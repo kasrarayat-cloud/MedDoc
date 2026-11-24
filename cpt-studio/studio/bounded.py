@@ -14,7 +14,7 @@ A child's work may start processes in sessions of their own - LibreOffice, for a
 which killing the child does not kill. The work tells the parent each such process group on a second pipe before it
 waits on it (``report_group``), and that it killed one itself (``group_ended``). The parent's ``finally`` kills the
 child, reads every report the child wrote, then kills each group reported and not ended, timeout or not, and waits
-briefly for it to be gone.
+briefly for it to be gone. The same happens when the one who asked for the work leaves first (``watch``: Abandoned).
 """
 import logging
 import os
@@ -41,6 +41,12 @@ class Overrun(Exception):
     def __init__(self, reason):
         super().__init__(reason)
         self.reason = reason
+
+
+class Abandoned(Exception):
+    """Whoever asked for the work left before it finished (run_bounded's ``watch`` became readable): the child was
+    killed as at a timeout, with every process group it reported, and nothing it computed is used (repair round 1,
+    C2: a converter's client that has gone never costs a conversion)."""
 
 
 def report_group(pgid):
@@ -90,9 +96,11 @@ def _child(write_fd, groups_fd, fn, args, memory_bytes):
         os._exit(status)
 
 
-def run_bounded(fn, *args, seconds, memory_bytes):
+def run_bounded(fn, *args, seconds, memory_bytes, watch=None):
     """``fn(*args)`` in a forked child; raises Overrun past ``seconds`` or past ``memory_bytes`` of growth. Every
-    process group the child reported (report_group) and did not end is killed before this returns or raises."""
+    process group the child reported (report_group) and did not end is killed before this returns or raises.
+    ``watch``: an object with a fileno() (a client's connection) that becomes readable when whoever asked for the work
+    has left; the child is then killed as at a timeout and Abandoned raised."""
     read_fd, write_fd = os.pipe()
     groups_read, groups_write = os.pipe()
     pid = os.fork()
@@ -104,7 +112,7 @@ def run_bounded(fn, *args, seconds, memory_bytes):
     os.close(groups_write)
     deadline = time.monotonic() + seconds
     chunks, reports, finished = [], bytearray(), False
-    watched = [read_fd, groups_read]
+    watched = [read_fd, groups_read] + ([watch] if watch is not None else [])
     try:
         while not finished:
             remaining = deadline - time.monotonic()
@@ -120,6 +128,8 @@ def run_bounded(fn, *args, seconds, memory_bytes):
                 chunk = os.read(read_fd, READ_CHUNK)
                 chunks.append(chunk)
                 finished = not chunk
+            if watch is not None and watch in ready and not finished:
+                raise Abandoned()
     finally:
         os.close(read_fd)
         try:

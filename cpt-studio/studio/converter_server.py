@@ -12,8 +12,13 @@ bytes, then a body of the header's ``size`` bytes.
   {"status": "error", "kind": "refused" | "failed" | "busy", "size": 0}. The worker reads refused and failed as a failed
   conversion (CONVERT) and busy - the converter stopping, the package checks out of time, or no answer at all: an
   unreachable socket, a timeout, a closed connection - as BUSY, which a member may retry.
-- Conversions run one at a time; up to BACKLOG more connections wait in the listen backlog. On SIGTERM the server
-  finishes the conversion it is running, answers busy to the connections waiting, and stops once none is left.
+- Every connection is taken at once and read in a thread of its own (at most MAX_CONNECTIONS at a time; one more is
+  closed unread), so a ping is answered at once, even while a conversion runs. Conversions run one at a time, in the
+  order they came, in a thread of their own; up to BACKLOG wait their turn, and one more is answered busy at once. A
+  request whose client has left by its turn is not converted, and a conversion whose client leaves is stopped (repair
+  round 1, C2: abandoned health checks held the listen backlog while a conversion ran, and a Word file then failed busy
+  at once). On SIGTERM the server finishes the conversion it is running, answers busy to the conversions waiting and to
+  any new one, and stops once none is left.
 - Its log holds sizes, durations and fixed words: never a document's text, title or file name.
 
     python -m studio.converter_server              serve at SOCKET_PATH (mode 0660, group SOCKET_GROUP)
@@ -22,18 +27,21 @@ bytes, then a body of the header's ``size`` bytes.
     (--socket PATH serves or pings another socket, as tests and local runs do; it keeps the socket's group as made.)
 """
 import argparse
+import collections
 import hashlib
 import io
 import json
 import logging
 import os
 import re
+import select
 import signal
 import socket
 import socketserver
 import stat
 import struct
 import sys
+import threading
 import time
 import zipfile
 
@@ -45,7 +53,8 @@ log = logging.getLogger(__name__)
 SOCKET_PATH = '/run/cpt-convert/convert.sock'
 SOCKET_MODE = 0o660
 SOCKET_GROUP = 10150  # the worker's group, which the converter's own user shares (A7)
-BACKLOG = 8  # connections that may wait while one conversion runs
+BACKLOG = 8  # conversions that may wait their turn while one runs (and the listen backlog, which the server empties)
+MAX_CONNECTIONS = 16  # connections read at once, each in a thread of its own (the worker sends 4; a ping takes ms)
 MAX_REQUEST_BYTES = 15 * 1024 * 1024  # settings.MAX_UPLOAD_BYTES (a test holds them equal): nothing larger is uploaded
 MAX_HEADER_BYTES = 4096
 REQUEST_SECONDS = 30  # how long a connection may take to send its whole request
@@ -193,8 +202,9 @@ def request(path, data: bytes, *, connect_seconds=CONNECT_SECONDS, total_seconds
 
 
 def ping(path=SOCKET_PATH, *, seconds=PING_SECONDS) -> str:
-    """'ok' when the converter on ``path`` answered a ping, 'busy' when it took the connection but is converting (it
-    answers one connection at a time); ConverterBusy when nothing takes connections there."""
+    """'ok' when the converter on ``path`` answered a ping, 'busy' when the connection was taken but not answered in
+    time (the server answers a ping at once, even while it converts: only one that is stuck, or reads MAX_CONNECTIONS
+    connections already, is late); ConverterBusy when nothing takes connections there."""
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         sock.settimeout(seconds)
@@ -219,25 +229,27 @@ def ping(path=SOCKET_PATH, *, seconds=PING_SECONDS) -> str:
 
 # --- the server -----------------------------------------------------------------------------------------------------
 
-class _Connection(socketserver.BaseRequestHandler):
-    def handle(self):
-        self.server.serve_connection(self.request)
-
-
 class ConverterServer(socketserver.UnixStreamServer):
-    """The converter's socket and its one-at-a-time loop (serve_until_stopped). ``runner``: the function the bounded
-    child runs on the safe package (default LibreOffice's; tests give a stand-in); ``group``: the socket's group, or
-    None to keep it as made. Setting ``draining`` stops it: the conversion running finishes, the connections waiting are
-    answered busy, and the loop returns once none is left."""
+    """The converter's socket and its loop (serve_until_stopped): the main thread takes every connection at once and
+    hands it to a thread of its own that reads the request (at most MAX_CONNECTIONS at a time; one more is closed
+    unread); a ping is answered there and then, a conversion joins the line - at most BACKLOG waiting, one more answered
+    busy at once - and one conversion thread takes the line in order, one conversion at a time. A request whose client
+    has left by its turn is closed unconverted, and a conversion is stopped when its client leaves. ``runner``: the
+    function the bounded child runs on the safe package (default LibreOffice's; tests give a stand-in); ``group``: the
+    socket's group, or None to keep it as made. Setting ``draining`` stops it: the conversion running finishes, the ones
+    waiting and any new one are answered busy, and the loop returns once nothing is left."""
     request_queue_size = BACKLOG
 
     def __init__(self, path, *, runner=None, group=None, idle_seconds=IDLE_SECONDS):
         self.path, self.runner, self.draining, self.timeout = path, runner, False, idle_seconds
         self._idle, self._inode = False, None
+        self._turn = threading.Condition()  # guards the line, the counts and _stopping
+        self._line = collections.deque()  # (connection, Word bytes, size) of the conversions waiting their turn
+        self._readers, self._converting, self._stopping = 0, False, False
         _clear_stale_socket(path)
         umask = os.umask(0o117)  # the socket is made 0660, never wider, even for an instant
         try:
-            super().__init__(path, _Connection)
+            super().__init__(path, socketserver.BaseRequestHandler)  # never called: process_request reads each one
         finally:
             os.umask(umask)
         try:
@@ -250,11 +262,25 @@ class ConverterServer(socketserver.UnixStreamServer):
             raise
 
     def serve_until_stopped(self):
-        while True:
-            self._idle = False
-            self.handle_request()
-            if self.draining and self._idle:
-                return
+        turns = threading.Thread(target=self._take_turns, name='cpt-converter-turns', daemon=True)
+        turns.start()
+        try:
+            while True:
+                self._idle = False
+                self.handle_request()
+                if self.draining and self._idle and self._settled():
+                    return
+        finally:
+            self.draining = True  # whatever ends the loop, what waits is answered busy, never converted unattended
+            with self._turn:
+                self._stopping = True
+                self._turn.notify_all()
+            turns.join()
+
+    def _settled(self) -> bool:
+        """Nothing is being read, waits its turn or converts."""
+        with self._turn:
+            return not self._readers and not self._line and not self._converting
 
     def handle_timeout(self):
         self._idle = True
@@ -270,40 +296,120 @@ class ConverterServer(socketserver.UnixStreamServer):
         except OSError:
             pass
 
-    def serve_connection(self, sock):
-        """One connection: read its request (by REQUEST_SECONDS), answer it (by ANSWER_SECONDS)."""
+    def process_request(self, request, client_address):
+        """A connection just taken: read in a thread of its own, so neither a slow client nor a conversion keeps the
+        next connection waiting."""
+        with self._turn:
+            full = self._readers >= MAX_CONNECTIONS
+            if not full:
+                self._readers += 1
+        if full:
+            log.warning('converter: closed a connection unread (%d connections are being read)', MAX_CONNECTIONS)
+            self.shutdown_request(request)
+            return
+        reader = threading.Thread(target=self._read_connection, args=(request,), name='cpt-converter-read',
+                                  daemon=True)
+        try:
+            reader.start()
+        except RuntimeError:  # no thread to be had (the container's process limit): the connection is closed unread
+            self._reader_done()
+            log.error('converter: closed a connection unread (no thread could be started)')
+            self.shutdown_request(request)
+
+    def _reader_done(self):
+        with self._turn:
+            self._readers -= 1
+            self._turn.notify_all()
+
+    def _read_connection(self, sock):
+        kept = False
+        try:
+            kept = self.serve_connection(sock)
+        except Exception as exc:  # noqa: BLE001 - one connection never stops the service
+            log.error('converter: a connection failed (%s)', type(exc).__name__)
+        finally:
+            if not kept:
+                self.shutdown_request(sock)
+            self._reader_done()
+
+    def serve_connection(self, sock) -> bool:
+        """One connection's request, read by REQUEST_SECONDS: a ping is answered at once, a conversion request joins the
+        line (True: the line holds the connection now) or is answered here (False: the caller closes it)."""
         deadline = time.monotonic() + REQUEST_SECONDS
         try:
             header = _read_header(sock, deadline)
         except (EOFError, TimeoutError, OSError, _Malformed) as exc:
             log.warning('converter: a request could not be read (%s)', type(exc).__name__)
-            return
+            return False
         op = header.get('op')
         if op == PING:
             self._answer(sock, {'status': OK, 'size': 0})
-            return
+            return False
         size, digest = header.get('size'), header.get('sha256')
         if op != CONVERT or type(size) is not int or not 0 < size <= MAX_REQUEST_BYTES \
                 or not isinstance(digest, str) or not _SHA256.match(digest):
             log.warning('converter: refused a request it does not take (its operation, size or digest)')
             self._answer(sock, _error(REFUSED))
-            return
+            return False
         try:
             data = _receive(sock, size, deadline)
         except (EOFError, TimeoutError, OSError) as exc:
             log.warning('converter: a request ended before its Word file arrived (%s)', type(exc).__name__)
-            return
+            return False
         if hashlib.sha256(data).hexdigest() != digest:
             log.warning('converter: refused a Word file that does not match its digest')
             self._answer(sock, _error(REFUSED))
-            return
+            return False
+        with self._turn:
+            if self.draining:
+                why = 'stopping'
+            elif len(self._line) >= BACKLOG:
+                why = f'{BACKLOG} conversions wait their turn already'
+            else:
+                self._line.append((sock, data, size))
+                self._turn.notify_all()
+                return True
+        log.info('converter: busy (%s)', why)
+        self._answer(sock, _error(BUSY))
+        return False
+
+    def _take_turns(self):
+        """The conversion thread: the line in order, one conversion at a time, until the loop stops."""
+        while True:
+            with self._turn:
+                while not self._line and not self._stopping:
+                    self._turn.wait()
+                if not self._line:
+                    return
+                sock, data, size = self._line.popleft()
+                self._converting = True
+            try:
+                self._convert_turn(sock, data, size)
+            except Exception as exc:  # noqa: BLE001 - one failed conversion never stops the service
+                log.error('converter: a conversion failed unexpectedly (%s)', type(exc).__name__)
+            finally:
+                self.shutdown_request(sock)
+                with self._turn:
+                    self._converting = False
+                    self._turn.notify_all()
+
+    def _convert_turn(self, sock, data, size):
+        """One request's turn: busy while stopping; nothing for a client that has left; else its conversion,
+        stopped if the client leaves meanwhile, and its answer (by ANSWER_SECONDS)."""
         if self.draining:
             log.info('converter: busy (stopping)')
             self._answer(sock, _error(BUSY))
             return
+        if _client_left(sock):
+            log.info('converter: a request whose client left before its turn was not converted')
+            return
         started = time.monotonic()
         try:
-            pdf = docx_package.convert_in_child(data, runner=self.runner, seconds=docx_package.CONVERT_SECONDS)
+            pdf = docx_package.convert_in_child(data, runner=self.runner, seconds=docx_package.CONVERT_SECONDS,
+                                                watch=sock)
+        except docx_package.ConversionAbandoned:
+            log.info('converter: a conversion was stopped after %.1f s: its client left', time.monotonic() - started)
+            return
         except docx_package.ConversionBusy as exc:  # its checks ran out of time: busy, for a retry
             log.warning('converter: busy (%s)', exc)
             self._answer(sock, _error(BUSY))
@@ -332,6 +438,16 @@ class ConverterServer(socketserver.UnixStreamServer):
             _send(sock, _frame(header, body), time.monotonic() + ANSWER_SECONDS)
         except (TimeoutError, OSError) as exc:
             log.warning('converter: an answer could not be sent (%s)', type(exc).__name__)
+
+
+def _client_left(sock) -> bool:
+    """Whether the client of a request waiting its turn has left: its connection reads as closed (or reset), or holds
+    bytes past its request, which this protocol's client never sends - either way its conversion is not made."""
+    try:
+        ready, _, _ = select.select([sock], [], [], 0)
+    except (OSError, ValueError):
+        return True
+    return bool(ready)
 
 
 def _clear_stale_socket(path):

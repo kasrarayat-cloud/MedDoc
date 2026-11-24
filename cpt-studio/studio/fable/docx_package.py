@@ -142,12 +142,19 @@ class ConversionFailed(Exception):
     in fixed words."""
 
 
-def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bytes:
+class ConversionAbandoned(Exception):
+    """convert_in_child: whoever asked for the conversion left before it finished (``watch``), so it was stopped - the
+    child and LibreOffice killed as at a timeout (repair round 1, C2)."""
+
+
+def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES,
+                     watch=None) -> bytes:
     """``data`` (a Word file) as PDF bytes, converted in a bounded child: ``runner(package, work)`` runs there on the
     package safe_package made of ``data`` and the work folder made here (default soffice_convert). The folder is removed
     after every run - a success, a failure or a timeout - once the child and every process group it reported are gone.
     ConversionRefused when safe_package refused the file, ConversionBusy when its checks ran out of time,
-    ConversionFailed when no PDF came of it."""
+    ConversionFailed when no PDF came of it, ConversionAbandoned when ``watch`` (the client's connection, for the
+    converter service) became readable first: its client left."""
     try:
         work = Path(tempfile.mkdtemp(prefix=WORK_PREFIX))
     except OSError as exc:
@@ -155,7 +162,9 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
     try:
         try:
             answer = bounded.run_bounded(_convert_package, runner or soffice_convert, data, str(work), seconds=seconds,
-                                         memory_bytes=memory_bytes)
+                                         memory_bytes=memory_bytes, watch=watch)
+        except bounded.Abandoned:
+            raise ConversionAbandoned('its client left before it finished') from None
         except bounded.Overrun as exc:
             raise ConversionFailed(f'the conversion passed its {exc.reason} limit') from None
         except Exception as exc:  # noqa: BLE001 - the child's failure is logged by run_bounded
