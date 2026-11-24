@@ -5,6 +5,9 @@ never passed, without one). Synthetic data only.
   I1  rollback-0, rollback-3: every session is ended when the site moves between a revision before release 1's session
       policy and one with it (the blue/green switch at S2, the swap once the old pair is stopped, the switch-back at
       B4), in this revision's image, with one SecurityEvent; never between two revisions that both have it.
+  I2  rollback-1, rollback-2: no way back to a revision without release 1's disposal (switch-back, rollback-app in the
+      keep layout, rollback-app's removal when the next pair is such a revision or not known) while a practice is closed
+      or a document destroyed; refused before anything starts or stops, and again at the switch-back's B4.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -390,6 +393,258 @@ class SwitchBackSessionTests(TemporaryDirectoryTest):
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.acts('end_sessions'), [])
         self.assertNotIn('sessions_ended', details)
+
+
+# --- I2: no way back to a revision without release 1's disposal while a practice is closed or a document destroyed ----
+
+class DisposalReadTests(unittest.TestCase):
+    def test_disposal_is_read_from_the_revisions_tree_and_an_unreadable_revision_is_refused(self):
+        real, seen = test_install.REAL_HAS_DISPOSAL, []
+
+        def git(answer_commit, answer_file):
+            def fake_run(argv, **kwargs):
+                seen.append(argv[-1])
+                code = answer_commit if argv[-1].endswith('^{commit}') else answer_file
+                return SimpleNamespace(returncode=code, stdout=b'', stderr=b'')
+            return fake_run
+        with mock.patch.object(install, 'run', git(0, 0)):
+            self.assertIs(real(REVISION), True)
+        self.assertEqual(seen[-1], f'{REVISION}:cpt-studio/studio/disposal.py')
+        with mock.patch.object(install, 'run', git(0, 128)):
+            self.assertIs(real(REVISION), False)
+        with mock.patch.object(install, 'run', git(128, 0)), self.assertRaisesRegex(install.InstallError, 'cannot read'):
+            real(REVISION)
+        with self.assertRaisesRegex(install.InstallError, '40-character'):
+            real('abc')
+
+    def test_on_this_tree_release_1_has_it_and_the_revision_before_it_does_not(self):
+        real = test_install.REAL_HAS_DISPOSAL
+        head = install.run(['git', '-C', str(REPO_ROOT), 'rev-parse', 'HEAD']).stdout.decode().strip()
+        self.assertIs(real(head), True)
+        known = install.run(['git', '-C', str(REPO_ROOT), 'cat-file', '-e', f'{R0_REVISION}^{{commit}}'], check=False)
+        if known.returncode:
+            raise unittest.SkipTest(f'{R0_REVISION[:12]} is not in this clone')
+        self.assertIs(real(R0_REVISION), False)
+
+    def test_the_counts_are_judged_and_an_answer_that_is_not_two_counts_is_never_read_as_none(self):
+        real = test_install.REAL_DISPOSAL_COUNTS
+        for answer in ({'closed': 1}, {'closed': -1, 'destroyed': 0}, {'closed': True, 'destroyed': 0},
+                       {'closed': '1', 'destroyed': 0}, [], None):
+            with self.subTest(answer=answer), mock.patch.object(install, 'app_script', return_value=answer), \
+                    self.assertRaisesRegex(install.InstallError, 'no answer it could be judged by'):
+                real(IMAGE, b'')
+        with mock.patch.object(install, 'app_script', return_value={'closed': 2, 'destroyed': 0}) as script:
+            self.assertEqual(real(IMAGE, b''), {'closed': 2, 'destroyed': 0})
+        self.assertIs(script.call_args.args[2], install.DISPOSAL_COUNTS)
+
+    def test_the_refusal_names_how_many_of_each_and_why(self):
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {OLD}), \
+                mock.patch.object(test_install, 'DISPOSAL_COUNTS_ANSWER', {'closed': 1, 'destroyed': 2}):
+            refusal, counts = install.disposal_refusal(IMAGE, b'', OLD)
+            self.assertEqual(counts, {'closed': 1, 'destroyed': 2})
+            self.assertIn('1 practice(s) are closed and 2 document(s) destroyed', refusal)
+            self.assertIn(f'revision {OLD[:12]} has no disposal', refusal)
+            self.assertIn('fix forward', refusal)
+            unknown, _ = install.disposal_refusal(IMAGE, b'', None)
+            self.assertIn('is not known', unknown)
+            self.assertEqual(install.disposal_refusal(IMAGE, b'', REVISION), ('', None))  # it has disposal: no read
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {OLD}):
+            self.assertEqual(install.disposal_refusal(IMAGE, b'', OLD), ('', {'closed': 0, 'destroyed': 0}))
+
+
+class DisposalCountsOnTheDatabaseTests(DatabaseTest):
+    """DISPOSAL_COUNTS on real rows: a closed practice and a destroyed document's tombstone (rollback-1's input) are
+    counted, through the base managers; open practices and live documents are not; counts only."""
+
+    def test_closed_practices_and_destroyed_documents_are_counted(self):
+        from django.utils import timezone
+        from studio import models
+        before = run_in_image(install.DISPOSAL_COUNTS, {})
+        kept = self.encounter('kept')
+        tombstone = self.encounter('tombstone')
+        models.Encounter.objects.filter(pk=tombstone.pk).update(title='', destroyed_at=timezone.now(), state='destroyed')
+        models.Workspace.objects.filter(pk=tombstone.workspace_id).update(closed_at=timezone.now())
+        after = run_in_image(install.DISPOSAL_COUNTS, {})
+        self.assertEqual(sorted(after), ['closed', 'destroyed'])
+        self.assertEqual(after['closed'] - before['closed'], 1)
+        self.assertEqual(after['destroyed'] - before['destroyed'], 1)
+        self.assertIsNone(models.Encounter.objects.get(pk=kept.pk).destroyed_at)
+
+
+class SwitchBackDisposalTests(TemporaryDirectoryTest):
+    def world(self, *, counts=None, pre_disposal=(OLD,)):
+        world = SessionWorld(self.tmp, live=9151, serving=(REVISION, IMAGE), pre_policy=())
+        install.write_receipt(self.tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION, 'details': {
+            'replaced': {'web': {'id': 'web-old', 'image': OLD_IMAGE, 'revision': OLD},
+                         'worker': {'id': 'worker-old', 'image': OLD_IMAGE, 'revision': OLD}}}})
+        world.disposal = dict(counts or {'closed': 0, 'destroyed': 0})
+        world.pre_disposal = set(pre_disposal)
+        return world
+
+    def switch_back(self, world, counts_side_effect=None):
+        patches = world.patches() + [
+            mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', world.pre_disposal),
+            mock.patch.object(test_install, 'DISPOSAL_COUNTS_ANSWER', world.disposal),
+            mock.patch.object(test_install, 'DISPOSAL_COUNTS_READ', [])]
+        if counts_side_effect is not None:
+            patches.append(mock.patch.object(install, 'disposal_counts', side_effect=counts_side_effect))
+        for patcher in patches:
+            patcher.start()
+        try:
+            result = install.phase_switch_back(install.Context(switch_back_args(self.tmp), self.tmp)), None
+        except install.InstallError as error:
+            result = None, error
+        finally:
+            world.disposal_reads = list(test_install.DISPOSAL_COUNTS_READ)
+            for patcher in reversed(patches):
+                patcher.stop()
+        return result
+
+    def test_a_closed_practice_or_a_destroyed_document_refuses_before_anything_starts(self):
+        for counts in ({'closed': 1, 'destroyed': 0}, {'closed': 0, 'destroyed': 3}, {'closed': 2, 'destroyed': 5}):
+            with self.subTest(counts=counts):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                world = self.world(counts=counts)
+                details, error = self.switch_back(world)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn(f'{counts["closed"]} practice(s) are closed and {counts["destroyed"]} document(s) '
+                              'destroyed', str(error))
+                self.assertIn(f'revision {OLD[:12]} has no disposal', str(error))
+                self.assertIn('fix forward', str(error))
+                self.assertIn('nothing was started or stopped', str(error))
+                self.assertEqual(error.details, {'disposal': counts})
+                self.assertEqual(world.acts('run', 'stop', 'rename', 'close', 'vhost', 'end_sessions'), [])
+                self.assertEqual(world.disposal_reads, [IMAGE])  # read in this revision's image
+
+    def test_with_neither_it_goes_on_and_reads_again_at_b4(self):
+        world = self.world()
+        details, error = self.switch_back(world)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.disposal_reads, [IMAGE, IMAGE])
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+
+    def test_one_closed_since_the_first_read_refuses_at_b4_and_this_revisions_pair_resumes(self):
+        world = self.world()
+        details, error = self.switch_back(world, counts_side_effect=[{'closed': 0, 'destroyed': 0},
+                                                                     {'closed': 1, 'destroyed': 0}])
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(error.details['failed_at'], 'B4')
+        self.assertIn('before anything was closed, 1 practice(s) are closed', str(error))
+        self.assertEqual(world.closes, [])
+        self.assertEqual(world.acts('vhost'), [])
+        self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
+
+    def test_a_revision_with_disposal_is_switched_back_to_whatever_was_disposed(self):
+        world = self.world(counts={'closed': 4, 'destroyed': 9}, pre_disposal=())
+        details, error = self.switch_back(world)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.disposal_reads, [])  # never read: that revision lists and refuses them itself
+
+
+class KeepLayoutDisposalTests(TemporaryDirectoryTest):
+    def keep(self):
+        from test_install_r2 import World, named
+        world = World(self.tmp)
+        world.unhealthy.add(WORKER)
+        world.close_answer = named({'e1': ['member_answer']})
+        details, failure = run_app(world)
+        self.assertIn('the new web keeps serving on 9151', str(failure))
+        world.unhealthy.discard(WORKER)
+        world.close_answer = named({})
+        world.inflight = {}
+        world.events.clear()
+        world.closes.clear()
+        return world
+
+    def run_rollback(self, world, counts, pre_disposal=(OLD,)):
+        from test_install_r2 import run_rollback_app
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', set(pre_disposal)), \
+                mock.patch.object(test_install, 'DISPOSAL_COUNTS_ANSWER', counts):
+            return run_rollback_app(world)
+
+    def test_rollback_app_does_not_return_an_older_web_while_a_document_is_destroyed(self):
+        world = self.keep()
+        before = world.names()
+        details, failure = self.run_rollback(world, {'closed': 0, 'destroyed': 1})
+        self.assertIsInstance(failure, install.InstallError)
+        self.assertIn('0 practice(s) are closed and 1 document(s) destroyed', str(failure))
+        self.assertIn('nothing was stopped or removed', str(failure))
+        self.assertEqual(world.names(), before)
+        self.assertEqual(world.acts('stop', 'rm', 'close', 'vhost', 'reload'), [])
+
+    def test_with_neither_or_to_a_web_with_disposal_it_switches_back(self):
+        for counts, pre in (({'closed': 0, 'destroyed': 0}, (OLD,)), ({'closed': 1, 'destroyed': 1}, ())):
+            with self.subTest(counts=counts, pre=pre):
+                world = self.keep()
+                details, failure = self.run_rollback(world, counts, pre)
+                self.assertIsNone(failure, failure and str(failure))
+                self.assertEqual(details['outcome'], 'switched')
+
+
+class RollbackRemovalDisposalTests(TemporaryDirectoryTest):
+    """rollback-app's removal of this revision's pair: the pair that runs next is the parked one, or not known."""
+
+    def containers(self, parked=None):
+        def container(role, image, revision, running=True):
+            return {'Id': f'{role}-{revision[:4]}', 'Image': image, 'Created': '2026-11-01T12:00:00.000000Z',
+                    'State': {'Running': running},
+                    'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: role,
+                                          install.REVISION_LABEL: revision}}}
+        live = {install.SERVICES[role]: container(role, IMAGE, REVISION) for role in ('web', 'worker')}
+        if parked is not None:
+            live.update({install.SERVICES[role] + '-previous': container(role, OLD_IMAGE, parked, running=False)
+                         for role in ('web', 'worker')})
+        return live
+
+    def run_phase(self, live, counts, pre_disposal=(OLD,)):
+        calls = []
+
+        def fake_docker(*args, **kwargs):
+            calls.append(args[:3])
+            if args[0] == 'rm':
+                for name in [name for name, c in live.items() if c['Id'] == args[-1]]:
+                    del live[name]
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+        def coded(image_id, env_bytes, body, params, **kwargs):
+            assert body == install.CODING_MADE, body[:60]
+            return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
+                               'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
+                               'exports': {'draft': 0, 'approved': 0}}}
+        ctx = install.Context(SimpleNamespace(phase='rollback-app', revision=REVISION), self.tmp)
+        with mock.patch.multiple(install, inspect=lambda kind, name: live.get(name), docker=fake_docker,
+                                 read_protected_env=mock.Mock(return_value=b''), require_db=mock.Mock(),
+                                 undo_hazards=mock.Mock(return_value={}),
+                                 close_undone_stages=mock.Mock(return_value={'closed': 0, 'kinds': [], 'hazards': {},
+                                                                             'relabel': []}),
+                                 put_back_states=mock.Mock(return_value={'encounters': 0, 'changed': {}}),
+                                 stage_kinds_of=mock.Mock(return_value=list(install.COMMON_STAGE_KINDS)),
+                                 app_script=coded, keep_container_log=mock.Mock(return_value={'kept': 0})), \
+                mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', set(pre_disposal)), \
+                mock.patch.object(test_install, 'DISPOSAL_COUNTS_ANSWER', counts):
+            try:
+                return install.phase_rollback_app(ctx), None, calls
+            except install.InstallError as error:
+                return None, error, calls
+
+    def test_a_parked_pair_without_disposal_or_none_known_is_refused_before_anything_stops(self):
+        for parked, said in ((OLD, f'revision {OLD[:12]} has no disposal'), (None, 'is not known')):
+            with self.subTest(parked=parked):
+                details, error, calls = self.run_phase(self.containers(parked), {'closed': 1, 'destroyed': 1})
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('1 practice(s) are closed and 1 document(s) destroyed', str(error))
+                self.assertIn(said, str(error))
+                self.assertIn('nothing was stopped or removed', str(error))
+                self.assertEqual(calls, [])
+
+    def test_with_neither_or_a_parked_pair_with_disposal_the_pair_is_removed(self):
+        for parked, counts, pre in ((None, {'closed': 0, 'destroyed': 0}, (OLD,)),
+                                    (OLD, {'closed': 3, 'destroyed': 3}, ())):
+            with self.subTest(parked=parked, counts=counts):
+                details, error, calls = self.run_phase(self.containers(parked), counts, pre)
+                self.assertIsNone(error, error and str(error))
+                self.assertIn(('rm', '--force', 'web-aaaa'), calls)
 
 
 class SessionScriptImportTests(unittest.TestCase):

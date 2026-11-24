@@ -1082,6 +1082,24 @@ switch is verified against that receipt's baseline - co-tenant routing and
 co-tenant - and `switch-back` refuses, starting and stopping nothing, while they
 no longer answer as it recorded.
 
+**No way back to a revision without release 1's disposal while anything was
+disposed** (refutation round 1, rollback-1 and rollback-2). Release 1's closed
+practices (`dispose --close`) and destroyed documents (a tombstone: the row
+kept, title emptied, its PHI-free decision trail kept) are rows only its own
+code reads. A revision whose tree has no `studio/disposal.py` - every revision
+before release 1 - would list and count each tombstone again, with its kept
+activity on its page and its console, and take uploads into a closed practice
+and send them for coding. So `switch-back` to such a revision refuses, starting
+and stopping nothing, while any practice is closed or any document destroyed
+(read in this revision's image, counts only; read again at B4 before anything
+is closed), and says how many of each. `rollback-app` refuses the same way
+before it returns such an older web (the S4 keep layout), and before it removes
+this revision's pair when the parked pair it leaves is such a revision or no
+parked pair says which revision runs next. Neither a closure nor a destruction
+is ever undone, so once the first one has run the way back is gone for good:
+the owner's path is a fix forward (a revision with disposal, by its `app`). A
+`switch-back` to a revision that has disposal is not affected.
+
 `--phase switch-back --provider-mode <mode> [--astra-mode …] [--fable-mode …]
 [--interpreter-mode …] [--coding-mode …] [--authorization-ref …]` runs under this
 revision's declaration and installer
@@ -1792,6 +1810,11 @@ release 1), run only through `--phase manage`, never over HTTP:
   of that practice, including anything a member added to the restored copy, and
   the replay's report counts such documents. A replay stopped by a signal
   prints its record and exits 143 (SIGTERM) or 129 (SIGHUP).
+
+The first closure or destruction ends the way back to every revision before
+release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
+revision without disposal (**Switching back**, above); the way on is a fix
+forward.
 
 Every disposal step refuses while an install or switch-back is in progress (a
 `cpt-studio-web-next` or a `*-previous` container); only after that reading is

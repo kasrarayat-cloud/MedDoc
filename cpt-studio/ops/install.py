@@ -3125,6 +3125,9 @@ READING_STAGE_KINDS = ('interpret', APPRAISE_KIND, QUESTION_KIND)
 #             reconcile there, and its reconcile allows "one new attempt" by its own rules - a paid Corti predict for an
 #             encounter of its own with a context - for a request it never made. It is reconciled on this revision's
 #             operator console (studio.jobs.reconcile) before the rows are handed back.
+# Release 1's disposal rows are read by an earlier revision too, and shown wrongly (a closed practice takes uploads, a
+# destroyed document's tombstone is listed): they are no undo hazard - they are never undone - but refuse every way back
+# to a revision without disposal (disposal_refusal; refutation round 1, rollback-1 and rollback-2).
 # Nothing else this revision writes is read by an earlier revision: it never writes an assessment, a proposal, a
 # clarification, a decision, a member's answer, a context or an event inventory, so none of the earlier pipeline's own
 # reasons (a second review, a participant, a member's answer, a modifier, a reinstatement, a request it would send
@@ -5118,6 +5121,67 @@ def sessions_ended_said(sessions) -> str:
                 'signs in again.')
     return (' The end of every session was started and gave no answer: it may have ended every session (and recorded '
             f'{SESSIONS_ENDED_EVENT}), so everyone may have to sign in again.')
+
+
+# Release 1's disposal (D1) and a way back to a revision before it (refutation round 1, rollback-1 and rollback-2): a
+# closed practice (Workspace.closed_at) and a destroyed document's tombstone (Encounter.destroyed_at: title '', no
+# revision, its PHI-free decision trail kept) are rows only release 1's own code reads. A revision without disposal lists
+# and counts each tombstone again (its kept activity on its page and its console), and takes uploads into a closed
+# practice and sends them for coding. So every way back to one - a switch-back to a revision whose tree has no
+# DISPOSAL_FILES, rollback-app returning an older web (the keep layout), and rollback-app's removal when the pair that
+# runs next is such a revision or is not known (no parked pair: an older revision installed afterwards) - refuses,
+# starting and stopping nothing, while any practice is closed or any document destroyed, read in this revision's image
+# (DISPOSAL_COUNTS: counts only). Neither is ever undone, so the way on is a fix forward (ops/INSTALL.md, switch-back).
+DISPOSAL_FILES = (f'{APP}/studio/disposal.py',)
+DISPOSAL_COUNTS = '''
+from studio import models
+print(ANSWER + json.dumps({'closed': models.Workspace._base_manager.filter(closed_at__isnull=False).count(),
+                           'destroyed': models.Encounter._base_manager.filter(destroyed_at__isnull=False).count()}))
+'''
+
+
+def has_disposal(revision) -> bool:
+    """Whether ``revision`` has release 1's disposal (D1): its tree holds DISPOSAL_FILES, read as has_converter reads
+    the converter. A revision this checkout cannot read is refused, never taken for one with it (fail closed)."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} has release 1\'s disposal: it is not a '
+                           '40-character revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} has release 1\'s disposal: this checkout cannot read '
+                           'that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in DISPOSAL_FILES)
+
+
+def disposal_counts(image_id, env_bytes) -> dict:
+    """DISPOSAL_COUNTS in ``image_id`` (this revision's): {'closed': practices, 'destroyed': documents}. An answer it
+    cannot judge raises, never read as none."""
+    answer = app_script(image_id, env_bytes, DISPOSAL_COUNTS, {},
+                        what='Reading the closed practices and destroyed documents')
+    counts = {name: answer.get(name) if isinstance(answer, dict) else None for name in ('closed', 'destroyed')}
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in counts.values()):
+        raise InstallError('The read of the closed practices and destroyed documents gave no answer it could be judged '
+                           'by.', details={'answer': answer})
+    return counts
+
+
+def disposal_refusal(image_id, env_bytes, target_revision) -> tuple:
+    """(the refusal, the counts) of a way back to ``target_revision`` - the revision that serves next, None when it is
+    not known - while a practice is closed or a document destroyed and that revision has no disposal: ('', None) when
+    it has disposal, ('', counts) when there is nothing to refuse on."""
+    if target_revision is not None and has_disposal(target_revision):
+        return '', None
+    counts = disposal_counts(image_id, env_bytes)
+    if not counts['closed'] and not counts['destroyed']:
+        return '', counts
+    which = (f'revision {target_revision[:12]} has no disposal (its tree has no {DISPOSAL_FILES[0]})'
+             if target_revision is not None else
+             'the revision that runs next is not known (no parked pair names one) and one before release 1 has no '
+             'disposal')
+    return (f'{counts["closed"]} practice(s) are closed and {counts["destroyed"]} document(s) destroyed (release 1, '
+            f'D1), and {which}: it would list and count each destroyed document again, its kept decision trail on its '
+            'page and its console, and take uploads into a closed practice and send them for coding. Neither is ever '
+            'undone, so fix forward instead: a revision with disposal (ops/INSTALL.md, switch-back)'), counts
 
 
 def sessions_ended_of(sessions) -> dict:
@@ -7171,6 +7235,12 @@ def phase_switch_back(ctx) -> dict:
                            'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
                            details={'hazards': hazards, 'touched_since': since.isoformat()})
+    # refutation round 1, rollback-1 and rollback-2: no way back to a revision without release 1's disposal while a
+    # practice is closed or a document destroyed (read again at B4, before anything is closed)
+    refusal, disposed = disposal_refusal(image_id, env, prev_revision)
+    if refusal:
+        raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was started or stopped.',
+                           details={'disposal': disposed})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
                                     preflight=preflight, plan=plan, interpreter=interpreter, reads=reads,
                                     touched_since=since, **({'coding': coding} if coding != 'disabled' else {}))
@@ -7399,6 +7469,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         if hazards:
             raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
                                'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
+        refusal, disposed = disposal_refusal(image_id, env_bytes, prev_revision)  # refutation round 1, rollback-1
+        if refusal:
+            raise InstallError(f'before anything was closed, {refusal}', details={'disposal': disposed})
         first = dt.datetime.now(dt.timezone.utc)
         # refutation r3, D-5: the close may take effect whatever its call then answers (CLOSE_STAGES commits, then reads
         # every encounter), so the undo is told it started
@@ -9833,6 +9906,10 @@ def rollback_from_keep(ctx, keep) -> dict:
                            'under its own rules; nothing was stopped or removed. Clear them on this revision\'s web, '
                            f'which serves ({INCOMING_WEB}; ops/INSTALL.md, Reinstalling an older revision), then rerun '
                            '--phase rollback-app.', details={'hazards': found})
+    refusal, disposed = disposal_refusal(image_id, env, old_revision)  # refutation round 1, rollback-1 and rollback-2
+    if refusal:
+        raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
+                           details={'disposal': disposed})
     baseline = own_baseline()
     parked_worker = keep['parked_worker']
     previous = {'image': (parked_worker or keep['web'])['Image'], 'revision': old_revision}
@@ -10046,6 +10123,16 @@ def phase_rollback_app(ctx) -> dict:
                                'under its own rules; nothing was stopped or removed. Clear them on this revision\'s '
                                'web (ops/INSTALL.md, Reinstalling an older revision), then rerun --phase rollback-app.',
                                details={'hazards': found})
+        # refutation round 1, rollback-1 and rollback-2: the pair that runs next is the parked one when one is parked,
+        # else not known (an older revision installed afterwards) - neither may be handed closed practices or destroyed
+        # documents without disposal
+        parked_next = next((labels_of(container).get(REVISION_LABEL) for container in
+                            (inspect('container', SERVICES[role] + '-previous') for role in ('worker', 'web'))
+                            if container is not None), None)
+        refusal, disposed = disposal_refusal(first['Image'], env, parked_next)
+        if refusal:
+            raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
+                               details={'disposal': disposed})
     for role in pair:
         stop_service_container(SERVICES[role], role)
     if pair:

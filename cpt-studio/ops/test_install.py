@@ -134,6 +134,28 @@ def _guarded_has_session_policy(revision):
     return revision not in PRE_SESSION_POLICY_REVISIONS
 
 
+# Release 1 (D1; refutation round 1, rollback-1 and rollback-2): whether a revision has release 1's disposal is read from
+# its git tree (install.has_disposal), and a way back to one without it reads the closed practices and destroyed
+# documents in this revision's image (install.disposal_counts). Under the guard a test revision has disposal unless a
+# test puts it in PRE_DISPOSAL_REVISIONS, and the read answers DISPOSAL_COUNTS_ANSWER (none of either: every world's
+# way back goes on, as every world's did before); the real functions, REAL_HAS_DISPOSAL and REAL_DISPOSAL_COUNTS, are
+# tested on their own (the read on the test database).
+REAL_HAS_DISPOSAL = install.has_disposal
+REAL_DISPOSAL_COUNTS = install.disposal_counts
+PRE_DISPOSAL_REVISIONS = set()
+DISPOSAL_COUNTS_ANSWER = {'closed': 0, 'destroyed': 0}
+DISPOSAL_COUNTS_READ = []  # (image id,) of every read the guard answered, in order
+
+
+def _guarded_has_disposal(revision):
+    return revision not in PRE_DISPOSAL_REVISIONS
+
+
+def _guarded_disposal_counts(image_id, env_bytes):
+    DISPOSAL_COUNTS_READ.append(image_id)
+    return dict(DISPOSAL_COUNTS_ANSWER)
+
+
 # Release 1 (A13): main() appends the phase's one-shot journal to the host's /var/log/cpt-studio through a root helper
 # at the end of every phase. Under the guard it is kept in JOURNALS_FLUSHED instead (the real flush, REAL_FLUSH_JOURNAL,
 # is tested on its own with its helper stood in for).
@@ -167,7 +189,8 @@ def guard_host():
                                    has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal,
                                    tls_policy_report=_guarded_tls_policy_report,
                                    has_health_digest=_guarded_has_health_digest,
-                                   has_session_policy=_guarded_has_session_policy),
+                                   has_session_policy=_guarded_has_session_policy,
+                                   has_disposal=_guarded_has_disposal, disposal_counts=_guarded_disposal_counts),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
