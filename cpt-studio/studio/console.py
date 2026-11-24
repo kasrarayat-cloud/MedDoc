@@ -113,9 +113,10 @@ ACCESS_SCOPES = ('practice', 'everywhere')  # C4 item 4: the per-practice switch
 # The activity log's kinds (GET /ops/activity?kind=...): each a set of audit event names, or a prefix.
 KINDS = {
     'documents': ('Documents added', ('encounter.created',)),
+    # provider.counting (release 1, D4: Lane 4's record of a token count, before each send) belongs to the coding view
     'coding': ('Coding reviews', ('coding.round_queued', 'coding.round_done', 'coding.round_failed', 'pipeline.stopped',
-                                  'pipeline.resumed', 'provider.sending', 'provider.finished', 'provider.count_failed',
-                                  'provider.reconciled')),
+                                  'pipeline.resumed', 'provider.counting', 'provider.sending', 'provider.finished',
+                                  'provider.count_failed', 'provider.reconciled')),
     'decisions': ('Approvals and rejections', ('decision.recorded',)),
     'answers': ('Answers', ('answers.recorded',)),
     'downloads': ('Reports made', ('export.created',)),
@@ -129,6 +130,7 @@ EVENT_LABELS = {
     'coding.round_failed': 'Coding review could not finish',
     'pipeline.stopped': 'Stopped',
     'pipeline.resumed': 'Resumed',
+    'provider.counting': 'Token count requested',
     'provider.sending': 'Coding request sent',
     'provider.finished': 'Coding request ended',
     'provider.count_failed': 'Token count failed',

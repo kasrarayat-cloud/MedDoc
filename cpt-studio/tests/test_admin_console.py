@@ -1320,3 +1320,24 @@ class ClosedPracticeTests(AdminCase):
         # the practice's row: 4 people with access, 4 people, 1 document (the tombstone is not counted)
         self.assertIn('<td class="num">4</td><td class="num">4</td><td class="num">1</td>',
                       page(self.ops.get('/ops/workspaces')))
+
+
+class TokenCountEventTests(AdminCase):
+    """Release 1, D4 (Lane 4): the AuditEvent provider.counting, written before every token count, reads in plain words
+    in the console's activity and belongs to its coding view; the customer's activity never shows it."""
+
+    def test_the_token_count_record_reads_in_plain_words_in_the_coding_view(self):
+        enc = self.done(title='Synthetic counted note')
+        round_ = models.CodingRound.objects.get(encounter=enc)
+        models.AuditEvent.objects.create(workspace=self.ws, encounter=enc, actor_kind='system', event='provider.counting',
+                                         data={'round': str(round_.pk), 'purpose': 'reader',
+                                               'request_sha256': '0' * 64})
+        everything = page(self.ops.get('/ops/activity'))
+        self.assertIn('Token count requested', everything)
+        coding = page(self.ops.get('/ops/activity?kind=coding'))
+        self.assertIn('Token count requested<br><span class="muted mono">provider.counting</span>', coding)
+        self.assertIn('purpose reader', coding)
+        self.assertNotIn('Token count requested', page(self.ops.get('/ops/activity?kind=decisions')))
+        self.assertIn('provider.counting', console.KINDS['coding'][1])
+        texts = [item['text'] for item in self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()['activity']]
+        self.assertFalse([text for text in texts if 'count' in text.lower()])
