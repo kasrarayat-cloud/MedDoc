@@ -41,7 +41,7 @@ from __future__ import annotations
 import re
 from datetime import timezone as dt_timezone
 from types import SimpleNamespace
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
@@ -266,6 +266,17 @@ def safe_name(name, fallback='original') -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '_', name or '')[:120] or fallback
 
 
+def converted_name(source) -> str:
+    """The file name a Word document's converted PDF is served under: the Word file's name with .pdf."""
+    stem = (source.original_name or 'document').rsplit('.', 1)[0]
+    return safe_name(f'{stem}.pdf', 'document.pdf')
+
+
+def _converted_file(view):
+    """The stored converted PDF of ``view`` (a round with view_pdf_*), as storage.read_original reads a file."""
+    return SimpleNamespace(storage_name=view.view_pdf_storage_name, sha256=view.view_pdf_sha256)
+
+
 def view_content(encounter):
     """(bytes, content type, file name) the in-page viewer shows, or None when there is nothing to show: the original
     PDF or text file, the pasted text, or for a Word document the PDF the coding review read. A stored file that no
@@ -284,10 +295,51 @@ def view_content(encounter):
         view = converted_view(encounter)
         if view is None:
             return None
-        data = read_original(SimpleNamespace(storage_name=view.view_pdf_storage_name, sha256=view.view_pdf_sha256))
-        stem = (source.original_name or 'document').rsplit('.', 1)[0]
-        return data, PDF, safe_name(f'{stem}.pdf', 'document.pdf')
+        return read_original(_converted_file(view)), PDF, converted_name(source)
     return None
+
+
+# --- the document's download (release 1, C6) --------------------------------------------------------------------------
+# A Word document someone else uploaded can carry links, embedded objects and field codes that Word on the reader's
+# computer acts on (UP-6), so its download is the PDF the coding review read - the file the in-page view shows. The Word
+# file itself is served only when asked for by name (?format=original), after the page's warning (Lane 2, app.js); a
+# Word document with no converted PDF yet is refused until then (OriginalOnly). Every download is recorded with the
+# format it served (C1: member.download; ops.original).
+
+ORIGINAL, CONVERTED = 'original', 'converted_pdf'  # the formats a download is recorded with
+EXTENSIONS = {media_type: suffix.lstrip('.') for suffix, media_type in ALLOWED_SUFFIXES.items()}
+ORIGINAL_ONLY = ('This Word document has no PDF copy yet. Download the original Word file instead: it can contain links '
+                 'and embedded content.')
+
+
+class OriginalOnly(Exception):
+    """A Word document with no converted PDF yet: its download is the Word file, asked for by name (format=original)."""
+
+
+class Download(NamedTuple):
+    data: bytes
+    content_type: str
+    filename: str  # the member's file name (the operator's is encounter-<reference>.<extension>: studio.operator)
+    fmt: str  # ORIGINAL or CONVERTED
+    sha256: str
+    extension: str
+
+
+def download_content(encounter, *, original=False) -> Optional[Download]:
+    """The document's download (see above), or None for a paste, which has none. A stored file that no longer matches
+    its sha256 raises storage.OriginalCorrupted; a Word document with no converted PDF yet raises OriginalOnly unless
+    ``original`` asks for the Word file."""
+    source = original_file(encounter)
+    if source is None:
+        return None
+    if source.media_type == DOCX and not original:
+        view = converted_view(encounter)
+        if view is None:
+            raise OriginalOnly(ORIGINAL_ONLY)
+        return Download(read_original(_converted_file(view)), PDF, converted_name(source), CONVERTED,
+                        view.view_pdf_sha256, 'pdf')
+    return Download(read_original(source), source.media_type, safe_name(source.original_name), ORIGINAL, source.sha256,
+                    EXTENSIONS.get(source.media_type, 'bin'))
 
 
 def document_json(encounter) -> dict:
@@ -565,6 +617,13 @@ def _activity_text(event, numbers, members) -> str:
     return ''
 
 
+# The events the activity shows (_activity_text's): read in SQL by name (release 1, C1 item 8; FLOW-11 (4)), so no other
+# row of the document's audit trail - an operator's act, a reuse of a report, whatever a later release records - is read
+# into the page. Reads of the document are AccessRecords, in their own table, and never reach it.
+ACTIVITY_EVENTS = ('encounter.created', 'coding.round_queued', 'answers.recorded', 'coding.round_done',
+                   'coding.round_failed', 'decision.recorded', 'export.created', 'pipeline.stopped', 'pipeline.resumed')
+
+
 def activity_json(encounter) -> list:
     """What happened to the document, oldest first, each in a fixed sentence (never an event's stored data as text).
     An act names its member - anyone holding a membership of the workspace, active or not - and anyone else's act (a
@@ -574,7 +633,8 @@ def activity_json(encounter) -> list:
     members = set(models.Membership.objects.filter(workspace_id=encounter.workspace_id)
                   .values_list('user_id', flat=True))
     out = []
-    for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk'):
+    for event in (encounter.audit_events.filter(event__in=ACTIVITY_EVENTS).select_related('actor')
+                  .order_by('created_at', 'pk')):
         text = _activity_text(event, numbers, members)
         if text:
             out.append({'at': iso(event.created_at), 'text': text})

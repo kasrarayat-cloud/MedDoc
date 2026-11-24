@@ -19,8 +19,12 @@ record - runs, models, usage, hashes, the coding review's whole answers - is a p
     POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: pdf, round}: the PDF report of the
                                                     round the page shows (409 when it is not the latest; 503 when a
                                                     PDF cannot be made, nothing stored)
-    GET  /api/encounters/<id>/original[?view=1]     the original (download), or the in-page view (inline)
+    GET  /api/encounters/<id>/original[?view=1]     the download (a Word document's converted PDF; the Word file with
+                                                    format=original), or the in-page view (inline)
     GET  /api/reports/<id>/download                 a stored export, exactly as stored
+
+Release 1, C1: every read of a document is recorded before it is served (studio.read_audit; the 503 NOT_RECORDED
+answer when it cannot be), and a read of another practice's document or report is the same 404 with a refused row.
 """
 import functools
 import json
@@ -36,10 +40,10 @@ from django.views.decorators.common import no_append_slash
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import client_contract, customer, decisions, exports, intake, jobs, models
+from . import client_contract, customer, decisions, exports, intake, jobs, models, read_audit, request_meta
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
-from .storage import OriginalCorrupted, read_original
+from .storage import OriginalCorrupted
 
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
@@ -88,6 +92,44 @@ def api_view(view=None, *, contract=True):
         except RecursionError:  # a backstop: a nested value that reached code recursing per level
             return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
     return wrapper
+
+
+# --- the read records (release 1, C1) -------------------------------------------------------------------------------
+# Every read of a document - the list, the document, its in-page view, its download, a report's download - writes its
+# AccessRecord before the answer leaves (studio.read_audit.record); a read whose row cannot be written answers 503 with
+# the fixed sentence and nothing else (fail closed). A document or report that exists in another practice is answered
+# exactly as a missing one (404), with a refused row that shows the probing (TEC-10).
+
+def _recorded(request, view, **fields):
+    """The AccessRecord of this read, written before it is served; ApiError 503 (read_audit.NOT_RECORDED, no PHI) when
+    it cannot be written."""
+    try:
+        return read_audit.record(request, view=view, **fields)
+    except read_audit.NotRecorded:
+        raise ApiError(503, read_audit.NOT_RECORDED)
+
+
+def _refused_read(request, view, **fields):
+    """The refused row of a read of another practice's document or report. The answer is the same 404 whether or not
+    the row could be written: a 503 here would tell an existing document from a missing one."""
+    try:
+        read_audit.record(request, view=view, outcome=read_audit.REFUSED, **fields)
+    except read_audit.NotRecorded:
+        pass
+
+
+def _scoped(request, encounter_id, view):
+    """(encounter, membership) as access.scoped_encounter gives them; a document that exists in a practice the caller
+    is no active member of is answered the same 404, with a refused row of ``view``."""
+    try:
+        return scoped_encounter(request.user, encounter_id)
+    except Http404:
+        try:
+            found = models.Encounter.objects.only('pk', 'workspace_id').get(pk=encounter_id)
+        except (models.Encounter.DoesNotExist, ValueError, TypeError, ValidationError):
+            raise Http404() from None
+        _refused_read(request, view, workspace_id=found.workspace_id, encounter_ids=[found.pk])
+        raise Http404() from None
 
 
 def _payload(request) -> dict:
@@ -161,12 +203,18 @@ def session(request):
 
 
 @api_view
+@read_audit.phi_read(read_audit.MEMBER_LIST)
 def encounters(request):
     """GET the list; POST an upload (multipart: file or text, title, service_date, insurance, synthetic_attestation,
-    client_key) -> 201 {id}, its coding round 1 queued in the same transaction (intake.create_encounter)."""
+    client_key) -> 201 {id}, its coding round 1 queued in the same transaction (intake.create_encounter). The list is
+    recorded as member.list: the practice, the time it was read and how many rows it holds - the whole practice, with no
+    paging, so that says exactly which rows were shown."""
     membership = active_membership(request.user)
     if request.method == 'GET':
-        return JsonResponse({'encounters': customer.list_rows(membership)})
+        as_of = timezone.now()
+        rows = customer.list_rows(membership)
+        _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, count=len(rows), as_of=as_of)
+        return JsonResponse({'encounters': rows})
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -208,8 +256,14 @@ def encounters(request):
 
 @require_GET
 @api_view
+@read_audit.phi_read(read_audit.MEMBER_DETAIL)
 def encounter_detail(request, encounter_id):
-    encounter, membership = scoped_encounter(request.user, encounter_id)
+    """The document as the page shows it, recorded as member.detail on every call - except the page's poll while coding
+    runs (X-CPT-Poll: 1), which writes at most one row per sign-in and document a minute (read_audit.detail_seen_recently;
+    TEC-9 (4))."""
+    encounter, membership = _scoped(request, encounter_id, read_audit.MEMBER_DETAIL)
+    if not (request_meta.is_poll(request) and read_audit.detail_seen_recently(request, encounter.pk)):
+        _recorded(request, read_audit.MEMBER_DETAIL, workspace_id=encounter.workspace_id, encounter_ids=[encounter.pk])
     return JsonResponse(customer.encounter_json(encounter, membership))
 
 
@@ -297,14 +351,25 @@ def create_report(request, encounter_id):
 
 @require_GET
 @api_view(contract=False)
+@read_audit.phi_read(read_audit.MEMBER_REPORT_DOWNLOAD)
 def download_report(request, report_id):
-    """A stored export of the caller's workspace, exactly as stored (no hash header); anything else answers 404."""
+    """A stored export of the caller's workspace, exactly as stored (no hash header), recorded as
+    member.report_download (the report and its document); anything else answers 404 - another practice's report with a
+    refused row."""
     try:
         export = models.ExportArtifact.objects.select_related('encounter').get(pk=report_id)
     except (models.ExportArtifact.DoesNotExist, ValueError, ValidationError):
         raise Http404()
-    active_membership(request.user, export.encounter.workspace_id)
+    workspace_id = export.encounter.workspace_id
+    try:
+        active_membership(request.user, workspace_id)
+    except Http404:
+        _refused_read(request, read_audit.MEMBER_REPORT_DOWNLOAD, workspace_id=workspace_id,
+                      encounter_ids=[export.encounter_id], export_id=export.pk)
+        raise
     content, content_type, filename = exports.download(export)
+    _recorded(request, read_audit.MEMBER_REPORT_DOWNLOAD, workspace_id=workspace_id, encounter_ids=[export.encounter_id],
+              export_id=export.pk)
     response = HttpResponse(content, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{customer.safe_name(filename, "export")}"'
     return response
@@ -312,29 +377,42 @@ def download_report(request, report_id):
 
 @require_GET
 @api_view(contract=False)
+@read_audit.phi_read(read_audit.MEMBER_DOWNLOAD)  # and member.inline, for view=1
 def original(request, encounter_id):
-    """The original upload as a download; with view=1, what the in-page viewer shows (customer.view_content: the PDF or
-    text, the pasted text, a Word document's converted PDF), inline and framable by CPT Studio's own page only."""
-    encounter, _ = scoped_encounter(request.user, encounter_id)
+    """The upload as a download (customer.download_content, release 1 C6: a Word document's is the PDF its coding review
+    read; the Word file itself only with format=original, which the page asks for after its warning, and the only one
+    a Word document with no PDF yet has), recorded as member.download with the format it served; with view=1, what the
+    in-page viewer shows (customer.view_content: the PDF or text, the pasted text, a Word document's converted PDF),
+    inline and framable by CPT Studio's own page only, recorded as member.inline. Each row is written before the bytes
+    are sent."""
+    inline = request.GET.get('view') == '1'
+    view = read_audit.MEMBER_INLINE if inline else read_audit.MEMBER_DOWNLOAD
+    encounter, _ = _scoped(request, encounter_id, view)
+    record = {'workspace_id': encounter.workspace_id, 'encounter_ids': [encounter.pk]}
     try:
-        if request.GET.get('view') == '1':
+        if inline:
             found = customer.view_content(encounter)
             if found is None:
                 raise Http404()
             data, content_type, filename = found
+            _recorded(request, view, **record)
             response = HttpResponse(data, content_type=content_type)
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             response['X-Frame-Options'] = 'SAMEORIGIN'
             response['Content-Security-Policy'] = VIEW_CSP
             return response
-        source = customer.original_file(encounter)
-        if source is None:
+        try:
+            found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)
+        except customer.OriginalOnly:
+            raise ApiError(409, customer.ORIGINAL_ONLY, original_url=f'/api/encounters/{encounter.pk}/original'
+                                                                     f'?format={customer.ORIGINAL}')
+        if found is None:
             raise Http404()
-        data = read_original(source)
     except (OriginalCorrupted, OSError):
         raise ApiError(409, STORAGE_TEXT)
-    response = HttpResponse(data, content_type=source.media_type)
-    response['Content-Disposition'] = f'attachment; filename="{customer.safe_name(source.original_name)}"'
+    _recorded(request, view, filters={'format': found.fmt}, **record)
+    response = HttpResponse(found.data, content_type=found.content_type)
+    response['Content-Disposition'] = f'attachment; filename="{found.filename}"'
     return response  # no hash header for a customer (the operator's download carries it)
 
 
