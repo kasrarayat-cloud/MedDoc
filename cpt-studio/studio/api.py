@@ -41,7 +41,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, rate, read_audit, request_meta
-from . import security_events, sessions
+from . import security_events, session_store, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -536,6 +536,10 @@ def _set_member_access(owner_membership, user_id, active, actor):
     found already so)."""
     try:
         with transaction.atomic():
+            # the person's account row first, then the practice's memberships: every transaction that ends an account's
+            # sessions meets the account before any other row (studio.session_store's lock order), as the console's acts
+            # - which lock the person, then update a membership - do (repair round 2 of release 1, S2-3)
+            session_store.lock_accounts([user_id])
             rows = list(models.Membership.objects.select_for_update(of=('self',)).select_related('user')
                         .filter(workspace_id=owner_membership.workspace_id).order_by('pk'))
             target = next((row for row in rows if str(row.user_id) == str(user_id)), None)

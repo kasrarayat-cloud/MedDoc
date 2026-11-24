@@ -346,9 +346,9 @@ class DoorKindTests(TestCase):
         for kind in session_store.KINDS:
             with self.subTest(kind=kind):
                 self.assertLessEqual(len(kind), field.max_length)
-        self.assertEqual((session_store.SIGNED_IN, session_store.PENDING, session_store.SETUP),
-                         (models.SessionAccountLink.SIGNED_IN, models.SessionAccountLink.PENDING,
-                          models.SessionAccountLink.SETUP))
+        self.assertEqual(session_store.KINDS, (models.SessionAccountLink.SIGNED_IN,
+                                               models.SessionAccountLink.SIGNED_IN_ADMIN,
+                                               models.SessionAccountLink.PENDING, models.SessionAccountLink.SETUP))
         self.assertEqual([session_store.signed_in_kind(door) for door in (request_meta.ADMIN, request_meta.CPT, None)],
                          [session_store.SIGNED_IN_ADMIN, session_store.SIGNED_IN, session_store.SIGNED_IN])
 
@@ -752,3 +752,196 @@ class SessionTagTests(TestCase):
         self.assertEqual(len(tags), 3000)
         self.assertEqual(sessions.session_tag(TaggedRequest(None)), '')
         self.assertEqual(sessions.session_tag(TaggedRequest('not a reference')), '')
+
+
+# --- the lock order is global: the account rows first, before any membership, grant, setup code or session row ---------
+
+@contextmanager
+def held_right_after_updating(table, row_id, worker):
+    """Hold ``worker``'s request right after it updates the row ``row_id`` of ``table`` (a model's id), with every lock it
+    holds then: an AFTER UPDATE trigger firing only on that worker's connection and only for that row, waiting on an
+    advisory lock the test holds until release(). Nothing in the code under test is patched. Dropped afterwards."""
+    assert table in ('studio_membership', 'studio_onetimetoken'), table
+    assert re.fullmatch(r'[0-9a-f-]+', str(row_id)), row_id
+    assert WORKER_NAME.fullmatch(worker.name), worker.name
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_lock(%s)', [GATE])
+        cursor.execute('CREATE OR REPLACE FUNCTION r2s2_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN '
+                       f"IF current_setting('application_name') = '{worker.name}' THEN "
+                       f'PERFORM pg_advisory_lock_shared({GATE}); PERFORM pg_advisory_unlock_shared({GATE}); '
+                       'END IF; RETURN NULL; END $$')
+        cursor.execute(f'CREATE TRIGGER r2s2_gate AFTER UPDATE ON {table} FOR EACH ROW '
+                       f"WHEN (NEW.id = '{row_id}') EXECUTE FUNCTION r2s2_gate()")
+    released = []
+
+    def release():
+        if not released:
+            released.append(True)
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_unlock(%s)', [GATE])
+    try:
+        yield release
+    finally:
+        release()
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP TRIGGER IF EXISTS r2s2_gate ON {table}')
+            cursor.execute('DROP FUNCTION IF EXISTS r2s2_gate()')
+
+
+class Call(threading.Thread):
+    """``function()`` - an act that is no request: the server's reset, a disposal command - on a thread and database
+    connection of its own, named as a Worker; whether it returned, and the exception it raised."""
+
+    def __init__(self, name, function):
+        super().__init__(name=f'r2s2-{name}', daemon=True)
+        assert WORKER_NAME.fullmatch(self.name), self.name
+        self.function = function
+        self.done, self.error = False, None
+
+    def run(self):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('application_name', %s, false)", [self.name])
+            self.function()
+            self.done = True
+        except BaseException as exc:  # noqa: BLE001 - the test reports it
+            self.error = f'{type(exc).__name__}: {exc}'
+        finally:
+            connection.close()
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class GlobalLockOrderRaceTests(TransactionTestCase):
+    """The lock order of every transaction that ends an account's sessions or changes its credentials: the account rows
+    first, in id order, before any membership, grant, setup code or session row (the lead's ruling on S2-3's class).
+    Each pair met S2-3's account lock from the other side: the first act holds a membership or a setup code when it
+    reaches the account, the second holds the account when it reaches that row. Each is held as the verifiers held
+    theirs - the first right after its UPDATE of the row, the second sent and run until it waits on a lock - and each
+    completes with no deadlock."""
+
+    def tearDown(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'r2s2%%'")
+            self.assertEqual(cursor.fetchone()[0], 0)
+        super().tearDown()
+
+    def race(self, first, table, row_id, second):
+        with server_errors() as errors, held_right_after_updating(table, row_id, first) as release:
+            first.start()
+            self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
+            second.start()
+            self.assertTrue(wait_until(lambda: getattr(second, 'status', None) is not None or getattr(second, 'done', False)
+                                       or getattr(second, 'error', None) is not None or wait_of(second)[0] == 'Lock'),
+                            'the second act neither finished nor waited on a lock')
+            release()
+            first.join(90)
+            second.join(90)
+        self.assertFalse(first.is_alive() or second.is_alive())
+        return errors
+
+    def practice(self, name):
+        practice = f.workspace(name)
+        member = f.member(practice)
+        owner = f.member(practice, role=models.Membership.OWNER)
+        owners = Client(raise_request_exception=False)
+        self.assertEqual(owners.post('/login/', {'username': owner.username, 'password': PASSWORD}).status_code, 302)
+        doctor = Client(raise_request_exception=False)
+        self.assertEqual(doctor.post('/login/', {'username': member.username, 'password': PASSWORD}).status_code, 302)
+        return practice, member, owners, models.Membership.objects.get(user=member, workspace=practice)
+
+    @staticmethod
+    def access_off(owners, member):
+        return Worker('toggle', lambda: owners.post(f'/api/members/{member.pk}/access', json.dumps({'active': False}),
+                                                    content_type='application/json',
+                                                    **{client_contract.WSGI_KEY: client_contract.VERSION}))
+
+    def console_act(self, member, path, data):
+        console = ops.admin_client(f.user(f'r2s2-console-{uuid.uuid4().hex[:8]}'))
+        console.raise_request_exception = False
+        return Worker('console', lambda: console.post(f'/ops/people/{member.pk}/{path}',
+                                                      {**data, 'requested_by': 'Synthetic practice contact'}))
+
+    def test_an_owners_access_off_and_the_consoles_role_change_on_the_same_member(self):
+        """The access off holds the practice's memberships (FOR UPDATE) when it ends the member's sessions; the console's
+        role change locks the person and then updates the membership. The access off now takes the account first."""
+        practice, member, owners, membership = self.practice('Synthetic practice s2 role')
+        toggle = self.access_off(owners, member)
+        role = self.console_act(member, 'role', {'membership': str(membership.pk), 'role': models.Membership.VIEWER})
+        errors = self.race(toggle, 'studio_membership', membership.pk, role)
+        self.assertEqual(errors, [])
+        self.assertEqual((toggle.status, toggle.error, role.status, role.error), (200, None, 303, None))
+        membership.refresh_from_db()
+        self.assertEqual((membership.active, membership.role), (False, models.Membership.VIEWER))
+        self.assertEqual(live_keys(member), set())
+
+    def test_an_owners_access_off_and_the_consoles_practice_access_change_on_the_same_member(self):
+        practice, member, owners, membership = self.practice('Synthetic practice s2 access')
+        toggle = self.access_off(owners, member)
+        access = self.console_act(member, 'access', {'membership': str(membership.pk), 'access': 'off'})
+        errors = self.race(toggle, 'studio_membership', membership.pk, access)
+        self.assertEqual(errors, [])
+        self.assertEqual((toggle.status, toggle.error, access.status, access.error), (200, None, 303, None))
+        membership.refresh_from_db()
+        self.assertFalse(membership.active)
+        self.assertEqual(live_keys(member), set())
+
+    def test_the_servers_reset_and_setups_first_step_at_once(self):
+        """Setup's first step uses its code up (UPDATE of the setup code's row) and then sets the password; the server's
+        reset ends the account's sessions and then revokes its unused setup codes. Setup now takes the account first."""
+        operator = f.user('r2s2-reset-operator')
+        ops.grant(operator)
+        token, code = second_factor.issue_setup_code(operator, 'Synthetic Person')
+        browser = admin_client(raise_request_exception=False)
+        setup = Worker('setup', lambda: browser.post('/login/enrol', {'step': 'code', 'code': code,
+                                                                     'new_password': NEW_PASSWORD,
+                                                                     'new_password_again': NEW_PASSWORD}))
+        reset = Call('reset', lambda: second_factor.reset(operator, 'Synthetic Person'))
+        errors = self.race(setup, 'studio_onetimetoken', token.pk, reset)
+        self.assertEqual(errors, [])
+        self.assertEqual((setup.status, setup.location, setup.error), (303, '/login/enrol', None))
+        self.assertEqual((reset.done, reset.error), (True, None))
+        operator.refresh_from_db()
+        self.assertTrue(operator.check_password(NEW_PASSWORD))  # setup was served first; the reset's code is the live one
+        live = models.OneTimeToken.objects.filter(user=operator, purpose=models.OneTimeToken.OPERATOR_SETUP,
+                                                  used_at__isnull=True, revoked_at__isnull=True)
+        self.assertEqual(live.count(), 1)
+
+    def test_a_practices_disposal_and_an_access_off_in_it_at_once(self):
+        """The access off holds the practice's memberships and, at its commit, its audit row's deferred foreign key takes
+        KEY SHARE on the practice's row; the disposal holds that row FOR UPDATE from its start and updates the
+        memberships and accounts later. The disposal now takes the practice's accounts before the practice's row."""
+        import io
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        from studio import disposal
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name)
+        with override_settings(ORIGINALS_DIR=root / 'originals'), \
+                mock.patch.object(disposal, 'switch_in_progress', return_value=''):
+            practice, member, owners, membership = self.practice('Synthetic practice s2 disposal')
+            enc = f.encounter(practice, member, title='Synthetic disposal race note')
+            f.upload(enc, member, data=f.PDF_BYTES + b' s2', filename='synthetic.pdf')
+            reason = root / 'reason.txt'
+            reason.write_text('Synthetic: the practice ended its contract and chose destruction in writing.')
+            for step in ('--close', '--plan'):
+                call_command('dispose', step, '--workspace', str(practice.pk), '--by', 'Synthetic Operator',
+                             '--reason-file', str(reason), stdout=io.StringIO())
+            plan = models.DisposalEvent.objects.get(stage=models.DisposalEvent.PLANNED)
+            toggle = self.access_off(owners, member)
+            destroy = Call('dispose', lambda: call_command(
+                'dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator', '--approved-by',
+                'Synthetic Approver', '--authorization-ref', 'synthetic@0000000', stdout=io.StringIO()))
+            errors = self.race(toggle, 'studio_membership', membership.pk, destroy)
+        self.assertEqual(errors, [])
+        self.assertEqual((toggle.status, toggle.error), (200, None))
+        self.assertEqual((destroy.done, destroy.error), (True, None))  # it waited for the access off, then destroyed
+        self.assertTrue(models.DisposalEvent.objects.filter(stage=models.DisposalEvent.COMPLETED).exists())
+        member.refresh_from_db()
+        self.assertFalse(member.is_active)  # no other practice: closed with it
+        self.assertEqual(live_keys(member), set())
+        self.assertTrue(models.AuditEvent.objects.filter(workspace=practice, event='member.access_off').exists())

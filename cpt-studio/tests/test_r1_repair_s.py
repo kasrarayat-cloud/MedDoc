@@ -405,9 +405,10 @@ class StoreContractTests(SimpleTestCase):
         from studio import second_factor, session_store
         self.assertEqual(settings.SESSION_ENGINE, 'studio.session_store')
         self.assertEqual(sessions.SESSION_STORES, ('studio.session_store',))
-        self.assertEqual((session_store.SIGNED_IN, session_store.PENDING, session_store.SETUP),
-                         (models.SessionAccountLink.SIGNED_IN, models.SessionAccountLink.PENDING,
-                          models.SessionAccountLink.SETUP))
+        self.assertEqual((session_store.SIGNED_IN, session_store.SIGNED_IN_ADMIN, session_store.PENDING,
+                          session_store.SETUP),  # each door its own kind (repair round 2, sessions-1)
+                         (models.SessionAccountLink.SIGNED_IN, models.SessionAccountLink.SIGNED_IN_ADMIN,
+                          models.SessionAccountLink.PENDING, models.SessionAccountLink.SETUP))
         self.assertEqual((second_factor.PENDING, second_factor.ENROLMENT),
                          (sessions.PENDING_SIGN_IN_KEY, sessions.SETUP_KEY))
         self.assertEqual(session_store.SessionStore.__qualname__, django_db_store.SessionStore.__qualname__)

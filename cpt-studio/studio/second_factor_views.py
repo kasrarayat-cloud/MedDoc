@@ -33,7 +33,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from . import rate, request_meta, second_factor as factor, security_events, sessions, throttle
+from . import rate, request_meta, second_factor as factor, security_events, session_store, sessions, throttle
 from .models import LoginAttempt, OneTimeToken, User
 from .operator import _methods as methods
 from .operator import operator_view
@@ -218,6 +218,9 @@ def _start_enrolment(request):
         except ValidationError as exc:
             return ' '.join(exc.messages)
         with transaction.atomic():  # the code used up, the claim, the password, the sessions ended and the record
+            # the account first (studio.session_store's lock order): the server's reset, which ends the account's
+            # sessions and then revokes its setup codes, never waits on this code while this waits on the account
+            session_store.lock_accounts([user.pk])
             claim = factor.claim_setup_code(token)
             if claim is not None:
                 user.set_password(new)
