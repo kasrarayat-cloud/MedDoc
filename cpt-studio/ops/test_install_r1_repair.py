@@ -12,6 +12,8 @@ never passed, without one). Synthetic data only.
       `--regrant <username>` (optionally in backticks), whitespace-trimmed.
   I4  installer-1: every manage step refuses an argument it does not pass to its command (dispose execute's
       --workspace-id and --encounter-id), and --address is refused outside manage.
+  I5  installer-2: the database's swap-off decision counts memory.swap.peak (memory peak plus swap peak), and skips the
+      change when the swap peak cannot be read.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -828,6 +830,84 @@ class ManageArgumentTests(unittest.TestCase):
         given = set(vars(args)) - {'phase', 'revision', 'receipts'}
         self.assertEqual(given, parser_names)
         self.assertEqual(sorted(given - set(install.PHASE_ARGUMENTS)), [])
+
+
+# --- I5: the swap the database used earlier counts --------------------------------------------------------------------
+
+MIB = 2 ** 20
+
+
+class CgroupScriptWorld:
+    """test_install_r1.DbWorld whose container answers the cgroup script for exactly the files it names (installer-2's
+    probe): a file the installer does not name is never read, whatever the cgroup holds."""
+
+    @staticmethod
+    def make(cgroup, **container):
+        import re
+        import test_install_r1 as r1
+
+        class World(r1.DbWorld):
+            def docker(self, *args, **kwargs):
+                if args[:3] == ('exec', install.DB_CONTAINER, 'sh'):
+                    self.calls.append(args)
+                    names = re.search(r'for f in ([^;]+);', args[-1]).group(1).split()
+                    out = ''.join(f'{name}={cgroup[name]}\n' for name in names if name in cgroup)
+                    return SimpleNamespace(returncode=0, stdout=out.encode(), stderr=b'')
+                if args[0] == 'update':
+                    cgroup.update({'memory.max': str(512 * MIB), 'memory.swap.max': '0'})
+                return super().docker(*args, **kwargs)
+        return World(r1.db_container(**container))
+
+
+class DatabaseSwapPeakTests(TemporaryDirectoryTest):
+    def test_swap_used_earlier_and_paged_back_counts_into_the_peak(self):
+        # installer-2's input: 300 MiB RAM high-water, 300 MiB swap high-water, nothing in swap today, 8 days up
+        cgroup = {'memory.max': 'max', 'memory.swap.max': 'max', 'memory.peak': str(300 * MIB),
+                  'memory.swap.current': '0', 'memory.swap.peak': str(300 * MIB)}
+        world = CgroupScriptWorld.make(cgroup, swap=-1, uptime_days=8)
+        details, error = world.run(self.tmp)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('600.0 MiB together', str(error))
+        self.assertIn('memory.swap.peak', str(error))
+        self.assertIn('limits were left as they are', str(error))
+        self.assertEqual(world.acts('update'), [])
+        self.assertEqual(error.details['swap_peak'], 300 * MIB)
+
+    def test_a_swap_peak_under_the_share_updates_and_is_recorded(self):
+        cgroup = {'memory.max': 'max', 'memory.swap.max': 'max', 'memory.peak': str(300 * MIB),
+                  'memory.swap.current': '0', 'memory.swap.peak': str(100 * MIB)}  # 400 MiB, under 409.6
+        world = CgroupScriptWorld.make(cgroup, swap=-1, uptime_days=8)
+        details, error = world.run(self.tmp)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(details['memory']['state'], 'updated')
+        self.assertEqual(details['memory']['swap_peak'], 100 * MIB)
+        self.assertEqual(len(world.acts('update')), 1)
+
+    def test_what_sits_in_swap_now_still_counts_when_the_peak_reads_lower(self):
+        cgroup = {'memory.max': 'max', 'memory.swap.max': 'max', 'memory.peak': str(300 * MIB),
+                  'memory.swap.current': str(200 * MIB), 'memory.swap.peak': '0'}  # an inconsistent reading
+        world = CgroupScriptWorld.make(cgroup, swap=-1, uptime_days=8)
+        details, error = world.run(self.tmp)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('500.0 MiB together', str(error))
+
+    def test_a_swap_peak_that_cannot_be_read_skips_the_change_and_says_why(self):
+        for value in (None, 'max', '', '12 kB'):
+            with self.subTest(value=value):
+                cgroup = {'memory.max': 'max', 'memory.swap.max': 'max', 'memory.peak': str(100 * MIB),
+                          'memory.swap.current': '0'}
+                if value is not None:
+                    cgroup['memory.swap.peak'] = value
+                world = CgroupScriptWorld.make(cgroup, swap=-1, uptime_days=8)
+                details, error = world.run(self.tmp)
+                self.assertIsNone(error, error and str(error))
+                self.assertEqual(details['memory']['state'], 'skipped')
+                self.assertIn('no readable memory.swap.peak', details['memory']['why'])
+                self.assertIn('memory limits left as they are', details['summary'])
+                self.assertEqual(world.acts('update'), [])
+
+    def test_the_cgroup_script_names_the_swap_peak(self):
+        self.assertIn('memory.swap.peak', install.DB_CGROUP_FILES)
 
 
 class SessionScriptImportTests(unittest.TestCase):

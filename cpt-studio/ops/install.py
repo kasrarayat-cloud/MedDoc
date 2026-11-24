@@ -2996,8 +2996,9 @@ DB_SHM_BYTES = 128 * 2 ** 20
 # only while its memory peak stays below this share of DB_MEMORY_BYTES; otherwise the db phase refuses and prints the
 # numbers, so the owner can choose a larger limit (a database that needs more than 512 MiB without swap would be killed).
 DB_PEAK_SHARE = 0.8
-# The container's own cgroup (v2) files, read inside it (/sys/fs/cgroup is the container's cgroup there).
-DB_CGROUP_FILES = ('memory.max', 'memory.swap.max', 'memory.peak', 'memory.swap.current')
+# The container's own cgroup (v2) files, read inside it (/sys/fs/cgroup is the container's cgroup there). memory.swap.peak
+# is the swap's high-water mark (refutation round 1, installer-2: swap used earlier and since paged back counts too).
+DB_CGROUP_FILES = ('memory.max', 'memory.swap.max', 'memory.peak', 'memory.swap.current', 'memory.swap.peak')
 # A5 (FLOW-13): the database's own log never holds statement text - a failed statement is logged without the statement
 # (log_min_error_statement panic) and without DETAIL, which can quote values (log_error_verbosity terse). Set with ALTER
 # SYSTEM (postgresql.auto.conf on the data volume, applied by a reload: no restart) on an existing cluster, and given as
@@ -3710,8 +3711,10 @@ def db_memory(container) -> dict:
     """A3, on an existing database container: as installed, or - when its HostConfig or its cgroup differ from
     db_args' 512m/512m (swap off) - updated in place with `docker update --memory 512m --memory-swap 512m` (applied to
     the running container: no restart, no connection dropped), but only once it has run DB_PEAK_MIN_UPTIME_DAYS (a
-    younger memory.peak is skipped, and said) and while its memory.peak plus what it has in swap now stays below
-    DB_PEAK_SHARE of 512 MiB; otherwise refused with the numbers, its limits left as they are.
+    younger memory.peak is skipped, and said) and while its memory.peak plus its swap's high-water mark
+    (memory.swap.peak, never below what it has in swap now) stays below DB_PEAK_SHARE of 512 MiB; otherwise refused
+    with the numbers, its limits left as they are. A cgroup whose memory.swap.peak cannot be read skips the change, and
+    says so: the swap it used earlier could not be counted (refutation round 1, installer-2).
     {'state', 'before', 'after'}."""
     def reading(found, cgroup):
         host = found.get('HostConfig') or {}
@@ -3733,19 +3736,29 @@ def db_memory(container) -> dict:
         raise InstallError(f'{DB_CONTAINER}\'s memory limits are not {DB_MEMORY}/{DB_MEMORY} (no swap), and its cgroup\'s '
                            'memory.peak and memory.swap.current cannot be read, so it cannot be told whether turning swap '
                            'off in place is safe; its limits were left as they are.', details={'before': before})
+    swap_peak = cgroup_bytes(cgroup, 'memory.swap.peak')
+    if swap_peak is None:  # refutation round 1, installer-2: never judged on what sits in swap now alone
+        return {'state': 'skipped', 'before': before, 'uptime_seconds': uptime,
+                'why': f'{DB_CONTAINER}\'s cgroup has no readable memory.swap.peak, so the swap it used earlier and has '
+                       'since paged back cannot be counted, and turning swap off at '
+                       f'{DB_MEMORY} would be a guess. Its limits were left as they are (verify reports the swap).'}
     limit = int(DB_PEAK_SHARE * DB_MEMORY_BYTES)
-    # what sits in swap now is memory the database used and could need back once swap is off (refutation A-6)
-    used = peak + swapped
+    # the swap it used at its high-water mark is memory it needed and could need again once swap is off (refutation
+    # A-6: what sits in swap now; refutation round 1, installer-2: what sat there earlier and has since paged back)
+    swap_used = max(swap_peak, swapped)
+    used = peak + swap_used
     if used >= limit:
-        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB) and holds {swapped} '
-                           f'bytes ({swapped / 2 ** 20:.1f} MiB) in swap now, {used / 2 ** 20:.1f} MiB together, not below '
-                           f'{DB_PEAK_SHARE:.0%} of {DB_MEMORY} ({limit} bytes): turning swap off at {DB_MEMORY} could get '
-                           'it killed, so its limits were left as they are. The owner decides on a larger limit '
-                           '(RELEASE-1-SPEC A3).', details={'before': before, 'peak': peak, 'swap': swapped})
+        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB) and up to {swap_used} '
+                           f'bytes ({swap_used / 2 ** 20:.1f} MiB) of swap (memory.swap.peak; {swapped} bytes in swap '
+                           f'now), {used / 2 ** 20:.1f} MiB together, not below {DB_PEAK_SHARE:.0%} of {DB_MEMORY} '
+                           f'({limit} bytes): turning swap off at {DB_MEMORY} could get it killed, so its limits were '
+                           'left as they are. The owner decides on a larger limit (RELEASE-1-SPEC A3).',
+                           details={'before': before, 'peak': peak, 'swap': swapped, 'swap_peak': swap_peak})
     docker('update', '--memory', DB_MEMORY, '--memory-swap', DB_MEMORY, DB_CONTAINER, timeout=60)
     updated = inspect('container', DB_CONTAINER) or {}
     after = reading(updated, db_cgroup())
-    return {'state': 'updated', 'before': before, 'after': after, 'peak': peak, 'swap_before': swapped}
+    return {'state': 'updated', 'before': before, 'after': after, 'peak': peak, 'swap_before': swapped,
+            'swap_peak': swap_peak}
 
 
 def db_settings_shown() -> dict:

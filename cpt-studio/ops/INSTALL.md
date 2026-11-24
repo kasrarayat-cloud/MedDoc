@@ -260,9 +260,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   changes (recreating the container would interrupt the site: the owner's
   call). Release 1 (A3): its memory and memory + swap must be 512m each and its
   own cgroup (read inside it) must allow no swap. When they differ, the
-  cgroup's `memory.peak` and `memory.swap.current` are read first, and their
-  sum - what sits in swap is memory the database used - must stay below 80% of
-  512 MiB; the limits are then set on the running container (`docker update
+  cgroup's `memory.peak`, `memory.swap.current` and `memory.swap.peak` are read
+  first, and `memory.peak` plus the swap's high-water mark (`memory.swap.peak`,
+  never less than what sits in swap now) - swap the database used, even if it
+  has since paged it back, is memory it needed (refutation round 1,
+  installer-2) - must stay below 80% of 512 MiB; a cgroup whose
+  `memory.swap.peak` cannot be read skips the change (its limits left as they
+  are, the receipt saying why). The limits are then set on the running
+  container (`docker update
   --memory 512m --memory-swap 512m`: no restart, no connection dropped) and the
   receipt records them before and after; otherwise it refuses and prints the
   numbers, so the owner can choose a larger limit. `memory.peak` counts only

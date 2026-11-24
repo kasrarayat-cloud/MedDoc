@@ -228,11 +228,16 @@ def db_container(*, memory=512 * MIB, swap=512 * MIB, cap_drop=('ALL',), core=Tr
 class DbWorld:
     """The database container and its cgroup, as phase_db reads and changes them; every docker call recorded."""
 
-    def __init__(self, container, *, peak=200 * MIB, swapped=30 * MIB, swap_max='max', shown=None, cgroup_readable=True):
+    def __init__(self, container, *, peak=200 * MIB, swapped=30 * MIB, swap_max='max', shown=None, cgroup_readable=True,
+                 swap_peak=None):
         self.container, self.calls = container, []
+        # memory.swap.peak (refutation round 1, installer-2): the swap's high-water mark - by default what is in swap
+        # now, never below it; '' leaves it out, as a kernel without the file does
         self.cgroup = {'memory.max': str(container['HostConfig']['Memory']) if container['HostConfig']['Memory']
                        else 'max', 'memory.swap.max': swap_max, 'memory.peak': str(peak),
                        'memory.swap.current': str(swapped)}
+        if swap_peak != '':
+            self.cgroup['memory.swap.peak'] = str(swapped if swap_peak is None else swap_peak)
         self.cgroup_readable = cgroup_readable
         self.settings = {'log_min_error_statement': 'error', 'log_error_verbosity': 'default'}
         self.shown = shown  # what SHOW answers whatever was set (None: what was set)
