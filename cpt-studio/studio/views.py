@@ -205,8 +205,14 @@ def admin_login_view(request):
 # --- the account page (B4) --------------------------------------------------------------------------------------------
 
 ACCOUNT_SCOPE = 'account.wrong_password'  # wrong current passwords on /account/, per account and minute
+# Every POST of /account/ that runs the password hasher, whatever its outcome, per account and minute (release 1 repair
+# round 1, avail-1): at most ACCOUNT_CHECKS_LIMIT in the sign-in window, then refused before any hashing. A change
+# hashes twice (the check, the new hash), so an account's page costs at most twice that many Argon2 runs a window.
+ACCOUNT_CHECKS_SCOPE = 'account.password_check'
+ACCOUNT_CHECKS_LIMIT = 10
 WRONG_CURRENT = 'The current password is not correct.'
 TOO_MANY_WRONG = 'Too many wrong passwords. Wait {wait} and try again.'
+TOO_MANY_CHECKS = 'Too many tries to change the password. Wait {wait} and try again.'
 NOT_THE_SAME = 'The two new passwords are not the same.'
 SAME_AS_BEFORE = 'Choose a new password that is not the one you have now.'
 OPERATOR_ON_CONSOLE = ('A platform operator changes this password on the console\'s own account page, with the security '
@@ -225,7 +231,11 @@ def _change_password(request, user):
     """Change ``user``'s password from the account page's form; the refusal sentence, or '' once changed. The place
     among the window's SIGNIN_USER_DELAY_AFTER wrong current passwords is taken before any hashing, in one atomic hit
     (throttle.reserve), so guesses sent in parallel from one session never get more checks than that (refutation r2,
-    finding 10); a right current password gives its place back.
+    finding 10); a right current password gives its place back. Every post that comes as far as the hasher also takes a
+    place among the account's ACCOUNT_CHECKS_LIMIT checks of the window, in the same way, and keeps it whatever its
+    outcome - a right password with two new ones that differ, the old one again, one the validators refuse, a change
+    made - so once they are used up the page refuses before any hashing, and one member of any role cannot keep the
+    web workers hashing (refutation of the integrated release, avail-1). A post refused before the hasher takes none.
 
     The change and its records are one transaction (release 1 repair round 1, failclosed-0): the new password, the
     other sessions ended, this session's new key, the SecurityEvent password.changed and the AuditEvent of each
@@ -235,6 +245,9 @@ def _change_password(request, user):
     before anything else is touched."""
     if not throttle.reserve(ACCOUNT_SCOPE, user.pk, settings.SIGNIN_USER_DELAY_AFTER):
         return TOO_MANY_WRONG.format(wait=throttle.wait_words(settings.SIGNIN_WINDOW_SECONDS))
+    if not throttle.reserve(ACCOUNT_CHECKS_SCOPE, user.pk, ACCOUNT_CHECKS_LIMIT):
+        throttle.give_back(ACCOUNT_SCOPE, user.pk)  # refused before the hasher: no wrong password to count
+        return TOO_MANY_CHECKS.format(wait=throttle.wait_words(settings.SIGNIN_WINDOW_SECONDS))
     current = request.POST.get('current_password', '')
     new = request.POST.get('new_password', '')
     again = request.POST.get('new_password_again', '')

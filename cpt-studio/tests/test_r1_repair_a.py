@@ -18,6 +18,9 @@ A5  Attempts that arrive together meet the username delay as attempts sent one a
     among the name's attempts in flight before any password is checked, as the address's and the pair's places are
     taken. A place left by an attempt that never finished counts two minutes at most. The same holds for wrong setup
     codes, per address: each takes its place before the code is looked up.
+A6  Every POST of /account/ that runs the password hasher counts per account, whatever its outcome, and past
+    views.ACCOUNT_CHECKS_LIMIT in the window the page refuses before any hashing: one member of any role can no longer
+    keep both web workers hashing. A wrong current password still counts as it did.
 """
 from __future__ import annotations
 
@@ -34,13 +37,14 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
+from django.contrib.auth.hashers import Argon2PasswordHasher
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 
-from studio import audit, console, models, rate, second_factor, throttle
+from studio import audit, console, models, rate, second_factor, throttle, views
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -801,3 +805,99 @@ class SetupCodesTogetherTests(TransactionTestCase):
         self.assertEqual(rate.count(second_factor.SETUP_CODE_SCOPE, '203.0.113.40',
                                     since=rate.window_start(settings.SIGNIN_WINDOW_SECONDS)),
                          settings.SECOND_FACTOR_ATTEMPTS, 'each wrong code counted once, no refusal counted')
+
+
+# --- A6: the account page's hashing, limited per account (avail-1) ----------------------------------------------------
+
+A6_FIRST, A6_SECOND = 'an entirely synthetic passphrase one', 'an entirely synthetic passphrase two'
+
+
+class Argon2Calls:
+    """Counts the Argon2 verifies and encodes made through Django's hasher (each call goes through unchanged)."""
+
+    def __enter__(self):
+        self.verify = self.encode = 0
+        verify, encode, calls = Argon2PasswordHasher.verify, Argon2PasswordHasher.encode, self
+
+        def counted_verify(hasher, password, encoded):
+            calls.verify += 1
+            return verify(hasher, password, encoded)
+
+        def counted_encode(hasher, password, salt):
+            calls.encode += 1
+            return encode(hasher, password, salt)
+
+        self.patches = [mock.patch.object(Argon2PasswordHasher, 'verify', counted_verify),
+                        mock.patch.object(Argon2PasswordHasher, 'encode', counted_encode)]
+        for patch in self.patches:
+            patch.start()
+        return self
+
+    def __exit__(self, *exc):
+        for patch in reversed(self.patches):
+            patch.stop()
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class AccountPageHashingLimitTests(TestCase):
+    """A6: a viewer - the least role - posting the account page with the right current password."""
+
+    def setUp(self):
+        self.ws = f.workspace('Synthetic practice A6')
+        self.viewer = f.member(self.ws, role=models.Membership.VIEWER)
+
+    def signed_in(self, user):
+        client = Client(HTTP_HOST=CPT)
+        self.assertEqual(client.post('/login/', {'username': user.get_username(), 'password': PASSWORD}).status_code,
+                         302)
+        return client
+
+    def post(self, client, current=PASSWORD, new=A6_FIRST, again=A6_SECOND):
+        return client.post('/account/', {'current_password': current, 'new_password': new, 'new_password_again': again})
+
+    def checks_counted(self, user):
+        return rate.count(views.ACCOUNT_CHECKS_SCOPE, user.pk, since=rate.window_start(throttle.MINUTE) - timedelta(
+            seconds=settings.SIGNIN_WINDOW_SECONDS))
+
+    def test_posts_that_hash_are_limited_whatever_their_outcome_then_refused_before_hashing(self):
+        limit = views.ACCOUNT_CHECKS_LIMIT
+        with Clock(MOMENT + timedelta(seconds=1)) as clock:
+            client = self.signed_in(self.viewer)
+            with Argon2Calls() as hashed:
+                answers = [self.post(client), self.post(client, new=PASSWORD, again=PASSWORD),
+                           self.post(client, new='short1', again='short1')]
+                answers += [self.post(client) for _ in range(limit - len(answers))]
+                self.assertEqual((hashed.verify, hashed.encode), (limit, 0), 'each of them hashed once')
+                texts = [answer.content.decode() for answer in answers]
+                self.assertEqual({answer.status_code for answer in answers}, {400})
+                self.assertIn(views.NOT_THE_SAME, texts[0])
+                self.assertIn(views.SAME_AS_BEFORE, texts[1])
+                self.assertIn('at least', texts[2])
+                # past the limit, whatever is sent - a real change included - is refused before any hashing
+                for refused in (self.post(client), self.post(client, new=A6_FIRST, again=A6_FIRST)):
+                    self.assertEqual(refused.status_code, 400)
+                    self.assertTrue(views.TOO_MANY_CHECKS.split('.')[0] in refused.content.decode(),
+                                    'past the limit the page refuses before hashing')
+                self.assertEqual((hashed.verify, hashed.encode), (limit, 0), 'a refusal hashes nothing')
+            self.assertEqual(self.checks_counted(self.viewer), limit, 'a refusal is not counted')
+            self.viewer.refresh_from_db()
+            self.assertTrue(self.viewer.check_password(PASSWORD))
+            # the limit is the account's: another member of the practice changes theirs
+            other = f.member(self.ws, role=models.Membership.VIEWER)
+            self.assertEqual(self.post(self.signed_in(other), new=A6_FIRST, again=A6_FIRST).status_code, 302)
+            # and it is a window, never a lockout: once it has passed, the change is made
+            for step in (600, settings.SIGNIN_WINDOW_SECONDS + 60 - 600):
+                clock.advance(step)
+                self.assertEqual(client.post('/session/activity').status_code, 200)  # the person is still there
+            done = self.post(client, new=A6_FIRST, again=A6_FIRST)
+            self.assertEqual((done.status_code, done.get('Location')), (302, '/account/?done=changed'))
+
+    def test_a_wrong_current_password_counts_as_before_and_its_refusal_spends_no_check(self):
+        client = self.signed_in(self.viewer)
+        with Argon2Calls() as hashed:
+            for _ in range(settings.SIGNIN_USER_DELAY_AFTER):
+                self.assertIn(views.WRONG_CURRENT, self.post(client, current='not the password').content.decode())
+            for _ in range(3):  # the right password, after five wrong ones: refused before hashing, as before
+                self.assertIn('Too many wrong passwords', self.post(client).content.decode())
+            self.assertEqual(hashed.verify, settings.SIGNIN_USER_DELAY_AFTER)
+        self.assertEqual(self.checks_counted(self.viewer), settings.SIGNIN_USER_DELAY_AFTER)
