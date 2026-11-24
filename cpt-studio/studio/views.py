@@ -113,16 +113,13 @@ def login_view(request):
         error = door.refusal()  # B1: before any password is checked
         if not error:
             user = door.check(authenticate(request, username=username, password=password) if username == submitted
-                              else None, allowed=lambda account: _member_door(account) or is_operator(account))
+                              else None, allowed=_member_door)
             sessions.prepare_sign_in(request, door=request_meta.CPT, sign_in_ref=door.sign_in_ref)
             if user is not None and user.memberships.filter(active=True).exists():
                 login(request, user)
                 return redirect(next_url)
-            if user is not None and is_operator(user):
-                # A platform operator may hold no membership (CORE-UX-DESIGN.md 5): they sign in on this same page and
-                # land on the operator diagnostics, or where they asked to go - until B3's door half (the next commit)
-                login(request, user)
-                return redirect(next_url if next_url != '/' else '/ops/')
+            # B3: an account with no active membership - a platform operator's included - is refused as a wrong
+            # password (recorded no_access); the console is the admin host's alone
             error = SIGN_IN_REFUSED
     context = {'error': error, 'next': next_url,
                'notice': '' if error else _signed_out_notice(request, settings.SESSION_IDLE_MEMBER_SECONDS),
@@ -140,9 +137,8 @@ def logout_view(request):
 @ensure_csrf_cookie
 @login_required
 def index(request):
-    if is_operator(request.user) and not request.user.memberships.filter(active=True).exists():
-        return redirect('/ops/')  # an operator with no membership has no workspace here: the diagnostics are theirs
-    membership = active_membership(request.user)  # 404 for accounts without an active workspace
+    # B3: no redirect to the console - an account without an active workspace gets the 404 active_membership gives
+    membership = active_membership(request.user)
     # the workspace's specialty, a label the page shows (owner direction 2026-11-22, D390); nothing codes from it
     response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA,
                                                      'specialty': membership.workspace.category.name})

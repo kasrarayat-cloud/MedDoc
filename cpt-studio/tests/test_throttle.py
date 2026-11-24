@@ -188,7 +188,7 @@ class RecordTests(ThrottleCase):
         attempt('owner', client=cpt)  # signed_in
         attempt('owner', WRONG)  # wrong_password
         attempt('nobody-at-all')  # unknown_account
-        attempt('platform-operator')  # an operator with no membership, at cpt: signed in (until B3's door half)
+        attempt('platform-operator')  # no_access at cpt: no membership
         attempt('owner', host=ADMIN)  # no_access at admin: not an operator
         attempt(expired.username)  # password_expired
         admin = Client(HTTP_HOST=ADMIN)
@@ -197,7 +197,7 @@ class RecordTests(ThrottleCase):
         rows = list(models.LoginAttempt.objects.order_by('pk').values_list('username', 'door', 'outcome', 'succeeded'))
         self.assertEqual(rows, [('owner', 'cpt', 'signed_in', True), ('owner', 'cpt', 'wrong_password', False),
                                 ('nobody-at-all', 'cpt', 'unknown_account', False),
-                                ('platform-operator', 'cpt', 'signed_in', True), ('owner', 'admin', 'no_access', False),
+                                ('platform-operator', 'cpt', 'no_access', False), ('owner', 'admin', 'no_access', False),
                                 (expired.username, 'cpt', 'password_expired', False),
                                 ('platform-operator', 'admin', 'signed_in', True)])
         refs = list(models.LoginAttempt.objects.values_list('sign_in_ref', flat=True))

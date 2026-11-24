@@ -178,10 +178,19 @@ class ConsoleGateTests(AdminHostCase):
         self.assertEqual(replay.get('/ops/').status_code, 404)
         self.assertEqual(admin.get('/ops/people').status_code, 302)  # ended for its own host too
 
-    def test_cpt_is_unchanged(self):
-        self.assertEqual(self.cpt().get('/ops/').status_code, 404)  # signed out: still an unknown URL there
+    def test_the_console_is_closed_on_cpt_as_far_as_the_doors_decide(self):
+        # B3 (it replaces "cpt is unchanged", whose operator got 200 on cpt.quillmd.com/ops/): the doors' half
+        self.assertEqual(self.cpt().get('/ops/').status_code, 404)  # signed out: an unknown URL there
         self.assertEqual(self.signed_in(self.member, CPT).get('/ops/').status_code, 404)
-        self.assertEqual(self.signed_in(self.operator, CPT).get('/ops/').status_code, 200)
+        # an operator with no membership no longer signs in on cpt.quillmd.com: the wrong-password answer, no session
+        refused = self.sign_in(self.cpt(), self.operator.username)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn(views.SIGN_IN_REFUSED, refused.content.decode())
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, refused.cookies)
+        attempt = models.LoginAttempt.objects.get(username=self.operator.username)
+        self.assertEqual((attempt.door, attempt.outcome, attempt.succeeded), ('cpt', 'no_access', False))
+        # the front page sends no operator to the console: an account without a workspace gets the 404
+        self.assertEqual(self.signed_in(self.operator, CPT).get('/').status_code, 404)
 
     def test_an_operator_s_own_cpt_session_meets_404_on_the_console(self):
         # B3's dual role: the doctors' app works on cpt and the console answers 404 there; on admin the console works
