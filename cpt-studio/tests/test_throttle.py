@@ -72,7 +72,8 @@ class DelayTests(ThrottleCase):
                           'before.', sentence(refused))
             self.assertNotIn(settings.SESSION_COOKIE_NAME, refused.cookies)
             known = attempt('owner', address=ADDRESS_B, client=usual)  # the browser that signed in before
-            self.assertEqual((known.status_code, known['Location']), (302, '/'))
+            self.assertEqual(known.status_code, 302, 'the known device waited')
+            self.assertEqual(known['Location'], '/')
             clock.advance(settings.SIGNIN_DELAY_BASE_SECONDS + 1)
             self.assertEqual(attempt('owner', address=ADDRESS_B).status_code, 302)  # after the delay, from anywhere
 
