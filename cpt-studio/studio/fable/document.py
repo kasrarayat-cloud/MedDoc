@@ -1,14 +1,15 @@
 """The document block of a coding request (BUILD-SPEC 4.3): the original file as the Anthropic API reads it.
 
 - PDF: a base64 document block with citations, titled with the original file name. No local PDF parsing at all.
-- DOCX: converted to PDF by LibreOffice, by the one code that converts a Word file (studio.fable.docx_package, Django-free:
-  safe_package makes it a package that cannot reach outside itself - SEC-S6, release 1 E1 and E2 - and soffice_convert
-  converts that in a bounded child of 60 s, with a memory cap, a throwaway HOME and profile and no inherited
-  environment). Where it runs (release 1 E3): with settings.CONVERTER_SOCKET, in the converter service on that socket
-  (studio.converter_server: a sealed container, one conversion at a time); a converter that cannot be reached, or does
-  not answer in time, fails the document BUSY - a member may retry - and nothing is converted inside the worker. With no
-  socket, in-process (tests and local runs), unless settings.CONVERTER_REQUIRED, which makes a missing socket BUSY too:
-  production never converts in the worker. A failed conversion is DocumentError CONVERT. The PDF is sent as above.
+- DOCX: converted to PDF by LibreOffice, by the one code that converts a Word file (studio.fable.docx_package,
+  Django-free: safe_package makes it a package that cannot reach outside itself - SEC-S6, release 1 E1 and E2 - and
+  soffice_convert converts that in a bounded child of 60 s, with a memory cap, a throwaway HOME and profile and no
+  inherited environment). Where it runs (release 1 E3): with settings.CONVERTER_SOCKET, in the converter service on that
+  socket (studio.converter_server: a sealed container, one conversion at a time); a converter that cannot be reached, or
+  does not answer in time, fails the document BUSY - a member may retry - and nothing is converted inside the worker.
+  With no socket, in-process (tests and local runs), unless settings.CONVERTER_REQUIRED, which makes a missing socket
+  BUSY too: production never converts in the worker. A failed conversion is DocumentError CONVERT. The PDF is sent as
+  above.
 - TXT (UTF-8; a leading byte-order mark is dropped) and pasted text: a text document block with citations.
 
 The stored form of the block (``stored_block``, what ProviderRun.request_body keeps) replaces the base64 data with

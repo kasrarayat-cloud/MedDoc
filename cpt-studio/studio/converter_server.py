@@ -137,7 +137,7 @@ def _error(kind) -> dict:
     return {'status': ERROR, 'kind': kind, 'size': 0}
 
 
-# --- the worker's side --------------------------------------------------------------------------------------------------
+# --- the worker's side ------------------------------------------------------------------------------------------------
 
 def request(path, data: bytes, *, connect_seconds=CONNECT_SECONDS, total_seconds) -> bytes:
     """The PDF the converter on the socket ``path`` makes of ``data`` (a Word file): ``connect_seconds`` to connect and

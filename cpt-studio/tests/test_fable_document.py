@@ -54,7 +54,8 @@ NAMESPACES = (f'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006
               'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
               'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"')
 # and the legacy picture and markup-compatibility ones a Word file also declares on its root
-FULL_NAMESPACES = (NAMESPACES + ' xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"'
+FULL_NAMESPACES = (NAMESPACES + ' xmlns:v="urn:schemas-microsoft-com:vml"'
+                   ' xmlns:o="urn:schemas-microsoft-com:office:office"'
                    ' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
                    ' xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"'
                    ' xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"'
@@ -415,6 +416,8 @@ class ConvertTests(SimpleTestCase):
                      'MAX_PACKAGE_BYTES', '_convert_package', '_relationships'):
             with self.subTest(name=name):
                 self.assertIs(getattr(document, name), getattr(docx_package, name))
+        # Lane 4's clean-up finds leftover work folders by document.WORK_PREFIX: every one is made with it
+        self.assertEqual(document.WORK_PREFIX, 'cpt-convert-')
 
 
 # --- E1: the package's limits, the conversion's clean-up ------------------------------------------------------------
@@ -663,9 +666,20 @@ class FieldInstructionTests(SimpleTestCase):
             'a tab and spaces first': complex_field('\t  DDEAUTO c:\\\\synthetic\\\\secret.exe '),
             'deleted instruction text': complex_field(' LINK Word.Document "c:\\\\secret.docx" ', text='delInstrText'),
             'plain text in the instruction': complex_field(' INCLUDETEXT "c:\\\\secret.docx" ', text='t'),
+            'plain text before the type (a reader that skips it reads INCLUDETEXT)': (
+                '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:t>ZZ</w:t></w:r><w:r><w:instrText '
+                'xml:space="preserve"> INCLUDETEXT "c:\\\\secret.docx" </w:instrText></w:r><w:r><w:fldChar '
+                'w:fldCharType="separate"/></w:r><w:r><w:t>VISIBLE RESULT</w:t></w:r><w:r><w:fldChar '
+                'w:fldCharType="end"/></w:r>'),
+            'deleted text before the type': (
+                '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:del w:id="1" w:author="Synthetic"><w:r><w:delText>'
+                'QUOTE</w:delText></w:r></w:del><w:r><w:instrText xml:space="preserve"> LINK Word.Document '
+                '"c:\\\\secret.docx" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>'
+                'VISIBLE RESULT</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>'),
             'split across runs': (
                 '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
-                f'<w:r>{rpr}<w:instrText xml:space="preserve"> INCL</w:instrText></w:r><w:proofErr w:type="spellStart"/>'
+                f'<w:r>{rpr}<w:instrText xml:space="preserve"> INCL</w:instrText></w:r>'
+                '<w:proofErr w:type="spellStart"/>'
                 f'<w:r w:rsidR="00A1"><w:instrText>UDE</w:instrText></w:r><w:r>{rpr}<w:instrText xml:space="preserve">'
                 'TEXT "c:\\\\secret.docx" </w:instrText></w:r>'
                 '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>VISIBLE RESULT</w:t></w:r>'
@@ -707,7 +721,8 @@ class FieldInstructionTests(SimpleTestCase):
         data = word_package(paragraph(harmless_outer))
         xml = document_xml(docx_package.safe_package(data))
         inner_marks = ('<w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">'
-                       f'{escape(DANGEROUS["INCLUDETEXT"])}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/>',
+                       f'{escape(DANGEROUS["INCLUDETEXT"])}</w:instrText></w:r>'
+                       '<w:r><w:fldChar w:fldCharType="separate"/>',
                        '<w:fldChar w:fldCharType="end"/></w:r><w:r><w:instrText xml:space="preserve">" ""')
         expected = document_xml(data)
         for mark, left in zip(inner_marks, ('</w:r><w:r>', '</w:r><w:r><w:instrText xml:space="preserve">" ""')):
@@ -925,6 +940,16 @@ class EmbeddedContentTests(SimpleTestCase):
         self.assertNotIn('word/afchunk.mht', safe)
         self.assertNotIn('rIdChunk', safe['word/_rels/document.xml.rels'].decode('utf-8'))
         self.assertEqual(removed['chunks'], 1)
+
+    def test_an_object_pointer_outside_an_object_goes_too(self):
+        stray = ('<w:r><w:pict>' + OLE_SHAPE + '<o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:pict>'
+                 '</w:r><w:r><w:objectEmbed r:id="rIdOle"/><w:t>KEPT</w:t></w:r>')
+        data, safe, removed = self.safe(paragraph(stray), OLE_RELS, OLE_PARTS)
+        xml = safe['word/document.xml'].decode('utf-8')
+        self.assertIn('<w:r><w:pict>' + OLE_SHAPE + '</w:pict></w:r><w:r><w:t>KEPT</w:t></w:r>', xml)
+        self.assertNotIn('word/embeddings/Microsoft_Excel_Worksheet.xlsx', safe)
+        self.assertNotIn('rIdOle', safe['word/_rels/document.xml.rels'].decode('utf-8'))
+        self.assertEqual(removed['objects'], 2)
 
     def test_a_relationship_kept_content_still_names_is_kept(self):
         shared = paragraph(f'<w:r>{OLE_OBJECT}</w:r>') + paragraph('<w:hyperlink r:id="rIdOle"><w:r><w:t>KEPT LINK'

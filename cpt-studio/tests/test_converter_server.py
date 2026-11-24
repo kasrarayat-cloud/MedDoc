@@ -115,8 +115,9 @@ class ServiceTests(SimpleTestCase):
                         self.assertEqual(document.convert_docx(data), here)
 
     def test_refused_and_failed_are_a_failed_conversion(self):
-        cases = [(fake_runner, b'PK\x03\x04 synthetic, not a zip', 'refused'), (failing_runner, PLAIN_PACKAGE, 'failed'),
-                 (no_pdf_runner, PLAIN_PACKAGE, 'failed'), (big_pdf, PLAIN_PACKAGE, 'failed')]
+        cases = [(fake_runner, b'PK\x03\x04 synthetic, not a zip', 'refused'),
+                 (failing_runner, PLAIN_PACKAGE, 'failed'), (no_pdf_runner, PLAIN_PACKAGE, 'failed'),
+                 (big_pdf, PLAIN_PACKAGE, 'failed')]
         for runner, data, said in cases:
             with self.subTest(runner=runner.__name__), Running(runner) as running:
                 with self.assertRaises(converter_server.ConverterFailed) as caught, \

@@ -3,16 +3,16 @@ the converter service (studio.converter_server) runs exactly the code the worker
 studio.fable.document re-exports every name, so its callers and tests keep theirs.
 
 ``convert_in_child`` is the one way a Word file becomes a PDF, for the worker's in-process path and for the converter
-service alike (E1). Its caller - the parent - makes a throwaway work folder, runs ``_convert_package`` in a bounded child
-(studio.bounded.run_bounded: CONVERT_SECONDS of wall clock, CONVERT_MEMORY_BYTES of address-space growth) and removes
-the folder whatever happened. In the child, ``safe_package`` makes the upload a package that cannot reach outside itself
-(within PACKAGE_SECONDS, checked between parts); then the runner - ``soffice_convert`` unless a test gives another -
-converts it in that folder within SOFFICE_SECONDS, and tells the parent LibreOffice's process group before it waits on
-it, so the parent's finally kills that group as well as the child, timeout or not.
+service alike (E1). Its caller - the parent - makes a throwaway work folder, runs ``_convert_package`` in a bounded
+child (studio.bounded.run_bounded: CONVERT_SECONDS of wall clock, CONVERT_MEMORY_BYTES of address-space growth) and
+removes the folder whatever happened. In the child, ``safe_package`` makes the upload a package that cannot reach
+outside itself (within PACKAGE_SECONDS, checked between parts); then the runner - ``soffice_convert`` unless a test
+gives another - converts it in that folder within SOFFICE_SECONDS, and tells the parent LibreOffice's process group
+before it waits on it, so the parent's finally kills that group as well as the child, timeout or not.
 
 ``safe_package``:
-- Only a Word package is converted (an OpenDocument file or any other zip named .docx is refused, since LibreOffice opens
-  what it finds, whatever the name).
+- Only a Word package is converted (an OpenDocument file or any other zip named .docx is refused, since LibreOffice
+  opens what it finds, whatever the name).
 - Its size is checked from the zip directory before any part is read (E1): at most MAX_PART_BYTES a part and
   MAX_PACKAGE_BYTES in all once inflated, and no part over INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION
   times its stored size; each part is then read through a bounded reader that inflates at most its declared size plus
@@ -55,7 +55,7 @@ from .. import bounded
 
 log = logging.getLogger(__name__)
 
-# --- the conversion and its limits (E1) ---------------------------------------------------------------------------------
+# --- the conversion and its limits (E1) -----------------------------------------------------------------------------
 CONVERT_SECONDS = 60  # the bounded child's wall clock, which its parent keeps
 PACKAGE_SECONDS = 10  # safe_package's own, checked between parts (and every few thousand elements of a part)
 SOFFICE_SECONDS = 45  # soffice's own, inside the child: 10 + 45 leaves the child 5 of its 60 s
@@ -93,10 +93,11 @@ MAX_INFLATION = 100  # a part may inflate to at most this many times its stored 
 INFLATION_CHECKED_FROM = 1024 * 1024  # ...once it inflates past this: a smaller part costs nothing whatever its ratio
 URI_SCHEME = re.compile(r'[A-Za-z][A-Za-z0-9+.-]*:')
 
-# --- what E2 removes ------------------------------------------------------------------------------------------------------
+# --- what E2 removes --------------------------------------------------------------------------------------------------
 # A field whose type (the first word of its instruction) starts with one of these is neutralised: LibreOffice could
 # act on its instruction while it converts - include a file of the server, fetch a picture, link or query a source.
-FIELD_INSTRUCTIONS_REMOVED = ('INCLUDETEXT', 'INCLUDEPICTURE', 'INCLUDE', 'LINK', 'DDE', 'DDEAUTO', 'IMPORT', 'DATABASE')
+FIELD_INSTRUCTIONS_REMOVED = ('INCLUDETEXT', 'INCLUDEPICTURE', 'INCLUDE', 'LINK', 'DDE', 'DDEAUTO', 'IMPORT',
+                              'DATABASE')
 WORD_NAMESPACES = ('http://schemas.openxmlformats.org/wordprocessingml/2006/main',  # transitional
                    'http://purl.oclc.org/ooxml/wordprocessingml/main')  # strict
 RELATIONSHIP_ID_NAMESPACES = ('http://schemas.openxmlformats.org/officeDocument/2006/relationships',
@@ -119,8 +120,8 @@ class ConversionRefused(Exception):
 
 
 class ConversionFailed(Exception):
-    """convert_in_child: no PDF came of the Word file (the child failed, passed a limit or made no PDF); the detail is in
-    fixed words."""
+    """convert_in_child: no PDF came of the Word file (the child failed, passed a limit or made no PDF); the detail is
+    in fixed words."""
 
 
 def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bytes:
@@ -391,6 +392,13 @@ _FLDCHAR, _FLDSIMPLE, _FLDDATA = _names('fldChar'), _names('fldSimple'), _names(
 _OBJECT, _CONTROL, _ALTCHUNK, _DRAWING, _RUN = (_names('object'), _names('control'), _names('altChunk'),
                                                 _names('drawing'), _names('r'))
 _FIELD_TEXT = _names('instrText', 'delInstrText', 't', 'delText')  # text that may spell a field's type
+# How a reader might assemble a field's instruction from that text: all of it, the instruction elements only, the text
+# not deleted, or w:instrText alone. The type is read in each, and one that names a removed type removes the field, so
+# no reader's view of the instruction is wider than this one's. A field Word wrote reads the same in all four.
+_READINGS = (('all', _FIELD_TEXT), ('instruction', _names('instrText', 'delInstrText')),
+             ('live', _names('instrText', 't')), ('bare', _names('instrText')))
+# What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
+_OLE_POINTERS = frozenset({'urn:schemas-microsoft-com:office:office OLEObject'}) | _names('objectEmbed', 'objectLink')
 # What a run may hold inside a field's instruction before the field's type is spelled out: anything else in the run (a
 # tab, a symbol, a picture, ...) makes the type unreadable from the text alone, and an unreadable type is removed.
 _RUN_NEUTRAL = _FIELD_TEXT | _names('rPr', 'lastRenderedPageBreak', 'fldChar')
@@ -403,8 +411,8 @@ _WORD_PREFIXES = tuple(f'{namespace} ' for namespace in WORD_NAMESPACES)
 _VML_PREFIX = f'{VML_NAMESPACE} '
 # A part is read for E2 only when its bytes hold one of these elements' tags (any prefix): element names are literal in
 # a part's bytes, so a part without one has nothing E2 removes.
-_TRIGGER = re.compile(rb'<(?:[^\s<>/:!?"\'=]+:)?(?:fldChar|fldSimple|instrText|delInstrText|object|control|altChunk)'
-                      rb'[\s/>]')
+_TRIGGER = re.compile(rb'<(?:[^\s<>/:!?"\'=]+:)?(?:fldChar|fldSimple|instrText|delInstrText|object|control|altChunk'
+                      rb'|OLEObject|objectEmbed|objectLink)[\s/>]')
 _DOCTYPE = re.compile(rb'<!DOCTYPE')
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
@@ -441,15 +449,18 @@ class _Element:
 
 class _Field:
     """A complex field (w:fldChar begin ... separate ... end) while it is read: its marks with the open elements around
-    each, and its type as far as its own instruction text has spelled it."""
-    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'letters', 'decided', 'unreadable')
+    each, and its type in each of the _READINGS as far as its own instruction text has spelled it."""
+    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'letters', 'done', 'decided', 'unreadable')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
-        self.letters, self.decided, self.unreadable = '', False, False
+        self.letters = {reading: '' for reading, _ in _READINGS}
+        self.done = {reading: False for reading, _ in _READINGS}
+        self.decided = self.unreadable = False
 
     def removed(self) -> bool:
-        return self.unreadable or self.letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED)
+        return self.unreadable or any(letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED)
+                                      for letters in self.letters.values())
 
 
 class _PartReader:
@@ -461,7 +472,7 @@ class _PartReader:
         self.raw, self.deadline, self.editable, self.collect_values = raw, deadline, editable, collect_values
         self.stack, self.fields, self.edits, self.declared, self.references, self.values = [], [], [], [], [], set()
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
-        self.elements, self.text_field, self.parser = 0, None, None
+        self.elements, self.text_field, self.text_name, self.parser = 0, None, None, None
 
     def read(self):
         parser = self.parser = expat.ParserCreate(namespace_separator=' ')
@@ -529,7 +540,7 @@ class _PartReader:
         elif name in _OBJECT:
             element.children = []
         elif name in _FIELD_TEXT and field is not None and not field.decided:
-            self.text_field = field
+            self.text_field, self.text_name = field, name
             self.parser.CharacterDataHandler = self._text
         self.stack.append(element)
 
@@ -560,19 +571,33 @@ class _PartReader:
         elif name in _ALTCHUNK:
             self._remove(element)
             self.removed['chunks'] += 1
+        elif name in _OLE_POINTERS:
+            self._remove(element)  # inside a w:object the object takes it too, and counts it
+            ancestor = element.parent
+            while ancestor is not None and ancestor.name not in _OBJECT:
+                ancestor = ancestor.parent
+            if ancestor is None:
+                self.removed['objects'] += 1
 
     def _text(self, data):
         field = self.text_field
         if field is None or field.decided:
             return
-        if not field.letters:
-            first = _LETTER.search(data)
-            if first is None:
-                return
-            data = data[first.start():]
-        stop = _NOT_LETTER.search(data)
-        field.letters = (field.letters + (data[:stop.start()] if stop else data)[:_TYPE_LETTERS])[:_TYPE_LETTERS]
-        if stop is not None or len(field.letters) >= _TYPE_LETTERS:
+        for reading, kinds in _READINGS:
+            if self.text_name not in kinds or field.done[reading]:
+                continue
+            text, letters = data, field.letters[reading]
+            if not letters:
+                first = _LETTER.search(text)
+                if first is None:
+                    continue
+                text = text[first.start():]
+            stop = _NOT_LETTER.search(text)
+            letters = (letters + (text[:stop.start()] if stop else text)[:_TYPE_LETTERS])[:_TYPE_LETTERS]
+            field.letters[reading] = letters
+            if stop is not None or len(letters) >= _TYPE_LETTERS:
+                field.done[reading] = True
+        if all(field.done.values()):
             field.decided = True
 
     # the removals
@@ -671,8 +696,8 @@ class _PartReader:
             qualified = _TAG_NAME.match(self.raw, element.start).group(1)
             prefix = qualified.rpartition(b':')[0]
             pict = prefix + b':pict' if prefix else b'pict'
-            declarations = ''.join(f' xmlns={quoteattr(uri)}' if prefix_ is None else f' xmlns:{prefix_}={quoteattr(uri)}'
-                                   for prefix_, uri in element.declared)
+            declarations = ''.join(f' xmlns={quoteattr(uri)}' if declared is None
+                                   else f' xmlns:{declared}={quoteattr(uri)}' for declared, uri in element.declared)
             self._edit(element.start, start_end, b'<' + pict + declarations.encode('utf-8') + b'>')
             for child in children:
                 if not child.name.startswith(_VML_PREFIX):
@@ -766,7 +791,8 @@ def _content_types(raw):
         if child.tag == f'{{{CONTENT_TYPES_NS}}}Default':
             defaults[(child.get('Extension') or '').casefold()] = (child.get('ContentType') or '').casefold()
         elif child.tag == f'{{{CONTENT_TYPES_NS}}}Override':
-            overrides[(child.get('PartName') or '').lstrip('/').casefold()] = (child.get('ContentType') or '').casefold()
+            part = (child.get('PartName') or '').lstrip('/').casefold()
+            overrides[part] = (child.get('ContentType') or '').casefold()
     return defaults, overrides
 
 
@@ -780,7 +806,8 @@ def _content_type(name, types) -> str:
 
 
 def _refuse_any_dtd(raw):
-    """Refuses ``raw`` when an XML parser reading it would meet a DTD; anything else wrong with it is not this check's."""
+    """Refuses ``raw`` when an XML parser reading it would meet a DTD; anything else wrong with it is not this
+    check's."""
     probe = expat.ParserCreate()
     probe.StartDoctypeDeclHandler = probe.EntityDeclHandler = _refuse_dtd
     try:

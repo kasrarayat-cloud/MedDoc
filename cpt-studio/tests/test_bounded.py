@@ -1,9 +1,9 @@
 """studio/bounded.py: work run in a forked child under a wall clock and a memory allowance - today the Word-to-PDF
-conversion of the coding step (studio.fable.docx_package.convert_in_child; tests/test_fable_document.py drives it through
-fake converters). The child returns exactly what the function returns; past the wall clock it is killed and reaped; past
-the memory allowance the work is refused; an exception inside it is logged and raised without its internals; and every
-process group the work reported is killed by the parent, timeout or not (release 1, E1: LibreOffice runs in a session
-of its own, which killing the child does not reach). Synthetic data only; no network.
+conversion of the coding step (studio.fable.docx_package.convert_in_child; tests/test_fable_document.py drives it
+through fake converters). The child returns exactly what the function returns; past the wall clock it is killed and
+reaped; past the memory allowance the work is refused; an exception inside it is logged and raised without its
+internals; and every process group the work reported is killed by the parent, timeout or not (release 1, E1: LibreOffice
+runs in a session of its own, which killing the child does not reach). Synthetic data only; no network.
 
 Moved from the earlier pipeline's round-4 suite (tests/test_repairs_r4_lead_bounded.py) when lane E removed the routing
 and context extraction those tests also drove; the four generic tests are unchanged but for the function the first one
