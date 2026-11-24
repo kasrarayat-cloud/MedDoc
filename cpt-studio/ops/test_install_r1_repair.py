@@ -1046,19 +1046,26 @@ class ExecuteWithThePlansReasonTests(TemporaryDirectoryTest):
         self.assertEqual(Path(details['log']).read_bytes(), certificate())
 
     def test_a_reason_line_the_output_happens_to_repeat_never_discards_the_record(self):
-        # builder D's example: a reason file whose line is just the approver's name, which the act's output also says
+        # builder D's example: a reason file whose line is just the approver's name, which the act's output also says.
+        # Since repair round 2 (I2-7, installer-5) it is refused before the act: a name alone is not a reason in words,
+        # and its redaction took the approver's name out of the certificate's own record
         r1, world = self.world(certificate())
+        with self.assertRaisesRegex(install.InstallError, 'must give the reason in words'):
+            world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                      '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'Grace Hopper\n')
+        self.assertEqual(world.acts(), [])
+        # a reason in words that the output happens to repeat is redacted there, and the record is kept
         details = world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
-                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'Grace Hopper\n')
+                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'approved by: Grace Hopper\n')
         self.assertEqual(details['exit'], 0)
-        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 2})  # the text line and the ledger line's value
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
         self.assertIn(f'Plan {CERTIFICATE_PLAN}: completed', details['stdout'])
         self.assertIn('Rows destroyed: 12', details['stdout'])
-        self.assertNotIn('Grace Hopper', details['stdout'])
+        self.assertNotIn('approved by: Grace Hopper', details['stdout'])
         log = Path(details['log']).read_bytes()
         self.assertIn(b'Destruction certificate', log)
-        self.assertNotIn(b'Grace Hopper', log)
-        self.assertIn('2 occurrence(s) of the reason', details['summary'])
+        self.assertNotIn(b'approved by: Grace Hopper', log)
+        self.assertIn('1 occurrence(s) of the reason', details['summary'])
 
     def test_the_shape_before_builder_ds_repair_is_kept_with_the_reason_redacted(self):
         reason_text = PLAN_REASON.decode().strip()

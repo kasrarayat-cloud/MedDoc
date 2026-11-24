@@ -15,6 +15,8 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
   I2-5  installer-2: an option given more than once is refused before anything runs, the receipt naming it.
   I2-6  installer-3: a re-grant is approved only by the line 'Approved: --regrant <name>' (outside a fence and a
         comment), the words named nowhere else in the declaration; a refusal, however its lines break, approves nothing.
+  I2-7  installer-5: a reason too short or too plain to be redacted without touching ids and counts is refused
+        before the act: in words, the whole text and each line of 12 characters or more.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
@@ -812,6 +814,62 @@ class RegrantApprovalTests(TemporaryDirectoryTest):
         self.assertIsNone(error, error and str(error))
         grant = [command for command in commands if command[1] == 'grant_operator']
         self.assertEqual(grant[0][-1], '--regrant')
+
+
+# --- I2-7: a reason in words, so no redaction touches an id or a count -----------------------------------------------------
+
+# refutation round 2, installer-5: dispose.py _plan's own lines for plan 7c9e6679-4521-40de-944b-e07fc1f90ae7, one file of
+# 4521 bytes - and the reasons that altered them
+PLAN_ID = '7c9e6679-4521-40de-944b-e07fc1f90ae7'
+PLAN_OUTPUT = (f'Plan {PLAN_ID} for document {r1.PLAN} (1 document(s)); nothing was changed. Carry it out within 24 '
+               'hours with --execute --plan <id>, run and approved by two different people.\n'
+               'Rows in scope: studio.encounter 1\n'
+               'Files in scope: 1 (4521 bytes; 0 missing); manifest sha256 ' + 'ab' * 32 + '\n').encode()
+
+
+class ReasonInWordsTests(TemporaryDirectoryTest):
+    def plan(self, reason):
+        world = r1.ManageWorld(self.tmp, output=PLAN_OUTPUT)
+        try:
+            return world.run('--command', 'dispose', '--dispose-step', 'plan', '--encounter-id', r1.PLAN, '--reason-file',
+                             'REASON', '--by', 'Ada Lovelace', reason=reason), None, world
+        except install.InstallError as error:
+            return None, error, world
+
+    def test_a_reason_too_short_or_too_plain_is_refused_before_the_act(self):
+        for reason in (b'4521\n', b'40de\n', b'7c9e6679\n', b'Ticket 4521\n', b'Grace Hopper\n', b'per ticket\n'):
+            with self.subTest(reason=reason):
+                details, error, world = self.plan(reason)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('--reason-file must give the reason in words', str(error))
+                self.assertIn('nothing was run', str(error))
+                self.assertEqual(world.acts(), [])
+                self.assertNotIn(reason.decode().strip(), str(error))  # the refusal never repeats the reason
+        # a line of 12 characters or more that is one word: an id, a link, a number alone
+        for line in (PLAN_ID, 'https://support.example/tickets/4521', '123456789012'):
+            with self.subTest(line=line):
+                details, error, world = self.plan(f'The practice asked to end access.\n{line}\n'.encode())
+                self.assertIn('is one word - an id, a link or a number alone', str(error))
+                self.assertEqual(world.acts(), [])
+
+    def test_a_reason_in_words_runs_and_leaves_the_plan_id_and_the_counts_whole(self):
+        for reason in (b'Ticket 4521: the document belongs to another practice.\n',
+                       b'Ticket 4521.\nThe document belongs to another practice.\n',  # a short line is not redacted alone
+                       b'Close per ticket ADM-4521, at the practice\'s request.\n'):
+            with self.subTest(reason=reason):
+                details, error, world = self.plan(reason)
+                self.assertIsNone(error, error and str(error))
+                self.assertIn(f'Plan {PLAN_ID} for document', details['stdout'])
+                self.assertIn('Files in scope: 1 (4521 bytes; 0 missing)', details['stdout'])
+                self.assertNotIn('redacted', details)
+
+    def test_every_text_the_redaction_replaces_is_held_to_the_rule(self):
+        # the rule reads reason_values' own forms: the whole text, and each line of 12 characters or more
+        self.assertEqual(install.reason_words_problem(b'Short.\nA longer second line here\n'), '')
+        self.assertIn('in words', install.reason_words_problem(b'a b\n'))  # three words, but 2 characters
+        self.assertIn('in words', install.reason_words_problem(b'abcdefghijkl mnop\n'))  # two words
+        self.assertIn('one word', install.reason_words_problem(b'one two three\nabcdefghijklmnop\n'))
+        self.assertEqual(install.reason_words_problem(b'one two three\nabcdefghijk\n'), '')  # 11: never redacted alone
 
 
 if __name__ == '__main__':

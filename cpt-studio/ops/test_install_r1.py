@@ -1447,7 +1447,8 @@ class MinorRepairTests(TemporaryDirectoryTest):
         with self.assertRaisesRegex(install.InstallError, 'at most'):
             install.read_reason_file(str(big))
         exact = self.tmp / 'exact.txt'
-        exact.write_bytes(b'y' * install.REASON_LIMIT)
+        # in words (repair round 2, I2-7: a reason of one word is refused before the act), and exactly the limit
+        exact.write_bytes((b'word ' * install.REASON_LIMIT)[:install.REASON_LIMIT - 1] + b'y')
         self.assertEqual(len(install.read_reason_file(str(exact))), install.REASON_LIMIT)
         link = self.tmp / 'link.txt'
         link.symlink_to(exact)

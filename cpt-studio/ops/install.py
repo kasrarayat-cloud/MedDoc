@@ -413,8 +413,9 @@ def assert_no_secret(outputs, values):
 # (reason_values) - is replaced by REDACTED_MARK before the log and the receipt are written, and the receipt counts how
 # many were (redact_output; never a value). A secret is replaced wherever it occurs (a long random value cannot occur by
 # chance); a value of the reason as written and as JSON writes it inside a string (a ledger line's), and one shorter than
-# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it, so an id or a digest that happens to contain a short
-# reason is never altered.
+# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it. Since refutation round 2 (installer-5: '-' bounds every
+# group of an id, so a 4-digit reason altered a plan id) an operator's reason is refused before the act unless every
+# value of it is in words (reason_words_problem), so that last rule is reached only by none of them.
 REDACTED_MARK = b'[redacted by the installer]'
 REDACT_BOUNDED_BELOW = 12
 _ALNUM = b'0-9A-Za-z'
@@ -8309,6 +8310,31 @@ def reason_values(reason) -> list:
     return [text, *[line.strip() for line in text.splitlines() if len(line.strip()) >= 12]]
 
 
+# A reason the redaction can never alter an id or a count with (refutation round 2, installer-5: a reason under 12
+# characters - a bare ticket number, '4521' - was redacted wherever no letter or digit stood beside it, and '-' bounds
+# every group of an id: it changed a group of the plan id execute needs, which the receipt then no longer showed, and hid
+# a count). Every text redact_output replaces of a reason (reason_values: its whole text, and each of its lines of 12
+# characters or more) must be in words: the whole text REASON_MIN_CHARACTERS characters or more that are not white
+# space and REASON_MIN_WORDS words or more (the release's act script, act_r1.sh, refuses the same), and each such line
+# two words or more - white space, which no id, digest, link or number holds. Anything else is refused before the act.
+REASON_MIN_CHARACTERS = 12
+REASON_MIN_WORDS = 3
+
+
+def reason_words_problem(reason: bytes) -> str:
+    """'' when ``reason`` is in words (above), else the refusal."""
+    whole, *lines = reason_values(reason)
+    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or len(whole.split()) < REASON_MIN_WORDS:
+        return (f'--reason-file must give the reason in words - {REASON_MIN_CHARACTERS} characters or more that are not '
+                f'white space, and {REASON_MIN_WORDS} words or more: a shorter or plainer one (a ticket number alone) '
+                "would be redacted from the act's output wherever it stands, inside an id or a count too")
+    if any(len(line.split()) < 2 for line in lines):
+        return ('--reason-file has a line of 12 characters or more that is one word - an id, a link or a number alone: '
+                "each such line is redacted on its own wherever it stands in the act's output, inside an id or a count "
+                'too; put it in a sentence')
+    return ''
+
+
 def read_reason_file(path) -> bytes:
     """A ruled act's reason (A6): a regular file, never a link, of UTF-8 text, not empty, at most REASON_LIMIT bytes. Its
     bytes go to the command as a RAM-only file; the receipt keeps its sha256 and size, never its text."""
@@ -8322,6 +8348,9 @@ def read_reason_file(path) -> bytes:
         raise InstallError('--reason-file is not UTF-8 text.') from None
     if not text.strip():
         raise InstallError('--reason-file is empty.')
+    problem = reason_words_problem(data)  # refutation round 2, installer-5: in words, before the act
+    if problem:
+        raise InstallError(f'{problem}; nothing was run.')
     return data
 
 

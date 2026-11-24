@@ -800,9 +800,8 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   phileak-1 and dataloss-3: a destruction's certificate that repeated the plan's
   reason was discarded with its log): every occurrence of the setup code, the
   application's own secret values and the reason's text (whole, or any line of
-  12 characters or more, as written or as JSON writes it inside a string; a
-  shorter reason only where no letter or digit adjoins it, so no id or digest
-  is altered) is replaced by `[redacted by the installer]` before the log and
+  12 characters or more, as written or as JSON writes it inside a string) is
+  replaced by `[redacted by the installer]` before the log and
   the receipt are written, and the receipt's `redacted` counts them by kind
   (`secret`, `reason`), never a value; the summary says so, and a secret the
   command printed is a FINDING. A setup code it printed is never kept (the
@@ -813,7 +812,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   fails, the receipt fails with the act's record (its exit, its log, its
   output) and says what did not finish, and a signal or a Ctrl-C there is
   recorded beside it (a setup code is then not kept). The receipt keeps the
-  command's stdout (ids and counts) and its log. Nothing that is not on the list
+  command's stdout (ids and counts) and its log. A reason must be in words, so
+  that its redaction can never touch an id or a count: its text 12 characters
+  or more that are not white space and three words or more (as the release's
+  act script requires), and each line of 12 characters or more two words or
+  more. A ticket number alone, or a line that is an id, a link or a number
+  alone, is refused before the act (refutation round 2, installer-5: a reason
+  `4521` was redacted inside a plan id's group, which `--plan-id` then needs,
+  and inside a byte count). Nothing that is not on the list
   runs. An act holds the receipts' lock for its whole run, as every phase does,
   so no install, `switch-back` or `rollback-app` can start while it runs (and
   none of them can be running when it starts). An act's own time ends 300 s
@@ -2036,6 +2042,11 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   the new server's). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
+- A ruled act's reason in words is still redacted wherever the act's output
+  repeats it, as any echo of it is: one written as the act's own printed words
+  around an id or a count (a reason line such as `Files in scope: 1`) is
+  redacted there too. The receipt counts every redaction (`redacted`) and the
+  summary says how many, so such a record is seen, never silent.
 - The disposal ledger holds every disposal ever made, and this release replays
   and keeps one of at most 16 MiB (`LEDGER_LIMIT`; **Disposal, returns and the
   ledger**): about four whole-practice disposals of a practice-year at one
