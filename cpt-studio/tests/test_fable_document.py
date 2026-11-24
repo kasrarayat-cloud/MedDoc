@@ -9,6 +9,7 @@ package is built here, never read from a file."""
 import base64
 import hashlib
 import http.server
+import inspect
 import io
 import math
 import os
@@ -648,7 +649,7 @@ class PackageLimitTests(SimpleTestCase):
 
     def test_the_checks_have_a_time_budget(self):
         self.assertEqual((docx_package.PACKAGE_SECONDS, docx_package.SOFFICE_SECONDS, docx_package.CONVERT_SECONDS),
-                         (10, 45, 60))
+                         (10, 55, 70))
         with mock.patch.object(docx_package, 'PACKAGE_SECONDS', -1):  # checked between parts
             self.refused(PLAIN_PACKAGE, 'checking it took longer than')
             self.assertEqual(docx_package._convert_package(fake_runner, PLAIN_PACKAGE, '/nonexistent')[0], 'busy')
@@ -729,7 +730,8 @@ class ConversionCleanupTests(SimpleTestCase):
                 mock.patch.object(bounded, 'report_group', side_effect=lambda pgid: calls.append(('report', pgid))), \
                 mock.patch.object(bounded, 'group_ended', side_effect=lambda pgid: calls.append(('ended', pgid))):
             self.assertEqual(docx_package.soffice_convert(PLAIN_PACKAGE, folder), CONVERTED)
-        self.assertEqual(calls, [('report', 4242), ('wait', 45), ('killpg', 4242, signal.SIGKILL), ('ended', 4242),
+        self.assertEqual(calls, [('report', 4242), ('wait', docx_package.SOFFICE_SECONDS),
+                                 ('killpg', 4242, signal.SIGKILL), ('ended', 4242),
                                  ('wait', None)])
         self.assertEqual(Path(seen['cwd']), folder)
         self.assertTrue(folder.is_dir())  # the parent removes it, not soffice_convert
@@ -746,6 +748,50 @@ class ConversionCleanupTests(SimpleTestCase):
             self.assertEqual(self.leftovers(), [])
         finally:
             kill_marked(marker)
+
+
+# A stand-in for soffice that takes ``{seconds}`` s, then writes a PDF where soffice would (run as soffice_convert runs
+# soffice: its own argv and an empty environment). Never LibreOffice itself.
+SLOW_SOFFICE = """#!{python}
+import sys, time
+args = sys.argv[1:]
+out = args[args.index('--outdir') + 1]
+time.sleep({seconds})
+open(out + '/document.pdf', 'wb').write(b'%PDF-1.4 synthetic slow stand-in\\n%%EOF\\n')
+"""
+
+
+@override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
+class LibreOfficeTimeTests(SimpleTestCase):
+    """The time limits after the lead's real-LibreOffice measurement: LibreOffice keeps the 55 s it had before release
+    1 (a 5,000-row table converts in 48.4 s, which spec E1's 45 s refused), and the parent's limit is the sum of the
+    package checks, LibreOffice and a margin, so the bounds cannot drift apart."""
+
+    def test_a_conversion_longer_than_45_s_and_shorter_than_55_s_is_not_refused(self):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        stand_in = folder / 'soffice-slow'
+        stand_in.write_text(SLOW_SOFFICE.replace('{python}', sys.executable).replace('{seconds}', '47'),
+                            encoding='utf-8')
+        stand_in.chmod(0o700)
+        started = time.monotonic()
+        with mock.patch.object(docx_package, 'SOFFICE', str(stand_in)):  # the real soffice_convert and bounded child
+            pdf = document.convert_docx(PLAIN_PACKAGE)
+        took = time.monotonic() - started
+        self.assertTrue(pdf.startswith(b'%PDF-1.4 synthetic slow stand-in'))
+        self.assertGreater(took, 45)  # the positive control: longer than spec E1 gave LibreOffice
+        self.assertLess(took, docx_package.CONVERT_SECONDS)
+
+    def test_the_time_limits_hold_together(self):
+        self.assertEqual((docx_package.PACKAGE_SECONDS, docx_package.SOFFICE_SECONDS), (10, 55))
+        self.assertGreater(docx_package.CHILD_MARGIN_SECONDS, 0)
+        self.assertEqual(docx_package.CONVERT_SECONDS, docx_package.PACKAGE_SECONDS + docx_package.SOFFICE_SECONDS
+                         + docx_package.CHILD_MARGIN_SECONDS)
+        self.assertEqual(docx_package.CONVERT_SECONDS, 70)
+        for function in (docx_package.convert_in_child, document.convert_docx):  # what each conversion is held to
+            with self.subTest(function=function.__qualname__):
+                self.assertEqual(inspect.signature(function).parameters['seconds'].default,
+                                 docx_package.CONVERT_SECONDS)
 
 
 # --- E2: field instructions and embedded content ------------------------------------------------------------------

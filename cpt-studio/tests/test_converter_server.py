@@ -26,7 +26,7 @@ from unittest import mock
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from studio import converter_server, decisions, jobs, models
+from studio import bounded, converter_server, decisions, jobs, models
 from studio.fable import BUSY, CONVERT, client as fable_client, document, docx_package
 from tests.support import coding as f
 from tests.test_fable_document import (CONVERTED, DANGEROUS, DOCX, PLAIN_PACKAGE, TEXT, _echo_package, _follower,
@@ -173,7 +173,29 @@ class ServiceTests(SimpleTestCase):
                 mock.patch.object(converter_server, 'request', return_value=CONVERTED) as request:
             self.assertEqual(document.convert_docx(PLAIN_PACKAGE), CONVERTED)
         request.assert_called_once_with('/run/cpt-convert/convert.sock', PLAIN_PACKAGE, connect_seconds=2,
-                                        total_seconds=255)
+                                        total_seconds=300)
+        # the bounds hold together: four Word files in a row, each up to the parent's limit, the connect and a margin
+        with override_settings(CONCURRENT_DOCUMENTS=4):
+            self.assertEqual(document.converter_wait_seconds(),
+                             4 * docx_package.CONVERT_SECONDS + document.CONVERTER_CONNECT_SECONDS
+                             + document.CONVERTER_MARGIN_SECONDS)
+        self.assertGreater(document.CONVERTER_MARGIN_SECONDS, 0)
+
+    def test_each_conversion_has_the_parents_limit_and_a_stop_allows_one_to_finish(self):
+        seen = {}
+
+        def converting(data, *, runner=None, seconds=None, memory_bytes=None):
+            seen['seconds'] = seconds
+            return CONVERTED
+        with mock.patch.object(docx_package, 'convert_in_child', converting), Running(fake_runner) as running, \
+                self.assertLogs('studio.converter_server', 'INFO'):
+            self.assertEqual(converter_server.request(running.path, PLAIN_PACKAGE, total_seconds=60), CONVERTED)
+        self.assertEqual(seen['seconds'], docx_package.CONVERT_SECONDS)
+        # what docker stop must allow the converter (A7): the conversion running, killing what it started, a margin
+        self.assertEqual(converter_server.MIN_STOP_SECONDS, docx_package.CONVERT_SECONDS + bounded.GROUP_GONE_SECONDS
+                         + converter_server.STOP_MARGIN_SECONDS)
+        self.assertGreater(converter_server.STOP_MARGIN_SECONDS, 0)
+        self.assertEqual(converter_server.MIN_STOP_SECONDS, 80)
 
     def test_required_with_no_socket_is_busy_and_nothing_is_converted_in_the_worker(self):
         with override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=True), \

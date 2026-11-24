@@ -61,9 +61,14 @@ from .. import bounded
 log = logging.getLogger(__name__)
 
 # --- the conversion and its limits (E1) -----------------------------------------------------------------------------
-CONVERT_SECONDS = 60  # the bounded child's wall clock, which its parent keeps
+# The bounded child's wall clock, which its parent keeps, is the sum of what the child does: the package checks, then
+# LibreOffice, then a margin for the rest (starting, writing the package, reading the PDF back). LibreOffice keeps the
+# 55 s it had before release 1, so no Word file that converts today times out (a deviation from spec E1, which took the
+# checks' 10 s out of LibreOffice's time).
 PACKAGE_SECONDS = 10  # safe_package's own, checked between parts (and every few thousand elements of a part)
-SOFFICE_SECONDS = 45  # soffice's own, inside the child: 10 + 45 leaves the child 5 of its 60 s
+SOFFICE_SECONDS = 55  # soffice's own, inside the child
+CHILD_MARGIN_SECONDS = 5
+CONVERT_SECONDS = PACKAGE_SECONDS + SOFFICE_SECONDS + CHILD_MARGIN_SECONDS  # 70
 CONVERT_MEMORY_BYTES = 2 * 1024 ** 3  # address-space growth allowed to the child, a second guard behind its container
 # The API takes 32 MB per request; base64 adds a third, so a PDF over 23 MiB (about 30.7 MB encoded) cannot fit with
 # the instructions. Uploads stop at 15 MB; only a converted Word file can be larger.

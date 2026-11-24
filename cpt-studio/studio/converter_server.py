@@ -37,6 +37,7 @@ import sys
 import time
 import zipfile
 
+from . import bounded
 from .fable import docx_package
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,11 @@ ANSWER_SECONDS = 30  # and to take its answer
 CONNECT_SECONDS = 2
 PING_SECONDS = 2
 IDLE_SECONDS = 0.5  # how often the server looks whether it was asked to stop, while no connection waits
+# What `docker stop` must allow the converter at least (A7's stop timeout): the conversion it is running
+# (docx_package.CONVERT_SECONDS, the bound of each conversion here as in the worker), killing what that conversion
+# started (bounded.GROUP_GONE_SECONDS), and STOP_MARGIN_SECONDS to answer the connections waiting busy and close: 80 s.
+STOP_MARGIN_SECONDS = 8
+MIN_STOP_SECONDS = docx_package.CONVERT_SECONDS + bounded.GROUP_GONE_SECONDS + STOP_MARGIN_SECONDS
 CONVERT, PING = 'convert', 'ping'
 OK, ERROR = 'ok', 'error'
 REFUSED, FAILED, BUSY = 'refused', 'failed', 'busy'
@@ -297,7 +303,7 @@ class ConverterServer(socketserver.UnixStreamServer):
             return
         started = time.monotonic()
         try:
-            pdf = docx_package.convert_in_child(data, runner=self.runner)
+            pdf = docx_package.convert_in_child(data, runner=self.runner, seconds=docx_package.CONVERT_SECONDS)
         except docx_package.ConversionBusy as exc:  # its checks ran out of time: busy, for a retry
             log.warning('converter: busy (%s)', exc)
             self._answer(sock, _error(BUSY))

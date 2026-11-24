@@ -3,7 +3,7 @@
 - PDF: a base64 document block with citations, titled with the original file name. No local PDF parsing at all.
 - DOCX: converted to PDF by LibreOffice, by the one code that converts a Word file (studio.fable.docx_package,
   Django-free: safe_package makes it a package that cannot reach outside itself - SEC-S6, release 1 E1 and E2 - and
-  soffice_convert converts that in a bounded child of 60 s, with a memory cap, a throwaway HOME and profile and no
+  soffice_convert converts that in a bounded child of 70 s, with a memory cap, a throwaway HOME and profile and no
   inherited environment). Where it runs (release 1 E3): with settings.CONVERTER_SOCKET, in the converter service on that
   socket (studio.converter_server: a sealed container, one conversion at a time); a converter that cannot be reached, or
   does not answer in time, fails the document BUSY - a member may retry - and nothing is converted inside the worker.
@@ -40,10 +40,11 @@ from .docx_package import (  # noqa: F401 - re-exported (E3): callers and tests 
 PDF, DOCX, TEXT = ALLOWED_SUFFIXES['.pdf'], ALLOWED_SUFFIXES['.docx'], ALLOWED_SUFFIXES['.txt']
 PASTE_TITLE = 'Pasted text'
 # E3: the worker's side of the converter service. It allows CONVERTER_CONNECT_SECONDS to connect and, in all,
-# CONVERT_SECONDS for each of the worker's CONCURRENT_DOCUMENTS threads plus CONVERTER_MARGIN_SECONDS (255 s for 4): the
-# service converts one file at a time, so every thread of the worker can wait its turn.
+# converter_wait_seconds(): CONVERT_SECONDS for each of the worker's CONCURRENT_DOCUMENTS threads - the service converts
+# one file at a time, so every thread may wait its turn behind the others - the connect, and CONVERTER_MARGIN_SECONDS
+# (300 s for 4).
 CONVERTER_CONNECT_SECONDS = 2
-CONVERTER_MARGIN_SECONDS = 15
+CONVERTER_MARGIN_SECONDS = 18
 CONVERT_TEXT = 'The Word file could not be opened.'
 BUSY_TEXT = 'The coding service is busy. Try again in a few minutes.'  # studio.jobs.FAILURE_TEXT[BUSY], word for word
 STORAGE_TEXT = 'The stored document could not be read back unchanged.'
@@ -173,13 +174,18 @@ def convert_docx(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_by
         raise DocumentError(CONVERT, CONVERT_TEXT, str(exc)) from None
 
 
+def converter_wait_seconds() -> int:
+    """How long the worker waits for the converter, in all, for one Word file (see CONVERTER_CONNECT_SECONDS)."""
+    return CONVERT_SECONDS * settings.CONCURRENT_DOCUMENTS + CONVERTER_CONNECT_SECONDS + CONVERTER_MARGIN_SECONDS
+
+
 def _converted_by_service(path, data: bytes) -> bytes:
     """The PDF the converter service on the socket ``path`` made of ``data`` (studio.converter_server.request): BUSY
     when it cannot be reached, does not answer in time or says it is busy; CONVERT when it refused the file, failed, or
     answered in a form it does not use."""
-    total = CONVERT_SECONDS * settings.CONCURRENT_DOCUMENTS + CONVERTER_MARGIN_SECONDS
     try:
-        return converter_server.request(path, data, connect_seconds=CONVERTER_CONNECT_SECONDS, total_seconds=total)
+        return converter_server.request(path, data, connect_seconds=CONVERTER_CONNECT_SECONDS,
+                                        total_seconds=converter_wait_seconds())
     except converter_server.ConverterBusy as exc:
         raise DocumentError(BUSY, BUSY_TEXT, str(exc)) from None
     except converter_server.ConverterFailed as exc:
