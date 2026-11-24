@@ -574,11 +574,22 @@ class SignInRowsTests(TestCase):
                 self.assertNotIn('Seq Scan on studio_loginattempt', plan)
                 self.assertIn(index or 'studio_login_', plan)
 
-    def test_clearing_a_names_delay_reads_the_case_insensitive_index(self):
+    def test_a_case_insensitive_name_is_read_by_an_index_never_the_table(self):
+        # the inflated name: clear_failures reads its last day of rows, through whichever index bounds them best (the
+        # name holds most rows, so the day's own index may be the narrower one)
         (sql,) = self.sql_of(lambda: throttle.clear_failures(self.owner.username.upper()), 'UPPER(')
-        plan = self.plan(sql)
-        self.assertNotIn('Seq Scan on studio_loginattempt', plan)
-        self.assertIn('studio_login_upper_name_time', plan)
+        self.assertNotIn('Seq Scan on studio_loginattempt', self.plan(sql))
+        # an ordinary name beside it: only the case-insensitive index finds it - in clear_failures, and in the
+        # disposal's hashing of a closed account's rows (username__iexact with no time bound)
+        name = self.colleague.username.upper()
+        (bounded,) = self.sql_of(lambda: throttle.clear_failures(name), 'UPPER(')
+        (unbounded,) = self.sql_of(lambda: list(models.LoginAttempt.objects.filter(username__iexact=name)
+                                                .values_list('pk', flat=True)), 'UPPER(')
+        for sql in (bounded, unbounded):
+            with self.subTest(sql=sql[-90:]):
+                plan = self.plan(sql)
+                self.assertNotIn('Seq Scan on studio_loginattempt', plan)
+                self.assertIn('studio_login_upper_name_time', plan)
 
     def test_the_latest_sign_ins_read_one_row_a_name_and_answer_as_before(self):
         names = [self.owner.username, self.colleague.username, 'never-signed-in']
