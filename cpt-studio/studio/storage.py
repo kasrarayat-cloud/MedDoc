@@ -107,6 +107,25 @@ def read_original(source_file) -> bytes:
     return data
 
 
+def in_practice_folder(workspace_id, storage_name) -> bool:
+    """Whether ``storage_name`` lies in the practice's own folder: its first part is the practice's id."""
+    try:
+        folder = str(uuid.UUID(str(workspace_id)))
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return isinstance(storage_name, str) and storage_name.split('/', 1)[0] == folder
+
+
+def read_own_original(workspace_id, source_file) -> bytes:
+    """read_original for a reader acting for one practice (release 1; refutation finding 6): OriginalCorrupted, before
+    any byte is read, when ``source_file``'s storage name - a SourceFile, or anything with ``storage_name`` and
+    ``sha256``, such as a round's converted PDF - lies outside the practice's own folder (<workspace_id>/). A row of one
+    practice that names another practice's file is a corrupted or crafted row: that file is never read for it."""
+    if not in_practice_folder(workspace_id, getattr(source_file, 'storage_name', None)):
+        raise OriginalCorrupted('A stored file lies outside its practice\'s folder.')
+    return read_original(source_file)
+
+
 # --- release 1: finding and removing stored files (D1 disposal, D3 clean-up) ------------------------------------------
 
 def root_path() -> Path:

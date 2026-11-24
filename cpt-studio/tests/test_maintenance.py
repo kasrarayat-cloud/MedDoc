@@ -23,6 +23,7 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from django.contrib.sessions.models import Session
@@ -94,6 +95,23 @@ class StoreCleanUpTests(OriginalsCase, TestCase):
             with self.assertRaises(OSError):
                 storage.store_original(ws.pk, f.PDF_BYTES, 'synthetic.pdf')
         self.assertEqual(stored_files(self.root), [])
+
+    def test_a_reader_for_one_practice_never_reads_another_practices_file(self):
+        mine, other = f.workspace(), f.workspace('Another practice')
+        name, digest, _ = storage.store_original(mine.pk, f.PDF_BYTES, 'synthetic.pdf')
+        foreign, foreign_digest, _ = storage.store_original(other.pk, f.PDF_BYTES + b'other', 'other.pdf')
+        own = SimpleNamespace(storage_name=name, sha256=digest)
+        self.assertEqual(storage.read_own_original(mine.pk, own), f.PDF_BYTES)
+        self.assertEqual(storage.read_own_original(str(mine.pk).upper(), own), f.PDF_BYTES)  # the id, not its spelling
+        with mock.patch.object(storage, 'read_original', wraps=storage.read_original) as read:
+            for workspace_id, source in ((mine.pk, SimpleNamespace(storage_name=foreign, sha256=foreign_digest)),
+                                         (other.pk, own), ('not-an-id', own),
+                                         (mine.pk, SimpleNamespace(storage_name=None, sha256=digest))):
+                with self.subTest(workspace=str(workspace_id), name=source.storage_name):
+                    with self.assertRaises(storage.OriginalCorrupted):
+                        storage.read_own_original(workspace_id, source)
+        self.assertEqual(read.call_count, 0)  # refused before any byte was read
+        self.assertFalse(storage.in_practice_folder(mine.pk, f'{mine.pk}x/{name.split("/")[1]}'))
 
     def test_a_good_store_keeps_its_one_file(self):
         ws = f.workspace()

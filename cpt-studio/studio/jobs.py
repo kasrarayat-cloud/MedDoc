@@ -16,6 +16,7 @@ reconcile; a stage that died is settled as it would have settled itself, never c
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -32,7 +33,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import audit, models, state
-from .storage import OriginalCorrupted, read_original, store_original
+from .storage import OriginalCorrupted, read_own_original, store_original
 from .fable import (BUSY, CEILING, CONVERT, DECLINED, DOCUMENT, FAILED, HOLD, STORAGE, TOO_LONG, UNAVAILABLE,
                     UNKNOWN, UNREADABLE)
 from .fable import client as fable_client
@@ -433,8 +434,11 @@ def _code(job, round_):
     if coder is None:
         _fail(round_, UNAVAILABLE)
     _live_gate(job, coder, round_.revision, round_)
+    # every file read for this document lies in its own practice's folder (storage.read_own_original): a row naming
+    # another practice's file fails the round 'storage', as an unreadable original does, before anything is counted or sent
+    own = functools.partial(read_own_original, encounter.workspace_id)
     try:
-        document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_))
+        document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_), reader=own)
     except fable_document.DocumentError as exc:
         log.info('round %s: the document was not sent (%s)', round_.pk, exc.detail or exc.failure_kind)
         _fail(round_, exc.failure_kind, text=exc.text)
@@ -476,17 +480,19 @@ def _code(job, round_):
 def _stored_conversion(round_):
     """For a Word document: a converter answering with the PDF a round of this revision already read and stored (the
     newest), so a resumed round, and every later round of the revision, reads - and the customer's viewer shows - the
-    same pages; it converts afresh when that file can no longer be read back unchanged. None (convert) when no round
-    of the revision stored one."""
+    same pages; it converts afresh when that file can no longer be read back unchanged, or lies outside the document's
+    own practice's folder (storage.read_own_original: never read). None (convert) when no round of the revision stored
+    one."""
     stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
               .exclude(view_pdf_storage_name='').order_by('-number').first())
     if stored is None:
         return None
+    workspace_id = round_.encounter.workspace_id
 
     def reuse(data):
         try:
-            return read_original(SimpleNamespace(storage_name=stored.view_pdf_storage_name,
-                                                 sha256=stored.view_pdf_sha256))
+            return read_own_original(workspace_id, SimpleNamespace(storage_name=stored.view_pdf_storage_name,
+                                                                   sha256=stored.view_pdf_sha256))
         except (OriginalCorrupted, OSError):
             log.warning('round %s: the stored conversion of round %s could not be read back; converting again',
                         round_.pk, stored.pk)
@@ -496,12 +502,13 @@ def _stored_conversion(round_):
 
 def _keep_view(round_, document, encounter):
     """Record on ``round_`` the PDF a Word document was converted to, as it is sent (CodingRound.view_pdf_*): the file
-    an earlier round of the revision stored when the bytes are the same, else stored now (storage.store_original). A
+    an earlier round of the revision stored when the bytes are the same - only one in the document's own practice's
+    folder, so a crafted row's name is never copied onto a new round - else stored now (storage.store_original). A
     failure to store is logged and coding goes on: the viewer then shows no page of a Word document."""
     if document.kind != 'docx' or round_.view_pdf_sha256 == document.sha256:
         return
     same = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
-                                 view_pdf_storage_name__isnull=False).exclude(view_pdf_storage_name='')
+                                 view_pdf_storage_name__startswith=f'{encounter.workspace_id}/')
             .order_by('-number').first())
     if same is not None:
         name = same.view_pdf_storage_name
