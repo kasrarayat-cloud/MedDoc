@@ -1846,7 +1846,18 @@ release 1), run only through `--phase manage`, never over HTTP:
   dataloss-1: a cut copy was refused, or replayed without the oldest
   disposals). A secret the command printed in it is redacted there, and that
   line no longer verifies: the summary says so (a FINDING), and the ledger is
-  printed again once that is fixed;
+  printed again once that is fixed. The ledger step keeps only a ledger the
+  replay step reads - at most `LEDGER_LIMIT` (16 MiB) and UTF-8, the one limit
+  both steps read (refutation round 2, installer-0: the replay had refused, at
+  1 MiB, a 5,000-document practice's ledger the ledger step called kept whole).
+  The limit is sized for the largest practice this release serves: at the
+  owner's figure (1,000 practices at 50 uploads a day) a practice reaches
+  18,250 documents in a year, and its whole-practice disposal adds about
+  3.8 MB of ledger at one file a document (209 bytes a document, 92 more for
+  each further file, about 5 KB a disposal), 8.9 MB at four files. A ledger past
+  the limit is written to no file: the step fails, says why, and changes
+  nothing (the database keeps every row the ledger is printed from); see
+  **Known limits**;
 - `--dispose-step replay-ledger --ledger-file <file>` is,
   on its own, a dry run that changes nothing (the receipt's `mode` says `dry
   run`, and its summary never says done); with `--execute --approved-by
@@ -1977,6 +1988,14 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   the new server's). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
+- The disposal ledger holds every disposal ever made, and this release replays
+  and keeps one of at most 16 MiB (`LEDGER_LIMIT`; **Disposal, returns and the
+  ledger**): about four whole-practice disposals of a practice-year at one
+  file a document. Past it the ledger step fails and keeps none, and a release
+  must raise the limit (the replay's one-shot has 768 MiB; its reading of a
+  16 MiB ledger peaks under 90 MiB) before a ledger can be kept again. Until
+  then, never restore the database from a backup older than its newest
+  disposal: no ledger could destroy that data again.
 - Release 1's front door (A1) starts with the spec's numbers (D5), sized on a
   copy before the live publish, the sign-in and the upload raised for an office
   behind one address: every request 30 r/s with a burst of 120 per client, the

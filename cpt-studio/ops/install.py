@@ -477,7 +477,8 @@ def raise_after_act(error, record, what):
     the receipt beside the interrupt."""
     if isinstance(error, Exception):
         said = str(error) or type(error).__name__
-        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: {record.get("log")}), '
+        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: '
+                           f'{record.get("log") or "none kept"}), '
                            f'but what follows the act did not finish: {said}. If it was the RAM folder\'s wipe, a '
                            f'/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, never read it.',
                            details={**record, 'after_act': said}) from error
@@ -8586,7 +8587,18 @@ DISPOSE_STEP_ARGUMENTS = {
     'replay-ledger': ('ledger_file', 'execute', 'approved_by'),
 }
 DISPOSE_ARGUMENTS = ('workspace_id', 'encounter_id', 'plan_id', 'approved_by', 'reason_file', 'ledger_file', 'execute')
-LEDGER_LIMIT = 1024 * 1024
+# A ledger's one limit (refutation round 2, installer-0: the replay refused, at 1 MiB, the ledger the ledger step had kept
+# "whole"): what --dispose-step replay-ledger reads (read_ledger_file) and so what --dispose-step ledger keeps as a ledger
+# (ledger_problem) - one name, read by both. It is sized for the largest practice this release serves: at the owner's
+# figure (1,000 practices at 50 uploads a day) a practice reaches 18,250 documents in a year, and its whole-practice
+# disposal adds about 209 bytes of ledger a document with one file, 92 more for each further file, and about 5 KB
+# (round 2's measurement): about 3.8 MB for that year at one file a document, 8.9 MB at four. 16 MiB holds that with
+# room - four such one-file practice-years in one ledger. Where the ledger travels none is smaller: the ledger step's
+# one-shot prints it whole (its stdout read whole), its log is written whole, its receipt keeps STDOUT_KEPT characters
+# and its sha256, size and lines; a replay hands it over in the RAM folder (/dev/shm: a tmpfs of half the host's
+# memory, 16 GiB here) to a one-shot of 768 MiB, whose reading of a 16 MiB ledger (the text, its lines, each line's JSON
+# and MAC: studio.disposal.read_ledger) peaks under 90 MiB (measured, repair round 2).
+LEDGER_LIMIT = 16 * 1024 * 1024
 # D2: a practice's export is written into a NEW folder of its own under EXPORTS_DIR on the host (root 0700), which the
 # one-shot writes as the application's user; afterwards the root helper makes everything in it root-only. [TO CONFIRM
 # the path on this host.]
@@ -8847,17 +8859,28 @@ print(json.dumps(R))
 EXPORTS_MOUNT = 'type=bind,src=/var/lib,dst=/host-var-lib'
 
 
+def ledger_problem(data: bytes) -> str:
+    """'' when ``data`` is a ledger --dispose-step replay-ledger reads (read_ledger_file: at most LEDGER_LIMIT bytes, and
+    UTF-8), else why not - so the ledger step keeps no ledger the replay would refuse (refutation round 2, installer-0)."""
+    if len(data) > LEDGER_LIMIT:
+        return f'it is {len(data)} bytes, more than the {LEDGER_LIMIT} --dispose-step replay-ledger reads (LEDGER_LIMIT)'
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        return 'it is not UTF-8 text'
+    return ''
+
+
 def read_ledger_file(path) -> bytes:
-    """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8. Its MAC is
-    the command's to check (keyed by the application's SECRET_KEY, so a restore keeps the same key)."""
+    """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8 (the rules
+    ledger_problem states, which the ledger step keeps a ledger by). Its MAC is the command's to check (keyed by the
+    application's SECRET_KEY, so a restore keeps the same key)."""
     given = Path(path or '')
     if not given.is_absolute():
         raise InstallError(f'--ledger-file must be an absolute path to a regular file of at most {LEDGER_LIMIT} bytes.')
     data = read_bounded_file(given, LEDGER_LIMIT, '--ledger-file')
-    try:
-        data.decode('utf-8')
-    except UnicodeDecodeError:
-        raise InstallError('--ledger-file is not UTF-8 text.') from None
+    if ledger_problem(data):
+        raise InstallError(f'--ledger-file is not a ledger --dispose-step replay-ledger reads: {ledger_problem(data)}.')
     return data
 
 
@@ -8970,13 +8993,18 @@ def phase_manage(ctx) -> dict:
     stdout, stdout_counts = redact_output(result.stdout, hidden, reasons)
     stderr, stderr_counts = redact_output(result.stderr, hidden, reasons)
     record.update(redaction_record(stdout_counts, stderr_counts))
+    unkept = ''
     if args.command == 'dispose' and args.dispose_step == 'ledger':
         # refutation round 1, dataloss-1: the ledger is the act's whole stdout, kept whole in a log of its own - the
-        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by
-        log = ctx.log('dispose-ledger', stdout)
+        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by.
+        # Refutation round 2, installer-0: only a ledger the replay step reads is kept as one (ledger_problem); another
+        # is written to no file, and the step fails below saying why
+        unkept = ledger_problem(stdout)
+        log = None if unkept else ctx.log('dispose-ledger', stdout)
         record['ledger_printed'] = {'log': log, 'sha256': sha256(stdout), 'bytes': len(stdout),
                                     'lines': sum(1 for line in stdout.splitlines() if line.strip()),
-                                    'redacted': bool(sum(stdout_counts.values()))}
+                                    'redacted': bool(sum(stdout_counts.values())),
+                                    **({'not_kept': unkept} if unkept else {})}
         if stderr:
             record['stderr_log'] = ctx.log('dispose-ledger-stderr', stderr)
     else:
@@ -8984,6 +9012,15 @@ def phase_manage(ctx) -> dict:
     record.update(exit=result.returncode, log=log, argv=argv, **kept_stdout(stdout))  # ids and counts only
     if after_act is not None:
         raise_after_act(after_act, record, f'manage {entry["command"]}')
+    if unkept:
+        raise InstallError(f'dispose ledger (exit {result.returncode}): the ledger it printed is not kept, since {unkept}, '
+                           'so --dispose-step replay-ledger could not replay it after a restore. Nothing was changed: '
+                           'this step only reads, and the database keeps every row the ledger is printed from. '
+                           'LEDGER_LIMIT is sized for one whole-practice disposal of the largest practice this release '
+                           'serves (ops/INSTALL.md, Disposal, returns and the ledger); a ledger past it needs a release '
+                           'that raises it, printed again with that release. Until then, never restore the database '
+                           'from a backup older than its newest disposal: no ledger could destroy that data again.',
+                           details=record)
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
