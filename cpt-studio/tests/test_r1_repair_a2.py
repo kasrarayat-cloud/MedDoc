@@ -4,6 +4,8 @@ read repeated over midnight), each pinned by its finding's own input (refute-r2/
 phi-3         a member's list read repeated just after midnight UTC was counted on the previous day's record, so the new
               day's reads page said 'No read recorded for this choice'. A repeat is now counted only on a record of its
               own UTC day - the day the reads page files a read under.
+              The same class for the document poll (TEC-9 (4), the lead's item 3): a poll writes no row within
+              READ_AUDIT_DETAIL_DEDUPE_SECONDS of a read of the same sign-in only on that read's own UTC day.
 phi-0         GET /api/members ran one LoginAttempt query per membership (about 1 ms each). The practice's last sign-ins
               are now one statement, one index lookup a name, whatever the membership count and the rows a name holds.
 phi-1         the admin door's key step read and settled its LoginAttempt by sign_in_ref, which no index covered: a
@@ -35,7 +37,7 @@ from studio import customer, models, read_audit, request_meta, second_factor, th
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
-from tests.test_read_audit import member_client
+from tests.test_read_audit import ReadCase, member_client
 from tests.test_second_factor import admin_client, enrolled_operator, options_of, password_step
 
 UTC = dt_timezone.utc
@@ -130,6 +132,59 @@ class ListRepeatDayTests(TestCase):
         self.assertIn('read again 2 times by this sign-in, the last at 2026-11-21 12:00:40',
                       self.page('?day=2026-11-21'))
 
+
+
+class DetailPollDayTests(ReadCase):
+    """phi-3's class for the document's poll (TEC-9 (4)): a poll (X-CPT-Poll: 1) of a document this sign-in read within
+    READ_AUDIT_DETAIL_DEDUPE_SECONDS writes no row of its own - only when that read is of the poll's own UTC day, the day
+    the reads page files a read under. The finding's shape: the document read at 23:59:40, polled at 23:59:50 and again
+    at 00:00:20 the next day."""
+
+    def details(self):
+        return [row.created_at for row in models.AccessRecord.objects.filter(
+            view=read_audit.MEMBER_DETAIL, actor_id=self.reviewer.pk).order_by('created_at', 'pk')]
+
+    def member_at(self, moment):
+        with at(moment):  # signed in a moment before its reads (a session's times are never in the future)
+            return member_client(self.reviewer)
+
+    def read_at(self, member, moment, *, poll=True):
+        with at(moment):
+            answer = member.get(f'/api/encounters/{self.text.pk}', **({'HTTP_X_CPT_POLL': '1'} if poll else {}))
+        self.assertEqual(answer.status_code, 200)
+
+    def day_rows(self, day):
+        auditor = ops.admin_client(f.user(f'a2-poll-auditor-{day}'))
+        body = auditor.get(f'/ops/activity/reads?day={day}&kind=member.detail').content.decode()
+        return body.count('Document<br>')  # a member.detail row (the kind's label, then a break)
+
+    def test_a_poll_just_after_midnight_is_a_read_of_the_new_day(self):
+        evening = datetime(2026, 11, 20, 23, 59, 40, tzinfo=UTC)
+        member = self.member_at(evening - timedelta(seconds=5))
+        self.read_at(member, evening, poll=False)  # the document opened at 23:59:40
+        self.read_at(member, evening + timedelta(seconds=10))  # polled at 23:59:50: no row of its own
+        self.read_at(member, evening + timedelta(seconds=40))  # polled at 00:00:20 on the 21st: a row of the 21st
+        self.assertEqual(self.details(), [evening, evening + timedelta(seconds=40)])
+        self.assertEqual((self.day_rows('2026-11-20'), self.day_rows('2026-11-21')), (1, 1))
+
+    def test_the_poll_boundary_is_the_reads_pages_own_to_the_microsecond(self):
+        evening = datetime(2026, 11, 20, 23, 59, 30, tzinfo=UTC)
+        member = self.member_at(evening - timedelta(seconds=5))
+        self.read_at(member, evening, poll=False)
+        self.read_at(member, datetime(2026, 11, 20, 23, 59, 59, 999999, tzinfo=UTC))  # the 20th's last moment: no row
+        midnight = datetime(2026, 11, 21, tzinfo=UTC)
+        self.read_at(member, midnight)  # the 21st's first moment: a row of the 21st
+        self.assertEqual(self.details(), [evening, midnight])
+
+    def test_a_poll_within_one_day_still_writes_at_most_one_row_a_minute(self):
+        noon = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
+        member = self.member_at(noon - timedelta(seconds=5))
+        self.read_at(member, noon, poll=False)
+        for second in (20, 59):
+            self.read_at(member, noon + timedelta(seconds=second))
+        self.assertEqual(self.details(), [noon])
+        self.read_at(member, noon + timedelta(seconds=61))  # past the minute: a row of its own
+        self.assertEqual(self.details(), [noon, noon + timedelta(seconds=61)])
 
 # --- phi-0: the practice's last sign-ins in one statement -----------------------------------------------------------------
 
