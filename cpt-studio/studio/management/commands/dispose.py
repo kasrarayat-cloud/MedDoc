@@ -28,10 +28,11 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
         Exit status: 0 when everything was carried out; 3 (DECISION_EXIT) when the only thing left is an entry that
         needs a person's decision; any other non-zero status for a real failure.
 
-The reason is read from a file, never argv. Every line printed holds ids, counts, digests, fixed words, storage names
-(random ids) and the names of the people who ran and approved the act; never a title, a file's own name, an answer or
-document text. A refusal writes nothing and ends with an error saying nothing was destroyed - which is said only when it
-is true: a replay that stops after it destroyed something says what it destroyed.
+The reason is read from a file, never argv, and printed only as its digest (studio.disposal.reason_digest: in each
+certificate and ledger line; the DisposalEvent rows keep its text). Every line printed holds ids, counts, digests, fixed
+words, storage names (random ids) and the names of the people who ran and approved the act; never a title, a file's own
+name, an answer, a reason's words or document text. A refusal writes nothing and ends with an error saying nothing was
+destroyed - which is said only when it is true: a replay that stops after it destroyed something says what it destroyed.
 """
 import signal
 import threading
@@ -193,7 +194,9 @@ class Command(BaseCommand):
 
     def _replay(self, options):
         try:
-            lines = Path(options['replay_ledger']).read_text(encoding='utf-8').splitlines()
+            # line by line on the newline alone: a JSON string may hold U+2028, U+2029 or U+0085 raw (ledger_line writes
+            # json.dumps(ensure_ascii=False)), which str.splitlines() would cut a genuine line at (refutation dataloss-0)
+            lines = Path(options['replay_ledger']).read_text(encoding='utf-8').split('\n')
         except (OSError, UnicodeDecodeError) as exc:
             raise CommandError(f'The ledger file cannot be read ({type(exc).__name__}).')
         try:

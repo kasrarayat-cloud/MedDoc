@@ -57,7 +57,10 @@ a committed declaration (A6):
                           anything is destroyed, so a replay either refuses having changed nothing or goes on; one that
                           stops partway reports, entry by entry, what it destroyed. The ledger is what
                           ledger_lines() prints: one signed line per DisposalEvent, so a line that was changed, or not
-                          written by this installation, is refused before anything is touched.
+                          written by this installation, is refused before anything is touched; it is read line by line
+                          on the newline alone. A ledger line - so a certificate, which ends with one, and a receipt -
+                          holds a reason only as its digest (reason_digest), never its words: the DisposalEvent rows
+                          keep the text, a replay's own events and the rows it writes back hold the digest.
 
 What a disposal keeps (OWNER DECISION D25, a question for counsel, and named in every certificate): the audit trail
 (AuditEvent) of each destroyed document still holds its decisions' code and line values and the sha256 of its original
@@ -249,10 +252,20 @@ def comparison_key(value) -> str:
     return ' '.join(text.casefold().replace('\u0131', 'i').split())
 
 
+def breaks_a_line(ch) -> bool:
+    """Whether Python reads ``ch`` as the end of a line, as str.splitlines does: the newline and carriage return, the
+    vertical tab and form feed, the file, group and record separators, U+0085, U+2028 and U+2029."""
+    return len(f'x{ch}x'.splitlines()) > 1
+
+
 def person(value, label='--by') -> str:
-    """A named person (a ruled act's --by or --approved-by) as recorded (name_as_recorded): refused when nothing visible
+    """A named person (a ruled act's --by or --approved-by) as recorded (name_as_recorded): refused when it holds a line
+    break (breaks_a_line: a name is one line - recorded, a break would only have become a space), when nothing visible
     is left of it, when it is longer than NAME_CHARS, or when its letters mix two of the Latin, Cyrillic and Greek
     scripts, whose look-alike letters let one name read as another."""
+    given = str(value or '')
+    if any(breaks_a_line(ch) for ch in {*given, *unicodedata.normalize('NFKC', given)}):
+        raise Refused(f'{label} is one line: it holds a line break (a newline, U+0085, U+2028, U+2029 or the like).')
     name = name_as_recorded(value)
     if not name:
         raise Refused(f'{label} is required: a person\'s name, with at least one visible character.')
@@ -272,6 +285,23 @@ def reason_text(value) -> str:
     if len(text) > REASON_CHARS or UNSTORABLE.search(text):
         raise Refused(f'The reason can be at most {REASON_CHARS} characters, with no NUL character.')
     return text
+
+
+REASON_DIGEST_FORM = re.compile(r'sha256:[0-9a-f]{64}')
+
+
+def reason_digest(reason) -> str:
+    """How a disposal's reason leaves the database (release 1 refutation phileak-0): 'sha256:<hex>' of the text a
+    DisposalEvent row holds (reason_text: the reason file's text, its leading and trailing white space removed - so not
+    the sha256 of the file's bytes that a receipt records). Every ledger entry and certificate carries this, never the
+    words: an operator writes the reason freely (a misfiled document's reason can name its patient), and a certificate
+    and the ledger go into receipts and logs and beside the backups. A reason that is such a digest already - the reason
+    of a replay's own events, and of a ledger row the replay wrote back: neither knows the text - is kept as it is, so a
+    row's ledger line is the same before and after a restore; no reason is ''."""
+    text = str(reason or '')
+    if not text or REASON_DIGEST_FORM.fullmatch(text):
+        return text
+    return 'sha256:' + hashlib.sha256(text.encode('utf-8', 'surrogatepass')).hexdigest()
 
 
 def authorization(value, *, required) -> str:
@@ -1040,9 +1070,10 @@ def certificate(event) -> str:
 
 def certificate_text(values, *, ledger='', unrecorded='could not be written') -> str:
     """A destruction certificate (FLOW-19 (f)) from a DisposalEvent's fields - ``id`` None for one that could not be
-    written: ids, counts, digests, who ran and approved it, the authorization, whether its rows were destroyed, what is
-    left and how to finish, and what the command cannot reach. It holds no PHI: no title, no file's own name, no
-    document text, no answer (a storage name is a random id)."""
+    written: ids, counts, digests, who ran and approved it, the authorization, the reason's digest (reason_digest: never
+    its words), whether its rows were destroyed, what is left and how to finish, and what the command cannot reach. It
+    holds no PHI: no title, no file's own name, no document text, no answer, no reason text (a storage name is a random
+    id)."""
     counts, files = values.get('counts') or {}, values.get('files') or {}
     stage, destroyed = values['stage'], counts.get('rows_destroyed', YES)
     if stage == DisposalEvent.COMPLETED:
@@ -1087,7 +1118,9 @@ def certificate_text(values, *, ledger='', unrecorded='could not be written') ->
         lines.append(f'To finish it: remove what stopped it, then plan the same scope again (dispose --plan {target}) and '
                      'carry that plan out; the new plan takes in what this run left.')
     lines += [f'Run by: {values.get("run_by", "")}; approved by: {values.get("approved_by", "")}; authorization: '
-              f'{values.get("authorization_ref", "")}', 'What this command cannot reach:']
+              f'{values.get("authorization_ref", "")}',
+              f'Reason: {reason_digest(values.get("reason")) or "none recorded"} (the sha256 of its text, which no '
+              'certificate, ledger or receipt holds)', 'What this command cannot reach:']
     lines += [f'- {text}' for text in CANNOT_REACH]
     if values['scope'] == DOCUMENT:
         lines.append(MISFILED_REMINDER)
@@ -1102,10 +1135,12 @@ LEDGER_FIELDS = ('id', 'created_at', 'stage', 'scope', 'workspace_id', 'encounte
 
 
 def _entry(event) -> dict:
+    """A DisposalEvent's ledger entry: its fields as the row holds them, but its reason, which goes as its digest
+    (reason_digest) - a ledger, and so a certificate, a receipt or a log, never holds the reason's words."""
     return {'id': str(event.pk), 'created_at': event.created_at.astimezone(dt_timezone.utc).isoformat(),
             'stage': event.stage, 'scope': event.scope, 'workspace_id': str(event.workspace_id),
             'encounter_ids': list(event.encounter_ids), 'counts': event.counts, 'files': event.files,
-            'manifest_digest': event.manifest_digest, 'reason': event.reason, 'run_by': event.run_by,
+            'manifest_digest': event.manifest_digest, 'reason': reason_digest(event.reason), 'run_by': event.run_by,
             'approved_by': event.approved_by, 'authorization_ref': event.authorization_ref, 'notes': event.notes}
 
 
@@ -1150,8 +1185,11 @@ def read_ledger(lines) -> list:
 
 
 def _insert_entry(entry) -> bool:
-    """Write a ledger row the database lacks back exactly as it was (its own id and time) - an insert, never an update:
-    the ledger stays append-only. True when it was missing."""
+    """Write a ledger row the database lacks back exactly as the ledger holds it (its own id and time) - an insert,
+    never an update: the ledger stays append-only. True when it was missing. Its reason is the ledger's: the digest
+    (reason_digest), since no ledger holds a reason's words - so a row written back after a restore holds the sha256
+    of the text its original held, and its ledger line, MAC included, is the original's (a ledger written before
+    release 1's refutation repair holds the text itself, and its rows are written back with it)."""
     if DisposalEvent.objects.filter(pk=entry['id']).exists():
         return False
     quote = connection.ops.quote_name
@@ -1251,7 +1289,8 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
     switch-back, and while the worker beats (a restored database's queued coding would send what was destroyed); two
     different people; then every entry's refusals are checked BEFORE anything is written, so a refused replay changed
     nothing; then every ledger row the database lacks is written back, and each entry whose scope holds anything again
-    is destroyed again (a practice closed in the same transaction), with a DisposalEvent naming the entry it replays.
+    is destroyed again (a practice closed in the same transaction), with a DisposalEvent naming the entry it replays
+    (notes replay=<id>) and the entry's reason as its digest (reason_digest: a ledger holds no reason's words).
     An error on one entry stops the replay there - the entries before it stay done, each with its event - and the
     report says so entry by entry: {'ledger_rows_restored' or 'ledger_rows_missing', 'items', 'stopped'}, each item
     {entry, scope, remains, status, event, outcome, error, certificate, decided_by, covered, added}. A run's
@@ -1279,7 +1318,7 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
             continue
         scope = _replay_scope(entry)
         remains = _what_remains(scope) if scope is not None else None
-        item = {'entry': entry['id'], 'reason': entry['reason'], 'scope': scope, 'remains': remains,
+        item = {'entry': entry['id'], 'reason': reason_digest(entry['reason']), 'scope': scope, 'remains': remains,
                 'needed': _needed(remains), 'status': 'nothing to do', 'event': None, 'outcome': None, 'error': '',
                 'certificate': '', 'decided_by': '', 'covered': list(entry['encounter_ids']), 'added': 0}
         if scope is not None and entry['scope'] == WORKSPACE:
