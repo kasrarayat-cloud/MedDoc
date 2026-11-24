@@ -25,7 +25,8 @@ before it waits on it, so the parent's finally kills that group as well as the c
   (ConversionBusy).
 - Every relationship with TargetMode External is dropped - a linked picture, template, frame or object LibreOffice would
   fetch from a URL or a local path while it converts, into the PDF that is sent and shown - with any part only they
-  referenced.
+  referenced. The content types keep their bytes then, as before release 1: an Override left for a part that is not
+  there is one a reader passes over (repair round 1, C4).
 - Field instructions and embedded content LibreOffice could act on are removed (E2), in every part that holds them: the
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
   spell), keeping the result the reader sees - a field's type read from its live instruction text, text a tracked
@@ -258,9 +259,11 @@ def _safe_package(data: bytes):
         folder, _, leaf = orphan.rpartition('/')
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
+    external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
     removed, held = _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline)
-    if orphans:  # a dropped part's Override goes with it
-        types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in orphans})
+    released = orphans - external_orphans  # what E2 dropped, with the content it removed
+    if released:  # a part E2 dropped takes its Override with it
+        types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in released})
         if types is not parts[CONTENT_TYPES_PART]:
             rewritten[CONTENT_TYPES_PART] = types
     for name, refusal in held.items():  # a part that could not be checked is refused only if it is still sent
@@ -994,9 +997,10 @@ def _refuse_any_dtd(raw):
 def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
-    SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The relationships
-    only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only they named added
-    to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is still sent})."""
+    SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
+    relationships only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only
+    they named added to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is
+    still sent})."""
     removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:

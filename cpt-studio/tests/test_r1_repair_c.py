@@ -5,6 +5,8 @@ folder records the mutation that undoes each repair and the test it fails.
 - C1 (coding-0): no ratio of inflated to stored size is held against a part. Generated Word tables (no w14:paraId, a
   border on every cell) deflate more than 100 times, and the code before release 1 converts them; the absolute limits,
   the bounded reader and the bounded child's limits still hold.
+- C4 (coding-3): with none of E2's features, the content types keep the base's bytes when an External relationship
+  orphans a part that has an Override (the Override of a part E2 itself drops still goes with it).
 - C5 (coding-4): a field's type is read from its live instruction text; text a tracked change deleted counts only when
   nothing live names a type. Every shape below was converted from the base revision's package by a real LibreOffice
   (24.2, measured by builder C; lo/lo_fields*.out in the builder's folder), and each test follows what it rendered.
@@ -20,11 +22,12 @@ from django.test import SimpleTestCase, override_settings
 
 from studio.fable import document, docx_package
 from studio.models import SourceRevision
-from tests.test_fable_document import (BEGIN, CONVERTED, DANGEROUS, DOCX, END, FULL_NAMESPACES, NAMESPACES,
-                                       PLAIN_PACKAGE, SEPARATE, TEXT, WORD_MAIN, _echo_package, complex_field,
+from tests.test_fable_document import (BEGIN, CONVERTED, DANGEROUS, DOCX, END, FULL_NAMESPACES, LINKED_PICTURE,
+                                       NAMESPACES, OLE_DEFAULTS, OLE_OBJECT_RUN_PARAGRAPH, OLE_PARTS, OLE_RELS,
+                                       PLAIN_PACKAGE, PNG, SEPARATE, TEXT, WORD_MAIN, _echo_package, complex_field,
                                        content_types, document_xml, full_package, instruction, legacy_safe_package,
-                                       lying, override, paragraph, parts_of, private_tempdir, relationship,
-                                       relationships, shown, word_package)
+                                       lying, named_but_missing, override, paragraph, parts_of, private_tempdir,
+                                       relationship, relationships, shown, word_package, zipped)
 
 MIB = 1024 * 1024
 
@@ -43,9 +46,9 @@ def generated_cell(text=''):
     run = (f'<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/></w:rPr>'
            f'<w:t>{text}</w:t></w:r>') if text else ''
     return (f'<w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/>{GENERATED_BORDERS}<w:vAlign w:val="center"/></w:tcPr>'
-            f'<w:p {GENERATED_RSID}><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/>'
-            f'<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/></w:rPr></w:pPr>{run}'
-            '</w:p></w:tc>')
+            f'<w:p {GENERATED_RSID}><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/>'
+            f'<w:jc w:val="center"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/>'
+            f'</w:rPr></w:pPr>{run}</w:p></w:tc>')
 
 
 def generated_note():
@@ -154,8 +157,8 @@ class GeneratedTableTests(SimpleTestCase):
         too_much = zero_parts(22 * MIB, 22 * MIB, 22 * MIB)  # each part within its limit, 66 MiB in all
         for data, said in ((too_large, 'a part is too large once inflated'),
                            (too_much, 'its parts are too large once inflated')):
-            with self.subTest(said), \
-                    mock.patch.object(docx_package, '_read_part', side_effect=AssertionError('a part was read')) as read:
+            reading = mock.patch.object(docx_package, '_read_part', side_effect=AssertionError('a part was read'))
+            with self.subTest(said), reading as read:
                 self.assertLess(len(data), MIB)  # a small upload that says it inflates past the limits
                 with self.assertRaises(docx_package.PackageRefused) as caught:
                     docx_package.safe_package(data)
@@ -193,6 +196,68 @@ class GeneratedTableTests(SimpleTestCase):
         self.assertEqual(counts['fields'], 1)
         self.assertNotIn(b'secret', parts_of(package)['word/media/picture.png'])
 
+
+# --- C4: the content types when an External relationship orphans a part -------------------------------------------
+OLE_TYPE = 'application/vnd.openxmlformats-officedocument.oleObject'
+
+
+def external_orphan_package(*, with_default=False, picture=False):
+    """The lens's coding-3 input: no field, object, control or altChunk; the main part's only relationship is External
+    and its relative target names a part the package holds, which has an Override - an embedded object's bytes, or (a
+    linked picture whose target is an embedded copy) a picture."""
+    if picture:
+        named, target, kind, body, content = ('word/media/image1.png', 'media/image1.png', 'image',
+                                              TEXT + LINKED_PICTURE, PNG)
+        rid, content_type = 'rIdImg', 'image/png'
+    else:
+        named, target, kind, body = 'word/embeddings/oleObject1.bin', 'embeddings/oleObject1.bin', 'oleObject', TEXT
+        rid, content_type, content = 'rId7', OLE_TYPE, b'\xd0\xcf\x11\xe0 synthetic compound file bytes'
+    defaults = f'<Default Extension="bin" ContentType="{OLE_TYPE}"/>' if with_default else ''
+    return zipped([
+        ('[Content_Types].xml', content_types(override('word/document.xml', WORD_MAIN), override(named, content_type),
+                                              defaults=defaults)),
+        ('_rels/.rels', relationships(relationship('rId1', 'officeDocument', 'word/document.xml'))),
+        ('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                              f'<w:document {NAMESPACES}><w:body>{body}</w:body></w:document>'),
+        ('word/_rels/document.xml.rels', relationships(relationship(rid, kind, target, 'External'))),
+        (named, content)])
+
+
+class ExternalOrphanContentTypesTests(SimpleTestCase):
+    """C4 (coding-3): the base drops the part an External relationship orphaned and keeps [Content_Types].xml byte for
+    byte (a stale Override, which a reader passes over); head also removed the Override, so a package with none of
+    E2's features differed from the base's."""
+
+    def test_an_external_orphan_leaves_the_content_types_as_the_base_does(self):
+        for label, data in (('an embedded object an External relationship names', external_orphan_package()),
+                            ('the same with a Default for .bin', external_orphan_package(with_default=True)),
+                            ('a linked picture whose target is an embedded copy',
+                             external_orphan_package(picture=True))):
+            with self.subTest(label):
+                package, removed = docx_package._safe_package(data)
+                self.assertEqual(package, legacy_safe_package(data))
+                self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 0})
+                safe, original = parts_of(package), parts_of(data)
+                self.assertEqual(safe['[Content_Types].xml'], original['[Content_Types].xml'])
+                self.assertEqual(len(safe), len(original) - 1)  # the orphan itself is dropped, as before release 1
+
+    def test_a_part_e2_drops_still_loses_its_override_beside_an_external_orphan(self):
+        embedding = 'word/embeddings/Microsoft_Excel_Worksheet.xlsx'
+        workbook = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        data = full_package(TEXT + OLE_OBJECT_RUN_PARAGRAPH, document_rels=OLE_RELS + (
+            relationship('rId7', 'oleObject', 'embeddings/oleObject1.bin', 'External'),),
+            parts=OLE_PARTS + (('word/embeddings/oleObject1.bin', b'\xd0\xcf\x11\xe0 synthetic'),),
+            defaults=OLE_DEFAULTS + override(embedding, workbook) + override('word/embeddings/oleObject1.bin',
+                                                                               OLE_TYPE))
+        package, removed = docx_package._safe_package(data)
+        self.assertEqual(removed['objects'], 1)
+        safe = parts_of(package)
+        types = safe['[Content_Types].xml'].decode('utf-8')
+        self.assertNotIn(embedding, types)  # dropped by E2 with the object that named it: its Override goes
+        self.assertIn('/word/embeddings/oleObject1.bin', types)  # dropped by the External rule: kept, as the base
+        self.assertNotIn(embedding, safe)
+        self.assertNotIn('word/embeddings/oleObject1.bin', safe)
+        self.assertEqual(named_but_missing(safe), ['Override /word/embeddings/oleObject1.bin'])
 
 # --- C5: a field's type from its live instruction text ---------------------------------------------------------------
 TRACKED = 'w:author="Synthetic Editor" w:date="2026-11-24T00:00:00Z"'
