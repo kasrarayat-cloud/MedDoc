@@ -8020,6 +8020,11 @@ def operator_reason(ctx, username, kind) -> str:
             f'({door_of(ctx)["declaration_commit"]}).\n')
 
 
+# The lines a declaration names an act with (declaration_names; ops/INSTALL.md, operators): the words alone, or in
+# backticks, on a line of their own.
+DECLARED_LINE_FORMS = ('{words}', '`{words}`')
+
+
 def door_of(ctx) -> dict:
     """The declaration this run is bound to - main's check_door record, else (a phase called directly) the door's two
     variables."""
@@ -8040,11 +8045,16 @@ def authorization_of(ctx) -> str:
 
 
 def declaration_names(ctx, words) -> bool:
-    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there)."""
+    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there): one of
+    its lines, split at line feeds and whitespace-trimmed, is exactly ``words`` or exactly ``words`` in backticks
+    (DECLARED_LINE_FORMS) - a line of its own, never a part of one (refutation round 1, installer-0: a substring test
+    read '--regrant alice' as naming '--regrant ali', and so did a sentence such as 'do not --regrant ali')."""
     try:
-        return words in (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
+        text = (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError, ValueError):
         return False
+    forms = {form.format(words=words) for form in DECLARED_LINE_FORMS}
+    return any(line.strip() in forms for line in text.split('\n'))
 
 
 def person_problem(value, flag) -> str:

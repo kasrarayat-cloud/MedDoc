@@ -8,6 +8,8 @@ never passed, without one). Synthetic data only.
   I2  rollback-1, rollback-2: no way back to a revision without release 1's disposal (switch-back, rollback-app in the
       keep layout, rollback-app's removal when the next pair is such a revision or not known) while a practice is closed
       or a document destroyed; refused before anything starts or stops, and again at the switch-back's B4.
+  I3  installer-0: a re-grant is approved only by a line of the committed declaration that is exactly
+      `--regrant <username>` (optionally in backticks), whitespace-trimmed.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -645,6 +647,90 @@ class RollbackRemovalDisposalTests(TemporaryDirectoryTest):
                 details, error, calls = self.run_phase(self.containers(parked), counts, pre)
                 self.assertIsNone(error, error and str(error))
                 self.assertIn(('rm', '--force', 'web-aaaa'), calls)
+
+
+# --- I3: a re-grant is named by a line of its own -----------------------------------------------------------------------
+
+# installer-0's input: the declaration names alice inside a sentence
+ALICE_SENTENCE = ('# Ruled act\n\nApproved by the owner: `--regrant alice` (alice was revoked in error).\nRevision '
+                  + 'a' * 40 + '\n')
+
+
+class RegrantDeclarationTests(TemporaryDirectoryTest):
+    def names(self, text, words):
+        root = self.tmp / f'repo-{uuid.uuid4().hex[:8]}'
+        (root / 'docs').mkdir(parents=True)
+        (root / 'docs' / 'declaration.md').write_bytes(text.encode('utf-8'))
+        ctx = SimpleNamespace(door={'declaration': 'docs/declaration.md', 'declaration_commit': 'd' * 40})
+        with mock.patch.object(install, 'ROOT', root):
+            return install.declaration_names(ctx, words)
+
+    def test_another_name_that_starts_with_it_or_a_sentence_names_nothing(self):
+        for words in ('--regrant ali', '--regrant al', '--regrant alice'):
+            with self.subTest(words=words):
+                self.assertIs(self.names(ALICE_SENTENCE, words), False)
+        for text in ('do not --regrant ali\n', 'We decided: --regrant ali\n', '- `--regrant ali`\n',
+                     '* --regrant ali\n', '`--regrant ali` (approved)\n', '--regrant alice\n', '`--regrant alice`\n',
+                     '--regrant ali, bob\n', '"--regrant ali"\n', '``--regrant ali``\n', '--regrant  ali\n',
+                     'do not\u2028--regrant ali\n', '--regrant ali --regrant bob\n', ''):
+            with self.subTest(text=text):
+                self.assertIs(self.names(text, '--regrant ali'), False)
+
+    def test_a_line_of_its_own_names_it_bare_or_in_backticks_whitespace_trimmed(self):
+        for text in ('--regrant ali\n', '`--regrant ali`\n', '  --regrant ali\t\n', 'x\r\n`--regrant ali`\r\ny\r\n',
+                     ALICE_SENTENCE + '\n`--regrant ali`\n', '--regrant ali'):
+            with self.subTest(text=text):
+                self.assertIs(self.names(text, '--regrant ali'), True)
+        self.assertIs(self.names('`--regrant alice`\n', '--regrant alice'), True)
+
+    def test_a_declaration_that_cannot_be_read_names_nothing(self):
+        ctx = SimpleNamespace(door={'declaration': 'docs/missing.md', 'declaration_commit': 'd' * 40})
+        with mock.patch.object(install, 'ROOT', self.tmp):
+            self.assertIs(install.declaration_names(ctx, '--regrant ali'), False)
+        (self.tmp / 'docs').mkdir()
+        (self.tmp / 'docs' / 'undecodable.md').write_bytes(b'\xff\xfe\n--regrant ali\n')
+        ctx = SimpleNamespace(door={'declaration': 'docs/undecodable.md', 'declaration_commit': 'd' * 40})
+        with mock.patch.object(install, 'ROOT', self.tmp):
+            self.assertIs(install.declaration_names(ctx, '--regrant ali'), False)
+
+
+class RegrantAtTheDoorTests(TemporaryDirectoryTest):
+    """installer-0 through the real phase_manage: ali, revoked, is never granted again on a declaration naming alice."""
+
+    def run_grant(self, text, username='ali'):
+        import test_install_r1 as r1
+        world = r1.ManageWorld(self.tmp, grant={'exists': True, 'operator': False, 'revoked': True})
+        root = self.tmp / 'repo'
+        (root / r1.DECLARATION).parent.mkdir(parents=True, exist_ok=True)
+        (root / r1.DECLARATION).write_text(text)
+        reason = self.tmp / 'reason.txt'
+        reason.write_bytes(b'Ticket 991: re-grant.\n')
+        args = r1.parse('--phase', 'manage', '--command', 'grant-operator', '--username', username, '--regrant',
+                        username, '--reason-file', str(reason), '--by', 'Ada Lovelace', '--review-by', r1.REVIEW_BY)
+        args.receipts = str(self.tmp)
+        ctx = install.Context(args, self.tmp)
+        ctx.door = {'declaration': r1.DECLARATION, 'declaration_commit': r1.COMMIT}
+        with mock.patch.multiple(install, ROOT=root, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=world.oneshot, inspect=world.inspect,
+                                 root_file=world.root, run_helper=world.run_helper, read_protected_env=mock.Mock(
+                                     return_value=f'CPT_STUDIO_SECRET_KEY={r1.SECRET_VALUE}\n'.encode()),
+                                 app_script=world.app_script):
+            try:
+                return install.phase_manage(ctx), None, world
+            except install.InstallError as error:
+                return None, error, world
+
+    def test_a_declaration_naming_alice_never_grants_ali_again(self):
+        details, error, world = self.run_grant(ALICE_SENTENCE)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('stays revoked', str(error))
+        self.assertEqual(world.acts(), [])
+
+    def test_a_line_of_its_own_grants_it_again(self):
+        details, error, world = self.run_grant(ALICE_SENTENCE + '\n`--regrant ali`\n')
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.acts()[0][:2], ['manage', 'grant_operator'])
+        self.assertEqual(world.acts()[0][-1], '--regrant')
 
 
 class SessionScriptImportTests(unittest.TestCase):
