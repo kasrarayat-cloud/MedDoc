@@ -820,6 +820,28 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertEqual(world.mounted['ledger'][0], '{"ledger": []}\n')
         self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})
 
+    def test_a_replay_that_leaves_an_entry_to_a_person_is_recorded_so_never_done_nor_a_failure(self):
+        # Lane 4: --replay-ledger --execute exits non-zero when an entry's commit outcome was unknown
+        said = b'replayed 7 of 8 entries; entry 3f2a0c1e-0000-4000-8000-000000000003 needs a decision\n'
+        world = ManageWorld(self.tmp, output=said, exit_code=2)
+        details = world.run('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER',
+                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--execute', '--approved-by',
+                            'Grace Hopper')
+        self.assertEqual((details['mode'], details['exit']), ("needs a person's decision", 2))
+        self.assertEqual(details['stdout'], said.decode())  # the command's ids-only output, in the receipt
+        self.assertIn("needs a person's decision", details['summary'])
+        self.assertNotRegex(details['summary'], r': done|executed')
+        # a dry run, a plan's execution or any other act that exits non-zero is still a failure
+        for extra in ((), ):
+            world = ManageWorld(self.tmp, exit_code=2)
+            with self.assertRaisesRegex(install.InstallError, 'failed'):
+                world.run('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER',
+                          '--reason-file', 'REASON', '--by', 'Ada Lovelace', *extra)
+        world = ManageWorld(self.tmp, exit_code=2)
+        with self.assertRaisesRegex(install.InstallError, 'failed'):
+            world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by', 'Ada Lovelace',
+                      '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+
     def test_an_export_is_written_into_a_new_folder_that_is_then_root_only(self):
         world = ManageWorld(self.tmp, output=f'exported {WORKSPACE}: 2 documents\n'.encode())
         world.export_files = {'manifest.json': b'{}', 'documents/one/record.json': b'{"x": 1}'}

@@ -21,10 +21,17 @@ from test_install import guard_host, release_host, rendered, statements  # noqa:
 APP_ROOT = Path(__file__).resolve().parents[1]
 UUID = '0f8fad5b-d9cb-469f-a165-70867728950e'
 SIZES = {'k': 1024, 'm': 1024 ** 2, 'g': 1024 ** 3}
-# A1's starting numbers (owner decision D5): zone -> (key variable, zone size, rate, burst)
-ZONES = {'cpt_all': ('$cpt_all_key', '10m', '30r/s', '120'), 'cpt_signin': ('$cpt_signin_key', '5m', '20r/m', '10'),
-         'cpt_write': ('$cpt_write_key', '5m', '5r/s', '30'), 'cpt_upload': ('$cpt_upload_key', '5m', '10r/m', '10'),
-         'cpt_export': ('$cpt_export_key', '5m', '6r/m', '6')}
+# A1's starting numbers (owner decision D5), the sign-in and the upload sized for an office behind one address
+# (refutation, edge lens C-12, C-13): zone -> (key variable, zone size, rate, burst)
+ZONES = {'cpt_all': ('$cpt_all_key', '10m', '30r/s', '120'), 'cpt_signin': ('$cpt_signin_key', '5m', '60r/m', '40'),
+         'cpt_write': ('$cpt_write_key', '2m', '5r/s', '30'), 'cpt_upload': ('$cpt_upload_key', '2m', '60r/m', '60'),
+         'cpt_export': ('$cpt_export_key', '2m', '6r/m', '6')}
+# the connection limits: zone -> (key variable, zone size, at once)
+CONNECTIONS = {'cpt_conn': ('$cpt_conn_key', '5m', '40'), 'cpt_bytes_conn': ('$cpt_bytes_key', '2m', '20'),
+               'cpt_bytes_all': ('$cpt_bytes_all_key', '1m', '24'), 'cpt_body_conn': ('$cpt_body_key', '5m', '4'),
+               'cpt_body_all': ('$cpt_body_all_key', '1m', '40')}
+REQUEST_KEYS = ('$cpt_all_key', '$cpt_signin_key', '$cpt_write_key', '$cpt_upload_key', '$cpt_export_key',
+                '$cpt_bytes_key')
 CIPHERS = ('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:'
            'ECDHE-RSA-AES128-GCM-SHA256')
 QUERY_VARIABLES = ('$request_uri', '$args', '$query_string', '$arg_', '$http_referer', '$is_args')
@@ -96,12 +103,14 @@ def maps(conf):
 
 
 def mapped(entry, value):
-    """What nginx's map gives for ``value``: an exact key first, then each regular expression in order, else default."""
+    """What nginx's map gives for ``value``: an exact key first, then each regular expression in order, else default -
+    a regular expression's positional captures ($1 ...) put into its value, as nginx puts them."""
     if value in entry['exact']:
         return entry['exact'][value]
     for pattern, result in entry['regex']:
-        if re.search(pattern, value):
-            return result
+        match = re.search(pattern, value)
+        if match:
+            return re.sub(r'\$(\d)', lambda m: match.group(int(m.group(1))) or '', result)
     return entry['default']
 
 
@@ -136,7 +145,7 @@ class FrontDoorLimitTests(unittest.TestCase):
         self.assertEqual(limits, sorted([f'zone={zone}', f'burst={burst}', 'nodelay']
                                         for zone, (_, _, _, burst) in ZONES.items()))
         self.assertEqual(sorted(words[1:] for words in location if words[0] == 'limit_conn'),
-                         [['cpt_bytes_conn', '6'], ['cpt_conn', '40']])
+                         sorted([zone, at_once] for zone, (_, _, at_once) in CONNECTIONS.items()))
         self.assertEqual(directive(conf, 'limit_req_status', 'server', 'location'), ['429'])
         self.assertEqual(directive(conf, 'limit_conn_status', 'server', 'location'), ['429'])
         pages = [words[1:] for words in location if words[0] == 'error_page']
@@ -155,8 +164,8 @@ class FrontDoorLimitTests(unittest.TestCase):
         for zone, (key, memory, rate, _) in ZONES.items():
             self.assertEqual(zones[zone], [key, f'zone={zone}:{memory}', f'rate={rate}'], zone)
         connections = sorted(words[1:] for words in top if words[0] == 'limit_conn_zone')
-        self.assertEqual(connections, [['$binary_remote_addr', 'zone=cpt_conn:10m'],
-                                       ['$cpt_bytes_key', 'zone=cpt_bytes_conn:5m']])
+        self.assertEqual(connections, sorted([key, f'zone={zone}:{memory}']
+                                             for zone, (key, memory, _) in CONNECTIONS.items()))
         # about 40 MB of shared memory on the shared nginx (the spec's figure), and no more
         total = sum(size(words[2].split(':')[1]) for words in top if words[0] in ('limit_req_zone', 'limit_conn_zone'))
         self.assertLessEqual(total, 45 * 2 ** 20)
@@ -168,13 +177,19 @@ class FrontDoorLimitTests(unittest.TestCase):
         self.assertEqual(sorted(words for words in geo[1:]),
                          sorted([['default', '0'], ['127.0.0.1', '1'], ['::1', '1'], [install.PUBLIC_IPV4, '1']]))
         found = maps(conf)
-        self.assertEqual(sorted(found), sorted(['$cpt_all_key', '$cpt_signin_key', '$cpt_write_key', '$cpt_upload_key',
-                                                '$cpt_export_key', '$cpt_bytes_key']))
-        for variable, entry in found.items():
+        self.assertEqual(sorted(found), sorted([*REQUEST_KEYS, '$cpt_client', '$cpt_conn_key', '$cpt_body_key',
+                                                '$cpt_body_all_key', '$cpt_bytes_all_key', '$cpt_unsized_body']))
+        for variable in REQUEST_KEYS:
+            entry = found[variable]
             self.assertEqual(entry['source'], '$cpt_exempt:$request_method $uri', variable)
             self.assertEqual(entry['default'], '', variable)
             values = set(entry['exact'].values()) | {result for _, result in entry['regex']}
-            self.assertEqual(values, {'$binary_remote_addr'}, variable)
+            self.assertEqual(values, {'$cpt_client'}, variable)  # the client: its address, or its IPv6 /64
+        # the connection keys: the client too, never counted for this host itself, and never empty when they count
+        self.assertEqual((found['$cpt_conn_key']['source'], found['$cpt_conn_key']['exact'],
+                          found['$cpt_conn_key']['default']), ('$cpt_exempt', {'0': '$cpt_client'}, ''))
+        self.assertEqual((found['$cpt_client']['default'], mapped(found['$cpt_client'], '203.0.113.9')),
+                         ('$remote_addr', '$remote_addr'))
 
     def test_each_key_counts_exactly_its_requests(self):
         found = maps(rendered()['https'])
@@ -204,11 +219,79 @@ class FrontDoorLimitTests(unittest.TestCase):
         for variable, values in counted.items():
             for value in values:
                 with self.subTest(variable=variable, value=value):
-                    self.assertEqual(mapped(found[variable], value), '$binary_remote_addr')
+                    self.assertEqual(mapped(found[variable], value), '$cpt_client')
         for variable, values in not_counted.items():
             for value in values:
                 with self.subTest(variable=variable, value=value, counted=False):
                     self.assertEqual(mapped(found[variable], value), '')
+
+    def test_an_ipv6_client_is_counted_by_its_64_and_an_ipv4_one_by_its_address(self):
+        # refutation, edge lens C-15: limits keyed per IPv6 /128 left a /64 unbounded. Every RFC 5952 form nginx writes
+        # ($remote_addr), with the :: run at each place it can fall, gives its first four groups.
+        import ipaddress
+        import random
+        client = maps(rendered()['https'])['$cpt_client']
+        rng, seen = random.Random(20261124), set()
+        for _ in range(4000):
+            groups = [rng.choice((0, 0, 0, rng.randrange(1, 0x10000))) for _ in range(8)]
+            address = ipaddress.IPv6Address(':'.join(f'{group:x}' for group in groups))
+            if address.ipv4_mapped is not None:
+                continue
+            text = address.compressed
+            expected = ':'.join(f'{group:x}' for group in groups[:4])
+            with self.subTest(address=text):
+                self.assertEqual(mapped(client, text), expected)
+            seen.add(text.count('::') and text.index('::'))
+        self.assertGreater(len(seen), 6)  # the run fell at many places
+        for text, expected in (('2001:db8::1', '2001:db8:0:0'), ('::1', '0:0:0:0'), ('::', '0:0:0:0'),
+                               ('fe80::1:2:3:4:5', 'fe80:0:0:1'), ('::1:2:3:4:5:6', '0:0:1:2'),
+                               ('2001:db8:85a3:8d3:1319:8a2e:370:7348', '2001:db8:85a3:8d3'),
+                               ('2001:db8:1:2::', '2001:db8:1:2'), ('::ffff:192.0.2.7', '192.0.2.7'),
+                               ('192.0.2.7', '$remote_addr')):
+            with self.subTest(address=text):
+                self.assertEqual(mapped(client, text), expected)
+        # one /64 is one key, whatever its interface ids
+        self.assertEqual({mapped(client, ipaddress.IPv6Address(f'2001:db8:1:2:{n:x}::{n:x}').compressed)
+                          for n in range(1, 500)}, {'2001:db8:1:2'})
+
+    def test_a_request_that_declares_a_body_is_bounded_per_client_and_in_all(self):
+        # refutation, edge lens C-15: a body buffer is allocated at the declared length (20 MiB for a slow sender)
+        conf = rendered()['https']
+        found = maps(conf)
+        body, every = found['$cpt_body_key'], found['$cpt_body_all_key']
+        self.assertEqual(body['source'], '$cpt_exempt:$content_length')
+        for value, counted in (('0:20971520', True), ('0:1', True), ('0:0', False), ('0:', False), ('1:20971520', False)):
+            with self.subTest(value=value):
+                self.assertEqual(mapped(body, value), '$cpt_client' if counted else '')
+        self.assertEqual((mapped(every, '2001:db8:1:2'), mapped(every, '')), ('cpt', ''))
+        bytes_all = found['$cpt_bytes_all_key']
+        self.assertEqual((mapped(bytes_all, '203.0.113.9'), mapped(bytes_all, '')), ('cpt', ''))
+        location = blocks_of(conf, 'server', 'location')
+        limits = {words[1]: int(words[2]) for words in location if words[0] == 'limit_conn'}
+        body_size = size(directive(conf, 'client_body_buffer_size', 'server')[0])
+        self.assertLessEqual(limits['cpt_body_all'] * body_size, 800 * 2 ** 20)  # the bound the edge lens asked for
+        self.assertEqual(limits['cpt_body_conn'], 4)
+        buffers = directive(conf, 'proxy_buffers', 'server', 'location')
+        response = int(buffers[0]) * size(buffers[1])
+        self.assertLessEqual(limits['cpt_bytes_all'] * response, 600 * 2 ** 20)
+        self.assertEqual(limits['cpt_bytes_conn'], 20)
+        self.assertEqual(directive(conf, 'client_body_timeout', 'server'), ['15s'])
+
+    def test_a_body_of_unknown_length_is_refused_with_411(self):
+        # refutation, edge lens C-16: chunked, or an HTTP/2 stream with no content-length, spooled past 20 MiB
+        conf = rendered()['https']
+        unsized = maps(conf)['$cpt_unsized_body']
+        self.assertEqual(unsized['source'], '$request_method:$content_length:$http_transfer_encoding')
+        for value, refused in (('POST::chunked', True), ('GET::chunked', True), ('POST:12:chunked', True),
+                               ('POST::', True), ('PUT::', True), ('PATCH::', True), ('POST:0:', False),
+                               ('POST:2048:', False), ('GET::', False), ('HEAD::', False), ('DELETE::', False)):
+            with self.subTest(value=value):
+                self.assertEqual(mapped(unsized, value), '1' if refused else '0')
+        self.assertEqual(conf.count('if ($cpt_unsized_body) { return 411; }'), 1)
+        # in the 443 block, before its one proxied location, so no body is read first
+        start = conf.index('listen 443')
+        self.assertLess(start, conf.index('if ($cpt_unsized_body) { return 411; }'))
+        self.assertLess(conf.index('if ($cpt_unsized_body) { return 411; }'), conf.index('    location / {', start))
 
     def test_slow_clients_and_slow_upstreams_are_cut_off(self):
         conf = rendered()['https']
@@ -240,8 +323,9 @@ class FrontDoorLimitTests(unittest.TestCase):
         for name in defined:
             self.assertTrue(name.startswith('cpt_'), name)
         variables = set(re.findall(r'\$(cpt\w*)', conf))
-        self.assertEqual(variables, {'cpt_exempt', 'cpt_all_key', 'cpt_signin_key', 'cpt_write_key', 'cpt_upload_key',
-                                     'cpt_export_key', 'cpt_bytes_key'})
+        self.assertEqual(variables, {'cpt_exempt', 'cpt_client', 'cpt_all_key', 'cpt_signin_key', 'cpt_write_key',
+                                     'cpt_upload_key', 'cpt_export_key', 'cpt_bytes_key', 'cpt_conn_key', 'cpt_body_key',
+                                     'cpt_body_all_key', 'cpt_bytes_all_key', 'cpt_unsized_body'})
 
 
 class EdgeLogTests(unittest.TestCase):

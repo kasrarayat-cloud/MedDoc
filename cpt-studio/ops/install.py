@@ -102,7 +102,10 @@ CONVERTER_SOCKET = f'{CONVERT_DIR}/convert.sock'
 CONVERTER_UID = 10151
 CONVERTER_LIMITS = ('1536m', 128, '1g')  # memory and swap, pids, the /tmp tmpfs (owner decision D9)
 CONVERTER_CPUS = '2'  # [TO CONFIRM] (D9)
-CONVERTER_STOP_SECONDS = 70  # a conversion in progress (60 s at most) finishes before the old converter stops
+# A conversion in progress finishes before the old converter stops (Lane 5: LibreOffice's own limit is 55 s and the
+# parent's conversion limit 70 s, so a running conversion needs up to 80 s; Lane 5 confirms the figure at
+# integration, and this one constant carries it to the container's --stop-timeout and the replacement's stop).
+CONVERTER_STOP_SECONDS = 80
 CONVERTER_FILES = (f'{APP}/studio/converter_server.py',)  # the revisions that have the converter service
 CONVERTER_HEALTH = 'python -m studio.converter_server --ping'
 CONVERTER_SELF_TEST = ('-m', 'studio.converter_server', '--self-test')
@@ -8279,6 +8282,9 @@ def export_name(args) -> str:
     return args._export_name
 
 
+DECISION_NEEDED = "needs a person's decision"
+
+
 def dispose_mode(args) -> str:
     """What a dispose step did, for its receipt (refutation, installer lens A-5b): a plan and a replay without
     --execute are dry runs that change nothing - never read as done."""
@@ -8491,6 +8497,14 @@ def phase_manage(ctx) -> dict:
     assert_no_secret([output], [*env_values(env), *reason_values(reason)])
     record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
                   stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
+    if result.returncode and args.command == 'dispose' and args.dispose_step == 'replay-ledger' and args.execute:
+        # Lane 4: a replay exits non-zero when an entry needs a person's decision - one whose commit's outcome was
+        # unknown - even when every other entry ran. Never done, and never an installer failure to undo: recorded so,
+        # with the command's ids-only output; a person decides by planning that scope again, with two people.
+        record['mode'] = DECISION_NEEDED
+        return {**record, 'summary': f'dispose replay-ledger: {DECISION_NEEDED} (exit {result.returncode}): an entry '
+                                     'whose outcome was unknown is left to a person - plan that scope again and '
+                                     'execute it with two people (ops/INSTALL.md, Disposal, returns and the ledger)'}
     if result.returncode:
         raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
                            details=record)

@@ -288,7 +288,9 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `volume-nocopy`, so Docker never copies an image's mount point over this
   preparation. It keeps a converter of this revision that runs healthy and sealed; and
   otherwise stops the one there (its log kept, ids only), with a grace that lets
-  a conversion in progress finish, removes it and starts the new one - network
+  a conversion in progress finish (80 s: LibreOffice's own 55 s inside the
+  converter's 70 s; the figure is Lane 5's to confirm), removes it and starts
+  the new one - network
   `none`, no environment file, no files volume, no credential, its own uid,
   init on - then waits for its health check. A Word conversion asked for in the
   few seconds between fails as busy and can be retried. The image gate runs the
@@ -1751,7 +1753,14 @@ release 1), run only through `--phase manage`, never over HTTP:
   run`, and its summary never says done); with `--execute --approved-by
   <another person>` it re-applies the ledger after a database restore, so
   destroyed data stays destroyed - two different named people, as for a
-  disposal (D14).
+  disposal (D14). A replay with `--execute` that ends with an entry needing a
+  person's decision - one whose commit's outcome was unknown, even when every
+  other entry ran (the command then exits non-zero) - is recorded so: the
+  receipt's `mode` says `needs a person's decision`, with the command's
+  ids-only output, never done and never undone. The decision is made by
+  planning that scope again (`--dispose-step plan` for its workspace or
+  encounter) and executing that plan with two people. The ledger holds ids,
+  counts and storage names (random ids), never a document's text or title.
 
 Every disposal step refuses while an install or switch-back is in progress (a
 `cpt-studio-web-next` or a `*-previous` container); only after that reading is
@@ -1844,22 +1853,39 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
 - Release 1's front door (A1) starts with the spec's numbers (D5), sized on a
-  copy before the live publish: every request 30 r/s with a burst of 120 per
-  address, the sign-in 20 r/min (burst 10), writes 5 r/s (burst 30), uploads
-  10 r/min (burst 10), report exports 6 r/min (burst 6), 40 connections and 6
-  byte downloads at once per address; this host's own probes are not counted.
-  A practice behind one address shares them, and an IPv6 client is counted per
-  address, not per /64. A refusal is a plain 429. Upstream read and send time
+  copy before the live publish, the sign-in and the upload raised for an office
+  behind one address: every request 30 r/s with a burst of 120 per client, the
+  sign-in 60 r/min (burst 40: everyone signs in again at once after the switch
+  signs them out; B1 is the guessing control), writes 5 r/s (burst 30), uploads
+  60 r/min (burst 60: 20 people each uploading a document every 2 minutes are
+  never refused; the application's per-member limit is the fine control),
+  report exports 6 r/min (burst 6); 40 connections, 20 byte downloads and 4
+  requests that carry a body at once per client. A client is an IPv4 address,
+  or an IPv6 /64; this host's own probes are not counted. A practice behind one
+  address shares them. A refusal is a plain 429. Upstream read and send time
   out after 60 s (gunicorn's own 120 s is unchanged).
+- Memory at the edge (A3) is bounded: a request body is held in memory and its
+  buffer allocated at the length the client declares (up to 20 MiB), so at most
+  40 requests carrying a body are read at once in all - under 800 MiB however
+  many clients send - and at most 24 downloads (each up to 24 MiB of response
+  buffers) are relayed at once in all - under 576 MiB. A sender that stalls
+  15 s between two reads is cut off; one that trickles a byte every few seconds
+  holds its slot, so ten clients (ten /64s) with four slow senders each can hold
+  every body slot until they stop, and sign-ins and uploads then get 429. A body
+  whose length is not declared (chunked, or an HTTP/2 stream with no
+  content-length) is refused with 411: every browser declares it.
 - The edge log (A2) holds about 250 bytes a request on the shared root disk;
   the host's nginx rotation keeps it (about two weeks: D7). The error log's
   request line can carry a query string; today's query parameters hold no
   patient detail (`view`, `next`, `workspace`, `kind`, `result`, `before`).
-- The TLS policy (A4) is CPT's 443 block's; on this shared listener the
-  default server's settings may still apply after SNI. `https-vhost` and
-  `verify` probe what negotiates (`openssl s_client` against 127.0.0.1:443) and
-  record it - a suite outside the policy is a finding, never an undo (D27); the
-  fix is CPT's own nginx on the new server.
+- The TLS policy (A4) is CPT's 443 block's, and CPT is not this shared
+  listener's default server: once SNI has chosen CPT's block, `ssl_protocols`,
+  the TLS 1.3 `Ciphersuites` and `ssl_prefer_server_ciphers` stay the default
+  server's, so TLS 1.3 ChaCha20 is accepted (measured by the edge refutation on
+  nginx 1.24 with this host's libssl 3). `https-vhost` and `verify` probe what
+  negotiates (`openssl s_client` against 127.0.0.1:443) and record it - a suite
+  outside the policy is a finding, never an undo (D27); the fix is CPT's own
+  nginx on the new server.
 - The application's logs (A13) are kept ids only and on this host; between
   deploys Docker's own rotation still drops a running container's oldest lines,
   so the edge log is the longer record of requests until the new server ships

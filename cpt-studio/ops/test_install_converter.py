@@ -79,7 +79,9 @@ class ConverterArgumentTests(unittest.TestCase):
         self.assertEqual(sorted(flags(argv, '--label')), sorted([f'{install.LABEL}=1', f'{install.ROLE_LABEL}=converter',
                                                                  f'{install.REVISION_LABEL}={REVISION}']))
         self.assertEqual(flags(argv, '--health-cmd'), ['python -m studio.converter_server --ping'])
-        self.assertEqual(flags(argv, '--stop-timeout'), ['70'])
+        # Lane 5: a running conversion needs up to 80 s to finish (55 s LibreOffice, 70 s its parent)
+        self.assertGreaterEqual(install.CONVERTER_STOP_SECONDS, 80)
+        self.assertEqual(flags(argv, '--stop-timeout'), [str(install.CONVERTER_STOP_SECONDS)])
         self.assertEqual(flags(argv, '--restart'), ['unless-stopped'])
         for hardened in ('--read-only', '--cap-drop', '--security-opt', '--pids-limit', '--ulimit'):
             self.assertIn(hardened, argv)
@@ -264,7 +266,7 @@ class ConverterPhaseTests(TemporaryDirectoryTest):
         self.assertEqual(details['state'], 'present')
         self.assertEqual([call for call in calls if call[0] in ('run', 'stop', 'rm')], [])
 
-    def test_another_revisions_converter_is_stopped_with_its_70_s_its_log_kept_then_replaced(self):
+    def test_another_revisions_converter_is_stopped_with_its_grace_its_log_kept_then_replaced(self):
         old = converter_container(Image=OLD_IMAGE, **{'Config.Labels': {
             install.LABEL: '1', install.ROLE_LABEL: 'converter', install.REVISION_LABEL: OLD}})
         details, error, calls, helper, kept = self.run_phase(old)
@@ -272,7 +274,7 @@ class ConverterPhaseTests(TemporaryDirectoryTest):
         self.assertEqual(details['state'], 'replaced')
         verbs = [call[0] for call in calls]
         self.assertEqual(verbs, ['stop', 'rm', 'run'])
-        self.assertEqual(calls[0], ('stop', '--time', '70', install.CONVERTER))
+        self.assertEqual(calls[0], ('stop', '--time', str(install.CONVERTER_STOP_SECONDS), install.CONVERTER))
         kept.assert_called_once()
         self.assertEqual(kept.call_args[0][1], 'converter')
 
