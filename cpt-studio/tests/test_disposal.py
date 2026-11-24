@@ -7,7 +7,9 @@ import hashlib
 import io
 import json
 import os
+import stat
 import tempfile
+import unicodedata
 import uuid
 from contextlib import contextmanager
 from datetime import timedelta
@@ -611,7 +613,7 @@ class CommittedDisposalTests(TransactionTestCase):
                 raise RuntimeError('synthetic: the last delete fails')
             return real(model, scope)
         with installer_idle(), mock.patch.object(disposal, '_delete_rows', side_effect=failing):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaisesMessage(CommandError, 'rolled back, and nothing was destroyed'):
                 call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
                              '--approved-by', 'Synthetic Approver', '--authorization-ref', 'synthetic@0000000',
                              stdout=io.StringIO())
@@ -701,3 +703,328 @@ class LedgerTests(PracticeCase, TestCase):
                          '--approved-by', 'Synthetic Approver', '--authorization-ref', 'synthetic@0000000')
         self.assertIn('The worker is running', str(raised.exception))
         self.assertTrue(models.SourceRevision.objects.filter(encounter__workspace=self.ws).exists())
+
+
+
+# --- the repairs of the lead's refutation findings (refute-lane4, 2026-11-24) ------------------------------------------------
+
+@contextmanager
+def read_only(folder):
+    """``folder`` made 0500 while the block runs: nothing in it can be removed (EACCES), as on a mount gone read-only."""
+    mode = stat.S_IMODE(Path(folder).stat().st_mode)
+    os.chmod(folder, 0o500)
+    try:
+        yield
+    finally:
+        os.chmod(folder, mode)
+
+
+AUTH = 'docs/foundation/mutations/synthetic-disposal.md@0000000'
+
+
+class RepairCase(PracticeCase):
+    def dispose_command(self, *args):
+        """(what the command printed, its error or None): a run that ends in an error keeps what it printed."""
+        out = io.StringIO()
+        try:
+            call_command('dispose', *args, stdout=out)
+        except CommandError as exc:
+            return out.getvalue(), str(exc)
+        return out.getvalue(), None
+
+    def plan_document(self, enc):
+        self.command('--plan', '--encounter', str(enc.pk), '--by', 'Synthetic Operator',
+                     '--reason-file', reason_file(self.scratch.name, 'Synthetic: misfiled.'))
+        return Event.objects.filter(stage=Event.PLANNED).latest('created_at')
+
+    def carry_out(self, plan):
+        with installer_idle():
+            return self.dispose_command('--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                                        '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH)
+
+    def ledger_file(self):
+        path = Path(self.scratch.name) / f'ledger-{uuid.uuid4().hex}.jsonl'
+        path.write_text(self.command('--ledger'), encoding='utf-8')
+        return path
+
+    def restore_document(self, enc, marker):
+        """What a restore from a backup older than the disposal brings back for one document (the lens's simulation):
+        its row as it was, and an upload revision with its file - and none of the ledger's rows."""
+        models.Encounter.objects.filter(pk=enc.pk).update(title=f'ZZ-TITLE-MARKER restored {marker}', destroyed_at=None,
+                                                          state='reviewed')
+        return f.upload(models.Encounter.objects.get(pk=enc.pk), self.owner,
+                        data=f.PDF_BYTES + f' restored {marker}'.encode(), filename='zz-file-marker-restored.pdf')
+
+    def forget_the_ledger(self):
+        with connection.cursor() as cursor:
+            cursor.execute('DELETE FROM studio_disposalevent')  # the restored backup predates every ledger row
+
+    def replay(self, ledger):
+        with installer_idle():
+            return self.dispose_command('--replay-ledger', str(ledger), '--execute', '--by', 'Synthetic Operator',
+                                        '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH)
+
+
+class FailedRunTests(RepairCase, TestCase):
+    """Findings 2 and 4: a run whose rows were destroyed and which then failed is recorded 'failed' with what it left - an
+    error after the commit never escapes the record - it can be finished by planning the same scope again, and a replay
+    carries it out again after a restore."""
+
+    def test_a_failed_document_disposal_records_what_it_left_and_a_new_plan_finishes_it(self):
+        self.seed()
+        plan = self.plan_document(self.a_note)
+        name = self.a_note.files.get().storage_name
+        with read_only(storage.workspace_folder(self.ws.pk)):
+            output, error = self.carry_out(plan)
+        self.assertIn('did not complete', error)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual((failed.counts['rows_destroyed'], failed.files['remaining_names'], failed.files['remaining']),
+                         ('yes', [name], 1))
+        self.assertIn('delete: PermissionError', failed.counts['problems'])
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=self.a_note).exists())  # the rows are gone
+        self.assertIn('NOT COMPLETE - the rows were destroyed', output)
+        self.assertIn(f'Files remaining, by storage name: {name}', output)
+        self.assertIn(f'dispose --plan --encounter {self.a_note.pk}', output)
+        again = self.plan_document(self.a_note)  # a destroyed document: planned again, for what is left
+        self.assertEqual((again.files['files'], again.counts['documents']), (1, 1))
+        output, error = self.carry_out(again)
+        self.assertIsNone(error)
+        self.assertIn('CPT Studio destruction certificate', output)
+        self.assertFalse(storage.stored_path(name).exists())
+        completed = Event.objects.get(stage=Event.COMPLETED)
+        self.assertEqual((completed.files['deleted'], completed.files['remaining']), (1, 0))
+        with self.assertRaisesMessage(CommandError, 'already destroyed, and nothing of it remains'):
+            self.plan_document(self.a_note)
+
+    def test_a_failed_document_disposal_is_carried_out_again_after_a_restore(self):
+        # the lens's probe (refute-lane4, data loss P1): the ledger's 'failed' entry was skipped by the replay
+        self.seed()
+        with read_only(storage.workspace_folder(self.ws.pk)):
+            _, error = self.carry_out(self.plan_document(self.a_note))
+        self.assertIn('did not complete', error)
+        failed_id = str(Event.objects.get(stage=Event.FAILED).pk)
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        revision = self.restore_document(self.a_note, 'A')
+        restored = storage.stored_path(revision.source_file.storage_name)
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)
+        enc = models.Encounter.objects.get(pk=self.a_note.pk)
+        self.assertIsNotNone(enc.destroyed_at)
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=enc).exists())
+        self.assertFalse(restored.exists())
+        replayed = Event.objects.get(stage=Event.COMPLETED, notes__startswith=f'replay={failed_id};')
+        self.assertEqual(replayed.encounter_ids, [str(self.a_note.pk)])
+        self.assertEqual(replayed.files['remaining'], 0)  # the restored file, and what the failed run had left
+
+    def test_an_error_after_the_commit_ends_in_a_failed_event_a_certificate_and_an_error(self):
+        # the lens's probe (refute-lane4, data loss P3): the store's root read-only, so the practice's emptied folder
+        # cannot be removed - the error escaped after every row was gone, with no event at all
+        self.seed()
+        plan = self.close_and_plan()
+        with read_only(storage.root_path()):
+            output, error = self.carry_out(plan)
+        self.assertIn('did not complete', error)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual(failed.counts['rows_destroyed'], 'yes')
+        self.assertTrue(any(problem.startswith('files: PermissionError') for problem in failed.counts['problems']))
+        self.assertFalse(models.SourceRevision.objects.filter(encounter__workspace=self.ws).exists())
+        self.assertIn('NOT COMPLETE', output)
+        self.assertIn('What failed after the commit: files: PermissionError', output)
+        self.assertIn('To finish it', output)
+        self.command('--plan', '--workspace', str(self.ws.pk), '--by', 'Synthetic Operator',
+                     '--reason-file', reason_file(self.scratch.name))  # once what stopped it is gone
+        output, error = self.carry_out(Event.objects.filter(stage=Event.PLANNED).latest('created_at'))
+        self.assertIsNone(error, output)
+        self.assertFalse(storage.workspace_folder(self.ws.pk).exists())
+
+    def test_every_step_after_the_commit_that_fails_ends_in_a_failed_event(self):
+        self.seed()
+        steps = (('the folder sync', storage, 'sync_folder', OSError('synthetic sync failure'), self.a_note),
+                 ('the check that nothing is left', disposal.os, 'lstat', PermissionError('synthetic'), self.a_word),
+                 ('the folder listing', storage, 'folder_entries', PermissionError('synthetic'), None))
+        for label, owner, name, failure, document in steps:
+            with self.subTest(step=label):
+                plan = self.plan_document(document) if document else self.close_and_plan()
+                armed, real, real_after = {'on': False}, getattr(owner, name), disposal._after_commit
+
+                def step(*args, **kwargs):
+                    if armed['on']:
+                        raise failure
+                    return real(*args, **kwargs)
+
+                def after_commit(scope, outcome):  # armed after the commit only: the plan's own reads stay as they are
+                    armed['on'] = True
+                    try:
+                        return real_after(scope, outcome)
+                    finally:
+                        armed['on'] = False
+                with mock.patch.object(owner, name, side_effect=step), \
+                        mock.patch.object(disposal, '_after_commit', side_effect=after_commit):
+                    output, error = self.carry_out(plan)
+                self.assertIn('did not complete', error)
+                event = Event.objects.filter(stage=Event.FAILED).latest('created_at')
+                self.assertEqual(event.counts['rows_destroyed'], 'yes')
+                self.assertTrue(event.counts['problems'])
+                self.assertIn('NOT COMPLETE', output)
+
+    def test_one_file_that_cannot_be_removed_never_keeps_the_others(self):
+        self.seed()
+        plan = self.close_and_plan()
+        names = sorted(disposal.scope_files(disposal.workspace_scope(self.ws.pk)))
+        stuck = names[0]  # the first in the manifest's order
+        real = storage.delete_stored
+
+        def delete(name):
+            if name == stuck:
+                raise PermissionError('synthetic: this one file cannot be removed')
+            return real(name)
+        with mock.patch.object(storage, 'delete_stored', side_effect=delete):
+            _, error = self.carry_out(plan)
+        self.assertIn('did not complete', error)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual(failed.files['remaining_names'], [stuck])
+        self.assertEqual(failed.files['deleted'], len(names) - 1)
+        self.assertEqual([path.name for path in storage.workspace_folder(self.ws.pk).iterdir()], [stuck.split('/')[1]])
+
+    def test_an_event_that_cannot_be_written_leaves_its_certificate_as_the_record(self):
+        self.seed()
+        plan = self.plan_document(self.a_note)
+        with mock.patch.object(Event.objects, 'create', side_effect=RuntimeError('synthetic: the database went away')):
+            output, error = self.carry_out(plan)
+        self.assertIn('its only record', error)
+        self.assertIn('NOT RECORDED', output)
+        self.assertIn('Rows destroyed: yes', output)
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=self.a_note).exists())
+        for marker in MARKERS:
+            self.assertNotIn(marker, output)
+
+
+class ReplayTruthTests(RepairCase, TestCase):
+    """Finding 3: a replay checks every entry's refusals before it destroys anything, and when it stops partway it says,
+    entry by entry, what it destroyed - never "nothing was destroyed" after a destruction."""
+
+    def two_destroyed_and_restored(self):
+        self.seed()
+        for enc in (self.a_note, self.a_word):
+            _, error = self.carry_out(self.plan_document(enc))
+            self.assertIsNone(error)
+        entries = [str(pk) for pk in Event.objects.filter(stage=Event.COMPLETED).order_by('created_at')
+                   .values_list('pk', flat=True)]
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(self.a_note, 'note')
+        self.restore_document(self.a_word, 'word')
+        return ledger, entries
+
+    def test_a_replay_a_later_entry_would_refuse_destroys_nothing(self):
+        # the lens's probe (refute-lane4, data loss P2): a standing hold set by the second document's run
+        ledger, entries = self.two_destroyed_and_restored()
+        word = models.Encounter.objects.get(pk=self.a_word.pk)
+        run = models.ProviderRun.objects.create(encounter=word, revision=word.current_revision, provider='synthetic',
+                                                adapter_version='legacy@1', request_sha256='0' * 64, request_body={},
+                                                contexts=[], state=models.ProviderRun.FAILED)
+        models.InterpreterHold.objects.create(reason='quota', run=run)
+        before = snapshot()
+        output, error = self.replay(ledger)
+        self.assertIn('Refused, nothing was destroyed', error)
+        self.assertIn(f'Ledger entry {entries[1]}: 1 coding hold(s)', error)
+        self.assertEqual(changed_rows(before, snapshot()), set())  # true: not even the ledger rows were written back
+        self.assertIsNone(models.Encounter.objects.get(pk=self.a_note.pk).destroyed_at)
+
+    def test_a_replay_that_stops_partway_says_what_it_destroyed(self):
+        ledger, entries = self.two_destroyed_and_restored()
+        real = disposal._delete_rows
+
+        def failing(model, scope):  # the second entry's transaction fails before its commit
+            if scope.kind == disposal.DOCUMENT and scope.encounter_ids == (self.a_word.pk,):
+                raise RuntimeError('synthetic: the second destruction fails')
+            return real(model, scope)
+        with mock.patch.object(disposal, '_delete_rows', side_effect=failing):
+            output, error = self.replay(ledger)
+        self.assertIn(f'The replay stopped at ledger entry {entries[1]}', error)
+        self.assertIn('1 ledger entry was carried out again before it', error)
+        self.assertNotIn('nothing was destroyed', error)
+        self.assertIn('stopped here: The destruction stopped before its commit (RuntimeError)', output)
+        self.assertIn('CPT Studio destruction certificate', output)  # the first entry's, as it happened
+        self.assertIsNotNone(models.Encounter.objects.get(pk=self.a_note.pk).destroyed_at)
+        self.assertIsNone(models.Encounter.objects.get(pk=self.a_word.pk).destroyed_at)  # rolled back
+        self.assertTrue(Event.objects.filter(stage=Event.COMPLETED, notes__startswith=f'replay={entries[0]};').exists())
+        self.assertFalse(Event.objects.filter(notes__startswith=f'replay={entries[1]};').exists())
+
+
+class KeptAccountTests(RepairCase, TestCase):
+    def test_an_account_whose_access_to_another_practice_is_turned_off_is_kept(self):
+        # the lens's probe (refute-lane4, data loss P4): C4 turns access off per practice by Membership.active alone
+        self.seed()
+        models.Membership.objects.filter(user=self.reviewer, workspace=self.other_ws).update(active=False)
+        _, error = self.carry_out(self.close_and_plan())
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertTrue(self.reviewer.is_active and self.reviewer.has_usable_password())
+        completed = Event.objects.get(stage=Event.COMPLETED)
+        self.assertEqual((completed.counts['accounts_kept'], completed.counts['accounts_off']), (1, 3))
+        models.Membership.objects.filter(user=self.reviewer, workspace=self.other_ws).update(active=True)
+        self.assertTrue(self.client.login(username=self.reviewer.username, password='synthetic-pass-123!'))
+
+
+class ForeignNameTests(RepairCase, TestCase):
+    def test_a_file_named_in_another_practices_folder_is_never_destroyed(self):
+        # the lens's probe (refute-lane4, data loss P9): A's round names a file no row of B names, in B's folder
+        self.seed()
+        named = set(models.SourceFile.objects.filter(encounter__workspace=self.other_ws).values_list(
+            'storage_name', flat=True)) | set(Round.objects.filter(encounter__workspace=self.other_ws).exclude(
+                view_pdf_storage_name=None).values_list('view_pdf_storage_name', flat=True))
+        b_orphan = sorted(f'{self.other_ws.pk}/{name}' for name in folder_digests(self.other_ws.pk)
+                          if f'{self.other_ws.pk}/{name}' not in named)[0]
+        Round.objects.filter(encounter=self.a_word).update(view_pdf_storage_name=b_orphan)
+        before = folder_digests(self.other_ws.pk)
+        with self.assertRaisesMessage(CommandError, "outside the practice's own folder"):
+            self.plan_document(self.a_word)
+        self.command('--close', '--workspace', str(self.ws.pk), '--by', 'Synthetic Operator',
+                     '--reason-file', reason_file(self.scratch.name))
+        with self.assertRaisesMessage(CommandError, "outside the practice's own folder"):
+            self.command('--plan', '--workspace', str(self.ws.pk), '--by', 'Synthetic Operator',
+                         '--reason-file', reason_file(self.scratch.name))
+        self.assertEqual(folder_digests(self.other_ws.pk), before)
+        self.assertFalse(Event.objects.filter(stage=Event.PLANNED).exists())
+
+
+class CertificateTraceTests(RepairCase, TestCase):
+    def test_the_certificate_names_the_trace_the_disposal_keeps(self):
+        self.seed()
+        output, error = self.carry_out(self.plan_document(self.a_note))
+        self.assertIsNone(error)
+        for words in ("code and line values", 'sha256 of each original and of every request sent',
+                      'links each document id to its title', 'OWNER DECISION D25'):
+            self.assertIn(words, output)
+        self.assertIn('not "no trace"', ' '.join(disposal.CANNOT_REACH))
+
+
+class PeopleNameTests(SimpleTestCase):
+    """Finding 7: the two-person rule compares names as they are recorded - NFKC, with nothing invisible - so two
+    spellings of one name that draw the same are one person, and a name with nothing visible is no name."""
+
+    def test_two_spellings_of_one_name_are_one_person(self):
+        pairs = (('José Ruiz', 'José Ruiz'),  # composed and decomposed accent (the lens's pair)
+                 ('Ann Lee', 'Ann Lee​'),  # a trailing zero-width space (the lens's pair)
+                 ('Ann Lee', 'Ann Lee'),  # a no-break space (the lens's pair)
+                 ('Ann Lee', '‏Ann Lee⁠'),  # a direction mark and a word joiner
+                 ('Ann Lee', 'Ａｎｎ Ｌｅｅ'),  # full-width letters
+                 ('Ann Lee', 'ANN　LEE'),  # capitals and an ideographic space
+                 ('Ann Lee', 'Ann️ Lee'))  # a variation selector
+        for runner, approver in pairs:
+            with self.subTest(runner=runner, approver=approver):
+                with self.assertRaisesMessage(disposal.Refused, 'two different people'):
+                    disposal.two_people(runner, approver)
+
+    def test_a_name_with_nothing_visible_is_refused(self):
+        for name in ('', '   ', '​', '​‌‍', '﻿', '⠀', 'ㅤ', '\U000e0041'):
+            with self.subTest(name=ascii(name)):
+                with self.assertRaisesMessage(disposal.Refused, 'at least one visible character'):
+                    disposal.person(name)
+
+    def test_names_are_recorded_as_compared_and_different_people_pass(self):
+        runner, approver = disposal.two_people('José  Ruiz​', ' Ann Lee')
+        self.assertEqual((runner, approver), ('José Ruiz', 'Ann Lee'))
+        self.assertTrue(unicodedata.is_normalized('NFKC', runner))

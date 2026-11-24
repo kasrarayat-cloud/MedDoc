@@ -6,16 +6,21 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
     dispose --plan (--workspace <id> | --encounter <id>) --by <name> --reason-file F [--authorization-ref R]
         a dry run: counts per table, file counts and the files' sha256 manifest, recorded as a plan; nothing changes.
     dispose --execute --plan <plan id> --by <name> --approved-by <name> --authorization-ref R
-        the plan carried out by two different people, and the destruction certificate printed for the receipt.
+        the plan carried out by two different people, and the destruction certificate printed for the receipt. A run
+        that did not complete is recorded 'failed' with what it left, prints a certificate saying so and ends with an
+        error; to finish it, remove what stopped it and plan the same scope again (a destroyed document may be planned
+        again while its last run failed): the new plan takes in what the failed run left.
     dispose --ledger
         every DisposalEvent as a signed ledger line, to keep beside the backups.
     dispose --replay-ledger FILE [--execute --by <name> --approved-by <name> --authorization-ref R]
-        after a restore from an older backup: what the ledger's disposals would destroy again (a dry run), or, with
-        --execute, the ledger's missing rows written back and those disposals carried out again.
+        after a restore from an older backup: what the ledger's disposals whose rows were destroyed ('completed', and
+        'failed' ones) would destroy again (a dry run), or, with --execute, every entry's refusals checked first, then
+        the ledger's missing rows written back and those disposals carried out again, entry by entry.
 
-The reason is read from a file, never argv. Every line printed holds ids, counts, digests, fixed words and the names of
-the people who ran and approved the act; never a title, a file name, an answer or document text. Any refusal writes
-nothing and ends with an error.
+The reason is read from a file, never argv. Every line printed holds ids, counts, digests, fixed words, storage names
+(random ids) and the names of the people who ran and approved the act; never a title, a file's own name, an answer or
+document text. A refusal writes nothing and ends with an error saying nothing was destroyed - which is said only when it
+is true: a replay that stops after it destroyed something says what it destroyed.
 """
 from pathlib import Path
 
@@ -56,8 +61,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             self._handle(options)
-        except disposal.Refused as exc:
+        except disposal.Refused as exc:  # raised only before anything was destroyed (studio.disposal)
             raise CommandError('Refused, nothing was destroyed: ' + ' '.join(exc.reasons))
+        except disposal.NotDestroyed as exc:
+            raise CommandError(str(exc))
+        except disposal.Unrecorded as exc:
+            self.stdout.write(exc.text)
+            raise CommandError('The destruction ran, but its DisposalEvent could not be written: the certificate above is '
+                               'its only record. Keep it with the receipt.')
 
     def _mode(self, options):
         plan = options['plan']
@@ -125,9 +136,9 @@ class Command(BaseCommand):
             raise CommandError(f'The ledger file cannot be read ({type(exc).__name__}).')
         report = disposal.replay(lines, execute_it=options['execute'], by=options['by'],
                                  approved_by=options['approved_by'], authorization_ref=options['authorization_ref'])
-        for name, value in report.items():
-            if name != 'items':
-                self.stdout.write(f'{name.replace("_", " ").capitalize()}: {value}')
+        for name in ('ledger_rows_restored', 'ledger_rows_missing'):
+            if name in report:
+                self.stdout.write(f'{name.replace("_", " ").capitalize()}: {report[name]}')
         for item in report['items']:
             if item['scope'] is None:
                 self.stdout.write(f'Ledger entry {item["entry"]}: nothing of its scope exists in this database.')
@@ -135,9 +146,28 @@ class Command(BaseCommand):
             remains = item['remains']
             self.stdout.write(f'Ledger entry {item["entry"]} ({item["scope"].label()}): rows '
                               f'{sum(remains["rows"].values())}, documents not destroyed {remains["documents_alive"]}, '
-                              f'files {remains["files"]}, memberships on {remains["memberships_on"]}')
+                              f'files {"not listable" if remains["files"] is None else remains["files"]}, memberships on '
+                              f'{remains["memberships_on"]}' + (f'; {item["status"]}' if options['execute'] else ''))
+            if item['error']:
+                self.stdout.write(f'  stopped here: {item["error"]}')
             if item['event'] is not None:
                 self.stdout.write(disposal.certificate(item['event']))
+            elif item['certificate']:
+                self.stdout.write(item['certificate'])
         if not options['execute']:
             self.stdout.write('Dry run: nothing was changed. Replay with --execute, run and approved by two different '
                               'people, while the worker is stopped.')
+            return
+        done = [item for item in report['items'] if item['status'] in (disposal.DisposalEvent.COMPLETED,
+                                                                        disposal.DisposalEvent.FAILED, 'unrecorded')]
+        if report['stopped']:
+            before = (f'{len(done)} ledger entr{"y was" if len(done) == 1 else "ies were"} carried out again before it '
+                      '(certificates above)') if done else 'no entry was carried out again before it'
+            later = sum(item['status'] == 'not attempted' for item in report['items'])
+            raise CommandError(f'The replay stopped at ledger entry {report["stopped"]}: {before}; '
+                               f'{later} later entr{"y was" if later == 1 else "ies were"} not attempted. Fix what stopped '
+                               'it and replay the ledger again: entries already carried out are skipped.')
+        failed = [item['entry'] for item in report['items'] if item['status'] == disposal.DisposalEvent.FAILED]
+        if failed:
+            raise CommandError(f'{len(failed)} replayed disposal(s) did not complete ({", ".join(failed)}): see their '
+                               'certificates above.')
