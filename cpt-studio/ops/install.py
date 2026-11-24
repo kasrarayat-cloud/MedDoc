@@ -4797,8 +4797,10 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     (end_every_session; refutation round 1, rollback-0 and rollback-3); a failure there restores the old pair."""
     parked, launched, started, sessions = {}, [], {}, {}
     swapped_at = worker_started_at = None
-    replaced = [labels_of(container).get(REVISION_LABEL) for container in
-                (inspect('container', SERVICES[role]) for role in ('web', 'worker')) if container is not None]
+    # the revisions of the pair it replaces (one park() refuses as not ours is left to park's own refusal)
+    replaced = [labels_of(container).get(REVISION_LABEL)
+                for role, container in ((role, inspect('container', SERVICES[role])) for role in ('web', 'worker'))
+                if container is not None and owned(container, role)]
     try:
         ends_sessions = [revision for revision in dict.fromkeys(replaced)
                          if sessions_end_needed(revision, ctx.revision)]
@@ -7488,10 +7490,10 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
       B9  remove this revision's parked pair (its image is kept)
     When the previous revision and this one do not share release 1's session policy (sessions_end_needed, read before
     anything starts), every session is ended at B4, after its close and before B5 (end_every_session; refutation round
-    1, rollback-0 and rollback-3). The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
-    the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
-    (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83, when not given) - the closes
-    keep their own, this pair's creation and B4's close."""
+    1, rollback-0 and rollback-3). The baseline is read before anything starts too. Before B5 every failure resumes
+    this revision's pair; from B5 on the previous web serves and the receipt says what is left. ``touched_since``: the
+    since of every touched filter (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83,
+    when not given) - the closes keep their own, this pair's creation and B4's close."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
@@ -8911,7 +8913,7 @@ def phase_manage(ctx) -> dict:
         log = ctx.log('dispose-ledger', stdout)
         record['ledger_printed'] = {'log': log, 'sha256': sha256(stdout), 'bytes': len(stdout),
                                     'lines': sum(1 for line in stdout.splitlines() if line.strip()),
-                                    'redacted': bool(record.get('redacted'))}
+                                    'redacted': bool(sum(stdout_counts.values()))}
         if stderr:
             record['stderr_log'] = ctx.log('dispose-ledger-stderr', stderr)
     else:
