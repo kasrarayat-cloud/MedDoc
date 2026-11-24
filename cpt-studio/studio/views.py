@@ -10,10 +10,11 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import connection
-from django.http import HttpResponseNotAllowed, JsonResponse
+from django.http import Http404, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.common import no_append_slash
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
@@ -156,3 +157,26 @@ def admin_login_view(request):
     context = {'error': error, 'next': next_url, 'release': settings.RELEASE_SHA,
                'username': UNSTORABLE.sub('�', request.POST.get('username', ''))[:150] if error else ''}
     return render(request, 'studio/ops_login.html', context, status=200 if not error else 400)
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 2 replaces this (B4)
+@csrf_exempt
+@no_append_slash
+def account_security(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 2 replaces this (B4)
+@csrf_exempt
+@no_append_slash
+def logout_everywhere(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 2 replaces this (B5)
+@csrf_exempt
+@no_append_slash
+def activity_ping(request, *args, **kwargs):
+    raise Http404()

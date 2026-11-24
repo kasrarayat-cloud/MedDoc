@@ -52,6 +52,8 @@ from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.common import no_append_slash
+from django.views.decorators.csrf import csrf_exempt
 
 from . import audit, jobs, models, spend
 from .fable import pricing
@@ -785,3 +787,19 @@ def sign_ins(request):
         query=f'result={result}' if result else '', result=result, tab='sign-ins',
         throttle_attempts=settings.LOGIN_THROTTLE_ATTEMPTS,
         throttle_minutes=settings.LOGIN_THROTTLE_WINDOW_SECONDS // 60))
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 3 replaces this (C1)
+@csrf_exempt
+@no_append_slash
+def reads(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 3 replaces this (B1)
+@csrf_exempt
+@no_append_slash
+def unlock_sign_in(request, *args, **kwargs):
+    raise Http404()
