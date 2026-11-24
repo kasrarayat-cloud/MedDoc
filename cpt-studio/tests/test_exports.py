@@ -358,6 +358,21 @@ class ReuseTests(ExportCase):
         self.assertEqual(self.make('approved').status_code, 201)
         self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 3)
 
+    def test_a_copy_made_meanwhile_is_answered_as_the_stored_copy(self):
+        """The made path re-checks under the document's lock. Another click may make the report between this
+        request's first look and its lock - here, while this request is being counted. That copy is answered as the
+        stored copy and never made twice."""
+        made = []
+
+        def charge():  # between the first look and the lock: another click makes the report
+            made.append(exports.create(self.enc, self.viewer, 'draft', 'pdf', round_number=self.round.number))
+        answer = exports.create(self.enc, self.reviewer, 'draft', 'pdf', round_number=self.round.number, charge=charge)
+        self.assertEqual(len(made), 1)
+        self.assertEqual((answer.reused, answer.pk), (True, made[0].pk))
+        self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 1)
+        self.assertEqual(models.AuditEvent.objects.filter(event='export.created').count(), 1)
+        self.assertEqual(models.AuditEvent.objects.get(event='export.reused').actor_id, self.reviewer.pk)
+
     def test_the_stored_copy_names_who_first_made_it(self):
         first = self.make()
         again = self.make(client=self.client_for(self.viewer))  # viewers keep making reports (owner decision D8)
