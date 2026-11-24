@@ -578,7 +578,8 @@ def loop_lines(function) -> set:
     The sweep takes such a line at its first line event only: a line event a loop's backward jump causes is where
     CPython 3.12's line instrumentation raises an exception a trace hook throws at an offset the enclosing handlers do
     not cover, so a with block's __exit__ never runs - which a real signal at that jump does not do (it is handled at
-    the jump, inside the handlers' range: 30 of 30 real signals ran __exit__, repair-d/exp/comprehension_signal2.py)."""
+    the jump, inside the handlers' range: measured on CPython 3.12.3, 30 real signals of 30 during such a loop ran the
+    with block's __exit__)."""
     return {instruction.positions.lineno for instruction in dis.get_instructions(function)
             if instruction.opname == 'FOR_ITER'}  # a loop's head (a with or except block's cleanup jumps back too)
 
