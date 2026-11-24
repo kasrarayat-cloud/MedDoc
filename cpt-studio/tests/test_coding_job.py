@@ -8,6 +8,7 @@ mid-send is not taken by another send; and the money rules of the second fix pas
 again and taken over by another thread stays the worker's own, so its checker is paid once, and an answer whose outcome
 could not be written stays unknown - in the stage, while it is left sending, and after the stale sweep - so nothing
 sends it again before an operator's reconcile. Synthetic documents only; nothing reaches the network."""
+import hashlib
 import io
 import signal
 import tempfile
@@ -27,10 +28,11 @@ from django.db.models.query import QuerySet
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from studio import jobs, models
+from studio import decisions, jobs, models, storage
 from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from studio.fable import pricing, prompts
+from studio.fable import result as fable_result
 from tests.support import coding as f
 
 Round, Run, Job = models.CodingRound, models.ProviderRun, models.Job
@@ -1153,3 +1155,142 @@ class ConcurrencyTests(TransactionTestCase):
         self.assertEqual(sorted(Round.objects.values_list('state', flat=True)), [Round.DONE] * 2)
         first = Run.objects.filter(purpose=jobs.READER).order_by('started_at').first()
         self.assertIs(first.scope.get('slot_lost'), True)  # recorded on the run, for the operator
+
+
+
+# --- release 1, refutation finding 6 on the coding path: one practice's files only ------------------------------------------
+
+WORD = b'PK\x03\x04 synthetic word bytes, never opened by anything'
+CONVERTED = b'%PDF-1.7\n% the synthetic conversion of this practice\'s own Word file\n%%EOF\n'
+FOREIGN = b'%PDF-1.7\n% ZZ-FOREIGN-MARKER: a file in another practice\'s folder\n%%EOF\n'
+
+
+class OwnFolderTests(CodingCase):
+    """A row of one practice that names another practice's file (a corrupted or crafted row) never has that file read on
+    the coding path: the original is read through storage.read_own_original bound to the encounter's practice - a refusal
+    fails the round 'storage', as an unreadable original does, before anything is counted or sent - the stored
+    conversion is never read and the Word file is converted again, and no new round takes the crafted name. For
+    legitimate documents every request sent and counted is byte for byte what it was."""
+
+    def foreign_file(self, data=FOREIGN):
+        other = f.workspace('Another practice')
+        name, digest, _ = storage.store_original(other.pk, data, 'far.pdf')
+        return name, digest
+
+    def answers(self):
+        return {'reader': f.succeeded(f.reader_message(READER)), 'checker': f.succeeded(f.checker_message(CHECKER))}
+
+    def test_an_original_named_in_another_practices_folder_is_refused_before_anything_is_sent(self):
+        name, digest = self.foreign_file()
+        with connection.cursor() as cursor:  # SourceFile refuses updates through the ORM: a crafted row
+            cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE id = %s',
+                           [name, digest, self.rev.source_file_id])
+        fake = self.use(f.FakeCoder(**self.answers()))  # it would answer, if anything were sent
+        with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
+            self.start()
+            self.run_next()
+        round_ = Round.objects.get(encounter=self.enc)
+        crafted = (round_.state, round_.failure_kind, round_.error)
+        self.assertEqual(crafted, (Round.FAILED, 'storage', fable_document.STORAGE_TEXT))
+        self.assertEqual((fake.counts, fake.calls), ([], []))  # nothing counted, nothing sent
+        self.assertFalse(Run.objects.filter(encounter=self.enc).exists())
+        self.assertEqual(read.call_count, 0)  # no file was read at all (the store's one read)
+        self.assertTrue(decisions.retry_offered(self.enc, round_))
+        # exactly how an original of its own practice that no longer reads back fails today
+        self.fresh_document()
+        storage.stored_path(self.rev.source_file.storage_name).write_bytes(b'%PDF-1.7 changed on the disk %%EOF')
+        self.start()
+        self.run_next()
+        unreadable = Round.objects.get(encounter=self.enc)
+        self.assertEqual((unreadable.state, unreadable.failure_kind, unreadable.error), crafted)
+
+    def test_a_name_that_leaves_the_folder_through_dotdot_is_refused_before_anything_is_sent(self):
+        # the lens's probe (refute-lane4 repairs, R6): '<A>/../<B>/<file>' passed the first-segment test, and B's bytes
+        # were sent and counted for A's document
+        name, digest = self.foreign_file()
+        for crafted in (f'{self.ws.pk}/../{name}', f'{self.ws.pk}/./../{name}'):
+            with self.subTest(crafted=crafted):
+                self.fresh_document()
+                with connection.cursor() as cursor:  # a crafted row, as above
+                    cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE id = %s',
+                                   [crafted, digest, self.rev.source_file_id])
+                fake = self.use(f.FakeCoder(**self.answers()))
+                with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
+                    self.start()
+                    self.run_next()
+                round_ = Round.objects.get(encounter=self.enc)
+                self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                 (Round.FAILED, 'storage', fable_document.STORAGE_TEXT))
+                self.assertEqual((fake.counts, fake.calls, read.call_count), ([], [], 0))
+
+    def word_document(self):
+        """A Word document coded once: its conversion stored in its own practice's folder by round 1."""
+        self.enc = f.encounter(self.ws, self.user, service_date='2026-10-05', insurance='medicare')
+        self.rev = f.upload(self.enc, self.user, data=WORD, filename='synthetic.docx', media_type=fable_document.DOCX)
+        self.use(f.FakeCoder(**self.answers()))
+        self.start()
+        self.run_next()
+        first = Round.objects.get(encounter=self.enc, number=1)
+        self.assertEqual(first.view_pdf_sha256, hashlib.sha256(CONVERTED).hexdigest())
+        return first
+
+    def code_again(self):
+        fake = self.use(f.FakeCoder(**self.answers()))
+        self.start(trigger=Round.ANSWERS)
+        self.run_next()
+        return Round.objects.get(encounter=self.enc, number=2), fake
+
+    def test_a_stored_conversion_named_in_another_practices_folder_is_never_read(self):
+        with mock.patch.object(fable_document, 'convert_docx', return_value=CONVERTED) as convert:
+            first = self.word_document()
+            name, digest = self.foreign_file()
+            Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+            with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
+                second, fake = self.code_again()
+        self.assertEqual(second.state, Round.DONE)
+        self.assertEqual(convert.call_count, 2)  # converted again, from this practice's own original
+        self.assertTrue(read.call_args_list)  # the practice's own original was read
+        self.assertNotIn(storage.stored_path(name), [call.args[0] for call in read.call_args_list])
+        sent = {request.stored['messages'][0]['content'][0]['source']['data']['$original_sha256']
+                for _, request in fake.calls}
+        self.assertEqual(sent, {hashlib.sha256(CONVERTED).hexdigest()})  # never the other practice's bytes
+
+    def test_a_new_round_never_takes_a_crafted_rounds_foreign_name(self):
+        with mock.patch.object(fable_document, 'convert_docx', return_value=CONVERTED):
+            first = self.word_document()
+            name, _ = self.foreign_file()
+            # the crafted row names another practice's file under the very sha256 the fresh conversion will have
+            Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name)
+            second, _ = self.code_again()
+        self.assertEqual(second.state, Round.DONE)
+        self.assertTrue(storage.in_practice_folder(self.ws.pk, second.view_pdf_storage_name))
+        self.assertEqual(storage.stored_path(second.view_pdf_storage_name).read_bytes(), CONVERTED)
+
+    def test_legitimate_documents_send_and_count_the_same_bytes_as_before(self):
+        # before this change prepare read the original with its default reader, storage.read_original: the requests built
+        # that way, from the same inputs, are the ones the stage now sends and counts, byte for byte
+        kinds = {'pdf': dict(), 'txt': dict(data='Synthetic note.\r\nColonoscopy, cold snare.\n'.encode(),
+                                            filename='synthetic.txt', media_type='text/plain'),
+                 'docx': dict(data=WORD, filename='synthetic.docx', media_type=fable_document.DOCX), 'paste': None}
+        for kind, upload in kinds.items():
+            with self.subTest(kind=kind):
+                self.enc = f.encounter(self.ws, self.user, service_date='2026-10-05', insurance='medicare')
+                self.rev = f.paste(self.enc, self.user) if upload is None else f.upload(self.enc, self.user, **upload)
+                fake = self.use(f.FakeCoder(**self.answers()))
+                with mock.patch.object(fable_document, 'convert_docx', return_value=CONVERTED):
+                    self.start()
+                    self.run_next()
+                    round_ = Round.objects.get(encounter=self.enc)
+                    document = fable_document.prepare(self.rev, converter=lambda data: CONVERTED)
+                built = [fable_client.build_request(system=prompts.READER_SYSTEM, document=document,
+                                                    instruction=prompts.reader_instruction(round_.context),
+                                                    effort=settings.CODING_EFFORT),
+                         fable_client.build_request(system=prompts.CHECKER_SYSTEM, document=document,
+                                                    instruction=prompts.checker_instruction(
+                                                        round_.context, fable_result.listing(round_.reader_result)),
+                                                    effort=settings.CODING_EFFORT)]
+                self.assertEqual(round_.state, Round.DONE)
+                self.assertEqual([(fable_client.canonical(request.params), request.sha256) for _, request in fake.calls],
+                                 [(fable_client.canonical(request.params), request.sha256) for request in built])
+                self.assertEqual([fable_client.canonical(fable_client.count_params(request)) for request in fake.counts],
+                                 [fable_client.canonical(fable_client.count_params(request)) for request in built])

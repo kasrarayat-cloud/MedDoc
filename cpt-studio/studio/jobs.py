@@ -16,6 +16,7 @@ reconcile; a stage that died is settled as it would have settled itself, never c
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -32,7 +33,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import audit, models, state
-from .storage import OriginalCorrupted, read_original, store_original
+from .storage import OriginalCorrupted, in_practice_folder, read_own_original, store_original
 from .fable import (BUSY, CEILING, CONVERT, DECLINED, DOCUMENT, FAILED, HOLD, STORAGE, TOO_LONG, UNAVAILABLE,
                     UNKNOWN, UNREADABLE)
 from .fable import client as fable_client
@@ -64,6 +65,10 @@ BUSY_MESSAGE = 'Wait for processing to finish (or stop it) first.'
 RETRY_NOTHING = 'There is no failed coding to try again.'
 # Resume or Retry of a round with a send whose outcome is not known and no operator's reconcile yet (FIX-SPEC 4).
 RECONCILE_FIRST = 'Whether the last coding finished is not known yet. It can run again once it has been checked.'
+# Release 1, D1: a practice closed by `dispose --close` (Workspace.closed_at) starts no new coding; reading stays on.
+CLOSED_MESSAGE = 'This practice is closed, so no coding can be started. Its documents can still be read.'
+CLOSED_JOB_ERROR = 'The practice was closed before this stage started; nothing was sent.'
+DESTROYED_MESSAGE = 'This document was destroyed; nothing of it can be coded.'
 FAILURE_TEXT = {
     UNREADABLE: 'The coding result could not be read. Try again.',
     CEILING: 'This document reached its spending limit.',
@@ -128,6 +133,16 @@ def busy(encounter):
     return encounter.jobs.filter(state__in=[Job.QUEUED, Job.RUNNING]).exists()
 
 
+def practice_closed(workspace_id) -> bool:
+    """Whether the practice was closed (release 1, D1: dispose --close sets Workspace.closed_at): read from the database
+    each time, so a close takes effect on the next upload, coding request or claimed job of any process."""
+    return models.Workspace.objects.filter(pk=workspace_id, closed_at__isnull=False).exists()
+
+
+def _closed_for(encounter_id) -> bool:
+    return models.Workspace.objects.filter(encounters__pk=encounter_id, closed_at__isnull=False).exists()
+
+
 def _locked(encounter):
     return models.Encounter.objects.select_for_update().get(pk=encounter.pk)
 
@@ -156,8 +171,12 @@ def start_round(encounter, revision, trigger, by):
         raise ValueError(f'{trigger!r} is not a coding round trigger.')
     with transaction.atomic():
         locked = _locked(encounter)
+        if locked.destroyed_at is not None:  # a tombstone (D1): no revision is left to code
+            raise Refused(DESTROYED_MESSAGE)
         if revision.encounter_id != locked.pk:
             raise ValueError('The revision belongs to another encounter.')
+        if practice_closed(locked.workspace_id):
+            raise Refused(CLOSED_MESSAGE)
         if busy(locked):
             raise Refused(BUSY_MESSAGE)
         last = latest_round(locked)
@@ -205,6 +224,8 @@ def resume(encounter, user):
     operator's reconcile (awaiting_reconcile)."""
     with transaction.atomic():
         locked = _locked(encounter)
+        if practice_closed(locked.workspace_id):
+            raise Refused(CLOSED_MESSAGE)
         if busy(locked):
             raise Refused(BUSY_MESSAGE)
         round_ = latest_round(locked)
@@ -413,8 +434,11 @@ def _code(job, round_):
     if coder is None:
         _fail(round_, UNAVAILABLE)
     _live_gate(job, coder, round_.revision, round_)
+    # every file read for this document lies in its own practice's folder (storage.read_own_original): a row naming
+    # another practice's file fails the round 'storage', as an unreadable original does, before anything is counted or sent
+    own = functools.partial(read_own_original, encounter.workspace_id)
     try:
-        document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_))
+        document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_), reader=own)
     except fable_document.DocumentError as exc:
         log.info('round %s: the document was not sent (%s)', round_.pk, exc.detail or exc.failure_kind)
         _fail(round_, exc.failure_kind, text=exc.text)
@@ -456,17 +480,19 @@ def _code(job, round_):
 def _stored_conversion(round_):
     """For a Word document: a converter answering with the PDF a round of this revision already read and stored (the
     newest), so a resumed round, and every later round of the revision, reads - and the customer's viewer shows - the
-    same pages; it converts afresh when that file can no longer be read back unchanged. None (convert) when no round
-    of the revision stored one."""
+    same pages; it converts afresh when that file can no longer be read back unchanged, or lies outside the document's
+    own practice's folder (storage.read_own_original: never read). None (convert) when no round of the revision stored
+    one."""
     stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
               .exclude(view_pdf_storage_name='').order_by('-number').first())
     if stored is None:
         return None
+    workspace_id = round_.encounter.workspace_id
 
     def reuse(data):
         try:
-            return read_original(SimpleNamespace(storage_name=stored.view_pdf_storage_name,
-                                                 sha256=stored.view_pdf_sha256))
+            return read_own_original(workspace_id, SimpleNamespace(storage_name=stored.view_pdf_storage_name,
+                                                                   sha256=stored.view_pdf_sha256))
         except (OriginalCorrupted, OSError):
             log.warning('round %s: the stored conversion of round %s could not be read back; converting again',
                         round_.pk, stored.pk)
@@ -476,13 +502,17 @@ def _stored_conversion(round_):
 
 def _keep_view(round_, document, encounter):
     """Record on ``round_`` the PDF a Word document was converted to, as it is sent (CodingRound.view_pdf_*): the file
-    an earlier round of the revision stored when the bytes are the same, else stored now (storage.store_original). A
-    failure to store is logged and coding goes on: the viewer then shows no page of a Word document."""
+    an earlier round of the revision stored when the bytes are the same - only one of the practice's own stored files
+    (storage.in_practice_folder), so a crafted row's name is never copied onto a new round - else stored now
+    (storage.store_original). A failure to store is logged and coding goes on: the viewer then shows no page of a Word
+    document."""
     if document.kind != 'docx' or round_.view_pdf_sha256 == document.sha256:
         return
-    same = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
-                                 view_pdf_storage_name__isnull=False).exclude(view_pdf_storage_name='')
-            .order_by('-number').first())
+    earlier = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
+                                    view_pdf_storage_name__isnull=False).exclude(view_pdf_storage_name='')
+               .order_by('-number'))
+    same = next((row for row in earlier if in_practice_folder(encounter.workspace_id, row.view_pdf_storage_name)),
+                None)
     if same is not None:
         name = same.view_pdf_storage_name
     else:
@@ -596,9 +626,17 @@ def _worst_case(round_, purpose, request, coder):
     free token count counted them, the send's worst case - every attempt the request may make, its server-side
     fallback's included). A coder that calls the API must count the request: when the count cannot be had, nothing is
     sent and the round fails busy, for a human retry; no estimate stands in (a PDF is billed by its pages, which its
-    bytes do not bound). A coder that calls nothing (a replay, endpoint '') bills nothing: (None, 0)."""
+    bytes do not bound). A coder that calls nothing (a replay, endpoint '') bills nothing: (None, 0).
+
+    The count is itself a disclosure: it hands the whole request, the document included, to the provider's token-count
+    endpoint (release 1, D4; ORG-9 (6), ORG-13 (7)). So the AuditEvent provider.counting - the document, the round, the
+    purpose and the request's sha256, never its content - is written BEFORE the count is asked for, for every coder that
+    has an endpoint; a record that cannot be written raises, and nothing is counted or sent. Nothing about the request
+    changes: the count is handed the same object as before."""
     if not coder.endpoint:
         return None, Decimal(0)
+    audit.record(round_.encounter.workspace, 'provider.counting', encounter=round_.encounter, round=str(round_.pk),
+                 purpose=purpose, request_sha256=request.sha256)
     counted = _counted_input(coder, request)
     if counted is None:
         log.warning('round %s: the %s request could not be counted; nothing was sent', round_.pk, purpose)
@@ -798,6 +836,9 @@ def claim_next():
         if job.stop_requested_at or is_stopped(job.encounter_id):
             job.state, job.error, job.finished_at = Job.CANCELLED, 'Stopped before it started.', now
             _cancel_queued_round(job)
+        elif _closed_for(job.encounter_id):  # release 1, D1: a closed practice's queued coding never starts
+            job.state, job.error, job.finished_at = Job.CANCELLED, CLOSED_JOB_ERROR, now
+            _cancel_queued_round(job)
         elif job.deadline_at < now:
             job.state, job.error, job.finished_at = (Job.CANCELLED, 'The stage expired before it could start; resume '
                                                      'to run it.', now)
@@ -977,16 +1018,32 @@ def mark_stale(*, startup=False):
             state.refresh(round_.encounter)
 
 
-def remove_stale_work_dirs():
-    """A worker killed mid-conversion (or mid-extraction, before this pipeline) can leave its child's work directory."""
+def remove_stale_work_dirs(*, older_than=None, root=None) -> int:
+    """A worker killed mid-conversion (or mid-extraction, before this pipeline) can leave its child's work directory,
+    and so can a conversion whose child was killed at its time limit. ``older_than`` (seconds): only directories whose
+    last change is at least that old - the hourly clean-up beside running conversions (release 1, D3), each of which
+    lasts at most fable.document.CONVERT_SECONDS; None removes every one, as at the worker's start, when nothing
+    converts. ``root``: the folder holding them (the system's temporary folder by default). A symbolic link is never
+    followed or removed. The number of directories removed."""
     import shutil
     import tempfile
     from pathlib import Path
 
+    cutoff = None if older_than is None else time.time() - older_than
+    removed = 0
     for prefix in (fable_document.WORK_PREFIX, 'cpt-ingest-'):
-        for path in Path(tempfile.gettempdir()).glob(f'{prefix}*'):
-            if path.is_dir() and not path.is_symlink():
-                shutil.rmtree(path, ignore_errors=True)
+        for path in Path(root or tempfile.gettempdir()).glob(f'{prefix}*'):
+            if not path.is_dir() or path.is_symlink():
+                continue
+            if cutoff is not None:
+                try:
+                    if path.lstat().st_mtime > cutoff:
+                        continue
+                except FileNotFoundError:
+                    continue
+            shutil.rmtree(path, ignore_errors=True)
+            removed += not path.exists()
+    return removed
 
 
 # The worker process beats every HEARTBEAT_SECONDS from a thread of its own; a beat older than WORKER_SILENT_SECONDS,
@@ -1076,12 +1133,27 @@ def _run_threads(target, count, *, while_waiting=None, should_stop=None):
             thread.join()
 
 
+def _maintain(state, clock):
+    """The maintenance part of the worker's tick (release 1, D3; studio.maintenance.tick): the hourly clean-up of stale
+    conversion folders, and the daily maintenance and the weekly check of stored originals when they are due, under a
+    Postgres advisory lock. A failure is logged and never stops the worker; the next tick tries again."""
+    from . import maintenance  # here, not at the top: maintenance reads this module
+
+    try:
+        maintenance.tick(state, clock=clock)
+    except Exception:  # noqa: BLE001 - logged; the next tick tries again
+        log.exception('the maintenance tick failed')
+        connection.close()
+
+
 def work(should_stop, *, poll_seconds=1.0, threads=None, clock=time.monotonic):
     """The worker: the startup sweep, then CPT_STUDIO_CONCURRENT_DOCUMENTS threads claiming and running jobs until
-    ``should_stop()`` (each finishes its current job first); the main thread sweeps every STALE_SWEEP_SECONDS."""
+    ``should_stop()`` (each finishes its current job first); the main thread sweeps every STALE_SWEEP_SECONDS, and then
+    runs the maintenance that is due (_maintain)."""
     remove_stale_work_dirs()
     mark_stale(startup=True)
     swept = {'at': clock()}
+    maintained = {}
 
     def sweep():
         if clock() - swept['at'] >= STALE_SWEEP_SECONDS:
@@ -1090,6 +1162,7 @@ def work(should_stop, *, poll_seconds=1.0, threads=None, clock=time.monotonic):
             except Exception:  # noqa: BLE001 - logged; the next sweep tries again
                 log.exception('the stale sweep failed')
                 connection.close()
+            _maintain(maintained, clock)
             swept['at'] = clock()
     try:
         _run_threads(lambda: _worker_thread(should_stop, poll_seconds), _thread_count(threads), while_waiting=sweep,
