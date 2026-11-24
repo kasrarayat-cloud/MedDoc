@@ -5,8 +5,17 @@ and the first coding round cannot diverge. The practice's own information
 entered at upload - the date of service and the insurance (BUILD-SPEC 2: one of
 jobs.INSURANCE, 'unknown' for not sure) - is kept in Encounter.user_values, which
 every coding round's context is taken from (jobs.context_snapshot).
+
+Release 1. A practice that was closed (Workspace.closed_at; studio.disposal, D1) takes no new document: the upload is
+refused with CLOSED_TEXT, and reading stays on. A stored file never outlives an upload whose transaction is known to have
+rolled back (D3): when anything raises inside the transaction after store_original wrote it, or the commit is refused
+with an IntegrityError (a deferred constraint, checked as it commits), the file is removed before the error goes on. Any
+other error of the commit itself - its acknowledgement lost to a dropped connection, say - may have followed a commit
+the server applied, so the file stays: the rows may name it, and the daily orphan sweep (studio.maintenance) removes it
+only if none does. The malware scan of an upload (D5) is release 1b.
 """
 import hashlib
+import logging
 from datetime import timedelta
 
 from django.conf import settings
@@ -15,13 +24,16 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from . import audit, jobs, models
-from .storage import media_type_for, store_original
+from .storage import StoreRefused, delete_stored, media_type_for, store_original
+
+log = logging.getLogger(__name__)
 
 # P5 FLOW: a repeated POST of one upload attempt (the page's client_key) within this window answers with the encounter
 # the first made; a key older than that, or one a member used for another document, is refused, never reused.
 UPLOAD_KEY_WINDOW = timedelta(hours=24)
 KEY_USED = 'This upload was already received. Open it from your documents.'
 KEY_OTHER_DOCUMENT = 'This upload key was already used for a different document. Reload the page and upload again.'
+CLOSED_TEXT = 'This practice is closed, so no new document can be added. Its documents can still be read.'
 
 
 class UploadKeyRefused(Exception):
@@ -85,26 +97,59 @@ def create_encounter(*, membership, user, title, service_date='', insurance='unk
     elif len(text) > settings.MAX_PASTE_CHARS:
         raise ValidationError(f'Pasted text is longer than {settings.MAX_PASTE_CHARS} characters.')
     now = timezone.now()
+    stored = _Stored()
     try:
         return _create(membership, user, title, service_date, insurance, data, filename, text, media_type, now,
-                       client_key)
+                       client_key, stored)
     except IntegrityError:
-        # the database's one row per member and key (Encounter.client_key's unique index): the first POST of this
-        # attempt committed while this one ran; its encounter is the answer, and nothing of this one was stored
+        # refused inside the transaction, or by its commit (a deferred constraint): rolled back either way. The
+        # database's one row per member and key (Encounter.client_key's unique index): the first POST of this attempt
+        # committed while this one ran; its encounter is the answer, and nothing of this one was kept
+        _discard(stored.names)
         existing = find_upload(user=user, workspace=membership.workspace, client_key=client_key, data=data, text=text)
         if existing is None:
             raise
         raise DuplicateUpload(existing) from None
+    except BaseException as exc:
+        if stored.committing:  # the commit itself failed: the server may have applied it, so its rows may name the file
+            log.error('an upload\'s commit failed (%s); its file is kept for the orphan sweep', type(exc).__name__)
+        else:  # raised inside the transaction, which rolled back
+            _discard(stored.names)
+        raise
 
 
-def _create(membership, user, title, service_date, insurance, data, filename, text, media_type, now, client_key):
+class _Stored:
+    """What one upload stored (``names``) and whether its transaction reached its commit (``committing``): the clean-up
+    removes the files only when the transaction is known to have rolled back."""
+
+    def __init__(self):
+        self.names, self.committing = [], False
+
+
+def _discard(stored):
+    """Remove the files a failed upload stored (its transaction rolled back, so no row names them). A file that cannot
+    be removed is logged (the error's type only) and left to the daily orphan sweep."""
+    while stored:
+        name = stored.pop()
+        try:
+            delete_stored(name)
+        except (OSError, StoreRefused) as exc:
+            log.error('the file of a failed upload could not be removed (%s); the orphan sweep removes it',
+                      type(exc).__name__)
+
+
+def _create(membership, user, title, service_date, insurance, data, filename, text, media_type, now, client_key,
+            stored):
     values = {'service_date': service_date, 'insurance': insurance} if service_date else {'insurance': insurance}
     with transaction.atomic():
+        if jobs.practice_closed(membership.workspace_id):  # D1: read inside the transaction that would add the document
+            raise ValidationError(CLOSED_TEXT)
         encounter = models.Encounter.objects.create(
             workspace=membership.workspace, title=title, created_by=user, client_key=client_key, user_values=values)
         source_file = None
         if data is not None:
             storage_name, digest, size = store_original(membership.workspace_id, data, filename)
+            stored.names.append(storage_name)
             source_file = models.SourceFile.objects.create(
                 encounter=encounter, original_name=filename[:255], media_type=media_type, size=size,
                 sha256=digest, storage_name=storage_name, uploaded_by=user)
@@ -119,4 +164,5 @@ def _create(membership, user, title, service_date, insurance, data, filename, te
                      sha256=source_file.sha256 if source_file else None, media_type=media_type or 'text/plain')
         # Queued in the same transaction: the encounter is never visible without its first coding round.
         jobs.start_round(encounter, revision, models.CodingRound.UPLOAD, user)
+        stored.committing = True  # the block's last statement: whatever raises from here on is the commit
     return encounter
