@@ -939,7 +939,12 @@ class LoginAttempt(models.Model):
                    models.Index(fields=['succeeded', 'created_at', 'id'], name='studio_login_result_time'),
                    models.Index(Upper('username'), F('created_at'), name='studio_login_upper_name_time'),
                    models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True),
-                                name='studio_login_name_signed_in')]
+                                name='studio_login_name_signed_in'),
+                   # refutation round 2 (phi-1): the admin door's key step reads and settles its attempt by the sign-in
+                   # reference while it is second_factor_pending (throttle.settle_second_factor); only pending rows are
+                   # held, so no other attempt's insert writes to it
+                   models.Index(fields=['sign_in_ref'], condition=Q(outcome='second_factor_pending'),
+                                name='studio_login_pending_ref')]
 
 
 class WorkerBeat(models.Model):

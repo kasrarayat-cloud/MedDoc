@@ -4,8 +4,10 @@
 # only, which no write of the revision before release 1 can be refused by (RELEASE-1-SPEC 2.1; ops/install.py
 # migration_verdict): SessionAccountLink, the session store's links (avail-0); AccessRecordRepeat, a member's repeated
 # list reads counted on their record, and two indexes for the console's reads page (avail-3); four indexes on
-# LoginAttempt, so its reads stay bounded however many rows one name holds (avail-5). The tables these indexes are
-# built on are small on the live host (synthetic data), so each CREATE INDEX holds its lock for moments.
+# LoginAttempt, so its reads stay bounded however many rows one name holds (avail-5). Refutation round 2 (release 1 is
+# installed nowhere, so this migration is amended rather than followed): an index of the pending rows' sign-in
+# reference, which the admin door's key step reads and settles by (phi-1). The tables these indexes are built on are
+# small on the live host (synthetic data), so each CREATE INDEX holds its lock for moments.
 
 import django.db.models.functions.text
 from django.db import migrations, models
@@ -60,6 +62,10 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name='loginattempt',
             index=models.Index(condition=models.Q(('succeeded', True)), fields=['username', 'created_at'], name='studio_login_name_signed_in'),
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(condition=models.Q(('outcome', 'second_factor_pending')), fields=['sign_in_ref'], name='studio_login_pending_ref'),
         ),
         migrations.AddIndex(
             model_name='sessionaccountlink',

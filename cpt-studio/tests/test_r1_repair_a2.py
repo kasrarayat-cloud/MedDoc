@@ -6,26 +6,32 @@ phi-3         a member's list read repeated just after midnight UTC was counted 
               own UTC day - the day the reads page files a read under.
 phi-0         GET /api/members ran one LoginAttempt query per membership (about 1 ms each). The practice's last sign-ins
               are now one statement, one index lookup a name, whatever the membership count and the rows a name holds.
+phi-1         the admin door's key step read and settled its LoginAttempt by sign_in_ref, which no index covered: a
+              sequential scan of the whole table. A partial index over the pending rows now serves both statements.
 
 Synthetic accounts, practices, titles and rows only."""
 from __future__ import annotations
 
+import json
 import re
+import uuid
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest import mock
 
+from django.conf import settings
 from django.db import connection
 from django.db.models import Max
 from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import customer, models, read_audit
+from studio import customer, models, read_audit, second_factor
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
 from tests.test_read_audit import member_client
+from tests.test_second_factor import admin_client, enrolled_operator, options_of, password_step
 
 UTC = dt_timezone.utc
 LIST = '/api/encounters'
@@ -198,3 +204,67 @@ class MembersLastSignInTests(TestCase):
             self.assertRegex(line, r'actual time=\S+ rows=[01] loops=5\)', plan)
         self.assertEqual(customer.last_sign_ins([owner.username, 'never-signed-in', owner.username]),
                          shipped_last_sign_ins([owner.username]))
+
+
+# --- phi-1: the admin door's key step finds its pending row by an index -------------------------------------------------
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class PendingSettleIndexTests(TestCase):
+    """The finding's input, scaled: LoginAttempt holds 20,000 rows, each with its own sign-in reference as Door.record
+    writes one for every attempt; an operator's password step at the admin door leaves its pending row, and the key step
+    settles it - signed in (complete_sign_in: an UPDATE), or failed at the fifth wrong key (note_failure: a SELECT, then
+    an UPDATE). Each statement that reads LoginAttempt by sign_in_ref is planned on the pending rows' index."""
+
+    WRONG_ORIGIN = 'https://x.example'
+
+    def setUp(self):
+        self.operator, self.key = enrolled_operator('a2-pending-operator')
+        outcomes = (models.LoginAttempt.SIGNED_IN, models.LoginAttempt.WRONG_PASSWORD, models.LoginAttempt.NO_ACCESS)
+        models.LoginAttempt.objects.bulk_create([models.LoginAttempt(
+            username=f'synthetic-{index % 50}', client=f'198.51.100.{index % 200}', door='cpt',
+            outcome=outcomes[index % 3], succeeded=index % 3 == 0, sign_in_ref=uuid.uuid4())
+            for index in range(20_000)], batch_size=5000)
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_loginattempt')
+
+    def pending(self):
+        client = admin_client()
+        first = password_step(client, self.operator)
+        self.assertEqual((first.status_code, first['Location']), (302, '/login/second-factor'))
+        return client, client.session[second_factor.PENDING]['ref']
+
+    def key_step(self, client, **assertion):
+        credential = json.dumps(self.key.assertion(options_of(client), **assertion))
+        with CaptureQueriesContext(connection) as seen:
+            answer = client.post('/login/second-factor', {'credential': credential})
+        return answer, [item['sql'] for item in seen.captured_queries
+                        if 'studio_loginattempt' in item['sql'] and '"sign_in_ref"' in item['sql']]
+
+    def assert_on_the_pending_index(self, statements):
+        self.assertTrue(statements)
+        for sql in statements:
+            with self.subTest(sql=sql[:60]):
+                plan = explain(sql)  # the plan only: the statement is not run again
+                self.assertNotIn('Seq Scan', plan)
+                self.assertIn('studio_login_pending_ref', plan)
+
+    def test_the_key_step_settles_its_attempt_by_the_pending_rows_index(self):
+        client, ref = self.pending()
+        answer, statements = self.key_step(client)
+        self.assertEqual(answer.status_code, 302)
+        self.assertNotEqual(answer['Location'], '/login/?reason=key')
+        self.assertEqual(models.LoginAttempt.objects.get(sign_in_ref=ref).outcome, models.LoginAttempt.SIGNED_IN)
+        self.assertEqual([sql.split()[0] for sql in statements], ['UPDATE'])
+        self.assert_on_the_pending_index(statements)
+
+    def test_the_fifth_wrong_key_settles_its_attempt_by_the_pending_rows_index(self):
+        client, ref = self.pending()
+        for _ in range(settings.SECOND_FACTOR_ATTEMPTS - 1):
+            answer, statements = self.key_step(client, origin=self.WRONG_ORIGIN)
+            self.assertEqual((answer.status_code, statements), (400, []))
+        answer, statements = self.key_step(client, origin=self.WRONG_ORIGIN)
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?reason=key'))
+        self.assertEqual(models.LoginAttempt.objects.get(sign_in_ref=ref).outcome,
+                         models.LoginAttempt.SECOND_FACTOR_FAILED)
+        self.assertEqual([sql.split()[0] for sql in statements], ['SELECT', 'UPDATE'])
+        self.assert_on_the_pending_index(statements)
