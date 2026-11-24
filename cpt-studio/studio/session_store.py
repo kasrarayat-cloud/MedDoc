@@ -123,16 +123,14 @@ def sync_links(session_key, links, now=None) -> None:
 
 
 def _end_if_named(session_key, link, now) -> bool:
-    """Delete the live session ``session_key`` through the store when its data still names ``link`` ((kind, account), or
-    (None, account) for any kind); else remove the account's links of it. Whether a session was ended."""
+    """Delete the live session ``session_key`` through the store when its data still names ``link`` ((kind, account));
+    else remove that link of it. Whether a session was ended."""
     kind, account = link
     session = _live_sessions(now).filter(session_key=session_key).first()
-    named = account_links(session.get_decoded()) if session is not None else frozenset()
-    if any(account == linked and kind in (None, linked_kind) for linked_kind, linked in named):
+    if session is not None and link in account_links(session.get_decoded()):
         SessionStore(session_key=session_key).delete()
         return True
-    stale = _link_model().objects.filter(session_key=session_key, account_id=account)
-    (stale if kind is None else stale.filter(kind=kind)).delete()
+    _link_model().objects.filter(session_key=session_key, account_id=account, kind=kind).delete()
     return False
 
 
@@ -163,16 +161,27 @@ def cap_account_sessions(account, kind, *, keep_session_key=None, now=None) -> i
 
 def end_account_sessions(account, keep_session_key=None, now=None) -> int:
     """End every live session that names ``account`` - signed in as it or waiting on it - except ``keep_session_key``,
-    reading only that account's links (see the module). The number ended."""
+    reading only that account's links (see the module): its live sessions in one query, each one's data read again,
+    each deleted through the store, in one transaction; then the account's links whose session is gone, expired or no
+    longer names it are removed. The number ended."""
     account = account_of(account)
     if account is None:
         return 0
     now = now or timezone.now()
     links = _link_model().objects.filter(account_id=account)
-    keys = sorted(set(links.values_list('session_key', flat=True)) - {keep_session_key})
-    ended = sum(1 for session_key in keys if _end_if_named(session_key, (None, account), now))
-    # whatever is left of this account's links whose session is gone or expired (the kept session is live: never here)
-    links.exclude(Exists(_live_sessions(now).filter(session_key=OuterRef('session_key')))).delete()
+    with transaction.atomic(using=router.db_for_write(_link_model())):
+        keys = set(links.values_list('session_key', flat=True)) - {keep_session_key}
+        ended, stale = 0, []
+        for session in _live_sessions(now).filter(session_key__in=keys):
+            if any(linked == account for _, linked in account_links(session.get_decoded())):
+                SessionStore(session_key=session.session_key).delete()
+                ended += 1
+            else:
+                stale.append(session.session_key)
+        if stale:
+            links.filter(session_key__in=stale).delete()
+        # the account's links whose session is gone or expired (the kept session is live: never here)
+        links.exclude(Exists(_live_sessions(now).filter(session_key=OuterRef('session_key')))).delete()
     return ended
 
 
