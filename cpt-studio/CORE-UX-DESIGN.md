@@ -10,7 +10,7 @@ so the numbering is kept; sections that described the removed pipeline say so in
 1. Synthetic data only: every upload carries the synthetic attestation; banners say so; exports say SYNTHETIC at both
    ends.
 2. Plain English for a physician's office.
-3. One page build at a time: the page names its build on every API call (client contract `customer-2026-11-22`) and
+3. One page build at a time: the page names its build on every API call (client contract `customer-2026-11-24`) and
    asks the member to reload when the server is newer.
 4. No inline script, handler or style attribute from server text; one same-origin script tag (for a document viewed as a
    PDF the page also loads the pinned PDF library, same-origin modules named on `<body>`; section 8); server text is

@@ -1,5 +1,5 @@
 """Frontend shell: templates render under the CSP, the approved stylesheet is intact, the customer page's synthetic
-fixtures carry the customer contract (client contract customer-2026-11-22, the build specification's section 6 with the
+fixtures carry the customer contract (client contract customer-2026-11-24, the build specification's section 6 with the
 fix passes' line identity, decision ids and download rounds, as ops/verification/customer-contract.json holds it), and
 the browser logic's own tests pass (node)."""
 import hashlib
@@ -275,7 +275,7 @@ class StaticAssetTests(SimpleTestCase):
 
     def test_the_page_sends_the_client_version_of_this_contract(self):
         script = (STATIC / 'app.js').read_text(encoding='utf-8')
-        self.assertIn("const CLIENT_VERSION = 'customer-2026-11-22';", script)
+        self.assertIn("const CLIENT_VERSION = 'customer-2026-11-24';", script)
         self.assertRegex(script, r'\[CLIENT_HEADER\]: CLIENT_VERSION')
 
 

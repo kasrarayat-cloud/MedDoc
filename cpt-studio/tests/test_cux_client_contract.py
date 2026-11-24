@@ -5,10 +5,12 @@ copy of the value (the server's, the page's app.js, ops/verify_login.py's and th
 file the tools read, ops/verification/customer-contract.json) is the same one.
 
 The fix pass's line identity (FIX-SPEC section 1) made the build customer-2026-11-21; the second fix pass (FIX-SPEC-2
-section 5) makes it customer-2026-11-22: an Undo names the decision it undoes and a download names the round shown, so
+section 5) made the build of 2026-11-22: an Undo names the decision it undoes and a download names the round shown, so
 a page of the build before it would post an Undo the server refuses and a download that names no round. Its copies
-land in two lanes - the server's and the contract file's (G1), the page's and the tools' (G2) - so in a tree holding
-only some of them OneValueTests fails, naming the copy that differs, until both are merged."""
+landed in two lanes - the server's and the contract file's (G1), the page's and the tools' (G2) - so in a tree holding
+only some of them OneValueTests failed, naming the copy that differed, until both were merged. Release 1
+(RELEASE-1-SPEC 3.6) makes it customer-2026-11-24, every copy in one commit, so a tab opened before its install is told
+to reload instead of meeting the new API."""
 from __future__ import annotations
 
 import importlib.util
@@ -22,8 +24,8 @@ from studio import client_contract
 from tests.support import coding as f
 
 ROOT = Path(__file__).resolve().parents[1]
-# FIX-SPEC-2 section 5: an Undo names its decision and a download its round - the build every copy names
-CURRENT_BUILD = 'customer-2026-11-22'
+# release 1 (RELEASE-1-SPEC 3.6): the build every copy names
+CURRENT_BUILD = 'customer-2026-11-24'
 
 
 def without_contract(client):
