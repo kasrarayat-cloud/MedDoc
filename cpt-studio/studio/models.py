@@ -875,22 +875,45 @@ class LoginAttemptQuerySet(models.QuerySet):
     def latest_sign_ins(self, usernames) -> dict:
         """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
         succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
-        by aggregating every succeeded row of each name."""
-        latest = {}
-        for name in sorted(set(usernames)):
-            last = (self.filter(succeeded=True, username=name).order_by('-created_at')
-                    .values_list('created_at', flat=True).first())
-            if last is not None:
-                latest[name] = last
-        return latest
+        by aggregating every succeeded row of each name. Every name in ONE statement (refutation round 2 of release 1,
+        phi-0: a query a name cost a round trip each), so the read costs one statement whatever the number of names
+        and whatever the rows one name holds."""
+        from django.db import connections  # here: the one read in this module that names its connection
+        names = sorted({str(name) for name in usernames})
+        if not names:
+            return {}
+        database = connections[self.db]
+        quote, meta = database.ops.quote_name, self.model._meta
+        table = quote(meta.db_table)
+        username, created_at, succeeded = (quote(meta.get_field(field).column)
+                                           for field in ('username', 'created_at', 'succeeded'))
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT wanted.name, (SELECT attempt.{created_at} FROM {table} AS attempt '
+                           f'WHERE attempt.{succeeded} AND attempt.{username} = wanted.name '
+                           f'ORDER BY attempt.{created_at} DESC LIMIT 1) '
+                           f'FROM unnest(%s::text[]) AS wanted(name)', [names])
+            return {name: last for name, last in cursor.fetchall() if last is not None}
 
-    def signed_in_clients(self, username, since, limit=None) -> set:
-        """The clients (addresses) of ``username``'s newest successful sign-ins at or after ``since``, at most ``limit``
-        rows of them (SIGNED_IN_CLIENTS_READ): read newest first by studio_login_name_signed_in, so the cost stays the
-        limit's however many times the name signed in - what throttle.Door.known_address reads unbounded."""
-        rows = (self.filter(username=username, succeeded=True, created_at__gte=since).order_by('-created_at')
-                .values_list('client', flat=True)[:limit or self.model.SIGNED_IN_CLIENTS_READ])
-        return set(rows)
+    def signed_in_from(self, username, client_key, since, *, client='') -> bool:
+        """Whether ``username`` signed in successfully from the client key ``client_key`` - an IPv4 address, or an IPv6
+        address's /64 (studio.request_meta.client_key) - at or after ``since`` (``client``: the address the key was read
+        from). However many times the name signed in (refutation round 2 of release 1, regression-1: a read of the
+        name's newest 1,000 sign-ins left an older address out), each read is one equality lookup of one partial index,
+        so neither its cost nor its answer depends on how many rows the name holds:
+        - a row release 1 writes carries its client's key (LoginAttempt.client_key): any address of the key - every
+          address of an IPv6 /64 - is found (studio_login_name_key_ok);
+        - a row an older revision wrote carries none, and is found by the texts the key is stored as (spellings_of):
+          ``client`` itself, and an IPv4 key as nginx writes it, plain or IPv4-mapped - all of an IPv4 key's texts
+          (studio_login_name_keyless, which holds those rows alone: no row release 1 writes enters it). An IPv6 /64's
+          other addresses are no list of texts, so an older revision's row is found by its own address only."""
+        if not client_key:
+            return False
+        signed_in = self.filter(username=username, succeeded=True, created_at__gte=since)
+        if signed_in.filter(client_key=client_key).exists():
+            return True
+        spellings = [text for text in dict.fromkeys(self.model.spellings_of(client_key, client))
+                     if self.model.key_of(text) == client_key]
+        return bool(spellings) and signed_in.filter(client_key__isnull=True, client__in=spellings).exists()
 
 
 class LoginAttempt(models.Model):
@@ -912,11 +935,46 @@ class LoginAttempt(models.Model):
     door = models.CharField(max_length=8, null=True, blank=True)
     outcome = models.CharField(max_length=24, null=True, blank=True)
     sign_in_ref = models.UUIDField(null=True, blank=True)  # the session's reference (request_meta.sign_in_ref)
-    # a name's newest successful sign-ins read for its known addresses (LoginAttemptQuerySet.signed_in_clients): more
-    # than one a day for 90 days, so only a name signed in again and again ever has an older one left out
-    SIGNED_IN_CLIENTS_READ = 1_000
+    # The client's key (key_of: an IPv4 address, an IPv6 address's /64, an IPv4-mapped address as its IPv4 address,
+    # anything else its keyed hash), written with every row by save(), so a name's sign-ins from one client key are one
+    # index lookup however many the name made (refutation round 2 of release 1, regression-1). Nullable with no database
+    # default (migration 0018): the rows an older revision inserts leave it NULL, and are read by their client
+    # (LoginAttemptQuerySet.signed_in_from).
+    client_key = models.CharField(max_length=64, null=True, blank=True)
 
     objects = LoginAttemptQuerySet.as_manager()
+
+    @staticmethod
+    def key_of(client) -> str:
+        """The client key of a stored ``client``: studio.request_meta.client_key's reading of it, as
+        throttle.key_of_address reads one."""
+        from types import SimpleNamespace
+
+        from . import request_meta  # here: request_meta needs no model, and this module loads first
+        return request_meta.client_key(SimpleNamespace(META={'REMOTE_ADDR': str(client or '')}))
+
+    @staticmethod
+    def spellings_of(client_key, client='') -> list:
+        """Texts a stored client is read from for ``client_key``: ``client`` itself and its canonical spelling, and for
+        an IPv4 key the address as nginx's $remote_addr writes it - plain, or IPv4-mapped on a dual-stack listener
+        (::ffff:a.b.c.d) - and as Python's ipaddress writes the mapped address. The caller keeps those whose key is
+        ``client_key``."""
+        import ipaddress
+        texts = [str(client or '')]
+        try:
+            texts.append(str(ipaddress.ip_address(texts[0])))
+        except ValueError:
+            pass
+        try:
+            address = ipaddress.IPv4Address(str(client_key or ''))
+        except ValueError:
+            return texts
+        return texts + [str(address), f'::ffff:{address}', str(ipaddress.IPv6Address(f'::ffff:{address}'))]
+
+    def save(self, *args, **kwargs):
+        if self.client_key is None:  # every row release 1 writes carries its client's key
+            self.client_key = self.key_of(self.client)
+        super().save(*args, **kwargs)
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at']),
@@ -929,7 +987,19 @@ class LoginAttempt(models.Model):
                    models.Index(fields=['succeeded', 'created_at', 'id'], name='studio_login_result_time'),
                    models.Index(Upper('username'), F('created_at'), name='studio_login_upper_name_time'),
                    models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True),
-                                name='studio_login_name_signed_in')]
+                                name='studio_login_name_signed_in'),
+                   # refutation round 2 (phi-1): the admin door's key step reads and settles its attempt by the sign-in
+                   # reference while it is second_factor_pending (throttle.settle_second_factor); only pending rows are
+                   # held, so no other attempt's insert writes to it
+                   models.Index(fields=['sign_in_ref'], condition=Q(outcome='second_factor_pending'),
+                                name='studio_login_pending_ref'),
+                   # refutation round 2 (regression-1): a name's sign-ins from one client key, one lookup however many
+                   # the name made; and those an older revision wrote, which carry no key, by their address
+                   # (LoginAttemptQuerySet.signed_in_from). No row release 1 writes is held by the second.
+                   models.Index(fields=['username', 'client_key', 'created_at'],
+                                condition=Q(succeeded=True, client_key__isnull=False), name='studio_login_name_key_ok'),
+                   models.Index(fields=['username', 'client', 'created_at'],
+                                condition=Q(succeeded=True, client_key__isnull=True), name='studio_login_name_keyless')]
 
 
 class WorkerBeat(models.Model):

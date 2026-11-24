@@ -420,8 +420,17 @@ class ListRepeatTests(ReadCase):
     def at(self, start, seconds):
         return mock.patch.object(timezone, 'now', return_value=start + timedelta(seconds=seconds))
 
+    def start(self):
+        """Now - or, when now is less than two minutes before UTC midnight, half a minute after it: a repeat is counted
+        only on a record of its own UTC day (refutation round 2, phi-3), so these reads, at most 61 s apart, fall on one
+        day whenever the suite runs. Never earlier than now: a session's times are never in the future."""
+        now = timezone.now()
+        if (now + timedelta(minutes=2)).date() != now.date():
+            return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1, seconds=30)
+        return now
+
     def test_one_session_listing_again_and_again_is_one_record_with_a_count(self):
-        start = timezone.now()
+        start = self.start()
         for second in range(0, 50, 10):  # five reads in 40 seconds
             with self.at(start, second):
                 self.assertEqual(self.member.get(LIST).status_code, 200)
@@ -436,7 +445,7 @@ class ListRepeatTests(ReadCase):
         self.assertEqual(len(self.lists()), 2)
 
     def test_anything_new_in_a_list_read_is_a_record_of_its_own(self):
-        start = timezone.now()
+        start = self.start()
         with self.at(start, 0):
             self.member.get(LIST)
         with self.at(start, 1):
@@ -450,7 +459,7 @@ class ListRepeatTests(ReadCase):
         self.assertFalse(models.AccessRecordRepeat.objects.exists())
 
     def test_every_detail_view_and_download_read_still_writes_its_own_record(self):
-        start = timezone.now()
+        start = self.start()
         reads = self.reads()
         for second in range(3):
             with self.at(start, second):
@@ -532,12 +541,15 @@ class SignInRowsTests(TestCase):
         self.ws = f.workspace()
         self.owner = f.member(self.ws, role=models.Membership.OWNER)
         self.colleague = f.member(self.ws)
+        key = models.LoginAttempt.key_of  # each row's client key, as release 1 writes every row (refutation round 2)
         rows = [models.LoginAttempt(username=self.owner.username, client=f'203.0.113.{index % 200}', succeeded=True,
-                                    door='cpt', outcome=models.LoginAttempt.SIGNED_IN) for index in range(20_000)]
+                                    client_key=key(f'203.0.113.{index % 200}'), door='cpt',
+                                    outcome=models.LoginAttempt.SIGNED_IN) for index in range(20_000)]
         rows += [models.LoginAttempt(username=f'unknown-{index}', client='198.51.100.7', succeeded=False, door='cpt',
-                                     outcome=models.LoginAttempt.UNKNOWN_ACCOUNT) for index in range(2_000)]
+                                     client_key='198.51.100.7', outcome=models.LoginAttempt.UNKNOWN_ACCOUNT)
+                 for index in range(2_000)]
         rows.append(models.LoginAttempt(username=self.colleague.username, client='192.0.2.44', succeeded=True,
-                                        door='cpt', outcome=models.LoginAttempt.SIGNED_IN))
+                                        client_key='192.0.2.44', door='cpt', outcome=models.LoginAttempt.SIGNED_IN))
         models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
         with connection.cursor() as cursor:  # 12 days of them, as the lens seeded them (60 a minute)
             cursor.execute("UPDATE studio_loginattempt SET created_at = now() - random() * interval '12 days'")
@@ -592,21 +604,33 @@ class SignInRowsTests(TestCase):
                 self.assertIn('studio_login_upper_name_time', plan)
 
     def test_the_latest_sign_ins_read_one_row_a_name_and_answer_as_before(self):
+        from django.db.models import Max
         names = [self.owner.username, self.colleague.username, 'never-signed-in']
-        self.assertEqual(models.LoginAttempt.objects.latest_sign_ins(names), customer.last_sign_ins(names))
-        for sql in self.sql_of(lambda: models.LoginAttempt.objects.latest_sign_ins(names), 'LIMIT 1'):
-            with self.subTest(sql=sql[-80:]):
-                plan = self.plan(sql, analyze=True)
-                self.assertIn('studio_login_name_signed_in', plan)
-                self.assertNotRegex(plan, r'actual time=\S+ rows=(?:[2-9]|\d{2,}) ')  # at most one row a name
-
-    def test_the_known_addresses_read_at_most_their_limit_of_rows(self):
-        since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
-        clients = models.LoginAttempt.objects.signed_in_clients(self.owner.username, since)
-        self.assertLessEqual(len(clients), models.LoginAttempt.SIGNED_IN_CLIENTS_READ)
-        self.assertIn(self.newest_client, clients)  # the newest sign-in's address is among them
-        (sql,) = self.sql_of(lambda: models.LoginAttempt.objects.signed_in_clients(self.owner.username, since), 'LIMIT')
+        shipped = dict(models.LoginAttempt.objects.filter(succeeded=True, username__in=names).values('username')
+                       .annotate(last=Max('created_at')).values_list('username', 'last'))  # every succeeded row
+        self.assertEqual(models.LoginAttempt.objects.latest_sign_ins(names), shipped)
+        self.assertEqual(customer.last_sign_ins(names), shipped)
+        # every name in one statement (refutation round 2, phi-0), each name's lookup one row of the partial index
+        (sql,) = self.sql_of(lambda: models.LoginAttempt.objects.latest_sign_ins(names), 'LIMIT 1')
         plan = self.plan(sql, analyze=True)
-        self.assertIn('studio_login_name_signed_in', plan)
-        read = [int(rows) for rows in re.findall(r'Index Scan .*? rows=(\d+) loops', plan)]
-        self.assertTrue(read and max(read) <= models.LoginAttempt.SIGNED_IN_CLIENTS_READ, plan)
+        scans = [line for line in plan.splitlines() if re.search(r'Scan.* on studio_loginattempt', line)]
+        self.assertTrue(scans, plan)
+        for line in scans:
+            self.assertIn('studio_login_name_signed_in', line)
+            self.assertNotRegex(line, r'actual time=\S+ rows=(?:[2-9]|\d{2,}) ')  # at most one row a name
+
+    def test_a_known_address_is_one_index_row_however_many_times_the_name_signed_in(self):
+        # refutation round 2 (regression-1): the bounded read this test pinned (the name's newest 1,000 sign-ins) left an
+        # older address out; the read is now exact, and still one index row: any address the name signed in from, the
+        # oldest among its 20,000 rows included, and the newest
+        since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
+        oldest = models.LoginAttempt.objects.filter(username=self.owner.username).order_by('created_at').first().client
+        found = models.LoginAttempt.objects.signed_in_from
+        for client, known in ((oldest, True), (self.newest_client, True), ('192.0.2.44', False)):
+            with self.subTest(client=client):
+                self.assertEqual(found(self.owner.username, client, since), known)
+                (sql,) = self.sql_of(lambda: found(self.owner.username, client, since), '"client_key" =')
+                plan = self.plan(sql, analyze=True)
+                self.assertIn('studio_login_name_key_ok', plan)
+                read = [int(rows) for rows in re.findall(r'Index (?:Only )?Scan .*? rows=(\d+) loops', plan)]
+                self.assertTrue(read and max(read) <= 1, plan)

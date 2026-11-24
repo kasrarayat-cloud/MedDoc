@@ -295,12 +295,10 @@ class Door:
     def known_address(self) -> bool:
         """Whether this username signed in from this client key - this IPv4 address, or this IPv6 address's /64 - within
         KNOWN_DEVICE_DAYS (check e): any LoginAttempt of the name that succeeded, an older release's rows included (they
-        carry succeeded alone), its client read as a client key (key_of_address)."""
+        carry succeeded alone), however many times the name signed in (refutation round 2 of release 1, regression-1):
+        a row's stored client key, or an older revision's client read as one (LoginAttemptQuerySet.signed_in_from)."""
         since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
-        # the name's newest successful sign-ins only, at most SIGNED_IN_CLIENTS_READ rows (refutation round 1, avail-5;
-        # B1 item 6: a read stops at its limit), however many times the name signed in
-        addresses = LoginAttempt.objects.signed_in_clients(self.username, since)
-        return any(key_of_address(address) == self.client_key for address in addresses)
+        return LoginAttempt.objects.signed_in_from(self.username, self.client_key, since, client=self.client)
 
     def refusal(self) -> str:
         """The sentence that refuses this attempt before any password is checked, or '' when it may go on. The address's

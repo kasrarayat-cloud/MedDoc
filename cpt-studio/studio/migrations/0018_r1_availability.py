@@ -4,8 +4,14 @@
 # only, which no write of the revision before release 1 can be refused by (RELEASE-1-SPEC 2.1; ops/install.py
 # migration_verdict): SessionAccountLink, the session store's links (avail-0); AccessRecordRepeat, a member's repeated
 # list reads counted on their record, and two indexes for the console's reads page (avail-3); four indexes on
-# LoginAttempt, so its reads stay bounded however many rows one name holds (avail-5). The tables these indexes are
-# built on are small on the live host (synthetic data), so each CREATE INDEX holds its lock for moments.
+# LoginAttempt, so its reads stay bounded however many rows one name holds (avail-5). Refutation round 2 (release 1 is
+# installed nowhere, so this migration is amended rather than followed): an index of the pending rows' sign-in
+# reference, which the admin door's key step reads and settles by (phi-1); and LoginAttempt.client_key, a nullable
+# column with no database default (an older revision's inserts leave it NULL), with an index of the succeeded rows that
+# carry one and another of those that do not, so a known address is one lookup however many times the name signed in
+# (regression-1); no row release 1 writes enters the second. The tables these indexes are built on are small on the
+# live host (synthetic data), so each CREATE INDEX holds its lock for moments; ADD COLUMN of a nullable column with no
+# default rewrites no row.
 
 import django.db.models.functions.text
 from django.db import migrations, models
@@ -37,6 +43,11 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField()),
             ],
         ),
+        migrations.AddField(
+            model_name='loginattempt',
+            name='client_key',
+            field=models.CharField(blank=True, max_length=64, null=True),
+        ),
         migrations.AddIndex(
             model_name='accessrecord',
             index=models.Index(fields=['created_at', 'id'], name='studio_access_time'),
@@ -60,6 +71,18 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name='loginattempt',
             index=models.Index(condition=models.Q(('succeeded', True)), fields=['username', 'created_at'], name='studio_login_name_signed_in'),
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(condition=models.Q(('outcome', 'second_factor_pending')), fields=['sign_in_ref'], name='studio_login_pending_ref'),
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(condition=models.Q(('client_key__isnull', False), ('succeeded', True)), fields=['username', 'client_key', 'created_at'], name='studio_login_name_key_ok'),
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(condition=models.Q(('client_key__isnull', True), ('succeeded', True)), fields=['username', 'client', 'created_at'], name='studio_login_name_keyless'),
         ),
         migrations.AddIndex(
             model_name='sessionaccountlink',

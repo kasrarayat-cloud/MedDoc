@@ -223,7 +223,8 @@ def member_json(row, last_sign_in) -> dict:
 def last_sign_ins(usernames) -> dict:
     """{username: the time of its latest successful sign-in} (a LoginAttempt that signed in: B1's signed_in, and the
     rows an older release wrote with succeeded true)."""
-    return models.LoginAttempt.objects.latest_sign_ins(usernames)  # each name's newest row (refutation round 1, avail-5)
+    # each name's newest row (refutation round 1, avail-5), every name in one statement (refutation round 2, phi-0)
+    return models.LoginAttempt.objects.latest_sign_ins(usernames)
 
 
 def members_json(membership) -> list:

@@ -114,7 +114,9 @@ class MemberReadTests(ReadCase):
 
     def test_a_poll_writes_at_most_one_row_a_minute_per_sign_in_and_document(self):
         url = f'/api/encounters/{self.enc.pk}'
-        start = timezone.now()
+        start = timezone.now()  # clear of UTC midnight, never earlier than now: a poll leans only on a row of its own day
+        if (start + timedelta(minutes=2)).date() != start.date():  # (refutation round 2, phi-3's class)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1, seconds=30)
         with mock.patch.object(timezone, 'now', return_value=start):
             for _ in range(5):
                 self.assertEqual(self.member.get(url, HTTP_X_CPT_POLL='1').status_code, 200)
