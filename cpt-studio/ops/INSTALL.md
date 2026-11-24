@@ -1893,11 +1893,27 @@ release 1), run only through `--phase manage`, never over HTTP:
 The first closure or destruction ends the way back to every revision before
 release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
 revision without disposal (**Switching back**, above); the way on is a fix
-forward.
+forward. Nor is a practice closed or a document destroyed while such a
+revision serves (below).
 
 Every disposal step refuses while an install or switch-back is in progress (a
-`cpt-studio-web-next` or a `*-previous` container); only after that reading is
-the command told so (`CPT_STUDIO_SWITCH_STATE=idle`, which it requires). It runs
+`cpt-studio-web-next` or a `*-previous` container). A step that changes rows -
+`close`, `execute`, `replay-ledger --execute` (the receipt's mode `executed`) -
+also refuses, running nothing, unless the pair under the canonical names
+(`cpt-studio-web` and `cpt-studio-worker`, running or stopped) is a revision
+with disposal, read from its tree as `switch-back` reads it (refutation round
+2, switchback-0: a switch-back allowed because nothing was closed, followed by
+a closure and a destruction while the revision before release 1 served, handed
+that revision the very rows the switch-back refuses to hand it). No web there,
+a container this installer did not start, one with no revision label, or a
+revision this checkout cannot read refuses too. Install a revision with
+disposal (`--phase app`), then run the step again. The dry runs (`plan`, and
+`replay-ledger` without `--execute`) and `ledger` stay open: they change no
+row an older revision reads (a plan writes only its own `planned`
+DisposalEvent, a release-1 table), and the step that would carry a plan out is
+refused until a revision with disposal serves. Only after these readings is
+the command told no switch is under way (`CPT_STUDIO_SWITCH_STATE=idle`, which
+it requires). It runs
 as the application's user with the files volume, the declaration passed as
 `--authorization-ref <declaration>@<commit>`. `--command export-workspace
 --workspace-id <id> --reason-file <file> --by <person>` writes one practice's

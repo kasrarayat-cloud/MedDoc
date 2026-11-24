@@ -8767,6 +8767,34 @@ def install_in_progress() -> list:
             if inspect('container', name) is not None]
 
 
+def serving_disposal_problem() -> str:
+    """'' when the pair under the canonical names - the one that serves, or serves once started: cpt-studio-web and
+    cpt-studio-worker, running or stopped - has release 1's disposal, else why not (refutation round 2, switchback-0: a
+    switch-back to a revision without disposal, refused once anything is closed or destroyed, was passed by switching
+    back first and then closing and destroying while that revision served). Read as the switch-back's refusal reads a
+    revision (has_disposal: its tree's DISPOSAL_FILES). No web there, a container that is not this installer's, or one
+    with no revision label is not known, and never read as one with disposal (fail closed)."""
+    revisions = {}
+    for role in ('web', 'worker'):
+        container = inspect('container', SERVICES[role])
+        if container is None:
+            continue
+        if not owned(container, role):
+            return f'{SERVICES[role]} is not a CPT Studio {role} container, so what serves is not known'
+        revision = labels_of(container).get(REVISION_LABEL)
+        if not SHA_RE.fullmatch(str(revision or '')):
+            return f'{SERVICES[role]} carries no revision label, so what serves is not known'
+        revisions[role] = revision
+    if 'web' not in revisions:
+        return f'there is no {SERVICES["web"]}, so the revision that serves next is not known'
+    for role, revision in revisions.items():
+        if not has_disposal(revision):
+            return (f'{SERVICES[role]} is revision {revision[:12]}, which has no disposal (its tree has no '
+                    f'{DISPOSAL_FILES[0]}): it takes uploads into a closed practice and sends them for coding, and lists '
+                    'each destroyed document again')
+    return ''
+
+
 def manage_argv(ctx, args, entry) -> list:
     """The command line of the act (the installer's half of each command's contract; RAM-only files at MANAGE_MOUNT)."""
     command, reason = ['manage', entry['command']], ['--reason-file', f'{MANAGE_MOUNT}/reason']
@@ -8927,6 +8955,21 @@ def phase_manage(ctx) -> dict:
         if busy:
             raise InstallError(f'An install or switch-back is in progress ({", ".join(busy)}), and the installer assumes '
                                'no row is deleted during one: nothing was disposed of (RELEASE-1-SPEC D1).')
+        # refutation round 2, switchback-0: a step that changes a row (close, execute, a replay with --execute: the
+        # receipt's mode 'executed') runs only while the serving pair has disposal; the dry runs (plan, a replay
+        # without --execute) and the ledger change no row such a revision reads, and stay open
+        if dispose_mode(args) == 'executed':
+            try:
+                problem = serving_disposal_problem()
+            except InstallError as error:
+                raise InstallError(f'{error} Nothing was disposed of.') from error
+            if problem:
+                raise InstallError(f'--dispose-step {args.dispose_step}' + (' --execute' if args.execute else '')
+                                   + f' changes rows, and {problem}: nothing was disposed of. A practice is closed, and '
+                                   'a document destroyed, only while a revision with disposal (release 1 or later) '
+                                   'serves (RELEASE-1-SPEC 6.3): install one (--phase app), then run this step again. '
+                                   'The plan, the ledger and a replay without --execute stay open meanwhile: they '
+                                   'change no row an older revision reads.')
         # only now, the reading above made: Lane 4's dispose refuses unless it is told no switch is in progress (this
         # phase holds the receipts' lock, so no install starts on them while it runs)
         environment = runtime_env('disabled', '') + ['-e', 'CPT_STUDIO_SWITCH_STATE=idle']

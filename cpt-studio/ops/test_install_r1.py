@@ -600,8 +600,12 @@ class ManageWorld:
     """The host for --phase manage: one-shots recorded (with what their RAM-only files held), the root file a folder
     standing in for /etc/cpt-studio, containers by name."""
 
-    def __init__(self, tmp, *, output=b'done\n', exit_code=0, containers=(), grant=None, declared=()):
+    def __init__(self, tmp, *, output=b'done\n', exit_code=0, containers=(), grant=None, declared=(), serving=None):
         self.tmp, self.output, self.exit_code = tmp, output, exit_code
+        # the pair under the canonical names, {role: its revision label (None: no such container)}, which a disposal
+        # step that changes a row reads (install.serving_disposal_problem; refutation round 2, switchback-0): this
+        # revision's web and worker unless a test says otherwise
+        self.serving = {'web': REVISION, 'worker': REVISION} if serving is None else dict(serving)
         # what GRANT_CHECK reads of a grant-operator's account, and the words the committed declaration names
         self.grant = {'exists': True, 'operator': False, 'revoked': False} if grant is None else grant
         self.declared, self.scripts = tuple(declared), []
@@ -638,6 +642,11 @@ class ManageWorld:
         return SimpleNamespace(returncode=self.exit_code, stdout=output, stderr=b'')
 
     def inspect(self, kind, name):
+        for role, revision in self.serving.items():
+            if kind == 'container' and name == install.SERVICES[role] and revision is not None:
+                return {'Id': name, 'Image': 'sha256:' + 'c' * 64, 'State': {'Running': True},
+                        'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: role,
+                                              install.REVISION_LABEL: revision}}}
         return {'Id': name} if name in self.containers else None
 
     def app_script(self, image_id, env, body, params, **kwargs):

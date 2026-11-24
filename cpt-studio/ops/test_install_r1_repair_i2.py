@@ -3,6 +3,9 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
 
   I2-1  installer-0: one ledger limit (LEDGER_LIMIT), read by the replay step and by the ledger step, which keeps no
         ledger the replay would refuse; sized for a practice-year at the owner's figure.
+  I2-2  switchback-0: a dispose step that changes rows (close, execute, a replay with --execute) runs only while the
+        pair under the canonical names has disposal (read as the switch-back's refusal reads it); the dry runs and the
+        ledger stay open; an install or switch in progress still refuses every step.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
@@ -149,6 +152,158 @@ class LedgerLimitTests(TemporaryDirectoryTest):
         memory = calls[0][calls[0].index('--memory') + 1]
         self.assertEqual(memory, '768m')
         self.assertLess(6 * install.LEDGER_LIMIT, 768 * 2 ** 20)
+
+
+# --- I2-2: no step that changes a row while the serving revision has no disposal ------------------------------------------
+
+# the dispose steps whose receipt's mode is 'executed' (they change rows), and those that change none an older revision
+# reads (the dry runs and the ledger), each with its own arguments beyond --command dispose and --by
+CHANGES_ROWS = {
+    'close': ('--dispose-step', 'close', '--workspace-id', r1.WORKSPACE, '--reason-file', 'REASON'),
+    'execute': ('--dispose-step', 'execute', '--plan-id', r1.PLAN, '--approved-by', 'Grace Hopper'),
+    'replay-ledger --execute': ('--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--execute',
+                                '--approved-by', 'Grace Hopper'),
+}
+CHANGES_NO_ROW_AN_OLDER_REVISION_READS = {
+    'plan': ('--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE, '--reason-file', 'REASON'),
+    'ledger': ('--dispose-step', 'ledger'),
+    'replay-ledger': ('--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER'),
+}
+
+
+class ManageOnHost(r1.ManageWorld):
+    """ManageWorld whose containers are a blue/green host's, labelled as docker inspect shows them."""
+
+    def __init__(self, tmp, host, **kwargs):
+        super().__init__(tmp, **kwargs)
+        self.host = host
+
+    def inspect(self, kind, name):
+        return self.host.inspect(kind, name)
+
+
+class ServingDisposalTests(TemporaryDirectoryTest):
+    def folder(self, name):
+        folder = self.tmp / name.replace(' ', '-')
+        folder.mkdir(mode=0o700)
+        return folder
+
+    def dispose(self, world, extra):
+        try:
+            return world.run('--command', 'dispose', *extra, '--by', 'Ada Lovelace'), None
+        except install.InstallError as error:
+            return None, error
+
+    def assert_each_step(self, make_world, revision):
+        """Every step that changes a row is refused, running nothing; every other runs."""
+        for step, extra in CHANGES_ROWS.items():
+            with self.subTest(refused=step):
+                world = make_world(self.folder(f'refused {step}'))
+                details, error = self.dispose(world, extra)
+                self.assertIsInstance(error, install.InstallError, details and details.get('summary'))
+                self.assertIn('changes rows', str(error))
+                self.assertIn(f'is revision {revision[:12]}, which has no disposal', str(error))
+                self.assertIn('nothing was disposed of', str(error))
+                self.assertIn('install one (--phase app), then run this step again', str(error))
+                self.assertEqual(world.acts(), [])
+        for step, extra in CHANGES_NO_ROW_AN_OLDER_REVISION_READS.items():
+            with self.subTest(open=step):
+                world = make_world(self.folder(f'open {step}'))
+                details, error = self.dispose(world, extra)
+                self.assertIsNone(error, error and str(error))
+                self.assertEqual(world.acts()[0][:2], ['manage', 'dispose'])
+                self.assertIn(details['mode'], ('dry run', 'read'))
+
+    def test_after_a_switch_back_to_a_revision_without_disposal_no_step_that_changes_a_row_runs(self):
+        # the finding's input: release 1's own switch-back to OLD (nothing closed or destroyed, so it is allowed), then
+        # release 1's --phase manage on that host, OLD's web and worker serving under the canonical names
+        import test_install
+        from test_install_bluegreen import IMAGE, OLD, OLD_IMAGE, REVISION, WEB, WORKER, switch_back_args
+        from test_install_r1_repair import SessionWorld
+        host = SessionWorld(self.tmp, live=9151, serving=(REVISION, IMAGE), pre_policy=(OLD,))
+        install.write_receipt(self.tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION, 'details': {
+            'replaced': {'web': {'id': 'web-old', 'image': OLD_IMAGE, 'revision': OLD},
+                         'worker': {'id': 'worker-old', 'image': OLD_IMAGE, 'revision': OLD}}}})
+        patches = host.patches() + [mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {OLD})]
+        for patcher in patches:
+            patcher.start()
+        try:
+            install.phase_switch_back(install.Context(switch_back_args(self.tmp), self.tmp))
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        self.assertEqual({name: host.containers[name]['revision'] for name in (WEB, WORKER)}, {WEB: OLD, WORKER: OLD})
+        self.assertEqual([name for name in host.containers if name.endswith(('-next', '-previous'))], [])
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {OLD}):
+            self.assert_each_step(lambda folder: ManageOnHost(folder, host), OLD)
+
+    def test_after_an_app_that_migrated_and_failed_at_s1_the_older_web_serving_is_read_too(self):
+        import test_install
+        from test_install_bluegreen import NEXT, OLD, BlueGreenWorld, run_app
+        host = BlueGreenWorld(self.tmp)  # OLD serves on 9150
+        host.unhealthy.add(NEXT)
+        details, failure = run_app(host)
+        self.assertEqual((failure.details or {}).get('failed_at'), 'S1')
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {OLD}):
+            self.assert_each_step(lambda folder: ManageOnHost(folder, host), OLD)
+
+    def test_what_serves_is_read_fail_closed(self):
+        import test_install
+        old = 'b' * 40
+        close = CHANGES_ROWS['close']
+
+        class Unowned(r1.ManageWorld):
+            labels = {}
+
+            def inspect(self, kind, name):
+                if name == install.SERVICES['web']:
+                    return {'Id': name, 'Config': {'Labels': self.labels}, 'State': {'Running': True}}
+                return super().inspect(kind, name)
+        unlabelled = type('Unlabelled', (Unowned,), {'labels': {install.LABEL: '1', install.ROLE_LABEL: 'web'}})
+        refused = {
+            'no web': (lambda folder: r1.ManageWorld(folder, serving={'web': None, 'worker': None}),
+                       'there is no cpt-studio-web, so the revision that serves next is not known'),
+            'no web, a worker': (lambda folder: r1.ManageWorld(folder, serving={'web': None, 'worker': r1.REVISION}),
+                                 'there is no cpt-studio-web'),
+            'an older worker': (lambda folder: r1.ManageWorld(folder, serving={'web': r1.REVISION, 'worker': old}),
+                                f'cpt-studio-worker is revision {old[:12]}, which has no disposal'),
+            'a web not this installer\'s': (Unowned, 'cpt-studio-web is not a CPT Studio web container'),
+            'a web with no revision label': (unlabelled, 'cpt-studio-web carries no revision label'),
+        }
+        with mock.patch.object(test_install, 'PRE_DISPOSAL_REVISIONS', {old}):
+            for label, (make, said) in refused.items():
+                with self.subTest(refused=label):
+                    world = make(self.folder(label))
+                    details, error = self.dispose(world, close)
+                    self.assertIsInstance(error, install.InstallError)
+                    self.assertIn(said, str(error))
+                    self.assertIn('nothing was disposed of', str(error))
+                    self.assertEqual(world.acts(), [])
+            # a revision this checkout cannot read is never taken for one with disposal
+            cannot = install.InstallError(f'Cannot tell whether {old[:12]} has release 1\'s disposal: this checkout '
+                                          'cannot read that revision.')
+            with mock.patch.object(install, 'has_disposal', side_effect=cannot):
+                world = r1.ManageWorld(self.folder('unreadable'))
+                details, error = self.dispose(world, close)
+            self.assertIn('cannot read that revision', str(error))
+            self.assertIn('Nothing was disposed of.', str(error))
+            self.assertEqual(world.acts(), [])
+            # controls: this revision's pair, or a later one that has disposal, serving - the step runs
+            for label, serving in (('this revision', None), ('a later one', {'web': 'c' * 40, 'worker': 'c' * 40})):
+                with self.subTest(control=label):
+                    world = r1.ManageWorld(self.folder(f'control {label}'), serving=serving)
+                    details, error = self.dispose(world, close)
+                    self.assertIsNone(error, error and str(error))
+                    self.assertEqual(details['summary'], 'dispose close: executed')
+
+    def test_an_install_or_switch_in_progress_still_refuses_every_step_read_only_ones_too(self):
+        for leftover in (install.INCOMING_WEB, 'cpt-studio-web-previous', 'cpt-studio-worker-previous'):
+            for step, extra in {**CHANGES_ROWS, **CHANGES_NO_ROW_AN_OLDER_REVISION_READS}.items():
+                with self.subTest(leftover=leftover, step=step):
+                    world = r1.ManageWorld(self.folder(f'{leftover} {step}'), containers=[leftover])
+                    details, error = self.dispose(world, extra)
+                    self.assertIn('in progress', str(error))
+                    self.assertEqual(world.acts(), [])
 
 
 if __name__ == '__main__':
