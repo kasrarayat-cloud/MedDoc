@@ -4,14 +4,17 @@
 # 2026-11-20 (lane E, the earlier pipeline removed): frozen with -c of the previous requirements.txt, so only the removals land.
 # 2026-11-21 (the physician PDF report): frozen with -c of the previous requirements.txt and requirements-dev.txt, so only
 # reportlab and its two dependencies land, at the versions the dev pins already carried.
+# 2026-11-24 (release 1, Lane 1): frozen with -c of the previous requirements.txt, so only webauthn, cryptography and their dependencies land (cbor2 held at 6.2.1, the newest release at least 14 days old).
 annotated-types==0.8.0
 anthropic==2.11.0
 anyio==4.16.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
 asgiref==3.12.1
+cbor2==6.2.1
 cffi==2.1.1
 charset-normalizer==3.5.1
+cryptography==50.0.1
 Django==5.2.17
 docstring_parser==0.18.0
 gunicorn==23.0.0
@@ -25,13 +28,17 @@ packaging==26.3
 pillow==13.0.0
 psycopg==3.3.5
 psycopg-binary==3.3.5
+pyasn1==0.6.5
+pyasn1_modules==0.4.2
 pycparser==3.0
 pydantic==2.14.4
 pydantic_core==2.50.5
+pyOpenSSL==26.4.0
 reportlab==4.5.1
 sniffio==1.3.1
 sqlparse==0.6.0
 truststore==0.10.5
 typing-inspection==0.4.5
 typing_extensions==4.16.0
+webauthn==3.0.1
 whitenoise==6.12.0

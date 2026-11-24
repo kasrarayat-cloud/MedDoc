@@ -13,3 +13,9 @@ anthropic==2.11.0
 # The physician PDF report (studio/physician_pdf.py): ReportLab, at the version the rebuild and this service's own
 # tests already pin; it brings pillow and charset-normalizer, pinned in requirements.txt at the same versions.
 reportlab==4.5.1
+# The operator's second factor (release 1, B2: studio/second_factor_views.py): py_webauthn verifies security keys and
+# passkeys; its runtime dependencies (cbor2, pyOpenSSL, pyasn1, pyasn1_modules) are pinned in requirements.txt.
+webauthn==3.0.1
+# Encryption of stored files and report PDFs (release 1, F1: studio/file_crypto.py, AES-256-GCM), which webauthn
+# also needs: the same pin the rebuild service carries (rebuild/requirements.txt).
+cryptography==50.0.1
