@@ -365,6 +365,37 @@ class ConverterTurnsTests(SimpleTestCase):
         for (event, *_), (following, *_) in zip(events, events[1:]):
             self.assertNotEqual((event, following), ('start', 'start'))  # never two at once
 
+    def test_a_waiting_request_leaves_its_word_bytes_with_its_client_until_its_turn(self):
+        # the converter holds no queued upload: 4 MiB that do not compress, far past a socket's buffer, wait in the
+        # client's send until their turn, as they waited in the listen backlog before
+        runner = recording_runner(self.record, lambda package: 1.5)
+        big = word_package(TEXT, parts=[('word/media/noise.bin', os.urandom(4 * MIB))])
+        self.assertGreater(len(big), 4 * MIB)
+        with Running(runner) as running:
+            first = threading.Thread(target=lambda: converter_server.request(
+                running.path, synthetic_word('first'), total_seconds=60), daemon=True)
+            first.start()
+            wait_for(lambda: record_of(self.record))  # the first one converts
+            sent, answers = threading.Event(), []
+            waiting = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            waiting.connect(running.path)
+
+            def send_then_read():
+                waiting.sendall(frame({'op': 'convert', 'size': len(big), 'sha256': hashlib.sha256(big).hexdigest()},
+                                      big))
+                sent.set()
+                answers.append(answer_of(waiting, 60))
+            sender = threading.Thread(target=send_then_read, daemon=True)
+            sender.start()
+            self.assertFalse(sent.wait(0.8))  # while the first converts, its bytes stay with it
+            self.assertTrue(sent.wait(30))  # at its turn they are read
+            sender.join(60)
+            first.join(60)
+            waiting.close()
+        self.assertEqual(answers[0]['status'], 'ok')
+        self.assertEqual([digest for event, digest, _ in record_of(self.record) if event == 'start'][1],
+                         package_digest(big))
+
     def test_a_request_whose_client_left_before_its_turn_is_not_converted(self):
         runner = recording_runner(self.record, lambda package: 1.0)
         first, left, after = synthetic_word('first'), synthetic_word('left before its turn'), synthetic_word('after')

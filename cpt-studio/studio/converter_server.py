@@ -232,9 +232,11 @@ def ping(path=SOCKET_PATH, *, seconds=PING_SECONDS) -> str:
 class ConverterServer(socketserver.UnixStreamServer):
     """The converter's socket and its loop (serve_until_stopped): the main thread takes every connection at once and
     hands it to a thread of its own that reads the request (at most MAX_CONNECTIONS at a time; one more is closed
-    unread); a ping is answered there and then, a conversion joins the line - at most BACKLOG waiting, one more answered
-    busy at once - and one conversion thread takes the line in order, one conversion at a time. A request whose client
-    has left by its turn is closed unconverted, and a conversion is stopped when its client leaves. ``runner``: the
+    unread); a ping is answered there and then, a conversion joins the line on its header - at most BACKLOG waiting,
+    one more answered busy at once - and one conversion thread takes the line in order, one conversion at a time,
+    reading each one's Word bytes at its turn (the converter holds no queued upload, as the listen backlog held none).
+    A request whose client has left by its turn is closed unconverted, and a conversion is stopped when its client
+    leaves. ``runner``: the
     function the bounded child runs on the safe package (default LibreOffice's; tests give a stand-in); ``group``: the
     socket's group, or None to keep it as made. Setting ``draining`` stops it: the conversion running finishes, the ones
     waiting and any new one are answered busy, and the loop returns once nothing is left."""
@@ -244,7 +246,7 @@ class ConverterServer(socketserver.UnixStreamServer):
         self.path, self.runner, self.draining, self.timeout = path, runner, False, idle_seconds
         self._idle, self._inode = False, None
         self._turn = threading.Condition()  # guards the line, the counts and _stopping
-        self._line = collections.deque()  # (connection, Word bytes, size) of the conversions waiting their turn
+        self._line = collections.deque()  # (connection, size, sha256) of the conversions waiting their turn
         self._readers, self._converting, self._stopping = 0, False, False
         _clear_stale_socket(path)
         umask = os.umask(0o117)  # the socket is made 0660, never wider, even for an instant
@@ -351,22 +353,13 @@ class ConverterServer(socketserver.UnixStreamServer):
             log.warning('converter: refused a request it does not take (its operation, size or digest)')
             self._answer(sock, _error(REFUSED))
             return False
-        try:
-            data = _receive(sock, size, deadline)
-        except (EOFError, TimeoutError, OSError) as exc:
-            log.warning('converter: a request ended before its Word file arrived (%s)', type(exc).__name__)
-            return False
-        if hashlib.sha256(data).hexdigest() != digest:
-            log.warning('converter: refused a Word file that does not match its digest')
-            self._answer(sock, _error(REFUSED))
-            return False
-        with self._turn:
+        with self._turn:  # the Word bytes stay with the client until its turn: the line holds no upload here
             if self.draining:
                 why = 'stopping'
             elif len(self._line) >= BACKLOG:
                 why = f'{BACKLOG} conversions wait their turn already'
             else:
-                self._line.append((sock, data, size))
+                self._line.append((sock, size, digest))
                 self._turn.notify_all()
                 return True
         log.info('converter: busy (%s)', why)
@@ -381,10 +374,10 @@ class ConverterServer(socketserver.UnixStreamServer):
                     self._turn.wait()
                 if not self._line:
                     return
-                sock, data, size = self._line.popleft()
+                sock, size, digest = self._line.popleft()
                 self._converting = True
             try:
-                self._convert_turn(sock, data, size)
+                self._convert_turn(sock, size, digest)
             except Exception as exc:  # noqa: BLE001 - one failed conversion never stops the service
                 log.error('converter: a conversion failed unexpectedly (%s)', type(exc).__name__)
             finally:
@@ -393,15 +386,25 @@ class ConverterServer(socketserver.UnixStreamServer):
                     self._converting = False
                     self._turn.notify_all()
 
-    def _convert_turn(self, sock, data, size):
-        """One request's turn: busy while stopping; nothing for a client that has left; else its conversion,
-        stopped if the client leaves meanwhile, and its answer (by ANSWER_SECONDS)."""
+    def _convert_turn(self, sock, size, digest):
+        """One request's turn: busy while stopping; nothing for a client that has left; else its Word bytes (by
+        REQUEST_SECONDS), its conversion - stopped if the client leaves meanwhile - and its answer (by
+        ANSWER_SECONDS)."""
         if self.draining:
             log.info('converter: busy (stopping)')
             self._answer(sock, _error(BUSY))
             return
         if _client_left(sock):
             log.info('converter: a request whose client left before its turn was not converted')
+            return
+        try:
+            data = _receive(sock, size, time.monotonic() + REQUEST_SECONDS)
+        except (EOFError, TimeoutError, OSError) as exc:
+            log.warning('converter: a request ended before its Word file arrived (%s)', type(exc).__name__)
+            return
+        if hashlib.sha256(data).hexdigest() != digest:
+            log.warning('converter: refused a Word file that does not match its digest')
+            self._answer(sock, _error(REFUSED))
             return
         started = time.monotonic()
         try:
@@ -441,13 +444,16 @@ class ConverterServer(socketserver.UnixStreamServer):
 
 
 def _client_left(sock) -> bool:
-    """Whether the client of a request waiting its turn has left: its connection reads as closed (or reset), or holds
-    bytes past its request, which this protocol's client never sends - either way its conversion is not made."""
+    """Whether the client of a request waiting its turn has left: its end of the connection is closed, reset or shut
+    for writing (this protocol's client never shuts it while it waits). Read from the connection's hang-up state, not
+    from whether bytes wait, since a waiting request's Word bytes are still unread."""
     try:
-        ready, _, _ = select.select([sock], [], [], 0)
+        poller = select.poll()
+        poller.register(sock, select.POLLRDHUP | select.POLLHUP | select.POLLERR)
+        found = poller.poll(0)
     except (OSError, ValueError):
         return True
-    return bool(ready)
+    return any(mask & (select.POLLRDHUP | select.POLLHUP | select.POLLERR | select.POLLNVAL) for _, mask in found)
 
 
 def _clear_stale_socket(path):

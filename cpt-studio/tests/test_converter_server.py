@@ -244,7 +244,7 @@ class ServiceTests(SimpleTestCase):
 
     def test_a_client_that_disconnects_halfway_leaves_the_server_serving(self):
         with Running(fake_runner) as running:
-            with self.assertLogs('studio.converter_server', 'WARNING') as logged:
+            with self.assertLogs('studio.converter_server', 'INFO') as logged:  # repair round 1, C2: see below
                 sock = raw(running.path)
                 sock.sendall(frame({'op': 'convert', 'size': 1000, 'sha256': hashlib.sha256(b'x' * 1000).hexdigest()},
                                    b'x' * 500))
@@ -257,7 +257,11 @@ class ServiceTests(SimpleTestCase):
                 wrong.sendall(frame({'op': 'convert', 'size': 3, 'sha256': '0' * 64}, b'abc'))
                 self.assertEqual(answer_of(wrong)['kind'], 'refused')  # the bytes do not match their digest
                 wrong.close()
-            self.assertIn('ended before its Word file arrived', '\n'.join(logged.output))
+            # repair round 1, C2: a request is queued on its header and its Word bytes read at its turn, so a client
+            # gone halfway is met there - as one that left before its turn, or one whose bytes ended, as the race goes
+            said = '\n'.join(logged.output)
+            self.assertTrue('ended before its Word file arrived' in said or 'client left before its turn' in said,
+                            said)
             self.assertEqual(converter_server.request(running.path, PLAIN_PACKAGE, total_seconds=60),
                              CONVERTED + b'PK\x03\x04')
 
