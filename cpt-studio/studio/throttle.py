@@ -10,7 +10,8 @@ The checks, in order, all before Argon2 runs (Door.refusal):
   (b) pair: failures for (the username, the client's key) reach SIGNIN_PAIR_LIMIT: refused from that pair only;
   (c) username delay: failures for the username from any address reach SIGNIN_USER_DELAY_AFTER: the next try waits
       min(SIGNIN_DELAY_BASE_SECONDS * 2 ** (n - SIGNIN_USER_DELAY_AFTER), SIGNIN_DELAY_MAX_SECONDS) after the last
-      failure. It never locks: the wait never grows past the ceiling, and refusals do not lengthen it;
+      failure, the name's attempts still being checked counted as failures made now (INFLIGHT_USER, below). It never
+      locks: the wait never grows past the ceiling, and refusals do not lengthen it;
   (d) known device: a valid device cookie for this username (device_cookie_name(): signed with django.core.signing,
       salt 'cpt-device', holding the account's id, a random id and the issue date - never a session; HttpOnly, Secure
       under HTTPS, SameSite=Strict, Path=/; KNOWN_DEVICE_DAYS long; set on every successful sign-in by
@@ -27,8 +28,15 @@ CLIENT_REFUSAL for (a)), and every refusal is answered before the password hashe
 The counts live in RateWindow rows (studio.rate), one per minute: failures per username, per pair and per address, and
 refusals per username and per address. The pair's and the address's places are taken before the password is checked,
 one atomic hit each (reserve), and given back unless the attempt fails, so attempts sent at the same moment never pass a
-limit together (refutation r2, finding 10); the username's failure is counted after the check. A username is only ever counted as its keyed hash (user_key), never as typed
-text, and a pair as the keyed hash of both (pair_key). A refusal is counted, never hidden (AUTH-9): the first refusal of
+limit together (refutation r2, finding 10). The username's delay is a wait after its last failure, so its own place is
+taken in a count of its own (INFLIGHT_USER, the name's attempts in flight: release 1 repair round 1, auth-2): before
+the delay is read, one atomic hit says how many of the name's attempts are ahead of this one, still being checked, and
+the delay is read as if each of them had failed just now - so attempts sent at the same moment get the checks attempts
+sent one after another get, and no more. The place is given back once the attempt is recorded (a failure is counted as
+one then) or refused, so neither a refusal nor a finished attempt moves the delay; a place an attempt never gave back -
+its worker died between the place and the record - counts for INFLIGHT_SECONDS at most, never the sign-in window. A
+username is only ever counted as its keyed hash (user_key), never as typed text, and a pair as the keyed hash of both
+(pair_key). A refusal is counted, never hidden (AUTH-9): the first refusal of
 a minute writes one SecurityEvent signin.throttled holding ids and counts - per username for (b) and (c), per address
 for (a) - and refused_in() answers the console's "N refused in the last hour".
 
@@ -68,7 +76,9 @@ from .models import LoginAttempt, RateWindow, User
 
 FAIL_USER, FAIL_PAIR, FAIL_CLIENT = 'signin.fail.user', 'signin.fail.pair', 'signin.fail.client'
 REFUSED_USER, REFUSED_CLIENT = 'signin.refused.user', 'signin.refused.client'
+INFLIGHT_USER = 'signin.inflight.user'  # a username's attempts between their place (Door.refusal) and their record
 MINUTE = 60  # every sign-in counter is kept per minute
+INFLIGHT_SECONDS = 2 * MINUTE  # an attempt in flight counts in its own minute and the next one, never longer
 FAILURES = frozenset({LoginAttempt.WRONG_PASSWORD, LoginAttempt.UNKNOWN_ACCOUNT, LoginAttempt.PASSWORD_EXPIRED,
                       LoginAttempt.SECOND_FACTOR_FAILED})
 DEVICE_SALT = 'cpt-device'
@@ -189,16 +199,16 @@ def count_failure(username, client_key):
 
 
 def clear_failures(username) -> int:
-    """Delete ``username``'s RateWindow rows: its failures, its refusals and those of every pair it was tried from in
-    the last day - under any case of the name, which the keys fold (RateWindow rows older than a day are pruned by the
-    daily maintenance). The rows deleted."""
+    """Delete ``username``'s RateWindow rows: its failures, its refusals, its attempts in flight and those of every pair
+    it was tried from in the last day - under any case of the name, which the keys fold (RateWindow rows older than a
+    day are pruned by the daily maintenance). The rows deleted."""
     since = timezone.now() - timedelta(days=1)
     folded = str(username).casefold()
     tried = set(LoginAttempt.objects.filter(username__iexact=username, created_at__gte=since)
                 .values_list('username', 'client'))
     pairs = {pair_key(name, key_of_address(address)) for name, address in tried if name.casefold() == folded}
     named = user_key(username)
-    deleted = RateWindow.objects.filter(scope__in=(FAIL_USER, REFUSED_USER), key=named).delete()[0]
+    deleted = RateWindow.objects.filter(scope__in=(FAIL_USER, REFUSED_USER, INFLIGHT_USER), key=named).delete()[0]
     if pairs:
         deleted += RateWindow.objects.filter(scope=FAIL_PAIR, key__in=pairs).delete()[0]
     return deleted
@@ -308,13 +318,27 @@ class Door:
             return self._refuse(PAIR, _wait_below(_rows(FAIL_PAIR, self.pair_key, since), settings.SIGNIN_PAIR_LIMIT,
                                                   now))
         self.reserved.append((FAIL_PAIR, self.pair_key))
+        ahead = self._take_inflight_place(now)
         failures, last = failures_of(self.username, now)
-        wait = delay_seconds(failures)
-        if wait and last is not None and now < last + timedelta(seconds=wait) and not self.known_device() \
+        wait = delay_seconds(failures + ahead)
+        since = now if ahead else last  # an attempt ahead that fails, fails about now
+        if wait and since is not None and now < since + timedelta(seconds=wait) and not self.known_device() \
                 and not self.known_address():
             self.give_back()
-            return self._refuse(USERNAME, (last + timedelta(seconds=wait) - now).total_seconds(), failures=failures)
+            return self._refuse(USERNAME, (since + timedelta(seconds=wait) - now).total_seconds(), failures=failures)
         return ''
+
+    def _take_inflight_place(self, now) -> int:
+        """Take this attempt's place among the username's attempts in flight (INFLIGHT_USER: one atomic hit, as reserve
+        takes the address's and the pair's) and answer how many are ahead of it: the places of this minute taken before
+        it, and the previous minute's not given back (INFLIGHT_SECONDS). record() or give_back() gives it back."""
+        start = rate.window_start(MINUTE, now)
+        earlier = sum(count for window, count in _rows(INFLIGHT_USER, self.user_key,
+                                                       start - timedelta(seconds=INFLIGHT_SECONDS - MINUTE))
+                      if window < start)
+        place = rate.hit(INFLIGHT_USER, self.user_key, window_seconds=MINUTE)
+        self.reserved.append((INFLIGHT_USER, self.user_key))
+        return earlier + place - 1
 
     def give_back(self):
         """Give back every place refusal() took for this attempt."""
@@ -367,6 +391,8 @@ class Door:
             for scope, key in ((FAIL_PAIR, self.pair_key), (FAIL_CLIENT, self.client_key)):
                 if (scope, key) not in self.reserved:
                     rate.hit(scope, key, window_seconds=MINUTE)
+            if (INFLIGHT_USER, self.user_key) in self.reserved:
+                give_back(INFLIGHT_USER, self.user_key)  # counted as the failure it is now, after that count
             self.reserved = []
         else:
             self.give_back()

@@ -183,12 +183,17 @@ def _enrolment(request):
     return user, claim
 
 
-def _code_refused(request):
-    """The refusal when this address has used up its wrong setup codes for the window (5, SECOND_FACTOR_ATTEMPTS), else ''."""
+def _setup_code_place(request):
+    """Take this attempt's place among the address's wrong setup codes of the window (SECOND_FACTOR_ATTEMPTS per
+    SIGNIN_WINDOW_SECONDS) BEFORE its code is looked up: one atomic hit, whose own count says where the attempt stands,
+    so codes sent at the same moment never get more lookups than codes sent one after another (release 1 repair round
+    1, the class of auth-2). The refusal when there is none left - the place given back at once, so a refusal never
+    counts - else ''. A wrong code keeps its place as its count; a live code gives it back."""
     window = settings.SIGNIN_WINDOW_SECONDS
-    used = rate.count(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), since=rate.window_start(window))
-    if used < settings.SECOND_FACTOR_ATTEMPTS:
+    key = request_meta.client_key(request)
+    if rate.hit(factor.SETUP_CODE_SCOPE, key, window_seconds=window) <= settings.SECOND_FACTOR_ATTEMPTS:
         return ''
+    throttle.give_back(factor.SETUP_CODE_SCOPE, key)
     return factor.TOO_MANY.format(wait=throttle.wait_words(window))
 
 
@@ -197,11 +202,12 @@ def _start_enrolment(request):
     code is used up here, in the transaction that sets the password (factor.claim_setup_code): a second browser with
     the same code - at the same moment or later - is refused like a used code, and only this session, in a fresh session
     key, holds the claim that finishes the setup (refutation r2, finding 6)."""
-    refused = _code_refused(request)
+    refused = _setup_code_place(request)
     if refused:
         return refused
     token = factor.setup_token(request.POST.get('code', ''))
     if token is not None:
+        throttle.give_back(factor.SETUP_CODE_SCOPE, request_meta.client_key(request))  # a live code is no wrong one
         user = token.user
         new, again = request.POST.get('new_password', ''), request.POST.get('new_password_again', '')
         if new != again:
@@ -224,8 +230,10 @@ def _start_enrolment(request):
             request.session.flush()  # the claim lives in a session of its own, under a new key
             request.session[factor.ENROLMENT] = {'claim': str(claim.pk), 'token': str(token.pk), 'user': str(user.pk)}
             return ''
-    rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), window_seconds=settings.SIGNIN_WINDOW_SECONDS)
-    return SETUP_CODE_REFUSED
+        # another request used the live code first: this one counts as a wrong code, after it was given its place back
+        rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request),
+                 window_seconds=settings.SIGNIN_WINDOW_SECONDS)
+    return SETUP_CODE_REFUSED  # a wrong code: the place it took is its count
 
 
 def _finish_enrolment(request, user, claim):

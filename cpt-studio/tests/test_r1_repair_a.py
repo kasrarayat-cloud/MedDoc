@@ -14,6 +14,10 @@ A3  Second-factor failures sent with the account's own known-device cookie are c
 A4  The signed-in pages of the second factor - the recovery codes setup ends on, and the step-up's key and recovery code
     pages - arm the console's idle timer (ops_session.js) as every console page does: the sign-out form, and the
     session's seconds on the body.
+A5  Attempts that arrive together meet the username delay as attempts sent one after another do: each takes its place
+    among the name's attempts in flight before any password is checked, as the address's and the pair's places are
+    taken. A place left by an attempt that never finished counts two minutes at most. The same holds for wrong setup
+    codes, per address: each takes its place before the code is looked up.
 """
 from __future__ import annotations
 
@@ -22,10 +26,12 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.sessions.models import Session
@@ -674,3 +680,124 @@ class SignedInSecondFactorPagesTimerTests(TestCase):
         self.assertEqual((seen['submittedAt'], seen['action'], seen['cleared']),
                          (settings.SESSION_IDLE_OPERATOR_SECONDS, '/logout/?reason=idle', True),
                          'at the idle limit the screen is cleared and the sign-out form submitted')
+
+
+# --- A5: the username delay under attempts that arrive together (auth-2) ----------------------------------------------
+
+A5_ATTEMPTS = 8
+
+
+def a5_attempt(username, index, password=None):
+    """One sign-in attempt at the doctors' door from its own address (each far inside its address and pair limits)."""
+    client = Client(HTTP_HOST=CPT, REMOTE_ADDR=f'203.0.113.{index + 1}')
+    return client.post('/login/', {'username': username, 'password': password or f'wrong-guess-{index}'})
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class UsernameDelayTogetherTests(TransactionTestCase):
+    """A5: the username delay (check c) holds for attempts sent at the same moment. A barrier holds every attempt just
+    after the checks made before any password is checked (Door.refusal) until all have made them, as attempts on
+    parallel workers interleave; the code under test runs unchanged."""
+
+    def together(self, username, count=A5_ATTEMPTS):
+        barrier = threading.Barrier(count, timeout=30)
+        checked = throttle.Door.refusal
+
+        def refusal_then_wait(door):
+            answer = checked(door)
+            barrier.wait()
+            return answer
+
+        answers = []
+
+        def attempt(index):
+            try:
+                answers.append(a5_attempt(username, index))
+            finally:
+                connection.close()
+
+        with mock.patch.object(throttle.Door, 'refusal', refusal_then_wait):
+            threads = [threading.Thread(target=attempt, args=(index,)) for index in range(count)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(90)
+        self.assertEqual(len(answers), count, 'every attempt was answered')
+        return answers
+
+    def test_attempts_sent_together_get_the_checks_attempts_sent_in_turn_get(self):
+        ws = f.workspace('Synthetic practice A5')
+        in_turn, together = f.member(ws), f.member(ws)
+        sequential = [a5_attempt(in_turn.username, index) for index in range(settings.SIGNIN_USER_DELAY_AFTER + 1)]
+        self.assertEqual(models.LoginAttempt.objects.filter(username=in_turn.username).count(),
+                         settings.SIGNIN_USER_DELAY_AFTER, 'in turn: the attempt after the fifth failure waits')
+        self.assertIn('Too many attempts', sequential[-1].content.decode())
+        answers = self.together(together.username)
+        checks = models.LoginAttempt.objects.filter(username=together.username).count()
+        self.assertEqual(checks, settings.SIGNIN_USER_DELAY_AFTER, 'together: no more password checks than in turn')
+        refused = [answer for answer in answers if 'Too many attempts' in answer.content.decode()]
+        self.assertEqual(len(refused), A5_ATTEMPTS - settings.SIGNIN_USER_DELAY_AFTER)
+        self.assertEqual({answer.status_code for answer in answers}, {400})
+        self.assertEqual(throttle.failures_of(together.username)[0], settings.SIGNIN_USER_DELAY_AFTER)
+        self.assertEqual(rate.count(throttle.INFLIGHT_USER, throttle.user_key(together.username),
+                                    since=rate.window_start(throttle.MINUTE) - timedelta(days=1)), 0,
+                         'every place taken was given back')
+
+    def test_a_place_left_by_an_attempt_that_never_finished_counts_two_minutes_at_most(self):
+        member = f.member(f.workspace('Synthetic practice A5'))
+        with Clock(MOMENT + timedelta(seconds=5)) as clock:
+            for _ in range(settings.SIGNIN_USER_DELAY_AFTER):  # five attempts that died between their place and record
+                rate.hit(throttle.INFLIGHT_USER, throttle.user_key(member.username), window_seconds=throttle.MINUTE)
+            refused = a5_attempt(member.username, 0, password=PASSWORD)
+            self.assertIn('Too many attempts', refused.content.decode(), 'they are counted while they may be in flight')
+            clock.advance(2 * throttle.MINUTE)
+            signed = a5_attempt(member.username, 1, password=PASSWORD)
+            self.assertEqual((signed.status_code, signed.get('Location')), (302, '/'), 'and never longer')
+        self.assertFalse(models.LoginAttempt.objects.filter(succeeded=False).exists())
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class SetupCodesTogetherTests(TransactionTestCase):
+    """A5's class: wrong setup codes sent at the same moment from one address get the lookups codes sent one after
+    another get (SECOND_FACTOR_ATTEMPTS per window), and no more. Each attempt is held just before its code is looked
+    up until all have come that far, or for three seconds (an attempt refused before it has none to make)."""
+
+    def test_wrong_codes_sent_together_get_no_more_lookups_than_codes_sent_in_turn(self):
+        setup_operator('a5-operator-setup')
+        barrier = threading.Barrier(A5_ATTEMPTS, timeout=3)
+        looked_up = []
+        lookup = second_factor.setup_token
+
+        def lookup_when_all_are_here(typed):
+            looked_up.append(1)
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+            return lookup(typed)
+
+        answers = []
+
+        def attempt(index):
+            try:
+                answers.append(setup_first_step(Client(HTTP_HOST=ADMIN, REMOTE_ADDR='203.0.113.40'),
+                                                second_factor.new_code(second_factor.SETUP_CODE_GROUPS)))
+            finally:
+                connection.close()
+
+        with mock.patch.object(second_factor, 'setup_token', lookup_when_all_are_here):
+            threads = [threading.Thread(target=attempt, args=(index,)) for index in range(A5_ATTEMPTS)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(90)
+        self.assertEqual(len(answers), A5_ATTEMPTS, 'every attempt was answered')
+        self.assertEqual(len(looked_up), settings.SECOND_FACTOR_ATTEMPTS, 'no more lookups than in turn')
+        texts = [answer.content.decode() for answer in answers]
+        self.assertEqual(sum('This setup code cannot be used' in text for text in texts),
+                         settings.SECOND_FACTOR_ATTEMPTS)
+        self.assertEqual(sum('Too many attempts' in text for text in texts),
+                         A5_ATTEMPTS - settings.SECOND_FACTOR_ATTEMPTS)
+        self.assertEqual(rate.count(second_factor.SETUP_CODE_SCOPE, '203.0.113.40',
+                                    since=rate.window_start(settings.SIGNIN_WINDOW_SECONDS)),
+                         settings.SECOND_FACTOR_ATTEMPTS, 'each wrong code counted once, no refusal counted')
