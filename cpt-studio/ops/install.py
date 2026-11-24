@@ -105,6 +105,12 @@ CONVERTER_STOP_SECONDS = 70  # a conversion in progress (60 s at most) finishes 
 CONVERTER_FILES = (f'{APP}/studio/converter_server.py',)  # the revisions that have the converter service
 CONVERTER_HEALTH = 'python -m studio.converter_server --ping'
 CONVERTER_SELF_TEST = ('-m', 'studio.converter_server', '--self-test')
+# the line the converter's self-test prints when it made a PDF (Lane 5's interface); exit 0 without it is a failure
+CONVERTER_SELF_TEST_OK = 'cpt-studio converter self-test: ok, a PDF of'
+# The convert volume's root is prepared by phase_converter alone (H_CONVERT_VOLUME: CONVERTER_UID, the application's
+# group, CONVERT_ROOT_MODE), never by the image: every mount of the volume says volume-nocopy, so Docker never copies an
+# image's mount point - its contents or its ownership - over that preparation when the volume is empty.
+CONVERT_ROOT_MODE = 0o750
 # Environment variable names a converter must never be given (its Config.Env): secrets and credentials files.
 CONVERTER_FORBIDDEN_ENV_RE = re.compile(r'(?i)SECRET|PASSWORD|CREDENTIALS|API_KEY|_KEK\b|TOKEN|AUTHORIZATION')
 # The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
@@ -1831,7 +1837,7 @@ print(json.dumps(R))
 H_CONVERT_VOLUME = '''
 root = '/convert'
 os.chown(root, P['uid'], P['gid'])
-os.chmod(root, 0o750)
+os.chmod(root, P['mode'])
 i = os.lstat(root)
 print(json.dumps({'root': {'uid': i.st_uid, 'gid': i.st_gid, 'mode': oct(stat.S_IMODE(i.st_mode))}}))
 '''
@@ -2912,7 +2918,7 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
     # release 1 (A7): a revision that has the converter mounts its socket's volume (read-only: connecting needs no write)
     # and is told the socket and that it is required, so it never converts in-process; an older revision's worker - a
     # switch-back to the pair before release 1 - is started exactly as before
-    extra = (['--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR},readonly',
+    extra = (['--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR},readonly,volume-nocopy',
               '-e', f'CPT_STUDIO_CONVERTER_SOCKET={CONVERTER_SOCKET}', '-e', 'CPT_STUDIO_CONVERTER_REQUIRED=1']
              if has_converter(revision) else [])
     extra += ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
@@ -3765,7 +3771,7 @@ def converter_args(image_id, revision) -> list:
             '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=converter', '--label', f'{REVISION_LABEL}={revision}',
             '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(CONVERTER_STOP_SECONDS),
             *hardening(*CONVERTER_LIMITS, user=f'{CONVERTER_UID}:{APP_UID}'), '--cpus', CONVERTER_CPUS, '--init',
-            '--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR}',
+            '--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR},volume-nocopy',
             '--health-cmd', CONVERTER_HEALTH, '--health-interval', '10s', '--health-timeout', '5s',
             '--health-retries', '3', '--health-start-period', '20s', image_id, 'converter']
 
@@ -6416,17 +6422,20 @@ def image_conversion(image_id) -> dict:
 
 def image_converter_self_test(image_id) -> dict:
     """The converter's own self-test in the built image (A7: it converts a Word file it builds in memory and checks
-    the PDF header), as the converter runs - its user, its limits, a read-only root - with no network. Refuses unless it
-    exits 0. {'exit', 'said'}: its last line, at most 200 characters (synthetic text only)."""
+    the PDF header), as the converter runs - its user, its limits, a read-only root, a noexec /tmp - with no network.
+    Refuses unless it exits 0 AND prints its success line (CONVERTER_SELF_TEST_OK): an exit 0 that says nothing is not a
+    PDF made. {'exit', 'said'}: that line, at most 200 characters (synthetic text only)."""
     done = docker('run', '--rm', '--pull=never', '--network', 'none', '--no-healthcheck',
                   *hardening(*CONVERTER_LIMITS, user=f'{CONVERTER_UID}:{APP_UID}'), '--entrypoint', 'python', image_id,
                   *CONVERTER_SELF_TEST, check=False, timeout=180)
     journal('oneshot', 'image converter self-test', done.returncode)  # A13
     lines = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines() if line.strip()]
-    if done.returncode:
-        raise InstallError(f'The image\'s converter fails its self-test (exit {done.returncode}) with no network, so '
-                           'every Word round would fail.', output=(done.stdout + done.stderr)[-8192:])
-    return {'exit': done.returncode, 'said': (lines[-1] if lines else '')[:200]}
+    said = [line for line in lines if line.startswith(CONVERTER_SELF_TEST_OK)]
+    if done.returncode or not said:
+        raise InstallError(f'The image\'s converter fails its self-test (exit {done.returncode}'
+                           + ('' if said else f', no line starting "{CONVERTER_SELF_TEST_OK}"') + ') with no network, '
+                           'so every Word round would fail.', output=(done.stdout + done.stderr)[-8192:])
+    return {'exit': done.returncode, 'said': said[-1][:200]}
 
 
 def phase_image(ctx) -> dict:
@@ -6514,8 +6523,14 @@ def phase_converter(ctx) -> dict:
         raise InstallError(f'Revision {ctx.revision[:12]} has no converter service ({", ".join(CONVERTER_FILES)}): '
                            'there is nothing to start.')
     details = {'volume': ensure_volume(CONVERT_VOLUME, 'convert')}
-    details['volume_root'] = run_helper(H_CONVERT_VOLUME, {'uid': CONVERTER_UID, 'gid': APP_UID},
-                                        mounts=[f'type=volume,src={CONVERT_VOLUME},dst=/convert'])['root']
+    root = details['volume_root'] = run_helper(
+        H_CONVERT_VOLUME, {'uid': CONVERTER_UID, 'gid': APP_UID, 'mode': CONVERT_ROOT_MODE},
+        mounts=[f'type=volume,src={CONVERT_VOLUME},dst=/convert,volume-nocopy'])['root']
+    # read back before anything starts: a root the converter's uid cannot write, or the worker's group cannot traverse,
+    # would leave the converter unable to make its socket
+    if root != {'uid': CONVERTER_UID, 'gid': APP_UID, 'mode': oct(CONVERT_ROOT_MODE)}:
+        raise InstallError(f'The convert volume\'s root reads {root}, not {CONVERTER_UID}:{APP_UID} '
+                           f'{oct(CONVERT_ROOT_MODE)}; nothing was started.', details=details)
     current = inspect('container', CONVERTER)
     if current is not None:
         if not owned(current, 'converter'):

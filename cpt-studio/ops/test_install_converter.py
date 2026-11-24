@@ -23,7 +23,9 @@ from test_install_bluegreen import (IMAGE, OLD, OLD_IMAGE, REVISION, WEB, WORKER
                                     app_args, flags, run_app)
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-CONVERT_MOUNT = f'type=volume,src={install.CONVERT_VOLUME},dst={install.CONVERT_DIR},readonly'
+# the line Lane 5's self-test prints on success (synthetic: no document)
+OK_LINE = b'cpt-studio converter self-test: ok, a PDF of 1 page (2,048 bytes)'
+CONVERT_MOUNT = f'type=volume,src={install.CONVERT_VOLUME},dst={install.CONVERT_DIR},readonly,volume-nocopy'
 MIB = 2 ** 20
 
 
@@ -67,7 +69,9 @@ class ConverterArgumentTests(unittest.TestCase):
         self.assertEqual(flags(argv, '--cpus'), ['2'])
         self.assertEqual(flags(argv, '--memory'), flags(argv, '--memory-swap'))
         self.assertEqual(flags(argv, '--memory'), ['1536m'])
-        self.assertEqual(flags(argv, '--mount'), [f'type=volume,src={install.CONVERT_VOLUME},dst={install.CONVERT_DIR}'])
+        # the volume's root is the installer's preparation alone: Docker never copies the image's mount point over it
+        self.assertEqual(flags(argv, '--mount'),
+                         [f'type=volume,src={install.CONVERT_VOLUME},dst={install.CONVERT_DIR},volume-nocopy'])
         for absent in ('--env-file', '-e', '-p', '--publish', '--privileged', '--cap-add'):
             self.assertNotIn(absent, argv)
         self.assertNotIn(install.FILES_VOLUME, ' '.join(argv))
@@ -121,7 +125,7 @@ class ConverterArgumentTests(unittest.TestCase):
         self.assertIn('CPT_STUDIO_CONVERTER_REQUIRED=1', flags(newer, '-e'))
         self.assertNotIn(CONVERT_MOUNT, flags(web, '--mount'))  # only the worker converts
         # the socket's volume is mounted read-only into the worker: connecting needs no write
-        self.assertTrue(CONVERT_MOUNT.endswith(',readonly'))
+        self.assertTrue(CONVERT_MOUNT.endswith(',readonly,volume-nocopy'))
 
     def test_has_converter_reads_the_tree_and_refuses_a_revision_it_cannot_read(self):
         real = test_install.REAL_HAS_CONVERTER
@@ -199,7 +203,7 @@ class AppPreconditionTests(TemporaryDirectoryTest):
 
 
 class ConverterPhaseTests(TemporaryDirectoryTest):
-    def run_phase(self, current, *, healthy_after=True):
+    def run_phase(self, current, *, healthy_after=True, root=None):
         calls, state = [], {'container': current}
 
         def inspect(kind, name):
@@ -214,8 +218,8 @@ class ConverterPhaseTests(TemporaryDirectoryTest):
             elif args[0] == 'rm':
                 state['container'] = None
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
-        helper = mock.Mock(return_value={'root': {'uid': install.CONVERTER_UID, 'gid': install.APP_UID,
-                                                  'mode': '0o750'}})
+        helper = mock.Mock(return_value={'root': root or {'uid': install.CONVERTER_UID, 'gid': install.APP_UID,
+                                                          'mode': '0o750'}})
         kept = mock.Mock(return_value={'file': 'x', 'kept': 0, 'dropped': 3, 'sha256': '0' * 64, 'bytes': 0})
         ctx = install.Context(SimpleNamespace(phase='converter', revision=REVISION, receipts=str(self.tmp)), self.tmp)
         with mock.patch.multiple(install, inspect=inspect, docker=docker, run_helper=helper, keep_container_log=kept,
@@ -236,9 +240,23 @@ class ConverterPhaseTests(TemporaryDirectoryTest):
         self.assertEqual(runs, [('run', '-d', *install.converter_args(IMAGE, REVISION))])
         body, params = helper.call_args[0]
         self.assertIs(body, install.H_CONVERT_VOLUME)
-        self.assertEqual(params, {'uid': install.CONVERTER_UID, 'gid': install.APP_UID})
-        self.assertEqual(helper.call_args[1]['mounts'], [f'type=volume,src={install.CONVERT_VOLUME},dst=/convert'])
+        self.assertEqual(params, {'uid': install.CONVERTER_UID, 'gid': install.APP_UID, 'mode': 0o750})
+        self.assertEqual(helper.call_args[1]['mounts'],
+                         [f'type=volume,src={install.CONVERT_VOLUME},dst=/convert,volume-nocopy'])
+        self.assertEqual(details['volume_root'], {'uid': install.CONVERTER_UID, 'gid': install.APP_UID, 'mode': '0o750'})
         kept.assert_not_called()
+
+    def test_a_volume_root_that_does_not_read_back_as_prepared_starts_nothing(self):
+        # Lane 5's interface: the image does not make /run/cpt-convert, so a fresh named volume's root is root's, and
+        # uid 10151 could not make its socket there; the phase prepares it and refuses unless it reads back so
+        for root in ({'uid': 0, 'gid': 0, 'mode': '0o755'}, {'uid': install.CONVERTER_UID, 'gid': install.APP_UID,
+                                                             'mode': '0o700'},
+                     {'uid': install.CONVERTER_UID, 'gid': 0, 'mode': '0o750'}):
+            with self.subTest(root=root):
+                details, error, calls, helper, kept = self.run_phase(None, root=root)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('nothing was started', str(error))
+                self.assertEqual([call for call in calls if call[0] in ('run', 'stop', 'rm')], [])
 
     def test_a_healthy_sealed_converter_of_this_revision_is_kept_as_it_is(self):
         details, error, calls, helper, kept = self.run_phase(converter_container())
@@ -288,7 +306,8 @@ class ConverterPhaseTests(TemporaryDirectoryTest):
                 real = os.lstat(path)
                 return SimpleNamespace(st_uid=self.owned[1], st_gid=self.owned[2], st_mode=real.st_mode)
         owner = Owner()
-        answer = run_body(install.H_CONVERT_VOLUME, {'uid': install.CONVERTER_UID, 'gid': install.APP_UID},
+        answer = run_body(install.H_CONVERT_VOLUME, {'uid': install.CONVERTER_UID, 'gid': install.APP_UID,
+                                                     'mode': install.CONVERT_ROOT_MODE},
                           {'/convert': str(directory)}, fake_os=owner)
         self.assertEqual(answer['root'], {'uid': install.CONVERTER_UID, 'gid': install.APP_UID, 'mode': '0o750'})
         self.assertEqual(stat.S_IMODE(os.stat(directory).st_mode), 0o750)
@@ -300,9 +319,9 @@ class ImageSelfTestTests(unittest.TestCase):
 
         def docker(*args, **kwargs):
             calls.append(args)
-            return SimpleNamespace(returncode=0, stdout=b'converter self-test: ok (%PDF-)\n', stderr=b'')
+            return SimpleNamespace(returncode=0, stdout=OK_LINE + b'\n', stderr=b'')
         with mock.patch.object(install, 'docker', docker):
-            self.assertEqual(install.image_converter_self_test(IMAGE), {'exit': 0, 'said': 'converter self-test: ok (%PDF-)'})
+            self.assertEqual(install.image_converter_self_test(IMAGE), {'exit': 0, 'said': OK_LINE.decode()})
         argv = calls[0]
         self.assertEqual(argv[:2], ('run', '--rm'))
         self.assertEqual(flags(list(argv), '--network'), ['none'])
@@ -312,6 +331,19 @@ class ImageSelfTestTests(unittest.TestCase):
         with mock.patch.object(install, 'docker', return_value=SimpleNamespace(returncode=1, stdout=b'', stderr=b'x')), \
                 self.assertRaisesRegex(install.InstallError, 'self-test'):
             install.image_converter_self_test(IMAGE)
+
+    def test_an_exit_0_without_the_success_line_is_a_failure(self):
+        # Lane 5's interface: success is exit 0 AND a line starting 'cpt-studio converter self-test: ok, a PDF of'
+        self.assertEqual(install.CONVERTER_SELF_TEST_OK, 'cpt-studio converter self-test: ok, a PDF of')
+        for said in (b'', b'converter self-test: ok (%PDF-)\n', b'cpt-studio converter self-test: failed\n',
+                     b'note: cpt-studio converter self-test: ok, a PDF of 1 page\n'):  # inside a line is not it
+            with self.subTest(said=said), \
+                    mock.patch.object(install, 'docker', return_value=SimpleNamespace(returncode=0, stdout=said, stderr=b'')), \
+                    self.assertRaisesRegex(install.InstallError, 'no line starting'):
+                install.image_converter_self_test(IMAGE)
+        with mock.patch.object(install, 'docker', return_value=SimpleNamespace(
+                returncode=1, stdout=OK_LINE + b'\n', stderr=b'')), self.assertRaisesRegex(install.InstallError, 'exit 1'):
+            install.image_converter_self_test(IMAGE)  # the line with a failing exit is still a failure
 
 
 class EntrypointTests(TemporaryDirectoryTest):

@@ -276,12 +276,19 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   revision's image and a revision that has the converter service
   (`studio/converter_server.py`). It makes the volume `cpt-studio-convert` and
   gives its root to the converter's uid (10151:10150 0750, through the root
-  helper); keeps a converter of this revision that runs healthy and sealed; and
+  helper), and reads it back before anything starts: the image does not make
+  `/run/cpt-convert`, so a fresh volume's root would be root's and the converter
+  could not make its socket there. Every mount of that volume says
+  `volume-nocopy`, so Docker never copies an image's mount point over this
+  preparation. It keeps a converter of this revision that runs healthy and sealed; and
   otherwise stops the one there (its log kept, ids only), with a grace that lets
   a conversion in progress finish, removes it and starts the new one - network
   `none`, no environment file, no files volume, no credential, its own uid,
   init on - then waits for its health check. A Word conversion asked for in the
-  few seconds between fails as busy and can be retried. `app` refuses to start
+  few seconds between fails as busy and can be retried. The image gate runs the
+  converter's self-test as the converter runs (its user, limits, read-only root,
+  `noexec` `/tmp`, no network) and passes only on exit 0 with its success line
+  (`cpt-studio converter self-test: ok, a PDF of ...`). `app` refuses to start
   anything until a healthy converter of this revision runs (`run --phase
   converter first`), and a `switch-back` to a revision that has the converter
   refuses until one runs; an older revision's pair never uses it.
