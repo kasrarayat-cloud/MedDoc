@@ -252,10 +252,31 @@ class ForcedChangeTests(TestCase):
             self.assertEqual(change(client)['Location'], '/account/?done=changed')
             clock.advance(30 * 24 * 60 * 60)
             signed_in(self.member, password=NEW)  # a password the member chose never expires
-            # a reset starts a new clock: 71 hours after it, the reset password still signs in
+
+    def test_the_72_hours_are_read_from_the_flag_s_own_time(self):
+        """This test resets no password: it WRITES password_change_required_at directly, as a reset would (the console's
+        reset is Lane 3's, studio.console, and is not on this branch). It proves only that the 72-hour rule reads the
+        flag's own time, so a flag written later starts a new clock - not that any reset writes it (refutation r2,
+        finding 12: the console's reset once kept the old time, and a member past 72 hours could not get back in).
+
+        The integration test that proves the way back end to end runs once Lanes 2 and 3 are combined: Lane 3's
+        tests.test_admin_console.ForcedChangeTests.test_a_reset_after_the_72_hours_lets_the_person_sign_in_to_the_forced_change
+        (add-person's flag, 73 hours, the real console reset by an operator with the second factor, then the reset
+        password at cpt lands on the forced change). It fails on either branch alone."""
+        with Clock() as clock:
             self.flag(self.member, clock.moment)
+            clock.advance(73 * 60 * 60)
+            refused = Client(HTTP_HOST=CPT).post('/login/', {'username': self.member.username, 'password': PASSWORD})
+            self.assertEqual(refused.status_code, 400)  # the first flag's 72 hours have passed
+            self.flag(self.member, clock.moment)  # the flag written again, as a reset writes it
             clock.advance(71 * 60 * 60)
-            self.assertEqual(signed_in(self.member, password=NEW).get('/')['Location'], sessions.FORCED_CHANGE_PAGE)
+            client = Client(HTTP_HOST=CPT)
+            answer = client.post('/login/', {'username': self.member.username, 'password': PASSWORD})
+            self.assertEqual(answer.status_code, 302, 'the new clock ran out after 71 hours')
+            self.assertEqual(client.get('/')['Location'], sessions.FORCED_CHANGE_PAGE)
+            clock.advance(2 * 60 * 60)
+            again = Client(HTTP_HOST=CPT).post('/login/', {'username': self.member.username, 'password': PASSWORD})
+            self.assertEqual(again.status_code, 400)  # and the new clock runs out in its turn
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
