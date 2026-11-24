@@ -122,6 +122,18 @@ def _guarded_has_health_digest(revision):
     return revision in DIGEST_REVISIONS
 
 
+# Release 1 (B5, B6; refutation round 1, rollback-0 and rollback-3): whether a revision has release 1's session policy is
+# read from its git tree (install.has_session_policy). Under the guard a test revision has it unless a test puts it in
+# PRE_SESSION_POLICY_REVISIONS (empty: every world's switch moves between revisions that share it, so it ends no
+# session, as every world did before); the real function, REAL_HAS_SESSION_POLICY, is tested on its own.
+REAL_HAS_SESSION_POLICY = install.has_session_policy
+PRE_SESSION_POLICY_REVISIONS = set()
+
+
+def _guarded_has_session_policy(revision):
+    return revision not in PRE_SESSION_POLICY_REVISIONS
+
+
 # Release 1 (A13): main() appends the phase's one-shot journal to the host's /var/log/cpt-studio through a root helper
 # at the end of every phase. Under the guard it is kept in JOURNALS_FLUSHED instead (the real flush, REAL_FLUSH_JOURNAL,
 # is tested on its own with its helper stood in for).
@@ -154,7 +166,8 @@ def guard_host():
                                    NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling,
                                    has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal,
                                    tls_policy_report=_guarded_tls_policy_report,
-                                   has_health_digest=_guarded_has_health_digest),
+                                   has_health_digest=_guarded_has_health_digest,
+                                   has_session_policy=_guarded_has_session_policy),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:

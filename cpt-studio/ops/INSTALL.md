@@ -391,7 +391,20 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   sign-in page and every static file that page names (read-only GETs) - the
   old web still serves everything; **S2** the old worker is parked (`docker
   stop --time 3600`: its current stage finishes, nothing new is claimed) - the
-  old web still serves, and what members start waits in the queue; **S3** the
+  old web still serves, and what members start waits in the queue - and, when
+  the old web's revision and this one do not share release 1's session policy
+  (one of the two trees has `studio/sessions.py`: the first install of release 1
+  over a revision before it, or `app` again after a `switch-back` to one; read
+  from each revision's tree before anything starts, and a revision this
+  checkout cannot read refuses, nothing started or stopped), every session is
+  ended in this revision's image: every `django_session` row deleted and one
+  SecurityEvent `sessions.ended_at_install` (the count and the two revisions,
+  the actor label `installer`) written, in one transaction. None of them could
+  be used once the new web serves (release 1's cookies have their `__Host-`
+  names, B6), and ending them all keeps a session from coming back for whoever
+  uses that browser next across a later switch (refutation round 1,
+  rollback-0 and rollback-3). The receipt's `sessions_ended` says how many and
+  the summary says so; a later release over release 1 ends none; **S3** the
   vhost's upstream is switched to the idle port: the live file must be this
   revision's HTTPS stage for the old port, and is replaced atomically by the
   rendering for the new one (the two differ in their `proxy_pass` line alone),
@@ -425,7 +438,10 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   the HTTPS observations), the `drain`, and the `smoke` of the incoming web.
   **Swap** (a host where nothing is served through the vhost): the current
   web/worker are parked (`*-previous`), the new pair starts and the phase waits
-  for `/health/` as above and a worker that stays up. Once the new
+  for `/health/` as above and a worker that stays up. Every session is ended
+  as at S2 once both old containers are stopped, before the new web starts,
+  when the pair replaced and this revision do not share release 1's session
+  policy; a failure there restores the parked pair. Once the new
   pair runs - and before the parked pair is removed - every encounter's stored
   list state is recomputed with this revision's derivation (only a changed one
   is written; nothing is sent; the receipt names each that changed): the
@@ -462,8 +478,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   - S1 (the incoming web is not healthy, or does not serve its pages): it is
     stopped and removed; nothing else changed and nothing is closed - no
     customer request reached it.
-  - S2 (the old worker could not be parked): it runs again (park starts it
-    when its rename fails); the incoming web is removed.
+  - S2 (the old worker could not be parked, or the end of every session
+    failed): it runs again (park starts it when its rename fails); the
+    incoming web is removed. An end that was started and gave no answer may
+    have ended every session: the receipt says so (everyone may have to sign
+    in again on the old revision), never that nothing else changed.
   - S3 (`nginx -t`, a new warning, the reload or the verification): the exact
     previous vhost bytes are put back, and nginx is reloaded with them whenever
     a reload of the switched file was asked for, so the old web serves. Whenever
@@ -1144,7 +1163,11 @@ and before that close, the baseline and this revision's records are read
 again, so nothing is closed for a switch that cannot pass or would refuse on
 what that read finds (a request the close itself finds in flight is recorded
 unknown, and that record still refuses the switch-back after the close; the
-receipt then says what the close closed, each way above);
+receipt then says what the close closed, each way above) - and, when the
+previous revision is before release 1's session policy, every session is ended
+as at `app`'s S2 (`sessions.ended_at_install`; the receipt's `sessions_ended`):
+the previous web reads none of this revision's cookies, and a session of its
+own left in a browser nobody used meanwhile would be valid again;
 **B5** the upstream is switched to the idle port (`/health/` = the previous
 revision; a reload of the switched file that was asked for and then failed is
 treated as applied, as in `app`: nginx is reloaded with this revision's vhost
@@ -1920,7 +1943,18 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   untouched until the owner deletes them.
 - Everyone is signed out once at the release-1 switch (the session cookie gets
   its `__Host-` name, B6) and again after any switch-back; the vhost sets the
-  flags of both names, so either revision's web serves behind it.
+  flags of both names, so either revision's web serves behind it. The
+  installer ends the sessions themselves, not only the browsers' cookies: at
+  `app`'s S2 (or its swap) from a revision before release 1's session policy,
+  and at a `switch-back`'s B4 to one, every `django_session` row is deleted
+  with one SecurityEvent `sessions.ended_at_install` (a count and the two
+  revisions). An `app` or `switch-back` between two revisions that both have
+  the policy ends none. Left (refutation round 1, rollback-3's window): a
+  sign-in on the older web in the seconds between S2's end and the end of S5's
+  drain keeps its row; it signs nobody in on release 1 (its cookie's name is
+  not read), and the next `switch-back` ends it at B4. `rollback-app` ends no
+  session: after one that returns an older web, a sign-in made on that web in
+  those seconds is valid there again until its own 8-hour limit.
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:

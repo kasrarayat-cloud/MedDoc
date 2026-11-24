@@ -4699,12 +4699,24 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     names it for a SHOWN_HAZARDS reason, and the old pair is not this same revision) is never restored over them: the
     new pair is left stopped and the old one parked, for rollback-app. On success the old pair is left parked: phase_app
     removes it (retire_parked) once the stored list states are recomputed. 'worker_started_at' is when the new worker
-    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4)."""
-    parked, launched, started = {}, [], {}
+    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4). When the
+    pair it replaces and this revision do not share release 1's session policy (sessions_end_needed, read before
+    anything is stopped), every session is ended once both old containers are stopped, before the new web starts
+    (end_every_session; refutation round 1, rollback-0 and rollback-3); a failure there restores the old pair."""
+    parked, launched, started, sessions = {}, [], {}, {}
     swapped_at = worker_started_at = None
+    replaced = [labels_of(container).get(REVISION_LABEL) for container in
+                (inspect('container', SERVICES[role]) for role in ('web', 'worker')) if container is not None]
+    try:
+        ends_sessions = [revision for revision in dict.fromkeys(replaced)
+                         if sessions_end_needed(revision, ctx.revision)]
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was started or stopped.') from error
     try:
         for role in ('worker', 'web'):  # the worker first, so no stage runs across the switch
             parked[role] = park(role)
+        if ends_sessions:  # both old containers are stopped: none of their sessions can be made any more
+            end_every_session(image_id, env_bytes, ends_sessions[0], ctx.revision, sessions)
         swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
@@ -4733,8 +4745,10 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
                                    '--phase rollback-app, then rename the parked pair back. The close was started and '
-                                   f'gave no answer: it {possibly_set_back(close_started)}.',
-                                   details={'close_started_at': close_started}) from error
+                                   f'gave no answer: it {possibly_set_back(close_started)}.'
+                                   + sessions_ended_said(sessions),
+                                   details={'close_started_at': close_started,
+                                            **sessions_ended_of(sessions)}) from error
             hazards = closed.get('hazards')
             shown, acting = hazards_by_kind(hazards)
             # Refutation p2, the skeptic of the install2:1 repair: a state the restored web would show wrongly whatever
@@ -4760,7 +4774,8 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
                     'parked pair back. While admin.quillmd.com is moved that way back is not open (rollback-app never '
                     'removes the pair quillmd-cpt proxies to): keep this revision as above, then --phase switch-back '
-                    'returns the previous pair.' + said, details=left) from failure
+                    'returns the previous pair.' + said + sessions_ended_said(sessions),
+                    details={**left, **sessions_ended_of(sessions)}) from failure
             # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
             # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
             try:
@@ -4771,7 +4786,8 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 raise InstallError(f'{failure}; the list states the previous revision labels otherwise could not then '
                                    f'be put back ({error}), so the new pair was left stopped and the previous pair '
                                    'parked (*-previous): run --phase rollback-app, then rename the parked pair '
-                                   'back.' + set_back_clause([closed]), details={'stages_closed': closed}) from error
+                                   'back.' + set_back_clause([closed]) + sessions_ended_said(sessions),
+                                   details={'stages_closed': closed, **sessions_ended_of(sessions)}) from error
             ctx.log('undo', json.dumps({**closed, 'states_put_back': put_back}).encode())
             # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
             # revision would act on under its own rules (a send without a date, an identical re-send of a request that
@@ -4796,15 +4812,19 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
                 f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
                 'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
-                'reads them under its own rules.' + set_back, details={'hazards': hazards, 'stages_closed': closed,
-                                                                       'states_put_back': put_back}) from failure
-        if set_back:
-            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back,
+                'reads them under its own rules.' + set_back + sessions_ended_said(sessions),
+                details={'hazards': hazards, 'stages_closed': closed, 'states_put_back': put_back,
+                         **sessions_ended_of(sessions)}) from failure
+        if set_back or sessions.get('started_at'):  # refutation round 1, rollback-0: the end may have committed
+            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back
+                               + sessions_ended_said(sessions),
                                details={**(failure.details if isinstance(getattr(failure, 'details', None), dict)
                                            else {}),
-                                        'stages_closed': closed, 'states_put_back': put_back}) from failure
+                                        **({'stages_closed': closed, 'states_put_back': put_back} if set_back else {}),
+                                        **sessions_ended_of(sessions)}) from failure
         raise
-    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
+    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at,
+            **sessions_ended_of(sessions)}
 
 
 def retire_parked(parked) -> dict:
@@ -5015,6 +5035,102 @@ def has_converter(revision) -> bool:
                            'that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
     return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
                    quiet=True).returncode == 0 for path in CONVERTER_FILES)
+
+
+# Release 1's session policy (B5, B6; studio/sessions.py) and a switch between a revision before it and one with it
+# (refutation round 1, rollback-0 and rollback-3). Release 1 names its session and CSRF cookies __Host-... under HTTPS,
+# so across such a switch a browser holds two independent sessions: neither web ever reads the other's cookie, release 1
+# only tells a browser that calls it to delete the old cookie, and nothing ended either revision's rows. So a release-1
+# session outlived a switch-back (an explicit sign-out on the older web ends only that web's session) and came back for
+# whoever used that browser next at the second switch forward; and an older session left in a browser nobody used during
+# release 1 was valid again after a switch-back. Whenever the site moves between such revisions, every session is ended
+# in this revision's image, in one transaction with one SecurityEvent (SESSIONS_ENDED_EVENT: a count and the two
+# revisions, the installer as the actor label) - none of them can be used across the switch anyway (the cookie rename):
+#   - an app's blue/green switch (switch_services) from a serving web of a revision before the policy: after S2 (the old
+#     worker parked) and before S3 (the upstream switch); a failure there is undone as at S2;
+#   - an app's swap (swap_services) of such a pair: once both old containers are stopped, before the new web starts;
+#   - a switch-back (switch_back_services) to such a revision: at B4, before B5, while this revision's web still serves
+#     (the older web reads none of its cookies once it serves).
+# Never when both revisions have the policy: a later release over release 1 signs no one out. Whether a revision has it
+# is read from its tree (SESSION_POLICY_FILES), as has_converter reads the converter; one this checkout cannot read is
+# refused, nothing started or stopped (fail closed).
+SESSION_POLICY_FILES = (f'{APP}/studio/sessions.py',)
+SESSIONS_ENDED_EVENT = 'sessions.ended_at_install'
+SESSIONS_ENDED_ACTOR = 'installer'
+SESSIONS_LOCK_TIMEOUT = '30s'  # a session row a web is saving holds the delete back at most this long
+END_EVERY_SESSION = f'''
+from django.contrib.sessions.models import Session
+from django.db import connection, transaction
+from studio import security_events
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute("SET LOCAL lock_timeout = '{SESSIONS_LOCK_TIMEOUT}'")
+    ended = Session.objects.all().delete()[0]
+    event = security_events.record(P['event'], actor_label=P['actor_label'], count=ended,
+                                   from_revision=P['from_revision'], to_revision=P['to_revision'])
+print(ANSWER + json.dumps({{'ended': ended, 'event': str(event.pk)}}))
+'''
+
+
+def has_session_policy(revision) -> bool:
+    """Whether ``revision`` has release 1's session policy (B5, B6): its tree holds SESSION_POLICY_FILES, read as
+    has_converter reads the converter. A revision this checkout cannot read is refused, never taken for one with or
+    without it (fail closed): either answer could leave a session to come back across a switch, or sign everyone out of
+    a later release for nothing."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} has release 1\'s session policy: it is not a '
+                           '40-character revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} has release 1\'s session policy: this checkout cannot '
+                           'read that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in SESSION_POLICY_FILES)
+
+
+def sessions_end_needed(from_revision, to_revision) -> bool:
+    """Whether a move of the site from ``from_revision`` to ``to_revision`` ends every session: exactly one of the two
+    has release 1's session policy. Raises (has_session_policy) when either cannot be read."""
+    return has_session_policy(from_revision) != has_session_policy(to_revision)
+
+
+def end_every_session(image_id, env_bytes, from_revision, to_revision, sessions) -> dict:
+    """END_EVERY_SESSION in ``image_id`` (this revision's): every django_session row deleted and SESSIONS_ENDED_EVENT
+    recorded, in one transaction. ``sessions`` is the caller's record, written into as it goes - 'started_at' before
+    the script runs (it may commit whatever its call then answers), then 'ended' and 'event' - so a receipt after a
+    failure or an interrupt says what may have happened. An answer it cannot judge raises, never read as none."""
+    sessions.update(from_revision=from_revision, to_revision=to_revision, started_at=utc_now_ms())
+    answer = app_script(image_id, env_bytes, END_EVERY_SESSION,
+                        {'event': SESSIONS_ENDED_EVENT, 'actor_label': SESSIONS_ENDED_ACTOR,
+                         'from_revision': from_revision, 'to_revision': to_revision}, what='Ending every session')
+    ended, event = (answer.get('ended'), answer.get('event')) if isinstance(answer, dict) else (None, None)
+    if isinstance(ended, bool) or not isinstance(ended, int) or ended < 0 or not UUID_RE.fullmatch(str(event)):
+        raise InstallError('The end of every session gave no answer it could be judged by.', details={'answer': answer})
+    sessions.update(ended=ended, event=event)
+    return sessions
+
+
+def sessions_ended_said(sessions) -> str:
+    """The sentence a receipt's message adds once the end of every session was started ('' when it was not)."""
+    if not isinstance(sessions, dict) or not sessions.get('started_at'):
+        return ''
+    if isinstance(sessions.get('ended'), int) and not isinstance(sessions.get('ended'), bool):
+        return (f' Every session was ended ({sessions["ended"]}; SecurityEvent {SESSIONS_ENDED_EVENT}): everyone '
+                'signs in again.')
+    return (' The end of every session was started and gave no answer: it may have ended every session (and recorded '
+            f'{SESSIONS_ENDED_EVENT}), so everyone may have to sign in again.')
+
+
+def sessions_ended_of(sessions) -> dict:
+    """{'sessions_ended': the record} once the end of every session was started, else {} (a receipt's details)."""
+    return {'sessions_ended': sessions} if isinstance(sessions, dict) and sessions.get('started_at') else {}
+
+
+def sessions_summary(sessions) -> str:
+    """'; every session ended (12): ...' for a receipt's summary ('' when none was ended)."""
+    if not isinstance(sessions, dict) or not isinstance(sessions.get('ended'), int):
+        return ''
+    return (f'; every session ended ({sessions["ended"]}: {str(sessions.get("from_revision"))[:12]} and '
+            f'{str(sessions.get("to_revision"))[:12]} do not share release 1\'s session policy)')
 
 
 def admin_answers(fetch) -> tuple:
@@ -5451,6 +5567,9 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
       S4  start the new worker - processing resumes under the new rules
       S5  drain the old web (drain_web), stop it, park it as cpt-studio-web-previous and rename the incoming web to
           cpt-studio-web
+    When the serving web's revision and this one do not share release 1's session policy (sessions_end_needed), every
+    session is ended at S2, once the old worker is parked and before S3 (end_every_session; refutation round 1,
+    rollback-0 and rollback-3): none can be used across the switch (the cookie rename), and the receipt says how many.
     An AvailabilityRecorder probes the public /health/ from before S1 to the end (an undo included). Any failure is
     undone by undo_switch without interrupting the site; the InstallError it raises says what is left. phase_app then
     recomputes the stored list states and removes the parked pair (S6)."""
@@ -5463,7 +5582,12 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'),
                            details={'plan': plan, 'baseline': drifted})
-    steps, parked, started, progress = {}, {}, {}, {}
+    try:  # refutation round 1, rollback-0 and rollback-3: decided before anything starts, from both revisions' trees
+        ends_sessions = sessions_end_needed(plan['web']['revision'], ctx.revision)
+    except InstallError as error:
+        raise InstallError(f'The blue/green switch cannot start, so nothing was started or stopped: {error}',
+                           details={'plan': plan}) from error
+    steps, parked, started, progress, sessions = {}, {}, {}, {}, {}
     record = {'mode': 'blue-green', 'ports': {'from': live, 'to': idle}, 'steps': steps}
     reached = [None]
 
@@ -5481,6 +5605,9 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
         record['smoke'] = smoke_web(idle, admin=serves_admin_host(ctx.revision))
         step('S2')
         parked['worker'] = park('worker')
+        if ends_sessions:  # S2, once the old worker is parked and before S3: undone as at S2
+            record['sessions_ended'] = sessions
+            end_every_session(image_id, env_bytes, plan['web']['revision'], ctx.revision, sessions)
         step('S3')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=ctx.revision, progress=progress,
                                            from_revision=plan['web']['revision'])
@@ -5498,14 +5625,16 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
         details = {}  # written into as the undo goes, so a receipt after a second interrupt still says what it did
         try:
             message, details = undo_switch(ctx, failure, reached[0], image_id=image_id, env_bytes=env_bytes, plan=plan,
-                                           preflight=preflight, parked=parked, progress=progress, details=details)
+                                           preflight=preflight, parked=parked, progress=progress, details=details,
+                                           sessions=sessions)
         except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
             message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
                        f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
                        'Recovery notes')
-        raise InstallError(message, details={**record, **details, 'failed_at': reached[0], 'started': started,
-                                             'replaced': parked, 'availability': stop_recorder(recorder),
-                                             'left': left_summary()}) from failure
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, **details, 'failed_at': reached[0], 'started': started,
+                                    'replaced': parked, 'availability': stop_recorder(recorder),
+                                    'left': left_summary()}) from failure
     return {'started': started, 'replaced': parked, **record}
 
 
@@ -5525,7 +5654,7 @@ def left_summary() -> dict:
 
 
 def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, parked, progress,
-                details=None) -> tuple:
+                details=None, sessions=None) -> tuple:
     """(message, details) after a blue/green step failed, with the site kept served (the failure matrix, ops/INSTALL.md
     app). S1, S2: the incoming web is removed and the old worker runs again - nothing reached the new pair. S3: the vhost
     is already back (publish_vhost); when nginx may have run the switched file it is proven to run the restored one
@@ -5556,8 +5685,11 @@ def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, 
     if reached == 'S2':
         state = worker_after_failed_park()
         removed = remove_incoming_web()
-        return (f'{cause}; the old worker is {state}, the incoming web ({INCOMING_WEB}) {removed}, and nothing else '
-                f'changed: {web} kept serving on {live}. Migrations already applied are not reversed.', details)
+        # refutation round 1, rollback-0: the end of every session (S2) may have committed - said by the caller
+        changed = ('nothing else changed but the sessions (below)' if (sessions or {}).get('started_at')
+                   else 'nothing else changed')
+        return (f'{cause}; the old worker is {state}, the incoming web ({INCOMING_WEB}) {removed}, and {changed}: '
+                f'{web} kept serving on {live}. Migrations already applied are not reversed.', details)
     if reached == 'done':
         return (f'{cause}; the switch had finished - the incoming pair serves on {idle} and the old pair is parked - '
                 'but its availability record could not be read and the stored list states were not recomputed: '
@@ -6927,13 +7059,15 @@ def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnab
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         services['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked)
+                           + sessions_ended_said(services.get('sessions_ended')),
                            details={**services, 'states_recomputed': states, 'coding': coding}) from error
     return {'image_id': image_id, 'coding': coding, 'authorization_ref': reference, 'migrate_log': migrate_log,
             'unrunnable_stages': unrunnable, 'states_recomputed': states, **services, 'v1_rows': v1,
             'install_counts': counts,
             'summary': f'web and worker running {image_id[:19]} ({coding_summary(mode)})'
-                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)}
+                       + switched_summary(services) + sessions_summary(services.get('sessions_ended'))
+                       + '; no design v1 row' + counts_summary(counts)}
 
 
 def retire_left_parked(ctx):
@@ -7054,7 +7188,7 @@ def phase_switch_back(ctx) -> dict:
             'summary': f'switched back to {prev_revision[:12]} ({named}) on '
                        f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')
-                       + (f'; {admin}' if admin else '')
+                       + sessions_summary(services.get('sessions_ended')) + (f'; {admin}' if admin else '')
                        + ('; FINDING: this revision\'s parked pair was left in place (its log could not be kept): '
                           'the next app keeps it, then removes it' if services.get('parked_left') else '')}
 
@@ -7190,7 +7324,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
           record
       B8  start the previous worker
       B9  remove this revision's parked pair (its image is kept)
-    The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
+    When the previous revision and this one do not share release 1's session policy (sessions_end_needed, read before
+    anything starts), every session is ended at B4, after its close and before B5 (end_every_session; refutation round
+    1, rollback-0 and rollback-3). The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
     the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
     (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83, when not given) - the closes
     keep their own, this pair's creation and B4's close."""
@@ -7208,7 +7344,11 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     drifted = ingress_checks(ctx, preflight)
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
-    steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
+    try:  # refutation round 1, rollback-0 and rollback-3: decided before anything starts, from both revisions' trees
+        ends_sessions = sessions_end_needed(ctx.revision, prev_revision)
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was started or stopped.') from error
+    steps, parked, started, progress, closes, put_back, sessions = {}, {}, {}, {}, {}, [], {}
     counted = {}  # design v2 (refutation 6b-r1 P2): B4's note as counted, before the update's clauses were added
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
               'states_put_back': put_back, 'since': since.isoformat(), 'touched_since': touched_since.isoformat()}
@@ -7270,6 +7410,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         # of what this revision coded that is not carried back (coding_note)
         counted['b4'] = coding_note(image_id, env_bytes, ctx.revision)
         record['not_carried_back'] = with_update_note(counted['b4'], [closes['first']])
+        if ends_sessions:  # B4, before B5: the previous web reads none of this revision's cookies once it serves
+            record['sessions_ended'] = sessions
+            end_every_session(image_id, env_bytes, ctx.revision, prev_revision, sessions)
         step('B5')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
                                            from_revision=ctx.revision)
@@ -7322,9 +7465,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
             # instructions for the previous web's members are not left standing in the receipt; refutation 6b-r2 F5: one
             # that nginx may have routed to until the settle is said to have served in that window
             record['not_carried_back'] = undone_note(counted['b4'], served=closes.get('served'))
-        raise InstallError(message, details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
-                                             'availability': stop_recorder(recorder),
-                                             'left': left_summary()}) from failure
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
+                                    'availability': stop_recorder(recorder), 'left': left_summary()}) from failure
     return {'started': started, 'replaced': parked, **record}
 
 
