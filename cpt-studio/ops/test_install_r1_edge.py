@@ -427,6 +427,19 @@ class TlsPolicyTemplateTests(unittest.TestCase):
         offered = ' '.join(directive(conf, 'ssl_ciphers', 'server') + directive(conf, 'ssl_conf_command', 'server'))
         self.assertNotRegex(offered, r'(?i)chacha|camellia|aria|cbc|sha1\b|rsa-aes\d+-sha\b|!|\+|@seclevel')
 
+    def test_the_template_and_install_md_say_what_holds_on_the_shared_listener(self):
+        # refutation, edge lens C-17: on a non-default server ssl_protocols, the TLS 1.3 Ciphersuites and
+        # ssl_prefer_server_ciphers take no effect after SNI - TLS 1.3 ChaCha20 is accepted - so "AES-GCM only" was untrue
+        conf = rendered()['https']
+        comment = ' '.join(line.lstrip('# ').strip() for line in conf[conf.index('# A4:'):].splitlines()[:9])
+        self.assertNotIn('AES-GCM suites only', conf)
+        for said in ('not this shared listener\'s default server', 'ssl_protocols, the TLS 1.3 Ciphersuites and '
+                     'ssl_prefer_server_ciphers stay the default server\'s', 'TLS 1.3 ChaCha20 is accepted', 'D27'):
+            self.assertIn(said, comment)
+        limits = ' '.join((APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8').split())
+        self.assertIn('so TLS 1.3 ChaCha20 is accepted', limits)
+        self.assertIn('a suite outside the policy is a finding, never an undo (D27)', limits)
+
 
 class CookieNameTests(unittest.TestCase):
     """B6: the vhost is published before the switch, so it gives both session cookie names their flags."""
