@@ -91,7 +91,7 @@ from webauthn.helpers.structs import (AttestationConveyancePreference, Authentic
                                       AuthenticatorTransport, PublicKeyCredentialDescriptor, ResidentKeyRequirement,
                                       UserVerificationRequirement)
 
-from . import hosts, rate, request_meta, security_events, sessions, throttle
+from . import hosts, rate, request_meta, security_events, session_store, sessions, throttle
 from .models import OneTimeToken, SecondFactorCredential, SecondFactorRecoveryCode, User
 
 STEP_UP_PATH = '/login/second-factor'  # Lane 2's second-factor page on the admin host (RELEASE-1-SPEC 3.4)
@@ -719,6 +719,7 @@ def reset(user, by, code=None):
     every session ended, a new setup code issued. (counts, the OneTimeToken, the code as shown)."""
     now = _now()
     with transaction.atomic():
+        session_store.lock_accounts([user.pk])  # the account first: the lock order (studio.session_store)
         removed = active_keys(user).update(removed_at=now, removed_reason=REMOVED_BY_RESET)
         voided = SecondFactorRecoveryCode.objects.filter(user=user, used_at__isnull=True).update(used_at=now)
         ended = sessions.end_sessions(user)
