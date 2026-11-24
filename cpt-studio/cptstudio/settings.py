@@ -60,6 +60,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # release 1 (RELEASE-1-SPEC 3.2; B3, B4, B5, A2): the session policy, which reads the signed-in user
+    'studio.sessions.SessionPolicyMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 ROOT_URLCONF = 'cptstudio.urls'
@@ -88,9 +90,14 @@ DATABASES = {'default': {
 }}
 
 AUTH_USER_MODEL = 'studio.User'
+# A password's minimum length (release 1, B4; OWNER DECISION D26: NIST SP 800-63B-4's minimum for a password used
+# alone). The validators run where a password is set - the console, provisioning, the installer, the account page -
+# never at sign-in, so an existing shorter password still signs in until its owner changes it.
+PASSWORD_MIN_LENGTH = 15
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': PASSWORD_MIN_LENGTH}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
@@ -122,8 +129,6 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 0
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
 
-SESSION_COOKIE_NAME = 'cptstudio_session'
-CSRF_COOKIE_NAME = 'cptstudio_csrf'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Strict'
 CSRF_COOKIE_SAMESITE = 'Strict'
@@ -131,6 +136,11 @@ CSRF_COOKIE_HTTPONLY = False  # the SPA reads it to send the X-CSRFToken header
 SESSION_COOKIE_AGE = 8 * 60 * 60
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 HTTPS = _flag('HTTPS')
+# B6: under HTTPS the __Host- prefix makes the browser refuse a cookie of the name that is not Secure, Path=/ and
+# host-only, so a sibling quillmd.com site on the shared host cannot set one that shadows CPT Studio's. The prefix
+# needs Secure, so without HTTPS (tests, the loopback port) the names stay as they were. Domain stays unset, the path '/'.
+SESSION_COOKIE_NAME = '__Host-cptstudio_session' if HTTPS else 'cptstudio_session'
+CSRF_COOKIE_NAME = '__Host-cptstudio_csrf' if HTTPS else 'cptstudio_csrf'
 SESSION_COOKIE_SECURE = HTTPS
 CSRF_COOKIE_SECURE = HTTPS
 # Only behind the loopback nginx proxy, which overwrites this header.
@@ -142,6 +152,83 @@ X_FRAME_OPTIONS = 'DENY'
 # Login throttling: attempts per (username, client) inside the window.
 LOGIN_THROTTLE_ATTEMPTS = 8
 LOGIN_THROTTLE_WINDOW_SECONDS = 15 * 60
+
+# --- Release 1: the security and HIPAA items (RELEASE-1-SPEC 3.2) -------------------------------------------------------
+# Every policy value here is a constant of the release, like the figures above: changing one is a release, which keeps
+# it reviewable. The owner decisions (RELEASE-1-SPEC section 8) stand at their recommended answers until the owner rules.
+
+# B5, automatic sign-out (OWNER DECISION D1): a session's idle limit and its cap, by who holds it; the warning before the
+# idle limit; and how often a session's last activity is written.
+SESSION_IDLE_MEMBER_SECONDS = 15 * 60
+SESSION_IDLE_OPERATOR_SECONDS = 10 * 60
+SESSION_MAX_MEMBER_SECONDS = 8 * 60 * 60  # today's 8 hours (SESSION_COOKIE_AGE)
+SESSION_MAX_OPERATOR_SECONDS = 8 * 60 * 60
+SESSION_IDLE_WARNING_SECONDS = 2 * 60
+SESSION_ACTIVITY_WRITE_SECONDS = 60
+
+# B1, sign-in slows down instead of locking anyone out (OWNER DECISIONS D6, D23): the window; failures per (username,
+# address) that refuse that pair; failures per username before its delay starts, the delay's base (doubled per further
+# failure) and its ceiling; refused or failed attempts per address (an IPv6 /64) that refuse the address; how long a
+# device that signed in before skips the delay. They replace LOGIN_THROTTLE_* above, which today's sign-in reads.
+SIGNIN_WINDOW_SECONDS = 15 * 60
+SIGNIN_PAIR_LIMIT = 10
+SIGNIN_USER_DELAY_AFTER = 5
+SIGNIN_DELAY_BASE_SECONDS = 30
+SIGNIN_DELAY_MAX_SECONDS = 15 * 60
+SIGNIN_CLIENT_LIMIT = 50
+KNOWN_DEVICE_DAYS = 90
+
+# B4 (OWNER DECISION D31): how long a password staff set stays usable before its owner replaces it, counted from the
+# must-change flag; after that it is refused exactly like a wrong password.
+STAFF_PASSWORD_UNUSED_SECONDS = 72 * 60 * 60
+
+# B2, the operator's second factor (OWNER DECISION D3): WebAuthn bound to the admin host exactly (never quillmd.com,
+# which sibling sites share); how long a checked password waits for the key; how recent the key must be for an act that
+# changes who can see what (the step-up); the attempts per window; how long a setup code lives; the recovery codes.
+WEBAUTHN_RP_ID = ADMIN_HOST
+WEBAUTHN_ORIGIN = 'https://' + ADMIN_HOST
+WEBAUTHN_RP_NAME = 'CPT Studio console'
+SECOND_FACTOR_PENDING_SECONDS = 5 * 60
+SECOND_FACTOR_STEP_UP_SECONDS = 5 * 60
+SECOND_FACTOR_ATTEMPTS = 5
+ENROLMENT_CODE_SECONDS = 30 * 60
+RECOVERY_CODE_COUNT = 10
+
+# C1: a member's poll of a document writes at most one read record per session and document in this many seconds.
+READ_AUDIT_DETAIL_DEDUPE_SECONDS = 60
+# C2 (OWNER DECISION D24): how long an operator's opening of one document's content lasts, in that session only.
+CONTENT_GRANT_SECONDS = 15 * 60
+# C5 and D2 (OWNER DECISION D8): (requests, per seconds) - report creations per member and per practice, uploads per
+# member, bundles per member; over a limit the answer is 429. The largest bundle (D2) keeps every answer inside nginx's
+# in-memory buffers (A3).
+EXPORT_LIMIT_PER_MEMBER = (10, 10 * 60)
+EXPORT_LIMIT_PER_WORKSPACE = (60, 60 * 60)
+UPLOAD_LIMIT_PER_MEMBER = (30, 10 * 60)
+BUNDLE_LIMIT_PER_MEMBER = (10, 10 * 60)
+BUNDLE_MAX_BYTES = 24 * 1024 * 1024
+
+# E3: the converter service's socket, which the installer mounts, and whether a Word conversion must go through it (a
+# converter that cannot be reached then fails the document as busy; nothing is converted inside the worker).
+CONVERTER_SOCKET = _env('CONVERTER_SOCKET', '')
+CONVERTER_REQUIRED = _flag('CONVERTER_REQUIRED')
+
+# F1 (OWNER DECISION D16): originals, converted PDFs and report PDFs sealed with their practice's own key - built, and
+# off. Turning it on is a release, never an environment flip: a revision older than release 1 cannot read a sealed file,
+# so it is turned on only where no switch-back to one can be needed (the new server). The key-encryption key is
+# CPT_STUDIO_FILES_KEK, from the protected environment file FILES_KEK_FILE names or from the process environment, never
+# from the database (studio.file_crypto).
+FILES_ENCRYPTION = 'off'
+FILES_KEK_FILE = _env('FILES_KEK_FILE', '')
+# D5 (OWNER DECISION D18): the malware scan of uploads, built for release 1b, and clamd's socket when it runs.
+MALWARE_SCAN = 'off'
+CLAMD_SOCKET = _env('CLAMD_SOCKET', '')
+for _switch, _state in (('FILES_ENCRYPTION', FILES_ENCRYPTION), ('MALWARE_SCAN', MALWARE_SCAN)):
+    if _state not in {'off', 'on'}:
+        raise RuntimeError(f'{_switch} must be off or on.')
+
+# B7: /health/ answers a request that came through nginx with the first 16 hex characters of
+# sha256(HEALTH_DIGEST_PREFIX + RELEASE_SHA) in place of the release.
+HEALTH_DIGEST_PREFIX = 'cpt-studio-release:'
 
 # The live gate's recorded owner authority (ruling file path or id): a live coding send names it, and none is made
 # without it (jobs._live_gate).

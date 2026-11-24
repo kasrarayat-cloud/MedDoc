@@ -22,6 +22,8 @@ from .hosts import is_console_page
 from .api import UNSTORABLE
 from .models import LoginAttempt
 from .operator import is_operator
+# the client's address: moved to studio.request_meta (release 1, RELEASE-1-SPEC 3.3); the alias keeps every caller
+from .request_meta import client_address as _client
 
 
 INDEX_CSP = SecurityHeadersMiddleware.CSP.replace("frame-ancestors 'none'", "frame-src 'self'; frame-ancestors 'none'")
@@ -39,16 +41,6 @@ def health(request):
     return JsonResponse({'status': 'ok' if status == 200 else 'degraded', 'service': 'cpt-studio',
                          'data_mode': 'synthetic-only', 'release': settings.RELEASE_SHA, 'database': database},
                         status=status)
-
-
-def _client(request):
-    # Behind the loopback proxy the real client is in X-Forwarded-For, which
-    # nginx REPLACES with $remote_addr; never trust it otherwise.
-    if settings.SECURE_PROXY_SSL_HEADER:
-        forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-        if forwarded:
-            return forwarded[:64]
-    return request.META.get('REMOTE_ADDR', '')[:64]
 
 
 def _throttled(username, client):
