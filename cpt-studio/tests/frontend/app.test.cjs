@@ -261,10 +261,13 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
     'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
+  const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
   try {
     await fn({ calls, element });
   } finally {
     await new Promise(resolve => setImmediate(resolve));
+    clearTimeout(app.idle.timer);
+    Object.assign(app.idle, idleBefore);
     clearTimeout(app.state.madeTimer);
     clearTimeout(app.state.toastTimer);
     clearTimeout(app.state.poll.timer);
@@ -4885,7 +4888,7 @@ test('the PDF library is named on the page as same-origin static modules, and no
   }
   // the shell names the pinned copy; the page script names no address of its own
   const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
-  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}">/);
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}" data-idle-seconds="\{\{ idle_seconds \}\}" data-cap-seconds="\{\{ cap_seconds \}\}" data-warning-seconds="\{\{ warning_seconds \}\}" data-session="\{\{ session \}\}">/);
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
   assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
   // the image decoders and standard fonts are the package's own folders, two up from the legacy worker
@@ -5038,20 +5041,20 @@ test('B5: a tab in use keeps the session signed in while another tab sits idle, 
   const form = fakeElement({ submitted: 0, submit() { this.submitted += 1; } });
   await withSignedInPage({ elements: { signoutForm: form } }, async ({ calls }) => {
     const now = Date.now();
-    // this tab has sat idle: its own deadline is about to pass
-    Object.assign(app.idle, { deadline: now + 50, gone: false, warningMs: 120000 });
+    // this tab of session 'tag-a' has sat idle: its own deadline is about to pass
+    Object.assign(app.idle, { deadline: now + 50, idleEnd: now + 50, capEnd: 0, gone: false, warningMs: 120000, session: 'tag-a' });
     // the tab in use pinged: its later deadline reaches this one, which adopts it and does not sign out
-    app.receiveSession({ type: 'deadline', deadline: now + 15 * 60000, warningMs: 120000 });
+    app.receiveSession({ type: 'deadline', deadline: now + 15 * 60000, warningMs: 120000, session: 'tag-a' });
     assert.equal(app.idle.deadline, now + 15 * 60000);
     await new Promise(resolve => setTimeout(resolve, 80));
     app.scheduleIdle();
     assert.equal(form.submitted, 0);
     assert.equal(app.idle.gone, false);
     // an earlier deadline never shortens a tab's time
-    app.receiveSession({ type: 'deadline', deadline: now + 1000 });
+    app.receiveSession({ type: 'deadline', deadline: now + 1000, session: 'tag-a' });
     assert.equal(app.idle.deadline, now + 15 * 60000);
     // a tab that signed out takes this one to the sign-in page, its screen cleared first
-    app.receiveSession({ type: 'signed-out', reason: 'idle' });
+    app.receiveSession({ type: 'signed-out', reason: 'idle', session: 'tag-a' });
     assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=idle&next=%2F' }]);
     assert.equal(form.submitted, 0, 'the other tab already sent the sign-out');
   });
@@ -5199,4 +5202,264 @@ test('B2: the console\'s key script converts the options to bytes and the answer
     const source = fs.readFileSync(path.join(ROOT, 'studio', 'static', 'studio', file), 'utf8');
     assert.ok(!/eval\(|new Function|innerHTML|document\.write/.test(source), file);
   }
+});
+
+// --- refutation r2: the timer armed at load (finding 13), the session's tabs (14), the cap (16) --------------------------
+
+// withSignedInPage, with a page that can run startIdleWatch: the body's data-* as the server writes them, document and
+// window listeners that do nothing, and no BroadcastChannel (the tabs' channel is the test's own where it needs one).
+function withTimerPage(options, dataset, fn, extra) {
+  const savedChannel = globalThis.BroadcastChannel;
+  return withSignedInPage(options, async page => {
+    Object.assign(global.document, { addEventListener() {}, body: { appendChild() {}, dataset } });
+    global.window.addEventListener = () => {};
+    globalThis.BroadcastChannel = undefined;
+    Object.assign(app.idle, { deadline: 0, idleEnd: 0, capEnd: 0, warningMs: 120000, lastPing: 0, pinging: null, checking: null,
+      channel: null, gone: false, started: false, session: '', capClosed: 0, returnFocus: null });
+    try {
+      await fn(page);
+    } finally {
+      globalThis.BroadcastChannel = savedChannel;
+    }
+  }, extra);
+}
+
+const PAGE_SECONDS = { idleSeconds: '900', capSeconds: '28800', warningSeconds: '120', session: 'tag-a' };
+
+test('B5: the timer is armed from the page\'s own seconds at load, and a first ping that fails leaves it armed', async () => {
+  const unavailable = { match: (method, url) => url === '/session/activity', status: 502, type: 'text/html', body: '<p>temporarily unavailable</p>' };
+  await withTimerPage({ answers: [unavailable] }, PAGE_SECONDS, async ({ calls }) => {
+    const before = Date.now();
+    app.startIdleWatch();
+    await app.idle.pinging;
+    assert.equal(calls.filter(call => call.url === '/session/activity').length, 1);
+    assert.ok(app.idle.deadline >= before + 900000 && app.idle.deadline <= Date.now() + 900000, 'armed from the page');
+    assert.equal(app.idle.session, 'tag-a');
+    // the failed ping is tried again on input, after RETRY_MS rather than a minute
+    app.noteInput();
+    assert.equal(calls.filter(call => call.url === '/session/activity').length, 1, 'not at once');
+    app.idle.lastPing -= app.RETRY_MS;
+    app.noteInput();
+    await app.idle.pinging;
+    assert.equal(calls.filter(call => call.url === '/session/activity').length, 2);
+  });
+  // a page with no seconds at all is armed at the doctors' limit: never unarmed
+  await withTimerPage({ answers: [unavailable] }, {}, async () => {
+    const before = Date.now();
+    app.startIdleWatch();
+    await app.idle.pinging;
+    assert.ok(app.idle.deadline >= before + app.DEFAULT_IDLE_SECONDS * 1000);
+  });
+  assert.deepEqual(app.pageSession({ idleSeconds: '840', capSeconds: '', warningSeconds: 'x', session: 's' }),
+    { idle: 840, cap: null, warning: null, session: 's' });
+});
+
+test('B5: the deadline is the earlier of the idle end and the cap, whose warning says so, and the page signs out as expired', async () => {
+  const main = fakeElement({ innerHTML: '<section>ZZ-TEXT-MARKER</section>' });
+  const form = fakeElement({ submitted: 0, submit() { this.submitted += 1; } });
+  const dialog = fakeElement();
+  await withTimerPage({ elements: { main, signoutForm: form, idleDialog: dialog } }, { ...PAGE_SECONDS, capSeconds: '120' }, async ({ element }) => {
+    const now = Date.now();
+    app.armFromPage(now);
+    assert.equal(app.idle.deadline, now + 120000, 'the cap, two minutes away, comes before the idle end');
+    assert.equal(app.capFirst(), true);
+    app.scheduleIdle();  // inside the warning's lead
+    assert.equal(dialog.open, true);
+    assert.equal(element('#idleTitle').textContent, 'Your session ends in 2 minutes');
+    assert.equal(element('#idleText').textContent, app.CAP_TEXT);
+    assert.deepEqual([element('#idleStay').hidden, element('#idleClose').hidden], [true, false]);
+    // a ping cannot move the cap: its answer brings it only closer
+    app.applySessionAnswer({ idle_seconds: 900, cap_seconds: 200, warning_seconds: 120, session: 'tag-a' }, false);
+    assert.equal(app.idle.deadline, now + 120000);
+    app.applySessionAnswer({ idle_seconds: 900, cap_seconds: 60, warning_seconds: 120, session: 'tag-a' }, false);
+    assert.ok(app.idle.deadline <= Date.now() + 60000);
+    // read and closed, it stays closed until the end
+    app.closeCapWarning();
+    assert.equal(dialog.open, false);
+    app.scheduleIdle();
+    assert.equal(dialog.open, false);
+    // at the cap the screen is cleared and the page signs out as expired
+    Object.assign(app.idle, { deadline: Date.now() - 1, capEnd: Date.now() - 1 });
+    app.scheduleIdle();
+    assert.equal(main.innerHTML, '');
+    assert.equal(form.submitted, 1);
+    assert.equal(form.attributes.action, '/logout/?reason=expired');
+  });
+  // the idle warning keeps its own words and button
+  await withTimerPage({ elements: { idleDialog: fakeElement() } }, PAGE_SECONDS, async ({ element }) => {
+    app.armFromPage(Date.now() - (900 - 60) * 1000);  // a minute left of the idle time
+    app.scheduleIdle();
+    assert.equal(element('#idleTitle').textContent, 'You will be signed out in 1 minute');
+    assert.equal(element('#idleText').textContent, app.IDLE_TEXT);
+    assert.deepEqual([element('#idleStay').hidden, element('#idleClose').hidden], [false, true]);
+  });
+  const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
+  assert.ok(template.includes(`<p class="dialog-copy" id="idleText">${app.IDLE_TEXT}</p>`), 'the page script and the page say the same');
+  assert.match(template, /<button type="button" class="button secondary" id="idleClose" data-action="idle-close" hidden>Close<\/button>/);
+});
+
+test('B5: a 401 is told to every tab of the session, and another session\'s news is never adopted', async () => {
+  const posted = [];
+  const channel = { postMessage(data) { posted.push(data); } };
+  // a 401 in this tab: the session's other tabs are told, with its tag
+  await withTimerPage({ answers: [{ match: () => true, status: 401, body: { error: 'signed_out', reason: 'expired' } }] }, PAGE_SECONDS, async ({ calls }) => {
+    app.armFromPage();
+    app.idle.channel = channel;
+    await assert.rejects(app.api('/api/encounters'), { status: 401 });
+    assert.deepEqual(posted.map(message => [message.type, message.reason, message.session]), [['signed-out', 'expired', 'tag-a']]);
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=expired&next=%2F' }]);
+  });
+  // news of another session: never adopted; the tab asks the server which session it is in, without counting as activity
+  const theirs = { match: (method, url) => url === '/session/activity', status: 200, body: { idle_seconds: 900, cap_seconds: 28800, warning_seconds: 120, session: 'tag-b' } };
+  await withTimerPage({ answers: [theirs] }, PAGE_SECONDS, async ({ calls }) => {
+    const now = Date.now();
+    app.armFromPage(now);
+    const own = app.idle.deadline;
+    app.receiveSession({ type: 'deadline', deadline: now + 3 * 3600000, cap: now + 8 * 3600000, warningMs: 120000, session: 'tag-b' });
+    assert.equal(app.idle.deadline, own, 'another session\'s deadline is never this tab\'s');
+    await app.idle.checking;
+    const check = calls.find(call => call.url === '/session/activity');
+    assert.equal(check.headers['X-CPT-Poll'], '1', 'the question is no activity');
+    // the browser now holds the other session: this tab leaves, its screen cleared
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=expired&next=%2F' }]);
+    assert.equal(app.idle.gone, true);
+  });
+  // a sign-out, or a message naming no session, is checked the same way; the tab whose session it still is stays
+  const mine = { match: (method, url) => url === '/session/activity', status: 200, body: { idle_seconds: 600, cap_seconds: 28000, warning_seconds: 120, session: 'tag-a' } };
+  await withTimerPage({ answers: [mine, { ...mine }] }, PAGE_SECONDS, async ({ calls }) => {
+    app.armFromPage();
+    app.receiveSession({ type: 'signed-out', reason: 'idle', session: 'tag-b' });
+    await app.idle.checking;
+    app.receiveSession({ type: 'deadline', deadline: Date.now() + 3600000 });
+    await app.idle.checking;
+    assert.equal(calls.filter(call => call.url === '/session/activity' && call.headers['X-CPT-Poll'] === '1').length, 2);
+    assert.deepEqual(calls.filter(call => call.assign), []);
+    assert.equal(app.idle.gone, false);
+  });
+  // the ping's own answer naming another session takes this tab out too
+  await withTimerPage({ answers: [theirs] }, PAGE_SECONDS, async ({ calls }) => {
+    app.armFromPage();
+    await app.sendActivity();
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=expired&next=%2F' }]);
+  });
+});
+
+// --- the console's timer (ops_session.js), run in a context of its own per tab: a fake page, clock, fetch and channel ---
+
+const OPS_SESSION = path.join(ROOT, 'studio', 'static', 'studio', 'ops_session.js');
+
+function consoleTab({ dataset = {}, bus, answers, clock, name = 'tab' }) {
+  const calls = [];
+  const timers = clock.timers;
+  const found = (node, id) => (node.id === id ? node : node.children.map(child => (typeof child === 'object' ? found(child, id) : null)).find(Boolean) || null);
+  const element = tag => ({
+    tag, id: '', className: '', hidden: false, open: false, textContent: '', attributes: {}, children: [], on: {},
+    setAttribute(key, value) { this.attributes[key] = String(value); }, append(...items) { this.children.push(...items); },
+    addEventListener(type, listener) { this.on[type] = listener; }, querySelector(selector) { return found(this, selector.slice(1)); },
+    showModal() { this.open = true; }, close() { this.open = false; }, focus() {},
+  });
+  const dialogs = [];
+  const form = { attributes: { action: '/logout/' }, submitted: 0, setAttribute(key, value) { this.attributes[key] = value; },
+    submit() { this.submitted += 1; }, addEventListener() {}, querySelector: () => ({ value: 'form-token' }) };
+  const main = { children: ['ZZ-PHI-MARKER'], replaceChildren() { this.children = []; } };
+  const document = {
+    body: { dataset, append(child) { if (child.tag === 'dialog') dialogs.push(child); } }, hidden: false, activeElement: null,
+    querySelector: selector => (selector === 'form[action="/logout/"]' ? form : null),
+    getElementById: id => (id === 'main' ? main : null), querySelectorAll: () => dialogs, createElement: element,
+    addEventListener(type, listener) { (listeners[type] ||= []).push(listener); },
+  };
+  const listeners = {};
+  class Channel {
+    constructor() { bus.push(this); }
+    postMessage(data) { for (const other of bus) if (other !== this && other.onmessage) other.onmessage({ data: JSON.parse(JSON.stringify(data)) }); }
+  }
+  const sandbox = {
+    document, console, BroadcastChannel: Channel, FormData: class { append() {} },
+    window: { location: { assign: url => calls.push({ assign: url }) }, addEventListener() {}, localStorage: undefined },
+    Date: class extends Date { static now() { return clock.now; } },
+    setTimeout: (run, ms) => { const timer = { at: clock.now + ms, run }; timers.push(timer); return timer; },
+    clearTimeout: timer => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); },
+    fetch: async (url, init) => {
+      calls.push({ url, method: init.method, poll: init.headers['X-CPT-Poll'] || null, tab: name });
+      const answer = answers.shift() || { status: 200, body: { idle_seconds: 600, cap_seconds: 28800, warning_seconds: 120, session: dataset.session } };
+      return { status: answer.status, ok: answer.status >= 200 && answer.status < 300, json: async () => (answer.text ? JSON.parse(answer.text) : answer.body) };
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(OPS_SESSION, 'utf8'), sandbox);
+  const press = () => (listeners.keydown || []).forEach(listener => listener({ type: 'keydown' }));
+  return { calls, form, main, dialogs, press };
+}
+
+function consoleClock(start = Date.parse('2026-11-24T12:00:00Z')) {
+  const clock = { now: start, timers: [] };
+  clock.advance = async ms => {
+    const end = clock.now + ms;
+    for (;;) {
+      await new Promise(resolve => setImmediate(resolve));
+      const due = clock.timers.filter(timer => timer.at <= end).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      clock.timers.splice(clock.timers.indexOf(due), 1);
+      clock.now = Math.max(clock.now, due.at);
+      due.run();
+    }
+    clock.now = end;
+    await new Promise(resolve => setImmediate(resolve));
+  };
+  return clock;
+}
+
+const CONSOLE_SECONDS = { idleSeconds: '600', capSeconds: '28800', warningSeconds: '120', session: 'op-a' };
+
+test('B5: the console\'s timer is armed at load, and a first ping answered 502 still clears the screen at the limit', async () => {
+  const clock = consoleClock();
+  const tab = consoleTab({ dataset: CONSOLE_SECONDS, bus: [], answers: [{ status: 502, text: 'null' }], clock });
+  await clock.advance(1000);
+  assert.equal(tab.calls.filter(call => call.url === '/session/activity').length, 1);
+  await clock.advance(478 * 1000);  // 479 s: no warning yet
+  assert.equal(tab.dialogs.filter(dialog => dialog.open).length, 0);
+  await clock.advance(2 * 1000);  // inside the two minutes
+  assert.equal(tab.dialogs[0]?.open, true);
+  assert.equal(tab.dialogs[0].querySelector('#idleTitle').textContent, 'You will be signed out in 2 minutes');
+  await clock.advance(120 * 1000);  // 601 s
+  assert.deepEqual([tab.form.submitted, tab.form.attributes.action, tab.main.children], [1, '/logout/?reason=idle', []]);
+});
+
+test('B5: a 401 in one console tab clears every tab of its session, and never adopts another session\'s deadline', async () => {
+  const clock = consoleClock();
+  const bus = [];
+  const answersA = [];
+  const a = consoleTab({ dataset: CONSOLE_SECONDS, bus, answers: answersA, clock, name: 'A' });
+  const b = consoleTab({ dataset: CONSOLE_SECONDS, bus, answers: [], clock, name: 'B' });
+  const otherAnswers = [];
+  const other = consoleTab({ dataset: { ...CONSOLE_SECONDS, session: 'op-b' }, bus, answers: otherAnswers, clock, name: 'other' });
+  await clock.advance(61 * 1000);
+  const checks = other.calls.length;
+  // the server ends op-a's session; a key pressed in tab A, a minute after its last ping, meets the 401
+  answersA.push({ status: 401, body: { error: 'signed_out', reason: 'expired' } });
+  otherAnswers.push({ status: 200, body: { idle_seconds: 600, cap_seconds: 28800, warning_seconds: 120, session: 'op-b' } });
+  a.press();
+  await clock.advance(10);
+  assert.deepEqual(a.calls.filter(call => call.assign), [{ assign: '/login/?reason=expired' }]);
+  assert.deepEqual(b.calls.filter(call => call.assign), [{ assign: '/login/?reason=expired' }], 'tab B of the same session leaves');
+  assert.deepEqual(b.main.children, [], 'and its screen is cleared');
+  // the tab of another session only asks which session it is in (a ping marked a poll), and stays
+  const asked = other.calls.slice(checks).filter(call => call.url === '/session/activity');
+  assert.deepEqual(asked.map(call => call.poll), ['1']);
+  assert.deepEqual(other.calls.filter(call => call.assign), []);
+  assert.deepEqual(other.main.children, ['ZZ-PHI-MARKER']);
+});
+
+test('B5: the console\'s deadline is the earlier of the idle end and the cap, which it signs out at as expired', async () => {
+  const clock = consoleClock();
+  const answers = [{ status: 200, body: { idle_seconds: 600, cap_seconds: 120, warning_seconds: 120, session: 'op-a' } }];
+  const tab = consoleTab({ dataset: { ...CONSOLE_SECONDS, capSeconds: '120' }, bus: [], answers, clock });
+  await clock.advance(1000);
+  assert.equal(tab.dialogs[0]?.open, true, 'the cap is two minutes away: its warning at once');
+  assert.equal(tab.dialogs[0].querySelector('#idleTitle').textContent, 'Your session ends in 2 minutes');
+  assert.deepEqual([tab.dialogs[0].querySelector('#idleStay').hidden, tab.dialogs[0].querySelector('#idleClose').hidden], [true, false]);
+  tab.press();  // activity: the idle end moves, the cap does not
+  await clock.advance(120 * 1000);
+  assert.deepEqual([tab.form.submitted, tab.form.attributes.action, tab.main.children], [1, '/logout/?reason=expired', []]);
+  assert.equal(opsSession.capWarningText(60000), 'Your session ends in 1 minute');
+  assert.deepEqual(opsSession.pageSession({ idleSeconds: '600', session: 'x' }), { idle: 600, cap: null, warning: null, session: 'x' });
 });

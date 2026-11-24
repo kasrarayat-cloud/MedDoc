@@ -5,6 +5,7 @@ limit and the cap (B5), the door a session is bound to (B3), the deletion of the
 The clock is patched (tests.test_second_factor.Clock), so no test waits. Synthetic data only."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import timedelta
 from importlib import import_module
@@ -297,7 +298,8 @@ class IdleAndCapTests(TestCase):
             answer = client.post('/session/activity')
             self.assertEqual(answer.json(), {'idle_seconds': settings.SESSION_IDLE_MEMBER_SECONDS - 30,
                                              'cap_seconds': settings.SESSION_MAX_MEMBER_SECONDS - 30,
-                                             'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS})
+                                             'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS,
+                                             'session': sessions.session_tag(type('R', (), {'session': client.session})())})
             clock.advance(60)
             self.assertEqual(client.post('/session/activity').json()['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS)
         anonymous = Client().post('/session/activity')
@@ -313,6 +315,59 @@ class IdleAndCapTests(TestCase):
         self.assertEqual(plain.post('/logout/')['Location'], '/login/')
         self.assertIn('You were signed out after 15 minutes without activity.', Client().get('/login/?reason=idle')
                       .content.decode())
+
+
+def body_data(page):
+    """The data-* attributes of a page's <body>."""
+    body = re.search(r'<body[^>]*>', page.content.decode()).group(0)
+    return dict(re.findall(r'data-([a-z-]+)="([^"]*)"', body))
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class PageConfigTests(TestCase):
+    """A signed-in page is given its session's seconds and its tag, so its timer is armed at load (refutation r2,
+    findings 13, 14 and 16; studio.sessions.page_config)."""
+
+    def test_the_doctors_page_carries_its_session_s_seconds_and_tag(self):
+        with Clock() as clock:
+            _, client = member_client()
+            clock.advance(100)
+            page = client.get('/')
+            data = body_data(page)
+            self.assertEqual((data['idle-seconds'], data['cap-seconds'], data['warning-seconds']),
+                             (str(settings.SESSION_IDLE_MEMBER_SECONDS - 100), str(settings.SESSION_MAX_MEMBER_SECONDS - 100),
+                              str(settings.SESSION_IDLE_WARNING_SECONDS)))  # as they stood before this request counted
+            tag = data['session']
+            self.assertRegex(tag, r'^[0-9a-f]{32}$')
+            self.assertNotIn(client.session[request_meta.SESSION_SIGN_IN_REF], page.content.decode())
+            self.assertEqual(client.post('/session/activity').json()['session'], tag)
+            _, other = member_client()
+            self.assertNotEqual(other.post('/session/activity').json()['session'], tag)
+
+    def test_a_console_page_carries_them_too_and_its_refresh_without_script_follows_the_session(self):
+        with Clock() as clock:
+            console_client = ops.admin_client(f.user('operator-page'))
+            session = console_client.session  # signed in almost eight hours ago: five minutes before the cap
+            session[request_meta.SESSION_AUTH_AT] = NOW - (settings.SESSION_MAX_OPERATOR_SECONDS - 300)
+            session.save()
+            clock.advance(30)
+            page = console_client.get('/ops/')
+            data = body_data(page)
+            self.assertEqual((data['idle-seconds'], data['cap-seconds']),
+                             (str(settings.SESSION_IDLE_OPERATOR_SECONDS - 30), '270'))
+            self.assertRegex(data['session'], r'^[0-9a-f]{32}$')
+            self.assertIn('<meta http-equiv="refresh" content="280;url=/login/?reason=idle">', page.content.decode())
+        sign_in_page = Client(HTTP_HOST=ADMIN).get('/login/')
+        self.assertEqual(body_data(sign_in_page), {})  # a page of nobody's session carries none
+
+    def test_a_ping_marked_a_poll_asks_and_records_no_activity(self):
+        with Clock() as clock:
+            _, client = member_client()
+            clock.advance(200)
+            asked = client.post('/session/activity', HTTP_X_CPT_POLL='1').json()
+            self.assertEqual(asked['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS - 200)
+            self.assertEqual(client.session[request_meta.SESSION_LAST_ACTIVE], NOW)
+            self.assertEqual(client.post('/session/activity').json()['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS)
 
 
 @override_settings(STORAGES=PLAIN_STATIC)

@@ -255,11 +255,13 @@ class ShellTemplateTests(SimpleTestCase):
 
     def test_the_console_signs_itself_out_and_without_script_moves_away_after_the_operators_limit(self):
         # B5, item 4: ops_session.js on every signed-in console page; without script a refresh ten seconds after the
-        # operators' idle limit, by which time the session policy has ended the session
+        # session's own end (studio.sessions.page_config's refresh_seconds: tests.test_sessions.PageConfigTests), and
+        # ten seconds after the operators' idle limit where a page is given none
         source = (TEMPLATES / 'ops_base.html').read_text(encoding='utf-8')
         self.assertIn('{% if user.is_authenticated %}<script src="/static/studio/ops_session.js" defer></script>', source)
-        self.assertIn(f'<noscript><meta http-equiv="refresh" content="{settings.SESSION_IDLE_OPERATOR_SECONDS + 10};'
-                      'url=/login/?reason=idle"></noscript>{% endif %}', source)
+        self.assertIn('<noscript><meta http-equiv="refresh" content="{{ request.cpt_page.refresh_seconds|default:'
+                      f'{settings.SESSION_IDLE_OPERATOR_SECONDS + 10} }}}};url=/login/?reason=idle"></noscript>{{% endif %}}',
+                      source)
 
     def test_release_one_s_pages_obey_the_content_security_policy(self):
         allowed = {'/static/studio/ops_session.js', '/static/studio/ops_second_factor.js'}

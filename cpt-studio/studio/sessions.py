@@ -47,7 +47,13 @@ signed-in request, before the view runs:
 And on the way out: a signed-in response carries X-CPT-Actor: <the sign-in reference> (A2: nginx logs it and strips
 it); a response to a sign-in sets the known-device cookie; and a browser that still sends the cookies of their names
 before release 1 (cptstudio_session, cptstudio_csrf - other names than this site's under HTTPS, B6) is told to delete
-them (Max-Age=0). The page's own sign-out after inactivity (POST /logout/?reason=idle) gets its reason on the redirect too.
+them (Max-Age=0). The page's own sign-out (POST /logout/?reason=idle after inactivity, ?reason=expired at the cap) gets
+its reason on the redirect too.
+
+A signed-in request also carries request.cpt_page (page_config): the seconds the session has before it idles out and
+before its cap, the warning's lead and the session's tag (session_tag), which index.html and ops_base.html give the
+page, so its timer is armed from the moment it loads, whatever becomes of its first ping (refutation r2, findings 13,
+14 and 16).
 """
 from __future__ import annotations
 
@@ -62,6 +68,7 @@ from django.contrib.auth.signals import user_logged_in
 from django.contrib.sessions.models import Session
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 from . import request_meta, throttle
 
@@ -87,6 +94,7 @@ FORCED_CHANGE_ALLOWED = frozenset({ACCOUNT_PATH, LOGOUT_PATH, '/logout/everywher
 FORCED_CHANGE_ALLOWED_ADMIN = frozenset({'/login/second-factor', '/login/second-factor/options', '/login/recovery'})
 OLD_COOKIE_NAMES = ('cptstudio_session', 'cptstudio_csrf')  # the names before release 1 (B6)
 ACTOR_HEADER = 'X-CPT-Actor'
+SESSION_TAG_SALT = 'studio.sessions.session_tag'
 FRAME_DESTINATIONS = frozenset({'iframe', 'frame', 'embed', 'object'})  # Sec-Fetch-Dest of a load the page itself makes
 # the session keys of an anonymous session that waits on an account (studio.second_factor reads them by these names):
 # a checked password waiting for its key, and a setup under way; end_sessions ends them with the account's sessions
@@ -262,11 +270,29 @@ def _with_reason(response, reason):
 
 
 def _page_sign_out_reason(request):
-    """The page's own sign-out after inactivity (app.js and ops_session.js submit the sign-out form to
-    /logout/?reason=idle): its redirect to the sign-in page says why."""
-    if request.method == 'POST' and request.path == LOGOUT_PATH and request.GET.get('reason') == IDLE:
-        return IDLE
+    """The page's own sign-out (app.js and ops_session.js submit the sign-out form to /logout/?reason=idle after
+    inactivity, and to /logout/?reason=expired at the session's cap): its redirect to the sign-in page says why."""
+    if request.method == 'POST' and request.path == LOGOUT_PATH and request.GET.get('reason') in REASONS:
+        return request.GET['reason']
     return None
+
+
+def session_tag(request) -> str:
+    """The value a signed-in page is given to know its own session by (data-session, and the ping's answer): a keyed
+    hash of the session's sign-in reference, so the tabs of one browser can tell their session's news from another
+    session's (refutation r2, finding 14) while the reference itself never reaches the page. '' when there is none."""
+    ref = request_meta.sign_in_ref(request)
+    return salted_hmac(SESSION_TAG_SALT, str(ref), algorithm='sha256').hexdigest()[:32] if ref else ''
+
+
+def page_config(request) -> dict:
+    """What a signed-in page needs to arm its own timer the moment it loads (refutation r2, findings 13 and 16): the
+    seconds until the session idles out and until its cap, as they stand before this request's own activity - so the
+    page's deadline is never later than the server's - the warning's lead, the session's tag, and when a page without
+    script refreshes to the sign-in (ops_base.html's noscript)."""
+    idle, cap = remaining(request)
+    return {'idle_seconds': idle, 'cap_seconds': cap, 'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS,
+            'session': session_tag(request), 'refresh_seconds': min(idle, cap) + 10}
 
 
 class SessionPolicyMiddleware:
@@ -299,6 +325,7 @@ class SessionPolicyMiddleware:
                 return JsonResponse({**SIGNED_OUT, 'reason': reason}, status=401)
             return None
         request.cpt_actor = str(request_meta.sign_in_ref(request))
+        request.cpt_page = page_config(request)  # the signed-in page's own timer (index.html, ops_base.html)
         if getattr(user, 'password_change_required_at', None) is not None and not _allowed_during_change(request):
             if request.path.startswith('/api/'):
                 return JsonResponse(PASSWORD_CHANGE_REQUIRED, status=403)

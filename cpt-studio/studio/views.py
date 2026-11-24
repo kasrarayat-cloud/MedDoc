@@ -140,8 +140,10 @@ def index(request):
     # B3: no redirect to the console - an account without an active workspace gets the 404 active_membership gives
     membership = active_membership(request.user)
     # the workspace's specialty, a label the page shows (owner direction 2026-11-22, D390); nothing codes from it
+    # the page's own timer, armed at load from the session's limits and its tag (studio.sessions.page_config)
     response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA,
-                                                     'specialty': membership.workspace.category.name})
+                                                     'specialty': membership.workspace.category.name,
+                                                     **getattr(request, 'cpt_page', {})})
     response.headers['Content-Security-Policy'] = INDEX_CSP
     return response
 
@@ -306,7 +308,7 @@ def activity_ping(request):
     """POST: the person is active on the page (B5): the ping records the session's activity itself - it has passed the
     CSRF check and will be answered 200 - unless it is marked a poll (X-CPT-Poll: 1: a tab checking which session it is
     in, which is no one's activity); the answer says how long the session has before it idles out and before its
-    cap, and the warning's lead."""
+    cap, the warning's lead, and the session's tag (studio.sessions.session_tag: a tab of another session leaves)."""
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
     if not request.user.is_authenticated:
@@ -316,4 +318,5 @@ def activity_ping(request):
         sessions.note_activity(request)
     idle, cap = sessions.remaining(request)
     return JsonResponse({'idle_seconds': idle, 'cap_seconds': cap,
-                         'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS})
+                         'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS,
+                         'session': sessions.session_tag(request)})

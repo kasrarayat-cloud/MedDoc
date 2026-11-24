@@ -1784,7 +1784,7 @@ async function api(path, { method = 'GET', json, form, poll = false } = {}) {
   const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
     const answer = isJson ? await response.json().catch(() => null) : null;
-    goToLogin(signedOutReason(answer));
+    sessionEnded(signedOutReason(answer));  // every tab of the session is told (B5)
     throw new ApiError('Your session has ended. Sign in again.', 401);
   }
   const data = isJson ? await response.json().catch(() => null) : null;
@@ -3924,19 +3924,54 @@ function generateReport(kind, fmt) {
   }).then(() => (refused ? rereadAfterRefusal(exporting.encounter) : undefined));
 }
 
-// --- automatic sign-out after inactivity (B5) ---------------------------------------------------------------------
-// The server ends a session idle longer than its limit (studio.sessions); the page keeps one timer with it, shared by the
-// tabs of this browser (BroadcastChannel, else localStorage events; every access in try/catch), so an idle tab never
-// signs out a tab in use. Input sends the activity ping at most once a minute; the ping's answer is the server's own
-// remaining time, so the timer never drifts from the session. A warning comes SESSION_IDLE_WARNING_SECONDS before the end,
-// with a button that sends the ping. At the end the page closes the viewer, lets go of its object addresses, empties #main
-// and every dialog, and submits the sign-out form. Answers typed and not sent are lost then: the warning is their
-// protection (no drafts are kept, because a draft would put a document's text in the browser's storage).
-const idle = { deadline: 0, warningMs: 120000, lastPing: 0, pinging: null, timer: 0, channel: null, gone: false, started: false };
+// --- automatic sign-out after inactivity, and at the session's cap (B5) -------------------------------------------
+// The server ends a session idle longer than its limit, or older than its cap (studio.sessions); the page keeps one timer
+// with it, shared by the tabs of this browser that show the same session (BroadcastChannel, else localStorage events;
+// every access in try/catch), so an idle tab never signs out a tab in use. The timer is armed the moment the page loads,
+// from the seconds the server put on the page (data-idle-seconds, data-cap-seconds, data-warning-seconds;
+// studio.sessions.page_config), so it never waits on a ping that may fail (refutation r2, finding 13). Input sends the
+// activity ping at most once a minute - one that failed is tried again on input after RETRY_MS, the deadline standing
+// meanwhile - and the ping's answer is the server's own remaining time, so the timer never drifts from the session. The
+// deadline is the earlier of the idle end and the session's cap (finding 16). A warning comes SESSION_IDLE_WARNING_SECONDS
+// before it: before the idle end with a button that sends the ping, before the cap with a sentence to send or copy what
+// is typed, since the cap cannot be moved. When the warning closes the focus goes back where it was, into the viewer's
+// frame too (finding 15). At the end the page closes the viewer, lets go of its object addresses, empties #main and every
+// dialog, and submits the sign-out form. Answers typed and not sent are lost then: the warning is their protection (no
+// drafts are kept, because a draft would put a document's text in the browser's storage).
+// Every message between tabs names its session (data-session: a per-sign-in value, which the ping answers too), and a
+// tab acts on its own session's news only. A message of another session - the browser was signed in again, or the
+// message is stale - makes the tab ask the server which session it is in (the ping marked a poll: no activity), and a
+// tab whose session is no longer the browser's leaves. A 401, in whichever tab meets it, is told to every tab of the
+// session, and each clears its screen (finding 14).
+const DEFAULT_IDLE_SECONDS = 900;  // the doctors' limit, for a page the server gave no seconds (it always gives them)
+const RETRY_MS = 15000;  // a ping that failed is tried again on the next input after this
+const IDLE_TEXT = 'CPT Studio signs you out after a while without activity, and clears the screen. Answers you have typed and not sent are lost when it does.';
+const CAP_TEXT = 'This session has reached its time limit. CPT Studio clears the screen and signs you out when it ends. Send or copy anything you are typing now: you will need to sign in again.';
+const idle = {
+  deadline: 0, idleEnd: 0, capEnd: 0, warningMs: 120000, lastPing: 0, pinging: null, checking: null, timer: 0,
+  channel: null, gone: false, started: false, session: '', capClosed: 0, returnFocus: null,
+};
 
 function seconds(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+// The seconds the server put on the page (studio.sessions.page_config), each null when it is absent or no number, and
+// the page's session tag ('' when absent).
+function pageSession(dataset) {
+  const data = dataset || {};
+  const number = value => (typeof value === 'string' && value.trim() !== '' ? seconds(value) : null);
+  return { idle: number(data.idleSeconds), cap: number(data.capSeconds), warning: number(data.warningSeconds),
+    session: typeof data.session === 'string' ? data.session : '' };
+}
+
+// The timer armed from the page's own seconds, before any ping answers: it is never unarmed.
+function armFromPage(now = Date.now()) {
+  const config = pageSession(typeof document === 'object' ? document.body?.dataset : null);
+  idle.session = config.session;
+  adoptDeadline(now + (config.idle ?? DEFAULT_IDLE_SECONDS) * 1000, config.warning === null ? null : config.warning * 1000,
+    false, config.cap === null ? null : now + config.cap * 1000);
 }
 
 function releaseObjectUrls() {
@@ -3970,8 +4005,9 @@ function clearScreen() {
   if (notice) notice.textContent = '';
 }
 
+// Every message names this tab's session.
 function shareSession(message) {
-  const data = { ...message, at: Date.now() };
+  const data = { ...message, session: idle.session, at: Date.now() };
   try {
     if (idle.channel) {
       idle.channel.postMessage(data);
@@ -3987,9 +4023,15 @@ function shareSession(message) {
   }
 }
 
+// A tab's news: acted on when it is of this tab's session; any other makes this tab ask the server which session it is
+// in, never adopt it.
 function receiveSession(message) {
-  if (!message || typeof message !== 'object') return;
-  if (message.type === 'deadline') adoptDeadline(Number(message.deadline), Number(message.warningMs), false);
+  if (!message || typeof message !== 'object' || idle.gone) return;
+  if (message.session !== idle.session) {
+    checkSession();
+    return;
+  }
+  if (message.type === 'deadline') adoptDeadline(Number(message.deadline), Number(message.warningMs), false, Number(message.cap));
   else if (message.type === 'signed-out') leaveSignedOut(message.reason === 'idle' ? 'idle' : 'expired');
 }
 
@@ -4014,14 +4056,38 @@ function openSessionChannel() {
   }
 }
 
-// Only a later deadline moves the timer: the server's last activity only moves forward, and another tab's news never
-// shortens this one's time.
-function adoptDeadline(deadline, warningMs, share = true) {
+// The idle end only moves later (the server's last activity only moves forward) and the cap only comes closer; the
+// deadline is the earlier of the two. Another tab's news never shortens this one's idle time.
+function adoptDeadline(deadline, warningMs, share = true, cap = null) {
   if (Number.isFinite(warningMs) && warningMs > 0) idle.warningMs = warningMs;
-  if (!Number.isFinite(deadline) || deadline <= idle.deadline) return;
-  idle.deadline = deadline;
-  if (share) shareSession({ type: 'deadline', deadline, warningMs: idle.warningMs });
+  let moved = false;
+  if (Number.isFinite(deadline) && deadline > idle.idleEnd) {
+    idle.idleEnd = deadline;
+    moved = true;
+  }
+  if (Number.isFinite(cap) && cap > 0 && (!idle.capEnd || cap < idle.capEnd)) {
+    idle.capEnd = cap;
+    moved = true;
+  }
+  if (!moved) return;
+  idle.deadline = idle.capEnd ? Math.min(idle.idleEnd, idle.capEnd) : idle.idleEnd;
+  if (share) shareSession({ type: 'deadline', deadline: idle.idleEnd, cap: idle.capEnd, warningMs: idle.warningMs });
   scheduleIdle();
+}
+
+// The answer of the ping, or of a re-check: a tab of another session than the browser's leaves; else the server's own
+// remaining time moves the timer.
+function applySessionAnswer(data, share) {
+  const tag = typeof data?.session === 'string' ? data.session : '';
+  if (tag && idle.session && tag !== idle.session) {
+    leaveSignedOut('expired');
+    return;
+  }
+  const left = seconds(data?.idle_seconds);
+  const cap = seconds(data?.cap_seconds);
+  const lead = seconds(data?.warning_seconds);
+  const now = Date.now();
+  if (left !== null) adoptDeadline(now + left * 1000, lead === null ? null : lead * 1000, share, cap === null ? null : now + cap * 1000);
 }
 
 function sendActivity() {
@@ -4030,12 +4096,11 @@ function sendActivity() {
   idle.lastPing = Date.now();
   idle.pinging = (async () => {
     try {
-      const data = await api(ACTIVITY_URL, { method: 'POST', json: {} });
-      const left = seconds(data?.idle_seconds);
-      const lead = seconds(data?.warning_seconds);
-      if (left !== null) adoptDeadline(Date.now() + left * 1000, lead === null ? null : lead * 1000);
-    } catch {
-      // a 401 has already signed the page out; offline, the timer stands
+      applySessionAnswer(await api(ACTIVITY_URL, { method: 'POST', json: {} }), true);
+    } catch (error) {
+      // a 401 has already signed the page out; any other failure keeps the deadline this page has, and the next input
+      // after RETRY_MS tries again
+      if (error?.status !== 401) idle.lastPing = Date.now() - ACTIVITY_EVERY_MS + RETRY_MS;
     } finally {
       idle.pinging = null;
     }
@@ -4043,22 +4108,75 @@ function sendActivity() {
   return idle.pinging;
 }
 
+// Which session this tab is in, asked of the server without counting as activity: the ping marked a poll.
+function checkSession() {
+  if (idle.gone) return Promise.resolve();
+  if (idle.checking) return idle.checking;
+  idle.checking = (async () => {
+    try {
+      applySessionAnswer(await api(ACTIVITY_URL, { method: 'POST', json: {}, poll: true }), false);
+    } catch {
+      // a 401 has already signed the page out; offline, the timer stands
+    } finally {
+      idle.checking = null;
+    }
+  })();
+  return idle.checking;
+}
+
 function noteInput() {
   if (idle.gone || idle.pinging) return;
   if (Date.now() - idle.lastPing >= ACTIVITY_EVERY_MS) sendActivity();
 }
 
+// Whether the session's cap comes before its idle end: the warning then says so, and the page signs out as expired.
+function capFirst() {
+  return Boolean(idle.capEnd) && idle.capEnd <= idle.idleEnd;
+}
+
+function capWarningText(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  return `Your session ends in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
 function showIdleWarning(left) {
   const dialog = $('#idleDialog');
   if (!dialog) return;
+  const cap = capFirst();
   const title = $('#idleTitle');
-  if (title) title.textContent = idleWarningText(left);
-  if (!dialog.open) dialog.showModal();
+  if (title) title.textContent = cap ? capWarningText(left) : idleWarningText(left);
+  const copy = $('#idleText');
+  if (copy) copy.textContent = cap ? CAP_TEXT : IDLE_TEXT;
+  const stay = $('#idleStay');
+  if (stay) stay.hidden = cap;
+  const close = $('#idleClose');
+  if (close) close.hidden = !cap;
+  if (dialog.open) return;
+  const active = document.activeElement;
+  idle.returnFocus = active && active !== document.body ? active : null;
+  dialog.showModal();
 }
 
+// The warning closes, and the focus goes back where it was - into the viewer's frame too, so the next key scrolls it.
 function hideIdleWarning() {
   const dialog = $('#idleDialog');
-  if (dialog?.open) dialog.close();
+  if (!dialog?.open) return;
+  dialog.close();
+  const back = idle.returnFocus;
+  idle.returnFocus = null;
+  if (!back || back.isConnected === false || typeof back.focus !== 'function') return;
+  try {
+    back.focus({ preventScroll: true });
+    if (back.tagName === 'IFRAME') back.contentWindow?.focus();
+  } catch {
+    // gone meanwhile
+  }
+}
+
+// The cap's warning, read: closed until the end, which no ping moves.
+function closeCapWarning() {
+  idle.capClosed = idle.capEnd;
+  hideIdleWarning();
 }
 
 function scheduleIdle() {
@@ -4066,16 +4184,17 @@ function scheduleIdle() {
   if (idle.gone) return;
   const next = idleStep(idle.deadline, idle.warningMs, Date.now());
   if (next.step === 'out') {
-    signOutIdle();
+    signOutIdle(capFirst() ? 'expired' : 'idle');
     return;
   }
-  if (next.step === 'warn') showIdleWarning(next.left);
+  if (next.step === 'warn' && !(capFirst() && idle.capClosed === idle.capEnd)) showIdleWarning(next.left);
   else hideIdleWarning();
   if (next.in === null) return;
   idle.timer = setTimeout(scheduleIdle, next.step === 'warn' ? Math.min(1000, next.in) : Math.max(1000, next.in));
 }
 
-// Another tab signed out (or the server did): this one clears its screen and goes to the sign-in page too.
+// Another tab of this session signed out, or the server said the session is over: this one clears its screen and goes to
+// the sign-in page too.
 function leaveSignedOut(reason) {
   if (idle.gone) return;
   idle.gone = true;
@@ -4083,22 +4202,31 @@ function leaveSignedOut(reason) {
   goToLogin(reason);
 }
 
-function signOutIdle() {
+// The server answered this tab 401: every tab of the session is told, and this one leaves, whatever its timer did.
+function sessionEnded(reason) {
+  if (!idle.gone) shareSession({ type: 'signed-out', reason });
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  goToLogin(reason);
+}
+
+function signOutIdle(reason = 'idle') {
   if (idle.gone) return;
   idle.gone = true;
   clearTimeout(idle.timer);
-  shareSession({ type: 'signed-out', reason: 'idle' });
+  shareSession({ type: 'signed-out', reason });
   state.leaving = true;
   clearScreen();
   const form = $('#signoutForm');
   if (!form) return;
-  form.setAttribute('action', '/logout/?reason=idle');
+  form.setAttribute('action', `/logout/?reason=${reason === 'expired' ? 'expired' : 'idle'}`);
   form.submit?.();
 }
 
 function startIdleWatch() {
   if (idle.started) return;
   idle.started = true;
+  armFromPage();
   openSessionChannel();
   for (const type of ACTIVITY_INPUTS) document.addEventListener(type, noteInput, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleIdle(); });
@@ -4182,6 +4310,7 @@ function onClick(event) {
     'reload-view': route,
     confirm: confirmChosen,
     'stay-signed-in': () => sendActivity(),
+    'idle-close': () => closeCapWarning(),
   })[action.dataset.action]?.();
 }
 
@@ -4291,6 +4420,8 @@ if (typeof module === 'object' && module.exports) {
     csrfCookieName, csrfValue, signedOutReason, loginAddress, idleStep, idleWarningText, rateLimitText, teamMembers, memberRow,
     teamList, teamView, downloadLinks, showTeam, setMemberAccess, askConfirm, confirmChosen, askWordOriginal, clearScreen,
     goToLogin, goToAccount, sendActivity, adoptDeadline, scheduleIdle, signOutIdle, receiveSession, shareSession, noteInput,
+    pageSession, armFromPage, applySessionAnswer, checkSession, sessionEnded, leaveSignedOut, capFirst, capWarningText,
+    showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,
     idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
     refreshIfWaiting, renderSession,
   };
