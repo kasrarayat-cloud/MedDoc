@@ -3,8 +3,10 @@ studio.views.login_view and admin.quillmd.com's admin_login_view - open a Door f
 BEFORE any password is checked, and hand it the result of the password check, which writes the attempt's LoginAttempt.
 
 The checks, in order, all before Argon2 runs (Door.refusal):
-  (a) address flood: refused or failed attempts from the client's key - an IPv4 address, or an IPv6 address's /64
-      (studio.request_meta.client_key) - in the window reach SIGNIN_CLIENT_LIMIT: refused from that address only;
+  (a) address flood: failed attempts from the client's key - an IPv4 address, or an IPv6 address's /64
+      (studio.request_meta.client_key) - in the window reach SIGNIN_CLIENT_LIMIT: refused from that address only. Only
+      attempts that reached the password check and failed count; a refusal never does, so the refusal ends once the
+      failures leave the window, however often the network keeps trying meanwhile (refutation r2, finding 9);
   (b) pair: failures for (the username, the client's key) reach SIGNIN_PAIR_LIMIT: refused from that pair only;
   (c) username delay: failures for the username from any address reach SIGNIN_USER_DELAY_AFTER: the next try waits
       min(SIGNIN_DELAY_BASE_SECONDS * 2 ** (n - SIGNIN_USER_DELAY_AFTER), SIGNIN_DELAY_MAX_SECONDS) after the last
@@ -37,13 +39,16 @@ door that does not admit the account (no active membership at cpt, not a human o
 a delay, so a doctor's right password at the admin door changes nothing on the doctors' sign-in.
 
 clear_failures(username) deletes that name's RateWindow rows - its failures, its refusals and the pairs it was tried
-from - and is what the console's unlock (Lane 3) and the ruled act clear_signin_failures call; each writes its own
-SecurityEvent. LoginAttempt rows are never deleted here.
+from - and is what the console's unlock (Lane 3) and the ruled act clear_signin_failures --username call;
+clear_address(key) deletes an address's - its failures, its refusals and the pairs tried from it - for
+clear_signin_failures --address (address_key reads the address given). Each act writes its own SecurityEvent.
+LoginAttempt rows are never deleted here.
 
 The settings LOGIN_THROTTLE_* (today's lockout) are read by nothing here.
 """
 from __future__ import annotations
 
+import ipaddress
 import math
 import secrets
 import uuid
@@ -197,6 +202,33 @@ def clear_failures(username) -> int:
     return deleted
 
 
+def address_key(text) -> str:
+    """The client key of an address given to clear_signin_failures --address: an IPv4 address as it is, an IPv6
+    address or /64 prefix as its /64 (an IPv4-mapped one as its IPv4 address) - request_meta.client_key's own reading.
+    ValueError for anything else (a name, a wider or narrower network, a range)."""
+    text = str(text or '').strip()
+    if '/' in text:
+        network = ipaddress.ip_network(text)  # strict: host bits set is no prefix
+        if network.version != 6 or network.prefixlen != 64:
+            raise ValueError('an address is an IPv4 address, or an IPv6 address or /64 prefix')
+        text = str(network.network_address)
+    ipaddress.ip_address(text)  # ValueError when it is no address
+    return key_of_address(text)
+
+
+def clear_address(key) -> int:
+    """Delete the RateWindow rows of the client key ``key``: its failures and refusals, and those of every pair a name
+    was tried in from it in the last day (RateWindow rows older than a day are pruned by the daily maintenance). The
+    rows deleted."""
+    since = timezone.now() - timedelta(days=1)
+    tried = set(LoginAttempt.objects.filter(created_at__gte=since).values_list('username', 'client').distinct())
+    pairs = {pair_key(name, key) for name, address in tried if key_of_address(address) == key}
+    deleted = RateWindow.objects.filter(scope__in=(FAIL_CLIENT, REFUSED_CLIENT), key=key).delete()[0]
+    if pairs:
+        deleted += RateWindow.objects.filter(scope=FAIL_PAIR, key__in=pairs).delete()[0]
+    return deleted
+
+
 class Door:
     """One sign-in attempt at one door (``door``: request_meta.CPT or ADMIN) for one typed ``username`` (as the
     LoginAttempt stores it: at most 150 characters, unstorable ones replaced)."""
@@ -237,8 +269,7 @@ class Door:
         counted per minute, per username key and per address key."""
         now = timezone.now()
         since = _since(now)
-        client_rows = _rows(FAIL_CLIENT, self.client_key, since) + _rows(REFUSED_CLIENT, self.client_key, since)
-        client_rows.sort()
+        client_rows = _rows(FAIL_CLIENT, self.client_key, since)  # checked failures only: a refusal never counts here
         if sum(count for _, count in client_rows) >= settings.SIGNIN_CLIENT_LIMIT:
             return self._refuse(ADDRESS, _wait_below(client_rows, settings.SIGNIN_CLIENT_LIMIT, now))
         pair_rows = _rows(FAIL_PAIR, self.pair_key, since)

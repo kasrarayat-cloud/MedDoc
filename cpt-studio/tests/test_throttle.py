@@ -75,13 +75,15 @@ class DelayTests(ThrottleCase):
             self.assertEqual(attempt('owner', address=ADDRESS_B).status_code, 302)  # after the delay, from anywhere
 
     def test_a_flood_from_one_ipv6_slash_64_is_refused_from_that_network_only(self):
+        # 100 wrong passwords from addresses rotating inside one /64, for 30 names (each stays under its own delay, so
+        # every attempt reaches the password check): the 51st is refused from the network
         network = ipaddress.IPv6Network('2001:db8:1:2::/64')
-        answers = [attempt('owner', WRONG, address=str(network[index + 1])) for index in range(100)]
+        answers = [attempt(f'guess-{index % 30}', WRONG, address=str(network[index + 1])) for index in range(100)]
         flooded = sentence(answers[-1])
         self.assertIn('Too many attempts from this network. Wait', flooded)
         self.assertNotIn('a device you have used before', flooded)
         first_flood = next(index for index, answer in enumerate(answers) if 'from this network' in sentence(answer))
-        self.assertEqual(first_flood, settings.SIGNIN_CLIENT_LIMIT)  # 50 refused or failed attempts, then the network
+        self.assertEqual(first_flood, settings.SIGNIN_CLIENT_LIMIT)  # 50 failed attempts, then the network
         # another name from the same /64 is refused too; the same name from another network meets only its own delay
         self.assertIn('from this network', sentence(attempt('somebody-else', WRONG, address=str(network[999]))))
         elsewhere = sentence(attempt('somebody-else', WRONG, address='2001:db8:9:9::1'))
@@ -216,6 +218,42 @@ class KnownAddressTests(ThrottleCase):
         pair = attempt('owner', address=self.OFFICE)  # the right password, from the known address: the pair refuses
         self.assertEqual(pair.status_code, 400)
         self.assertIn('Too many attempts', sentence(pair))
+
+
+class AddressLimitTests(ThrottleCase):
+    """The address limit counts checked failures only, so it ends however often the network keeps trying, and the
+    ruled act clears it at once (refutation r2, finding 9; lockout/probes/lockprobe/test_p3_address.py)."""
+
+    OFFICE = '192.0.2.44'
+
+    def flood(self, address=None):
+        for index in range(settings.SIGNIN_CLIENT_LIMIT):  # 25 names, twice each: every attempt is checked
+            self.assertIn(views.SIGN_IN_REFUSED, sentence(attempt(f'colleague-{index % 25}', 'typo',
+                                                                   address=address or self.OFFICE)))
+
+    def test_a_network_that_keeps_trying_is_refused_only_until_its_failures_leave_the_window(self):
+        with Clock() as clock:
+            start = clock.moment
+            usual = Client(HTTP_HOST=CPT)
+            self.assertEqual(attempt('owner', address=self.OFFICE, client=usual).status_code, 302)  # a known device
+            usual.post('/logout/')
+            self.flood()
+            answers = []
+            for second in range(15, 20 * 60 + 1, 15):  # someone on the office network tries every 15 s, refused
+                clock.moment = start + timedelta(seconds=second)
+                attempt(f'colleague-{second % 7}', 'retry', address=self.OFFICE)
+                if second % 300 == 0:  # the owner, on the usual browser, every 5 minutes
+                    answer = attempt('owner', address=self.OFFICE, client=usual)
+                    answers.append('in' if answer.status_code == 302 else
+                                   'network' if 'from this network' in sentence(answer) else sentence(answer)[:80])
+                    if answer.status_code == 302:
+                        usual.post('/logout/')
+            # refused while the 50 failures are in the 15-minute window (5, 10 and 15 minutes), in at 20 minutes: the
+            # sixty refusals of the trickle meanwhile counted for nothing (once the window has passed, the trickle's
+            # own attempts reach the password check, and a failure among them counts as any failure does)
+            self.assertEqual(answers, ['network'] * 3 + ['in'])
+            self.assertGreater(throttle.refused_in('owner'), 0)  # refusals are still counted, for the Sign-ins page
+            self.assertGreater(rate.count(throttle.REFUSED_CLIENT, self.OFFICE, since=rate.window_start(60, start)), 0)
 
 
 class CrossDoorTests(ThrottleCase):
@@ -369,6 +407,48 @@ class ClearTests(ThrottleCase):
         self.assertEqual((event.actor_label, event.subject_id), ('Synthetic Person', self.owner.pk))
         self.assertGreater(event.data['rows_deleted'], 0)
         self.assertEqual(attempt('owner').status_code, 302)
+
+    def test_an_address_is_cleared_at_once_and_its_pairs_with_it(self):
+        office = '192.0.2.44'
+        for index in range(settings.SIGNIN_CLIENT_LIMIT):
+            attempt(f'colleague-{index % 25}', WRONG, address=office)
+        for _ in range(3):
+            attempt('owner', WRONG, address=office)  # the owner's pair from the office, under its own limit
+        self.assertIn('from this network', sentence(attempt('owner', address=office)))
+        before = models.LoginAttempt.objects.count()
+        output = self.run_command('--address', office, '--reason-file', self.reason_file(), '--by', 'Synthetic Person')
+        self.assertIn('counter row(s) deleted', output)
+        self.assertNotIn(office, output)
+        for scope in (throttle.FAIL_CLIENT, throttle.REFUSED_CLIENT):
+            self.assertFalse(models.RateWindow.objects.filter(scope=scope, key=office).exists(), scope)
+        self.assertFalse(models.RateWindow.objects.filter(
+            scope=throttle.FAIL_PAIR, key=throttle.pair_key('owner', office)).exists())
+        self.assertTrue(models.RateWindow.objects.filter(scope=throttle.FAIL_USER).exists())  # the names' own delays stay
+        self.assertEqual(models.LoginAttempt.objects.count(), before)
+        event = models.SecurityEvent.objects.get(event='signin.address_cleared')
+        self.assertEqual((event.actor_label, event.subject_id, event.data['address']), ('Synthetic Person', None, office))
+        self.assertGreater(event.data['rows_deleted'], 0)
+        self.assertEqual(attempt('owner', address=office).status_code, 302)
+
+    def test_an_ipv6_address_is_cleared_as_its_slash_64(self):
+        for index in range(settings.SIGNIN_CLIENT_LIMIT):
+            attempt(f'colleague-{index % 25}', WRONG, address=f'2001:db8:1:2::{index + 1:x}')
+        self.assertIn('from this network', sentence(attempt('owner', address='2001:db8:1:2::ff')))
+        for given in ('2001:db8:1:2:abcd::1', '2001:db8:1:2::/64'):
+            with self.subTest(given=given):
+                self.run_command('--address', given, '--reason-file', self.reason_file(), '--by', 'Synthetic Person')
+                self.assertEqual(models.SecurityEvent.objects.filter(event='signin.address_cleared').latest(
+                    'created_at').data['address'], '2001:db8:1:2::/64')
+        self.assertEqual(attempt('owner', address='2001:db8:1:2::ff').status_code, 302)
+
+    def test_an_address_that_is_none_or_a_network_of_another_size_is_refused(self):
+        for given in ('not-an-address', '2001:db8:1:2::/48', '2001:db8:1:2::1/64', '10.0.0.0/8', '192.0.2.300', ''):
+            with self.subTest(given=given), self.assertRaises(CommandError):
+                self.run_command('--address', given, '--reason-file', self.reason_file(), '--by', 'Synthetic Person')
+        with self.assertRaises(CommandError):  # one of the two, never both
+            self.run_command('--address', '192.0.2.44', '--username', 'owner', '--reason-file', self.reason_file(),
+                             '--by', 'Synthetic Person')
+        self.assertFalse(models.SecurityEvent.objects.exists())
 
     def test_it_refuses_without_a_person_or_a_known_account(self):
         attempt('owner', WRONG)
