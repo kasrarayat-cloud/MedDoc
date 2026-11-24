@@ -1330,18 +1330,21 @@ class ForcedChangeTests(AdminCase):
 
     def test_a_reset_after_the_72_hours_lets_the_person_sign_in_to_the_forced_change(self):
         # needs Lane 2's sign-in (studio/throttle.py and views.py: the 72-hour refusal and the forced change); fails on Lane 3's branch alone
-        flagged = timezone.now()
-        User.objects.filter(pk=self.reviewer.pk).update(password_change_required_at=flagged)  # a staff-set password
-        later = flagged + timedelta(hours=73)  # its 72 hours ran out: it no longer signs in
+        added = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'dr.expired',
+                                                  'name': 'Dr. Synthetic Expired', 'role': 'reviewer'})
+        self.assertEqual(added.status_code, 200)  # a staff-set password, by the real add-person: its 72 hours start
+        person = User.objects.get(username='dr.expired')
+        self.assertIsNotNone(person.password_change_required_at)
+        later = person.password_change_required_at + timedelta(hours=73)  # they ran out: it no longer signs in
         with mock.patch.object(timezone, 'now', return_value=later):
             console_session = ActsClient(ops.admin_client(self.operator_user))  # the second factor, at the moved clock
-            reset = console_session.post(f'/ops/people/{self.reviewer.pk}/password', {})  # the real console reset
+            reset = console_session.post(f'/ops/people/{person.pk}/password', {})  # the real console reset
             self.assertEqual(reset.status_code, 200)
             password = shown_password(reset)
-            self.reviewer.refresh_from_db()
-            self.assertEqual(self.reviewer.password_change_required_at, later)  # a new clock, in the reset's own save
+            person.refresh_from_db()
+            self.assertEqual(person.password_change_required_at, later)  # a new clock, in the reset's own save
             doctor = Client(HTTP_HOST='cpt.quillmd.com')
-            signed = doctor.post('/login/', {'username': self.reviewer.username, 'password': password})
+            signed = doctor.post('/login/', {'username': person.username, 'password': password})
             self.assertEqual(signed.status_code, 302)  # signed in: never the wrong-password refusal
             landing = signed['Location']
             if not landing.startswith('/account/'):
