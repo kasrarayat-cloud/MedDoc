@@ -2163,5 +2163,53 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.assertTrue(outcome['root_credentials'].endswith('/initial-credentials-neurosurgery.json'))
 
 
+
+# --- release 1's one migration (RELEASE-1-SPEC 3.1 and 3.7): the gate accepts it, and refuses it with an AlterField ----
+
+class ReleaseOneMigrationTests(TemporaryDirectoryTest):
+    MIGRATIONS = Path(__file__).resolve().parents[1] / 'studio' / 'migrations'
+    NAME = '0017_r1_security'
+    TABLES = ('AccessRecord', 'DisposalEvent', 'FileKey', 'OneTimeToken', 'RateWindow', 'SecondFactorCredential',
+              'SecondFactorRecoveryCode', 'SecurityEvent')
+    COLUMNS = ('auditevent.client', 'auditevent.request_id', 'auditevent.sign_in_ref', 'encounter.destroyed_at',
+               'loginattempt.door', 'loginattempt.outcome', 'loginattempt.sign_in_ref', 'operatorgrant.authorization_ref',
+               'operatorgrant.review_by', 'user.password_change_required_at', 'user.password_changed_at',
+               'workspace.closed_at')
+    # what the deliberate refusal adds: a change to a column an older revision writes (the gate refuses AlterField)
+    ALTER = ("        migrations.AlterField(model_name='loginattempt', name='client', "
+             "field=models.CharField(max_length=80)),\n")
+
+    def source(self):
+        return (self.MIGRATIONS / f'{self.NAME}.py').read_text(encoding='utf-8')
+
+    def test_the_gate_accepts_0017_and_says_why_for_every_operation(self):
+        found = install.migration_verdict(self.source())
+        self.assertTrue(found['safe'], found)
+        for table in self.TABLES:
+            self.assertIn(f'{table}: a new table no older revision reads', found['why'])
+        for column in self.COLUMNS:
+            self.assertIn(f'{column}: nullable', found['why'])  # nullable with no database default: an older pair
+        self.assertIn('loginattempt: an index (writes are not refused)', found['why'])  # leaves it NULL
+        self.assertIn('ratewindow: a constraint on a table this migration creates', found['why'])
+        self.assertEqual(install.migration_safety(self.MIGRATIONS)[self.NAME], found)
+
+    def test_a_deliberate_alterfield_in_a_scratch_copy_is_refused(self):
+        original = hashlib.sha256((self.MIGRATIONS / f'{self.NAME}.py').read_bytes()).hexdigest()
+        copy = self.tmp / 'migrations'
+        shutil.copytree(self.MIGRATIONS, copy, ignore=shutil.ignore_patterns('__pycache__'))
+        source = (copy / f'{self.NAME}.py').read_text(encoding='utf-8')
+        anchor = '    operations = [\n'
+        self.assertEqual(source.count(anchor), 1)
+        mutated = source.replace(anchor, anchor + self.ALTER)
+        (copy / f'{self.NAME}.py').write_text(mutated, encoding='utf-8')
+        self.assertIn('migrations.AlterField(', (copy / f'{self.NAME}.py').read_text(encoding='utf-8'))
+        verdicts = install.migration_safety(copy)
+        self.assertFalse(verdicts[self.NAME]['safe'])
+        self.assertIn('AlterField: not an additive operation this check reads', verdicts[self.NAME]['why'])
+        self.assertTrue(all(verdict['safe'] for name, verdict in verdicts.items() if name != self.NAME))
+        # the committed file itself was never touched
+        self.assertEqual(hashlib.sha256((self.MIGRATIONS / f'{self.NAME}.py').read_bytes()).hexdigest(), original)
+
+
 if __name__ == '__main__':
     unittest.main()
