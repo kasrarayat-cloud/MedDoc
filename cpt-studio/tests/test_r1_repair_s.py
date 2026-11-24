@@ -508,9 +508,11 @@ class ReadsPageIndexTests(TestCase):
         newest = models.AccessRecord.objects.order_by('-created_at', '-pk')[150]
         cursor_text = f'{newest.created_at.astimezone(dt_timezone.utc):%Y%m%dT%H%M%S.%fZ}~{newest.pk}'
         today = timezone.now().date().isoformat()
-        for query in ('', '?kind=member.list', '?kind=ops.reads', f'?day={today}', '?day=2001-01-01',
-                      f'?kind=ops.reads&day={today}', f'?before={cursor_text}'):
+        by_time, by_kind = 'studio_access_time', 'studio_access_view_time'
+        for query, index in (('', by_time), ('?kind=member.list', None), ('?kind=ops.reads', by_kind),
+                             (f'?day={today}', by_time), ('?day=2001-01-01', by_time),
+                             (f'?kind=ops.reads&day={today}', by_kind), (f'?before={cursor_text}', by_time)):
             with self.subTest(query=query):
                 plan = self.plan(self.window_query('/ops/activity/reads' + query))
                 self.assertNotIn('Seq Scan on studio_accessrecord', plan)
-                self.assertIn('studio_access', plan)
+                self.assertIn(index or 'studio_access', plan)  # a common kind may read either index
