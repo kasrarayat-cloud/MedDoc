@@ -1749,7 +1749,8 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         enrolment = json.loads((self.etc / install.OPERATOR_ENROLMENT).read_text())
         code = enrolment['code']
         self.assertEqual(self.mounted['code'], (code, 0o600))
-        self.assertGreaterEqual(len(code), 32)
+        # Lane 2's shape (refutation A-5a): 5 groups of 5 of its 31 characters, about 124 bits
+        self.assertRegex(code, r'^[abcdefghjkmnpqrstuvwxyz23456789]{5}(-[abcdefghjkmnpqrstuvwxyz23456789]{5}){4}$')
         self.assertEqual((enrolment['username'], enrolment['valid_seconds'], enrolment['url']),
                          ('platform-operator', 1800, 'https://admin.quillmd.com/login/enrol'))
         self.assertEqual(stat.S_IMODE((self.etc / install.OPERATOR_ENROLMENT).stat().st_mode), 0o600)

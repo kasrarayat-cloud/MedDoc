@@ -380,6 +380,8 @@ class ManageArgumentTests(unittest.TestCase):
              *reason),
             ('--command', 'dispose', '--dispose-step', 'ledger', *by),
             ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by),
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by,
+             '--execute', '--approved-by', 'Grace Hopper'),
             ('--command', 'export-workspace', '--workspace-id', WORKSPACE, *reason, *by),
         ]
         for extra in accepted:
@@ -408,6 +410,21 @@ class ManageArgumentTests(unittest.TestCase):
             'an approver outside execute': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
                                              WORKSPACE, *reason, *by, '--approved-by', 'Grace Hopper'),
                                             'belong to --dispose-step execute'),
+            # refutation, installer lens A-5b: a replay that destroys data again is carried out by two named people
+            'a replay carried out by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
+                                                    '--ledger-file', '/srv/ledger.json', *reason, *by, '--execute'),
+                                                   'replay-ledger --execute needs --approved-by'),
+            'a replay run and approved by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
+                                                         '--ledger-file', '/srv/ledger.json', *reason, *by,
+                                                         '--execute', '--approved-by', 'ADA LOVELACE'), 'differ'),
+            'an approver of a dry run': (('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
+                                          '/srv/ledger.json', *reason, *by, '--approved-by', 'Grace Hopper'),
+                                         'replay-ledger --execute'),
+            '--execute outside a replay': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
+                                            *by, '--approved-by', 'Grace Hopper', *reason, '--execute'),
+                                           '--execute belongs to --dispose-step replay-ledger'),
+            '--execute on another act': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason, *by,
+                                          '--execute'), 'not used by --command revoke-operator'),
             'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *reason, *by),
                                             '--ledger-file'),
             'a ledger file elsewhere': (('--command', 'dispose', '--dispose-step', 'ledger', '--ledger-file',
@@ -454,10 +471,14 @@ class ManageWorld:
                 self.mounted[Path(source).name] = (Path(source).read_text(), stat.S_IMODE(os.stat(source).st_mode),
                                                    stat.S_IMODE(os.stat(Path(source).parent).st_mode))
         for mount in kwargs.get('mounts', ()):
-            if mount.endswith(f'dst={install.EXPORT_MOUNT}'):  # the command writes its export into the folder
+            if mount.endswith(f'dst={install.EXPORT_MOUNT}'):  # the command makes its --out subfolder and writes there
                 folder = Path(mount.split('src=', 1)[1].split(',', 1)[0].replace(install.EXPORTS_DIR,
                                                                                     str(self.tmp / 'var-lib' /
                                                                                         'cpt-studio-exports')))
+                out = command[command.index('--out') + 1]
+                assert out.startswith(install.EXPORT_MOUNT + '/') and out != install.EXPORT_MOUNT, out
+                folder = folder / out[len(install.EXPORT_MOUNT) + 1:]
+                folder.mkdir()  # Lane 4 refuses a folder that already exists
                 for name, data in self.export_files.items():
                     (folder / name).parent.mkdir(parents=True, exist_ok=True)
                     (folder / name).write_bytes(data)
@@ -573,6 +594,14 @@ class ManagePhaseTests(TemporaryDirectoryTest):
                             '--by', 'Ada Lovelace')
         code = json.loads((world.etc / install.OPERATOR_ENROLMENT).read_text())['code']
         self.assertEqual(world.mounted['code'][:2], (code, 0o600))
+        # refutation, installer lens A-5a: Lane 2's plain_code() reads only its own shape - 5 groups of 5 characters
+        # of its alphabet, joined by hyphens (a cross-check against Lane 2's constants is added at integration)
+        self.assertEqual((install.CODE_ALPHABET, install.CODE_GROUP, install.SETUP_CODE_GROUPS),
+                         ('abcdefghjkmnpqrstuvwxyz23456789', 5, 5))
+        self.assertRegex(code, r'^[abcdefghjkmnpqrstuvwxyz23456789]{5}(-[abcdefghjkmnpqrstuvwxyz23456789]{5}){4}$')
+        codes = {install.new_setup_code() for _ in range(200)}
+        self.assertEqual(len(codes), 200)
+        self.assertTrue(all(len(each) == 29 and set(each) <= set(install.CODE_ALPHABET + '-') for each in codes))
         self.assertEqual(world.acts(), [['manage', 'issue_enrolment', '--username', 'platform-operator', '--code-file',
                                          '/run/cpt-manage/code', '--reason-file', '/run/cpt-manage/reason', '--by',
                                          'Ada Lovelace']])
@@ -641,13 +670,26 @@ class ManagePhaseTests(TemporaryDirectoryTest):
             ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON'):
                 ['--replay-ledger', '/run/cpt-manage/ledger', '--reason-file', '/run/cpt-manage/reason', '--by',
                  'Ada Lovelace', *authority],
+            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON', '--execute', '--approved-by',
+             'Grace Hopper'):
+                ['--replay-ledger', '/run/cpt-manage/ledger', '--execute', '--approved-by', 'Grace Hopper',
+                 '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace', *authority],
         }
+        modes = {'close': 'executed', 'plan': 'dry run', 'ledger': 'read'}
         for (step, *extra), expected in steps.items():
             with self.subTest(step=step, extra=extra):
                 details = world.run('--command', 'dispose', '--dispose-step', step, *extra, '--by', 'Ada Lovelace')
                 command, kwargs = world.oneshots[-1]
                 self.assertEqual(command, ['manage', 'dispose', *expected])
                 self.assertIn('CPT_STUDIO_SWITCH_STATE=idle', kwargs['environment'])
+                # refutation, installer lens A-5b: what the step did - a dry run never reads as done
+                mode = modes.get(step) or ('executed' if '--execute' in extra else 'dry run')
+                self.assertEqual(details['mode'], mode)
+                if mode == 'dry run':
+                    self.assertIn('dry run, nothing was changed', details['summary'])
+                    self.assertNotRegex(details['summary'], r': done|executed')
+                else:
+                    self.assertTrue(details['summary'].endswith(f'{step}: {mode}'), details['summary'])
         # the replayed ledger travelled as a RAM-only file, its digest in the receipt, never its text
         self.assertEqual(world.mounted['ledger'][0], '{"ledger": []}\n')
         self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})
@@ -658,16 +700,20 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         details = world.run('--command', 'export-workspace', '--workspace-id', WORKSPACE, '--reason-file', 'REASON',
                             '--by', 'Ada Lovelace')
         command, kwargs = world.oneshots[-1]
-        self.assertEqual(command, ['manage', 'export_workspace', '--workspace', WORKSPACE, '--out', '/run/cpt-export',
-                                   '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
-                                   '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
-        self.assertNotIn('environment', kwargs)  # an export is told nothing about the switch
-        self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR},readonly', kwargs['mounts'])
         folder = details['export']['folder']
         self.assertRegex(folder, rf'^{install.EXPORTS_DIR}/{WORKSPACE}-\d{{8}}T\d+Z$')
+        name = folder.rsplit('/', 1)[1]
+        # refutation, installer lens A-5d: --out is a NEW subfolder of the mounted folder, never the mount point,
+        # which Lane 4's export_workspace refuses
+        self.assertEqual(command, ['manage', 'export_workspace', '--workspace', WORKSPACE, '--out',
+                                   f'/run/cpt-export/{name}', '--reason-file', '/run/cpt-manage/reason', '--by',
+                                   'Ada Lovelace', '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
+        self.assertEqual(details['export']['out'], f'{folder}/{name}')
+        self.assertNotIn('environment', kwargs)  # an export is told nothing about the switch
+        self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR},readonly', kwargs['mounts'])
         self.assertIn(f'type=bind,src={folder},dst={install.EXPORT_MOUNT}', kwargs['mounts'])
         self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_SEAL_EXPORT])
-        self.assertEqual((details['export']['files'], details['export']['folders'], details['export']['bytes']), (2, 3, 10))
+        self.assertEqual((details['export']['files'], details['export']['folders'], details['export']['bytes']), (2, 4, 10))
         # everything in it is root's: the folders 0700 and the files 0600; the base folder too
         local = self.tmp / 'var-lib' / 'cpt-studio-exports'
         for path in [local, *local.rglob('*')]:
@@ -698,7 +744,8 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         world = ManageWorld(self.tmp)
         world.run('--command', 'require-password-change', '--all-human-accounts', '--reason-file', 'REASON', '--by',
                   'Ada Lovelace')
-        self.assertEqual(world.acts(), [['manage', 'require_password_change', '--all-human-accounts', '--reason-file',
+        # refutation, installer lens A-5c: Lane 2's command names every human account --all
+        self.assertEqual(world.acts(), [['manage', 'require_password_change', '--all', '--reason-file',
                                          '/run/cpt-manage/reason', '--by', 'Ada Lovelace']])
 
     def test_a_failed_act_fails_the_phase_and_a_bad_reason_file_runs_nothing(self):

@@ -720,7 +720,8 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   **operators** - and the command is then told `--regrant`), `issue-enrolment` and
   `reset-second-factor` (`--username --reason-file --by`; each issues a new
   setup code, kept as **operators** keeps one), `require-password-change`
-  (`--username` or `--all-human-accounts`, D22; never an automated account),
+  (`--username` or `--all-human-accounts`, which the command is given as its
+  `--all`, D22; never an automated account),
   `dispose` and `export-workspace` (below: **Disposal, returns and the
   ledger**). The reason file must be a short UTF-8 text file; it reaches the
   command as a RAM-only file under `/dev/shm`, and the receipt keeps its
@@ -1695,9 +1696,12 @@ release 1), run only through `--phase manage`, never over HTTP:
   different named people run and approve it (D14);
 - `--dispose-step ledger` prints the ledger - the MAC-signed list of every
   disposal - into the receipt; keep it with the receipts;
-- `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>`
-  re-applies the ledger after a database restore, so destroyed data stays
-  destroyed.
+- `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
+  on its own, a dry run that changes nothing (the receipt's `mode` says `dry
+  run`, and its summary never says done); with `--execute --approved-by
+  <another person>` it re-applies the ledger after a database restore, so
+  destroyed data stays destroyed - two different named people, as for a
+  disposal (D14).
 
 Every disposal step refuses while an install or switch-back is in progress (a
 `cpt-studio-web-next` or a `*-previous` container); only after that reading is
@@ -1705,14 +1709,18 @@ the command told so (`CPT_STUDIO_SWITCH_STATE=idle`, which it requires). It runs
 as the application's user with the files volume, the declaration passed as
 `--authorization-ref <declaration>@<commit>`. `--command export-workspace
 --workspace-id <id> --reason-file <file> --by <person>` writes one practice's
-documents and manifests into a new folder of its own, `/var/lib/cpt-studio-exports/
-<id>-<UTC>/` (the files volume read-only), which is then made root-only (folders
-0700, files 0600); the receipt counts its files and bytes and never names one.
+documents and manifests into a new folder of its own: the installer makes
+`/var/lib/cpt-studio-exports/<id>-<UTC>/` for the application's user, mounts it
+at `/run/cpt-export`, and the command makes `--out /run/cpt-export/<id>-<UTC>`
+inside it (Lane 4's command refuses a folder that exists; the files volume is
+read-only). Everything in it is then made root-only (folders 0700, files 0600);
+the receipt counts its files and bytes and never names one.
 Delivery to the practice is the termination runbook's step.
 
 **Restoring the database.** After any restore from a backup older than a
 disposal, replay the ledger before the site serves again
-(`--dispose-step replay-ledger`). The ledger's MAC is keyed by the
+(`--dispose-step replay-ledger --execute --approved-by <another person>`,
+after a dry run without `--execute`). The ledger's MAC is keyed by the
 application's `CPT_STUDIO_SECRET_KEY` (`/etc/cpt-studio/app.env`), so a restore
 must keep the same secret key: with another key the ledger cannot be verified,
 and destroyed data could come back.

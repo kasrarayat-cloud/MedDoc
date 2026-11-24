@@ -535,7 +535,7 @@ PHASE_ARGUMENTS = {
     'regrant': {'operators', 'manage'},
     'command': {'manage'}, 'username': {'manage'}, 'reason_file': {'manage'}, 'approved_by': {'manage'},
     'workspace_id': {'manage'}, 'encounter_id': {'manage'}, 'dispose_step': {'manage'}, 'plan_id': {'manage'},
-    'all_human_accounts': {'manage'}, 'ledger_file': {'manage'},
+    'all_human_accounts': {'manage'}, 'ledger_file': {'manage'}, 'execute': {'manage'},
 }
 
 
@@ -587,7 +587,11 @@ def parse_args(argv=None):
     parser.add_argument('--command', choices=sorted(MANAGE_COMMANDS), help='manage: the ruled act to run')
     parser.add_argument('--username', help='manage: the account the act is for')
     parser.add_argument('--reason-file', help='manage: an absolute path to the reason, a short UTF-8 text file')
-    parser.add_argument('--approved-by', help='manage dispose --dispose-step execute: the approving person (D14)')
+    parser.add_argument('--approved-by', help='manage dispose --dispose-step execute, or replay-ledger --execute: the '
+                                              'approving person (D14)')
+    parser.add_argument('--execute', action='store_true', default=None,
+                        help='manage dispose --dispose-step replay-ledger: replay it (without: a dry run that changes '
+                             'nothing); needs --approved-by')
     parser.add_argument('--workspace-id', help='manage dispose, export-workspace: the practice (a UUID)')
     parser.add_argument('--encounter-id', help='manage dispose --dispose-step plan: one document (a UUID)')
     parser.add_argument('--dispose-step', choices=DISPOSE_STEPS, help='manage dispose: the step')
@@ -7601,6 +7605,18 @@ print(ANSWER + json.dumps(found))
 # (D11, D12).
 OPERATOR_ENROLMENT = 'operator-enrolment.json'
 ENROLMENT_CODE_SECONDS = 1800
+# The setup code's shape is Lane 2's (studio.second_factor.new_code(SETUP_CODE_GROUPS)), the only one its plain_code()
+# reads from a --code-file: SETUP_CODE_GROUPS groups of CODE_GROUP characters of CODE_ALPHABET (no 0/o, 1/i/l), joined by
+# hyphens - 25 characters of 31, about 124 bits (refutation, installer lens A-5a; a test pins the three).
+CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+CODE_GROUP = 5
+SETUP_CODE_GROUPS = 5
+
+
+def new_setup_code() -> str:
+    """A setup code in Lane 2's shape, from the operating system's random source."""
+    return '-'.join(''.join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_GROUP)) for _ in range(SETUP_CODE_GROUPS))
+
 LEGACY_OPERATOR_CREDENTIALS = f'{ETC_DIR}/operator-credentials.json'
 LEGACY_AGENT_LOGIN = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
 MANAGE_MOUNT = '/run/cpt-manage'  # where a ruled act's RAM-only reason and code files are mounted
@@ -7736,7 +7752,7 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
     reaches the database; committed root-only to /etc/cpt-studio/OPERATOR_ENROLMENT through the root helper (staged
     first, discarded if the command fails). The code never appears in an argument, the output kept, a log or a
     receipt (assert_no_secret). {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
-    code = secrets.token_urlsafe(24)
+    code = new_setup_code()
     document = json.dumps({'service': 'cpt-studio', 'url': f'https://{ADMIN_HOST}/login/enrol', 'username': username,
                            'code': code, 'issued_at': utc_now(), 'valid_seconds': ENROLMENT_CODE_SECONDS,
                            'revision': ctx.revision, 'synthetic_only': True}, indent=2).encode()
@@ -7891,7 +7907,7 @@ MANAGE_COMMANDS = {
     'export-workspace': {'command': 'export_workspace', 'needs': ('workspace_id', 'reason_file', 'by'), 'files': True},
 }
 MANAGE_ARGUMENTS = ('command', 'username', 'reason_file', 'by', 'review_by', 'approved_by', 'workspace_id',
-                    'encounter_id', 'dispose_step', 'plan_id', 'all_human_accounts', 'ledger_file')
+                    'encounter_id', 'dispose_step', 'plan_id', 'all_human_accounts', 'ledger_file', 'execute')
 # dispose's steps (Lane 4's command, D1): close the practice, plan (a dry run), execute a plan (run by one named person and
 # approved by another), print the ledger (the MAC-signed list of disposals, keyed by the application's SECRET_KEY), and
 # replay a ledger after a database restore, so destroyed data stays destroyed
@@ -7915,7 +7931,7 @@ def manage_problem(args) -> str:
         if getattr(args, name, None) in (None, ''):
             return f'--command {args.command} needs --{name.replace("_", "-")}.'
     for name in ('username', 'workspace_id', 'encounter_id', 'plan_id', 'review_by', 'approved_by', 'dispose_step',
-                 'all_human_accounts', 'reason_file', 'ledger_file', 'regrant'):
+                 'all_human_accounts', 'reason_file', 'ledger_file', 'regrant', 'execute'):
         value = getattr(args, name, None)
         if value not in (None, '') and name not in entry['needs'] and not allowed_extra(args.command, name):
             return f'--{name.replace("_", "-")} is not used by --command {args.command}.'
@@ -7951,14 +7967,22 @@ def manage_problem(args) -> str:
             return f'--dispose-step {step} needs --workspace-id' + (' or --encounter-id.' if step == 'plan' else '.')
         if step == 'close' and args.encounter_id:
             return '--dispose-step close closes a whole practice: --encounter-id is not used.'
-        if step == 'execute':
-            if not (args.plan_id and args.approved_by):
-                return '--dispose-step execute needs --plan-id and --approved-by.'
+        if args.execute and step != 'replay-ledger':
+            return ('--execute belongs to --dispose-step replay-ledger (a replay is a dry run without it); '
+                    '--dispose-step execute carries out a plan.')
+        if step == 'execute' or (step == 'replay-ledger' and args.execute):
+            # a disposal and a replay that destroys data again are both carried out by two different named people
+            if not args.approved_by or (step == 'execute' and not args.plan_id):
+                return (f'--dispose-step {step}' + (' --execute' if step == 'replay-ledger' else '') + ' needs '
+                        + ('--plan-id and ' if step == 'execute' else '') + '--approved-by.')
             if args.approved_by.strip().casefold() == (args.by or '').strip().casefold():
                 return ('The person who approves a disposal is not the one who runs it (D14): --by and --approved-by '
                         'differ.')
+            if step == 'replay-ledger' and args.plan_id:
+                return '--plan-id belongs to --dispose-step execute.'
         elif args.plan_id or args.approved_by:
-            return '--plan-id and --approved-by belong to --dispose-step execute.'
+            return ('--plan-id and --approved-by belong to --dispose-step execute; --approved-by also to '
+                    'replay-ledger --execute.')
         if (step == 'replay-ledger') != bool(args.ledger_file):
             return '--ledger-file is the ledger --dispose-step replay-ledger replays, and only it takes one.'
         if step in ('ledger', 'replay-ledger') and (args.workspace_id or args.encounter_id):
@@ -7971,7 +7995,24 @@ def allowed_extra(command, name) -> bool:
     return {('require-password-change', 'username'), ('require-password-change', 'all_human_accounts'),
             ('dispose', 'workspace_id'), ('dispose', 'encounter_id'), ('dispose', 'plan_id'),
             ('dispose', 'approved_by'), ('dispose', 'reason_file'), ('dispose', 'ledger_file'),
-            ('grant-operator', 'regrant')}.__contains__((command, name))
+            ('grant-operator', 'regrant'), ('dispose', 'execute')}.__contains__((command, name))
+
+
+def export_name(args) -> str:
+    """The export's folder name, <workspace>-<UTC>: made once per run (the host folder and Lane 4's --out subfolder
+    inside it share it)."""
+    if getattr(args, '_export_name', None) is None:
+        args._export_name = f'{args.workspace_id}-{stamp()}'
+    return args._export_name
+
+
+def dispose_mode(args) -> str:
+    """What a dispose step did, for its receipt (refutation, installer lens A-5b): a plan and a replay without
+    --execute are dry runs that change nothing - never read as done."""
+    step = args.dispose_step
+    if step == 'plan' or (step == 'replay-ledger' and not args.execute):
+        return 'dry run'
+    return 'read' if step == 'ledger' else 'executed'
 
 
 def install_in_progress() -> list:
@@ -7991,11 +8032,14 @@ def manage_argv(ctx, args, entry) -> list:
                 authorization_of(ctx), '--review-by', args.review_by,
                 *(['--regrant'] if getattr(args, 'regrant', None) else [])]
     if args.command == 'require-password-change':
-        who = ['--username', args.username] if args.username else ['--all-human-accounts']
+        # Lane 2's command names every human account --all (the installer's own flag stays --all-human-accounts)
+        who = ['--username', args.username] if args.username else ['--all']
         return [*command, *who, *reason, '--by', args.by]
     if args.command == 'export-workspace':
-        return [*command, '--workspace', args.workspace_id, '--out', EXPORT_MOUNT, *reason, '--by', args.by,
-                '--authorization-ref', authorization_of(ctx)]
+        # Lane 4's export_workspace writes into a folder it makes itself: a NEW subfolder of the mounted export
+        # folder, never the mount point (which it refuses)
+        return [*command, '--workspace', args.workspace_id, '--out', f'{EXPORT_MOUNT}/{export_name(args)}', *reason,
+                '--by', args.by, '--authorization-ref', authorization_of(ctx)]
     if args.command == 'dispose':
         step, authority = args.dispose_step, ['--authorization-ref', authorization_of(ctx)]
         given = reason if args.reason_file else []
@@ -8010,7 +8054,9 @@ def manage_argv(ctx, args, entry) -> list:
                     *given, *authority]
         if step == 'ledger':
             return [*command, '--ledger', *given, '--by', args.by, *authority]
-        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *given, '--by', args.by, *authority]
+        # without --execute Lane 4's replay is a dry run; with it, two named people carry it out
+        execute = ['--execute', '--approved-by', args.approved_by] if args.execute else []
+        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *execute, *given, '--by', args.by, *authority]
     raise InstallError(f'--command {args.command} has no command line here.')
 
 
@@ -8134,8 +8180,8 @@ def phase_manage(ctx) -> dict:
     if args.command == 'grant-operator':
         record['grant_check'] = record_grant
     if args.command == 'dispose':
-        record.update(step=args.dispose_step, ledger=({'sha256': sha256(ledger), 'bytes': len(ledger)}
-                                                      if ledger is not None else None))
+        record.update(step=args.dispose_step, mode=dispose_mode(args),
+                      ledger=({'sha256': sha256(ledger), 'bytes': len(ledger)} if ledger is not None else None))
     if entry.get('code'):
         record['setup_code'] = issue_setup_code(ctx, image_id, env, args.username, command=entry['command'], by=args.by,
                                                 reason=reason)
@@ -8145,10 +8191,10 @@ def phase_manage(ctx) -> dict:
     files = entry.get('files')
     export = None
     if args.command == 'export-workspace':  # D2: a new folder of its own, root-only on the host
-        export = f'{args.workspace_id}-{stamp()}'
+        export = export_name(args)
         run_helper(H_EXPORT_DIR, {'dir': PurePosixPath(EXPORTS_DIR).name, 'name': export, 'uid': APP_UID},
                    mounts=[EXPORTS_MOUNT])
-        record['export'] = {'folder': f'{EXPORTS_DIR}/{export}'}
+        record['export'] = {'folder': f'{EXPORTS_DIR}/{export}', 'out': f'{EXPORTS_DIR}/{export}/{export}'}
     try:
         with RamFiles('cpt-studio-manage-', shared=bool(files)) as ram:
             mounts = [ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')] if reason is not None else []
@@ -8176,8 +8222,14 @@ def phase_manage(ctx) -> dict:
     if result.returncode:
         raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
                            details=record)
+    done = 'done'
+    if args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
+        done = ('dry run, nothing was changed' + ('; to replay it, run again with --execute and --approved-by'
+                                                   if args.dispose_step == 'replay-ledger' else ''))
+    elif args.command == 'dispose':
+        done = record['mode']
     return {**record, 'summary': f'{args.command}' + (f' {args.dispose_step}' if args.command == 'dispose' else '')
-                                 + (f' {args.username}' if args.username else '') + ': done'
+                                 + (f' {args.username}' if args.username else '') + f': {done}'
                                  + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')}
 
 
