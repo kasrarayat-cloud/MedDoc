@@ -6,6 +6,8 @@
   holding a line break is refused.
 - D2 (dataloss-2): a real SIGTERM or SIGHUP while a statement after the commit waits on a lock is recorded 'failed' with
   its certificate, and the command still ends with 128 + the signal's number.
+- D3 (failclosed-6): an export whose 'exported' DisposalEvent cannot be written is removed, and the command says nothing
+  was kept; a copy that cannot be removed is said to remain.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -13,19 +15,21 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import signal
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
 import psycopg
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
-from studio import disposal, models, storage
+from studio import disposal, models, record_bundle, storage
 from studio.management.commands import dispose as dispose_cmd
 from tests import test_disposal as td
 from tests.support import coding as f
@@ -373,3 +377,179 @@ class StopSignalDuringAStatementTests(TransactionTestCase):
 
     def test_control_ctrl_c_while_the_vacuum_waits_on_a_lock(self):
         self.assert_recorded(signal.SIGINT, 'KeyboardInterrupt', 'KeyboardInterrupt')
+
+
+# --- D3: an export whose record cannot be written ------------------------------------------------------------------------
+
+@contextmanager
+def exported_rows_fail(body):
+    """A BEFORE INSERT trigger on studio_disposalevent for stage 'exported' whose function's body is ``body``: the
+    verifier's faults, made at the database - no code under test is patched. Dropped afterwards, on a fresh connection
+    (the fault may have ended the old one)."""
+    name = 'r1repd_exported_fault'
+    with connection.cursor() as cursor:
+        cursor.execute(f'CREATE OR REPLACE FUNCTION {name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {body} '
+                       'RETURN NEW; END $$')
+        cursor.execute(f"CREATE TRIGGER {name} BEFORE INSERT ON studio_disposalevent FOR EACH ROW WHEN "
+                       f"(NEW.stage = 'exported') EXECUTE FUNCTION {name}()")
+    try:
+        yield
+    finally:
+        connection.close()
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP TRIGGER IF EXISTS {name} ON studio_disposalevent')
+            cursor.execute(f'DROP FUNCTION IF EXISTS {name}()')
+
+
+@override_settings(SESSION_ENGINE='django.contrib.sessions.backends.db')
+class UnrecordedExportTests(TransactionTestCase):
+    """D3, failclosed-6: export_workspace writes a whole practice's copy, then its 'exported' DisposalEvent. When that
+    row cannot be written - the database refuses it, goes away, or Ctrl-C comes while it is written - the copy is
+    removed as a half-written one is, and the command says nothing was kept; when the copy cannot be removed, it says a
+    copy may remain. In autocommit, as the command runs."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        override = override_settings(ORIGINALS_DIR=self.root / 'originals')
+        override.enable()
+        self.addCleanup(override.disable)
+        self.ws, other = f.workspace('Synthetic A'), f.workspace('Synthetic B')
+        for ws in (self.ws, other):
+            user = f.member(ws)
+            enc = f.encounter(ws, user, title='ZZ-TITLE-MARKER export')
+            f.upload(enc, user, data=f.PDF_BYTES + b' ZZ-TEXT-MARKER ' + str(ws.pk).encode(), filename='zz-file-marker.pdf')
+        self.reason = td.reason_file(self.root, 'Synthetic: the practice ended its contract and asked for its data.')
+        self.originals = td.folder_digests(self.ws.pk)
+        (self.root / 'exports').mkdir(mode=0o700)
+
+    def export(self, name='export'):
+        """(the export folder, stdout, stderr, what ended the command or None)."""
+        out, printed, errors, raised = self.root / 'exports' / name, io.StringIO(), io.StringIO(), None
+        try:
+            call_command('export_workspace', '--workspace', str(self.ws.pk), '--out', str(out), '--by',
+                         'Synthetic Operator', '--reason-file', self.reason, stdout=printed, stderr=errors)
+        except (CommandError, KeyboardInterrupt) as exc:
+            raised = exc
+        return out, printed.getvalue(), errors.getvalue(), raised
+
+    def assert_nothing_kept(self, out, printed, raised):
+        self.assertFalse(os.path.lexists(out))
+        self.assertEqual(os.listdir(self.root / 'exports'), [])
+        connection.close()  # a fresh connection reads what was recorded
+        self.assertFalse(Event.objects.filter(stage=Event.EXPORTED).exists())
+        self.assertEqual(td.folder_digests(self.ws.pk), self.originals)  # the export only read the originals
+        for marker in ('ZZ-TITLE-MARKER', 'ZZ-TEXT-MARKER', 'zz-file-marker'):
+            self.assertNotIn(marker, printed + str(raised))
+
+    def test_control_an_export_with_its_record(self):
+        out, printed, errors, raised = self.export()
+        self.assertIsNone(raised)
+        event = Event.objects.get(stage=Event.EXPORTED)
+        self.assertEqual(event.manifest_digest, hashlib.sha256((out / 'manifest.json').read_bytes()).hexdigest())
+        self.assertIn(f'DisposalEvent {event.pk} (exported)', printed)
+
+    def test_the_lenss_export_whose_record_the_database_refuses_keeps_nothing(self):
+        with exported_rows_fail("RAISE EXCEPTION 'synthetic: the exported record is refused';"):
+            out, printed, errors, raised = self.export()
+        self.assertIsInstance(raised, CommandError)
+        self.assertIn("The export's DisposalEvent could not be written (", str(raised))
+        self.assertIn('nothing was kept', str(raised))
+        self.assert_nothing_kept(out, printed, raised)
+
+    def test_an_export_whose_database_goes_away_at_the_record_keeps_nothing(self):
+        with exported_rows_fail('PERFORM pg_terminate_backend(pg_backend_pid());'):
+            out, printed, errors, raised = self.export()
+        self.assertIsInstance(raised, CommandError)
+        self.assertIn('(OperationalError), so the export was removed: nothing was kept', str(raised))
+        self.assert_nothing_kept(out, printed, raised)
+
+    def test_ctrl_c_while_the_record_is_written_keeps_nothing_and_goes_on(self):
+        # a real SIGINT once pg_stat_activity shows the row's INSERT running (its trigger sleeps)
+        watcher, main, sent, done = None, threading.get_ident(), [], threading.Event()
+
+        def interrupt_once_it_runs():
+            deadline = time.monotonic() + 90
+            while not done.is_set() and time.monotonic() < deadline:
+                running = watcher.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND state = 'active' AND "
+                    "query LIKE 'INSERT INTO \"studio_disposalevent\"%'").fetchone()[0]
+                if running:
+                    sent.append(True)
+                    signal.pthread_kill(main, signal.SIGINT)
+                    return
+                time.sleep(0.02)
+
+        params = {key: value for key, value in connection.get_connection_params().items()
+                  if key not in ('cursor_factory', 'context')}
+        watcher = psycopg.connect(**params, autocommit=True)
+        watching = threading.Thread(target=interrupt_once_it_runs, daemon=True)
+        before = signal.signal(signal.SIGINT, signal.default_int_handler)  # Ctrl-C, as in a terminal
+
+        def start_watching(execute, sql, params, many, context):
+            if sql.startswith('INSERT INTO "studio_disposalevent"') and watching.ident is None:
+                watching.start()
+            return execute(sql, params, many, context)
+        try:
+            with exported_rows_fail('PERFORM pg_sleep(60);'), connection.execute_wrapper(start_watching):
+                out, printed, errors, raised = self.export()
+        finally:
+            done.set()
+            if watching.ident is not None:
+                watching.join(timeout=120)
+            watcher.close()
+            signal.signal(signal.SIGINT, before)
+        self.assertEqual(sent, [True])  # the control: the signal went while the row was written
+        self.assertIsInstance(raised, KeyboardInterrupt)  # it goes on as an interrupt
+        self.assertIn("Interrupted (KeyboardInterrupt) while the export's DisposalEvent was written: the export was "
+                      'removed, and nothing was kept', errors)
+        self.assert_nothing_kept(out, printed, raised)
+
+    def test_a_copy_that_cannot_be_removed_is_said_to_remain(self):
+        # the record is refused, and one folder of the copy cannot be emptied (made read-only as the row is written)
+        made = []
+
+        def lock_a_folder(execute, sql, params, many, context):
+            if sql.startswith('INSERT INTO "studio_disposalevent"') and not made:
+                folder = next((self.root / 'exports' / 'export' / 'documents').iterdir()) / 'original'
+                os.chmod(folder, 0o500)
+                made.append(folder)
+            return execute(sql, params, many, context)
+        try:
+            with exported_rows_fail("RAISE EXCEPTION 'synthetic: refused';"), connection.execute_wrapper(lock_a_folder):
+                out, printed, errors, raised = self.export()
+        finally:
+            for folder in made:
+                os.chmod(folder, 0o700)
+        self.assertIsInstance(raised, CommandError)
+        self.assertIn('could not be written (', str(raised))
+        self.assertIn("its folder could not be removed: a complete or partial copy of the practice's data may remain",
+                      str(raised))
+        self.assertNotIn('nothing was kept', str(raised))
+        self.assertTrue(out.exists())  # what the sentence says
+        self.assertTrue(any(path.is_file() for path in out.rglob('*')))
+        record_bundle.discard_export(out)  # the person's clean-up, once the folder can be emptied
+        self.assertFalse(Event.objects.filter(stage=Event.EXPORTED).exists())
+
+    def test_a_failed_export_that_cannot_be_removed_is_said_to_remain(self):
+        # a failure inside export_practice (as tests.test_bundles fails it), while one of its folders cannot be emptied
+        made = []
+
+        def failing_trail(workspace):
+            folder = next((self.root / 'exports' / 'export' / 'documents').iterdir()) / 'original'
+            os.chmod(folder, 0o500)
+            made.append(folder)
+            raise RuntimeError('synthetic: the audit trail cannot be read')
+        try:
+            with mock.patch.object(record_bundle, '_audit_trail', side_effect=failing_trail):
+                out, printed, errors, raised = self.export()
+        finally:
+            for folder in made:
+                os.chmod(folder, 0o700)
+        self.assertIsInstance(raised, CommandError)
+        self.assertIn('The export failed (RuntimeError), and its folder could not be removed', str(raised))
+        self.assertTrue(out.exists())
+        record_bundle.discard_export(out)
+        self.assertFalse(os.path.lexists(out))
+        self.assertFalse(Event.objects.filter(stage=Event.EXPORTED).exists())

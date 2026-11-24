@@ -15,7 +15,9 @@
                                          one folder per document holding what its bundle holds - with every stored report
                                          - and a practice manifest in JSON and CSV listing documents, codes, decisions
                                          with who and when, answers and the practice's audit trail, with the sha256 of
-                                         every file, and SHA256SUMS. Folders 0700, files 0600, written once.
+                                         every file, and SHA256SUMS. Folders 0700, files 0600, written once. A
+                                         failed export removes its folder (discard_export), as export_workspace does
+                                         when the export's DisposalEvent cannot be written.
 
 Every query is scoped to the one document it reads (encounter_id), or to the one practice: nothing of another document
 or practice can enter a bundle or an export. Delivery of a practice's export - encrypted, through a time-limited link,
@@ -169,6 +171,15 @@ class ExportRefused(Exception):
     """The practice export cannot be written where it was asked to be (a fixed sentence)."""
 
 
+class ExportKept(Exception):
+    """A practice export that failed - or whose 'exported' DisposalEvent could not be written - could not be removed:
+    a copy of the practice's data may remain in its folder (a fixed sentence). Said instead of "nothing was kept"."""
+
+
+EXPORT_KEPT = ("its folder could not be removed: a complete or partial copy of the practice's data may remain in the "
+               'export folder (--out). Remove it by hand.')
+
+
 def _write(path: Path, data: bytes) -> dict:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'wb') as handle:
@@ -218,19 +229,37 @@ def export_practice(workspace, folder, *, now=None) -> dict:
     try:
         return _export_into(workspace, root, now)
     except BaseException:
-        _discard(root)  # a half-written export is a stray copy of PHI: the folder this run made goes with it
+        # a half-written export is a stray copy of PHI: the folder this run made goes with it - or ExportKept says it
+        # could not (raised from the failure)
+        discard_export(root)
         raise
 
 
-def _discard(root: Path) -> None:
-    """Remove the folder export_practice made, and everything this run wrote into it (nothing else can be in it: it
-    did not exist before). A symbolic link is removed, never followed."""
-    for path in sorted(root.rglob('*'), key=lambda item: len(item.parts), reverse=True):
-        if path.is_dir() and not path.is_symlink():
-            path.rmdir()
-        else:
-            path.unlink(missing_ok=True)
-    root.rmdir()
+def discard_export(root) -> None:
+    """Remove a practice export's folder - export_practice's own, which nothing else writes into (it did not exist
+    before) - and everything in it: on a failure inside export_practice, and when the export's 'exported'
+    DisposalEvent cannot be written (export_workspace; refutation failclosed-6). Every entry is tried, a symbolic link
+    removed and never followed; ExportKept when the folder is still there afterwards, so "nothing was kept" is said
+    only when it is true."""
+    root = Path(root)
+    try:
+        entries = sorted(root.rglob('*'), key=lambda item: len(item.parts), reverse=True)
+    except OSError:
+        entries = []  # what cannot be listed is found below: the folder stays
+    for path in entries:
+        try:
+            if path.is_dir() and not path.is_symlink():
+                path.rmdir()
+            else:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue  # the others are removed all the same; the folder stays, and that is said
+    try:
+        root.rmdir()
+    except OSError:
+        pass  # gone already, or still there: said below
+    if os.path.lexists(root):
+        raise ExportKept(EXPORT_KEPT)
 
 
 def _export_into(workspace, root: Path, now) -> dict:
