@@ -260,11 +260,17 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   changes (recreating the container would interrupt the site: the owner's
   call). Release 1 (A3): its memory and memory + swap must be 512m each and its
   own cgroup (read inside it) must allow no swap. When they differ, the
-  cgroup's `memory.peak` and `memory.swap.current` are read first; below 80% of
-  512 MiB the limits are set on the running container (`docker update --memory
-  512m --memory-swap 512m`: no restart, no connection dropped) and the receipt
-  records them before and after; otherwise it refuses and prints the numbers,
-  so the owner can choose a larger limit. Then (A5) `ALTER SYSTEM` sets
+  cgroup's `memory.peak` and `memory.swap.current` are read first, and their
+  sum - what sits in swap is memory the database used - must stay below 80% of
+  512 MiB; the limits are then set on the running container (`docker update
+  --memory 512m --memory-swap 512m`: no restart, no connection dropped) and the
+  receipt records them before and after; otherwise it refuses and prints the
+  numbers, so the owner can choose a larger limit. `memory.peak` counts only
+  since the container last started, so the change is made only once it has run
+  7 days (a week of the practices' use); a younger one is skipped - its limits
+  left as they are, the receipt saying why - and `verify` reports the swap
+  until a later `db` makes the change. A stopped database is never started
+  here: the phase refuses, starting and changing nothing. Then (A5) `ALTER SYSTEM` sets
   `log_min_error_statement` to `panic` and `log_error_verbosity` to `terse`
   (they persist in `postgresql.auto.conf` on the data volume), `pg_reload_conf()`
   applies them without a restart, and `SHOW` on fresh connections must read

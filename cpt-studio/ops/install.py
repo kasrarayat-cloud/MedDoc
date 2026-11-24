@@ -3643,11 +3643,33 @@ def cgroup_bytes(cgroup, name):
     return int(value) if value.isascii() and value.isdigit() else None
 
 
+# A3 (refutation, installer lens A-6): memory.peak is the cgroup's high-water mark since the container last started, so
+# it says what the database needs only once it has seen the practices' use - a week holds every weekday's clinic load,
+# the heaviest coding rounds and the report exports. A younger peak (after a host reset, say) may have seen no busy day
+# at all, and turning swap off on it would be a guess: the change is skipped, and the receipt says why.
+DB_PEAK_MIN_UPTIME_DAYS = 7
+
+
+def started_seconds_ago(container):
+    """How long ago Docker last started ``container`` (State.StartedAt, UTC, nanoseconds cut), or None when it does not
+    say - Docker's zero time (never started) included."""
+    match = re.fullmatch(r'(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?Z',
+                         str(((container or {}).get('State') or {}).get('StartedAt', '')))
+    if not match:
+        return None
+    started = dt.datetime.strptime(match.group(1), '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc)
+    if started.year < 2000:
+        return None
+    return (dt.datetime.now(dt.timezone.utc) - started).total_seconds()
+
+
 def db_memory(container) -> dict:
     """A3, on an existing database container: as installed, or - when its HostConfig or its cgroup differ from
     db_args' 512m/512m (swap off) - updated in place with `docker update --memory 512m --memory-swap 512m` (applied to
-    the running container: no restart, no connection dropped), but only while its memory.peak stays below
-    DB_PEAK_SHARE of 512 MiB; otherwise refused with the numbers, nothing changed. {'state', 'before', 'after'}."""
+    the running container: no restart, no connection dropped), but only once it has run DB_PEAK_MIN_UPTIME_DAYS (a
+    younger memory.peak is skipped, and said) and while its memory.peak plus what it has in swap now stays below
+    DB_PEAK_SHARE of 512 MiB; otherwise refused with the numbers, its limits left as they are.
+    {'state', 'before', 'after'}."""
     def reading(found, cgroup):
         host = found.get('HostConfig') or {}
         return {'memory': host.get('Memory'), 'memory_swap': host.get('MemorySwap'), 'cgroup': cgroup}
@@ -3655,17 +3677,28 @@ def db_memory(container) -> dict:
     before = reading(container, cgroup)
     if not db_memory_problems(container, cgroup):
         return {'state': 'as installed', 'before': before}
+    uptime = started_seconds_ago(container)
+    if uptime is None or uptime < DB_PEAK_MIN_UPTIME_DAYS * 86400:
+        ran = 'an unknown time' if uptime is None else f'{uptime / 86400:.1f} days'
+        return {'state': 'skipped', 'before': before, 'uptime_seconds': uptime,
+                'why': f'{DB_CONTAINER} has run {ran} since it last started, under {DB_PEAK_MIN_UPTIME_DAYS}: its '
+                       'memory.peak has not yet seen a week of the practices\' use, so turning swap off at '
+                       f'{DB_MEMORY} would be a guess. Its limits were left as they are; rerun --phase db once it has '
+                       f'run {DB_PEAK_MIN_UPTIME_DAYS} days (verify reports the swap until then).'}
     peak, swapped = cgroup_bytes(cgroup, 'memory.peak'), cgroup_bytes(cgroup, 'memory.swap.current')
     if peak is None or swapped is None:
         raise InstallError(f'{DB_CONTAINER}\'s memory limits are not {DB_MEMORY}/{DB_MEMORY} (no swap), and its cgroup\'s '
                            'memory.peak and memory.swap.current cannot be read, so it cannot be told whether turning swap '
-                           'off in place is safe; nothing was changed.', details={'before': before})
+                           'off in place is safe; its limits were left as they are.', details={'before': before})
     limit = int(DB_PEAK_SHARE * DB_MEMORY_BYTES)
-    if peak >= limit:
-        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB; {swapped} bytes in '
-                           f'swap now), not below {DB_PEAK_SHARE:.0%} of {DB_MEMORY} ({limit} bytes): turning swap off at '
-                           f'{DB_MEMORY} could get it killed, so nothing was changed. The owner decides on a larger '
-                           'limit (RELEASE-1-SPEC A3).', details={'before': before, 'peak': peak, 'swap': swapped})
+    # what sits in swap now is memory the database used and could need back once swap is off (refutation A-6)
+    used = peak + swapped
+    if used >= limit:
+        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB) and holds {swapped} '
+                           f'bytes ({swapped / 2 ** 20:.1f} MiB) in swap now, {used / 2 ** 20:.1f} MiB together, not below '
+                           f'{DB_PEAK_SHARE:.0%} of {DB_MEMORY} ({limit} bytes): turning swap off at {DB_MEMORY} could get '
+                           'it killed, so its limits were left as they are. The owner decides on a larger limit '
+                           '(RELEASE-1-SPEC A3).', details={'before': before, 'peak': peak, 'swap': swapped})
     docker('update', '--memory', DB_MEMORY, '--memory-swap', DB_MEMORY, DB_CONTAINER, timeout=60)
     updated = inspect('container', DB_CONTAINER) or {}
     after = reading(updated, db_cgroup())
@@ -6577,6 +6610,12 @@ def phase_db(ctx) -> dict:
                'files_volume': ensure_volume(FILES_VOLUME, 'files')}
     files_volume_helper({})
     container = inspect('container', DB_CONTAINER)
+    if container is not None and not (container.get('State') or {}).get('Running'):
+        # refutation, installer lens A-6: never started here - a database that stopped did so for a reason, and the
+        # memory.peak a start begins would describe minutes, not its use
+        raise InstallError(f'{DB_CONTAINER} exists but is stopped. The db phase never starts it: find out why it stopped, '
+                           f'start it by hand (docker start {DB_CONTAINER}), then rerun. It was not started and its '
+                           'limits and settings were not changed.')
     if container is None:
         problem = port_problem(DB_PORT, DB_CONTAINER)
         if problem:
@@ -6590,21 +6629,21 @@ def phase_db(ctx) -> dict:
         if problems:
             raise InstallError(f'{DB_CONTAINER} exists but ' + '; '.join(problems) + '. Nothing was changed: recreating '
                                'it would interrupt the site, which is the owner\'s call (ops/INSTALL.md, db).')
-        if not container['State'].get('Running'):
-            docker('start', DB_CONTAINER)
         details['container'] = 'present'
     wait_db_ready()
     details['memory'] = db_memory(inspect('container', DB_CONTAINER) or {})  # A3
     container = inspect('container', DB_CONTAINER)
     cgroup = db_cgroup()
-    problems = db_container_problems(container, postgres['Id'], cgroup)
+    skipped = details['memory']['state'] == 'skipped'  # its memory limits stay as they are, and said
+    problems = db_container_problems(container, postgres['Id'], cgroup, memory=not skipped)
     if problems:
         raise InstallError(f'{DB_CONTAINER} ' + '; '.join(problems) + '.', details={**details, 'cgroup': cgroup})
     details['statement_logging'] = db_statement_logging()  # A5
+    memory = (f'memory limits left as they are ({details["memory"]["why"]})' if skipped
+              else f'memory {DB_MEMORY} with no swap ({details["memory"]["state"]})')
     details.update(container_id=container['Id'], image_id=postgres['Id'], cgroup=cgroup,
-                   summary=f'{DB_CONTAINER} ready on 127.0.0.1:{DB_PORT} ({details["container"]}); memory '
-                           f'{DB_MEMORY} with no swap ({details["memory"]["state"]}); statement text kept out of its '
-                           'log')
+                   summary=f'{DB_CONTAINER} ready on 127.0.0.1:{DB_PORT} ({details["container"]}); {memory}; '
+                           'statement text kept out of its log')
     return details
 
 

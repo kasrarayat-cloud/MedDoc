@@ -145,9 +145,19 @@ MIB = 2 ** 20
 POSTGRES_ID = 'sha256:' + 'e' * 64
 
 
-def db_container(*, memory=512 * MIB, swap=512 * MIB, cap_drop=('ALL',), core=True, shm=128 * MIB, running=True):
-    """The database container as docker inspect shows it - by default exactly as db_args starts it."""
-    return {'Id': 'db-1', 'Image': POSTGRES_ID, 'State': {'Running': running},
+def started(days):
+    """Docker's State.StartedAt ``days`` ago (nanoseconds, as Docker writes it)."""
+    import datetime
+    moment = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    return moment.strftime('%Y-%m-%dT%H:%M:%S.123456789Z')
+
+
+def db_container(*, memory=512 * MIB, swap=512 * MIB, cap_drop=('ALL',), core=True, shm=128 * MIB, running=True,
+                 uptime_days=30):
+    """The database container as docker inspect shows it - by default exactly as db_args starts it, 30 days ago."""
+    return {'Id': 'db-1', 'Image': POSTGRES_ID,
+            'State': {'Running': running, 'StartedAt': started(uptime_days) if uptime_days is not None
+                      else '0001-01-01T00:00:00Z'},
             'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'db'}},
             'NetworkSettings': {'Networks': {install.NETWORK: {}}},
             'HostConfig': {'PortBindings': {'5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(install.DB_PORT)}]},
@@ -291,6 +301,45 @@ class DatabaseMemoryTests(TemporaryDirectoryTest):
         self.assertIn('does not drop every capability', str(error))
         self.assertIn("owner's call", str(error))
         self.assertEqual((world.acts('update'), world.acts('exec')), ([], []))
+
+    def test_a_stopped_database_is_never_started_here(self):
+        # refutation, installer lens A-6: the phase started it, then judged swap-off by the peak that start began
+        world = DbWorld(db_container(swap=-1, running=False), peak=40 * MIB, swapped=0)
+        details, error = world.run(self.tmp)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('exists but is stopped', str(error))
+        self.assertIn('It was not started', str(error))
+        self.assertEqual(world.calls, [])  # no start, no update, no exec
+
+    def test_a_peak_younger_than_a_week_skips_the_swap_change_and_says_why(self):
+        for days in (0.01, 2, 6.9, None):
+            with self.subTest(days=days):
+                world = DbWorld(db_container(swap=-1, uptime_days=days), peak=40 * MIB, swapped=0)
+                details, error = world.run(self.tmp)
+                self.assertIsNone(error, error and str(error))
+                memory = details['memory']
+                self.assertEqual(memory['state'], 'skipped')
+                self.assertIn('under 7', memory['why'])
+                self.assertEqual(world.acts('update'), [])
+                self.assertIn('memory limits left as they are', details['summary'])
+                self.assertEqual(details['statement_logging']['shown'], dict(install.DB_LOG_SETTINGS))  # A5 still set
+        world = DbWorld(db_container(swap=-1, uptime_days=7.1), peak=40 * MIB, swapped=0)
+        details, error = world.run(self.tmp)
+        self.assertEqual(details['memory']['state'], 'updated')
+
+    def test_what_sits_in_swap_counts_into_the_peak(self):
+        # refutation, installer lens A-6: 300 MiB resident + 250 MiB in swap is 550 MiB, over 512 MiB
+        world = DbWorld(db_container(swap=-1), peak=300 * MIB, swapped=250 * MIB)
+        details, error = world.run(self.tmp)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('550.0 MiB together', str(error))
+        self.assertIn('limits were left as they are', str(error))
+        self.assertEqual(world.acts('update'), [])
+        world = DbWorld(db_container(swap=-1), peak=300 * MIB, swapped=100 * MIB)  # 400 MiB, under 409.6
+        details, error = world.run(self.tmp)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(details['memory']['state'], 'updated')
+        self.assertEqual(install.DB_PEAK_MIN_UPTIME_DAYS, 7)
 
     def test_a_container_as_installed_is_left_as_it_is(self):
         world = DbWorld(db_container(), swap_max='0')
