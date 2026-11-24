@@ -1107,3 +1107,48 @@ class ResetLockOrderRaceTests(TransactionTestCase):
         self.assertNotEqual((recover.status, recover.location), (302, '/ops/'))  # the code was void by then: refused
         self.assert_reset_kept(operator)
         self.assertNotEqual(waiting.get('/ops/').status_code, 200)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class KeySignInAgainstTheResetTests(TransactionTestCase):
+    """The lead's last item of repair round 2 (builder s2's residual): the admin door's key sign-in
+    (second_factor_views.second_factor -> complete_sign_in) wrote its signed-in session, and so its link, only in the
+    middleware's save after login(), so a server reset served between them ended the account's sessions without it - and
+    the console's gate reads the session's second-factor mark, not the keys the reset removed, so that session kept the
+    console with no key. The sign-in now takes the account first and saves its session before its commit, as the
+    recovery and setup sign-ins do. Held right after its login() deleted the pending row; the reset sent meanwhile."""
+
+    def tearDown(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'r2s2%%'")
+            self.assertEqual(cursor.fetchone()[0], 0)
+        super().tearDown()
+
+    def test_a_key_sign_in_never_outlives_a_reset_served_after_it(self):
+        operator, authenticator = enrolled_operator('r2s2-key-reset')
+        browser = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
+        self.assertEqual(password_step(browser, operator)['Location'], '/login/second-factor')
+        pending_key = browser.cookies[settings.SESSION_COOKIE_NAME].value
+        credential = json.dumps(authenticator.assertion(options_of(browser)))
+        key = Worker('key', lambda: browser.post('/login/second-factor', {'credential': credential}))
+        reset = Call('reset', lambda: second_factor.reset(operator, 'Synthetic Person'))
+        before = deadlocks_counted()
+        with server_errors() as errors, held_right_after_deleting(pending_key, key) as release:
+            key.start()
+            self.assertTrue(wait_until(lambda: wait_of(key) == ('Lock', 'advisory')), 'the key sign-in never reached the hold')
+            reset.start()
+            self.assertTrue(wait_until(lambda: reset.done or reset.error is not None or wait_of(reset)[0] == 'Lock'),
+                            'the reset neither finished nor waited on a lock')
+            release()
+            key.join(90)
+            reset.join(90)
+        self.assertFalse(key.is_alive() or reset.is_alive())
+        assert_no_deadlock(self, before)
+        self.assertEqual(errors, [])
+        self.assertIsNone(key.error)
+        self.assertEqual((reset.done, reset.error), (True, None))
+        self.assertEqual(second_factor.active_keys(operator).count(), 0)  # the reset removed the key
+        # signed in first (302) - or its answer met its session ended by the reset served after it (400,
+        # SessionInterrupted): either way the console is closed to that browser afterwards
+        self.assertIn(key.status, (302, 400))
+        self.assertNotEqual(browser.get('/ops/').status_code, 200)

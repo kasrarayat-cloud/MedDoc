@@ -102,7 +102,15 @@ def second_factor(request):
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # the pending sign-in was dropped
             else:
                 if purpose == factor.SIGN_IN:
-                    if not factor.complete_sign_in(request, user, state):
+                    # the account first (studio.session_store's lock order), and the session with its link written
+                    # before the commit, so an end of the account's sessions served after this sign-in - the server's
+                    # reset waiting on the account - ends it too, as the recovery and setup sign-ins do (repair round 2
+                    # of release 1, builder s2's residual); the key check above stays outside
+                    with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+                        session_store.lock_accounts([user.pk])
+                        signed_in = factor.complete_sign_in(request, user, state)
+                        request.session.save()
+                    if not signed_in:
                         return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
                 else:
                     factor.refresh(request)
