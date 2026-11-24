@@ -593,8 +593,8 @@ YES, UNKNOWN = 'yes', 'unknown'  # counts['rows_destroyed'] of a run whose commi
 DECIDE, DECIDED, INTERRUPTED = 'needs a person\'s decision', 'decided', 'interrupted'
 # the DisposalEvent each destruction writes INSIDE its own transaction, before the commit: the commit proves the
 # deletion and its record together, or neither. 'completed' and 'failed' describe the file phase after it.
-COMMITTED = 'committed'
-LEDGER_STAGES = (*DisposalEvent.STAGES, COMMITTED)
+COMMITTED = DisposalEvent.COMMITTED
+LEDGER_STAGES = DisposalEvent.STAGES  # every stage, the committed one included
 
 
 @dataclass

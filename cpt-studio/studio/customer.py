@@ -48,7 +48,7 @@ from django.utils import timezone
 
 from . import decisions, jobs, models, state
 from .fable import result as fable_result
-from .storage import ALLOWED_SUFFIXES, read_original
+from .storage import ALLOWED_SUFFIXES, read_own_original
 
 Round, Revision, Export = models.CodingRound, models.SourceRevision, models.ExportArtifact
 PDF, DOCX, TEXT = ALLOWED_SUFFIXES['.pdf'], ALLOWED_SUFFIXES['.docx'], ALLOWED_SUFFIXES['.txt']
@@ -326,14 +326,14 @@ def view_content(encounter):
             return None
         return (revision.pasted_text or '').encode('utf-8'), TEXT_SERVED, 'pasted-text.txt'
     if source.media_type == PDF:
-        return read_original(source), PDF, safe_name(source.original_name)
+        return read_own_original(encounter.workspace_id, source), PDF, safe_name(source.original_name)
     if source.media_type == TEXT:
-        return read_original(source), TEXT_SERVED, safe_name(source.original_name)
+        return read_own_original(encounter.workspace_id, source), TEXT_SERVED, safe_name(source.original_name)
     if source.media_type == DOCX:
         view = converted_view(encounter)
         if view is None:
             return None
-        return read_original(_converted_file(view)), PDF, converted_name(source)
+        return read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source)
     return None
 
 
@@ -374,9 +374,11 @@ def download_content(encounter, *, original=False) -> Optional[Download]:
         view = converted_view(encounter)
         if view is None:
             raise OriginalOnly(ORIGINAL_ONLY)
-        return Download(read_original(_converted_file(view)), PDF, converted_name(source), CONVERTED,
+        return Download(read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source),
+                        CONVERTED,
                         view.view_pdf_sha256, 'pdf')
-    return Download(read_original(source), source.media_type, safe_name(source.original_name), ORIGINAL, source.sha256,
+    return Download(read_own_original(encounter.workspace_id, source), source.media_type, safe_name(source.original_name),
+                    ORIGINAL, source.sha256,
                     EXTENSIONS.get(source.media_type, 'bin'))
 
 

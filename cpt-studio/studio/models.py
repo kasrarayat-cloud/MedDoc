@@ -1143,7 +1143,10 @@ class DisposalEvent(ImmutableModel):
     completed, failed, closed or exported, with counts per table, file counts, the manifest's digest, who ran and who
     approved it, and the authorization. The ledger that is re-applied after a restore (D1, item 10)."""
     PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED = 'planned', 'completed', 'failed', 'closed', 'exported'
-    STAGES = (PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED)
+    # written inside a destruction's own transaction, before its commit (Lane 4, round 3): the commit proves both or
+    # neither, and a replay treats the run as destroyed whatever follows it
+    COMMITTED = 'committed'
+    STAGES = (PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED, COMMITTED)
     DOCUMENT, WORKSPACE = 'document', 'workspace'  # its scope: one document, or a whole practice
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)

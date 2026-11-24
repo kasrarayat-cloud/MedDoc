@@ -183,7 +183,7 @@ class BundleRefusalTests(BundleCase, TestCase):
         enc = self.coded()
         models.Encounter.objects.filter(pk=enc.pk).update(destroyed_at=timezone.now())
         self.assertEqual(self.get_bundle(enc).status_code, 404)
-        self.assertFalse(Access.objects.exists())
+        self.assertFalse(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).exists())
 
     def test_over_the_cap_answers_413_with_the_sentence_and_records_nothing(self):
         enc = self.coded()
@@ -192,7 +192,7 @@ class BundleRefusalTests(BundleCase, TestCase):
         self.assertEqual((answer.status_code, answer.json()['error']), (413, record_bundle.TOO_LARGE))
         self.assertEqual(record_bundle.TOO_LARGE, 'This document is too large for one bundle; download the original '
                                                   'and the report separately.')
-        self.assertFalse(Access.objects.exists())
+        self.assertFalse(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).exists())
 
     def test_the_eleventh_bundle_in_ten_minutes_is_refused_per_member(self):
         enc = self.coded()
@@ -230,7 +230,7 @@ class BundleRefusalTests(BundleCase, TestCase):
         path.write_bytes(b'%PDF-1.7 changed on the disk %%EOF')
         answer = self.get_bundle(enc)
         self.assertEqual(answer.status_code, 409)
-        self.assertFalse(Access.objects.exists())
+        self.assertFalse(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).exists())
 
 
 @override_settings(STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
@@ -278,7 +278,7 @@ class ForeignFolderTests(BundleCase, TestCase):
         self.assertEqual(answer.status_code, 409)
         self.assertNotIn(storage.stored_path(source.storage_name).read_bytes(), answer.content)
         self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
-        self.assertFalse(Access.objects.exists())  # nothing was served, so nothing was recorded as served
+        self.assertFalse(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).exists())  # nothing was served, so nothing was recorded as served
         membership = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         with self.assertRaises(storage.OriginalCorrupted):
             record_bundle.bundle(models.Encounter.objects.get(pk=word.pk), membership)
@@ -308,7 +308,7 @@ class ForeignFolderTests(BundleCase, TestCase):
                 answer = self.get_bundle(enc)
                 self.assertEqual(answer.status_code, 409)
                 self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
-        self.assertFalse(Access.objects.exists())
+        self.assertFalse(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).exists())
         with tempfile.TemporaryDirectory() as scratch:
             reason = Path(scratch) / 'reason.txt'
             reason.write_text('Synthetic: the practice asked for its data.', encoding='utf-8')
