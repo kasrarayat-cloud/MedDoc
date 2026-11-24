@@ -5060,18 +5060,18 @@ def has_converter(revision) -> bool:
 SESSION_POLICY_FILES = (f'{APP}/studio/sessions.py',)
 SESSIONS_ENDED_EVENT = 'sessions.ended_at_install'
 SESSIONS_ENDED_ACTOR = 'installer'
-SESSIONS_LOCK_TIMEOUT = '30s'  # a session row a web is saving holds the delete back at most this long
-END_EVERY_SESSION = f'''
+# (the lock timeout: a session row a web is saving holds the delete back at most that long, as LICENSE_NOTE_FIX's)
+END_EVERY_SESSION = '''
 from django.contrib.sessions.models import Session
 from django.db import connection, transaction
 from studio import security_events
 with transaction.atomic():
     with connection.cursor() as cursor:
-        cursor.execute("SET LOCAL lock_timeout = '{SESSIONS_LOCK_TIMEOUT}'")
+        cursor.execute("SET LOCAL lock_timeout = '30s'")
     ended = Session.objects.all().delete()[0]
     event = security_events.record(P['event'], actor_label=P['actor_label'], count=ended,
                                    from_revision=P['from_revision'], to_revision=P['to_revision'])
-print(ANSWER + json.dumps({{'ended': ended, 'event': str(event.pk)}}))
+print(ANSWER + json.dumps({'ended': ended, 'event': str(event.pk)}))
 '''
 
 
