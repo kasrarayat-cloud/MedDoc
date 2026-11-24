@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import functools
 import uuid
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import timedelta
 from importlib import import_module
 from unittest import mock
 
