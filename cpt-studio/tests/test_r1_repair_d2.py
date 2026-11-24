@@ -15,7 +15,8 @@ record.
 - D2-2 (records-2): what the daily maintenance deletes and its maintenance.daily SecurityEvent commit together or neither
   does - the rows in one transaction with it, the files once it has committed - and a run whose record cannot be written
   is tried again an hour later in that worker, never at every tick. Then (the lead's follow-up) what the files' removal
-  did goes in a record of its own after the commit, whose failure is logged and undoes nothing.
+  did goes in a record of its own after the commit, whose failure is logged and undoes nothing; and the orphan sweep
+  command records first, so a record the database refuses removes nothing.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -799,3 +800,15 @@ class DailyRecordTests(TransactionTestCase):
         clock.now += jobs.STALE_SWEEP_SECONDS
         self.assertFalse(self.tick(state, clock))  # never tried again at the next tick: the day's run is recorded
 
+    def test_records_2_a_sweep_whose_record_is_refused_removes_nothing(self):
+        seed = self.seed('sweep refused')
+        with security_events_refused(f"NEW.event = '{maintenance.SWEPT_EVENT}'"):
+            with self.assertRaises(DatabaseError):
+                call_command('sweep_orphan_files', '--delete', stdout=io.StringIO())
+        self.assertTrue(seed['orphan'].exists())  # refused before anything was removed
+        self.assertFalse(models.SecurityEvent.objects.filter(event=maintenance.SWEPT_EVENT).exists())
+        out = io.StringIO()
+        call_command('sweep_orphan_files', '--delete', stdout=out)  # the refusal lifted: recorded, then removed
+        self.assertFalse(seed['orphan'].exists())
+        self.assertEqual(models.SecurityEvent.objects.get(event=maintenance.SWEPT_EVENT).data['orphans'], 1)
+        self.assertIn('deleted 1', out.getvalue())

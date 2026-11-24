@@ -372,8 +372,11 @@ class SweepTests(OriginalsCase, TestCase):
         for text in (dry.getvalue(), out.getvalue()):
             for name in (self.original, self.converted, self.orphan, self.young):
                 self.assertNotIn(name.split('/')[1], text)  # never a file's name
+        # recorded first (round 2, records-2): what the sweep found and goes on to remove; what it removed is printed
         event = models.SecurityEvent.objects.get(event=maintenance.SWEPT_EVENT)
-        self.assertEqual((event.data['deleted'], event.data['orphans'], event.data['named']), (1, 1, 2))
+        self.assertEqual((event.data['orphans'], event.data['named'], event.data['young']), (1, 2, 1))
+        self.assertNotIn('deleted', event.data)
+        self.assertIn('deleted 1', out.getvalue())
         self.assertNotIn(self.orphan, stored_files(self.root))
 
 
