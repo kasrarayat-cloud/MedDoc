@@ -397,6 +397,14 @@ class WorkspaceTests(AdminCase):
         password = shown_password(added)
         doctor = Client()
         self.assertEqual(doctor.post('/login/', {'username': 'spine-owner', 'password': password}).status_code, 302)
+        # release 1, B4 (Lanes 2 and 3 combined): a password staff set must be replaced by its owner before anything is
+        # shown - the API answers 403 password_change_required until the person chooses their own on /account/
+        refused = doctor.get('/api/encounters')
+        self.assertEqual((refused.status_code, refused.json()), (403, {'error': 'password_change_required'}))
+        own = 'spine owner chooses a long passphrase 2026'
+        changed = doctor.post('/account/', {'current_password': password, 'new_password': own,
+                                            'new_password_again': own})
+        self.assertEqual(changed.status_code, 302)
         listing = doctor.get('/api/encounters')
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(listing.json()['encounters'], [])

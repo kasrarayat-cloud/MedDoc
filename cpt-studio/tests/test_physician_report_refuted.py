@@ -9,7 +9,7 @@ content."""
 import io
 import json
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from pypdf import PdfReader
 
 from studio import models, physician_pdf, state
@@ -25,6 +25,7 @@ def words(n, start=0):
     return ' '.join(WORDS[(start + i) % len(WORDS)] for i in range(n))
 
 
+@override_settings(EXPORT_LIMIT_PER_MEMBER=(10_000, 600), EXPORT_LIMIT_PER_WORKSPACE=(10_000, 3600))  # C5: layout cases, not limits
 class RefutedCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
@@ -37,7 +38,7 @@ class RefutedCase(r.CustomerCase, TestCase):
 
     def pdf(self, enc, kind, client=None) -> bytes:
         made = self.make(enc, kind, client)
-        self.assertEqual(made.status_code, 201, made.content)
+        self.assertIn(made.status_code, (200, 201), made.content)  # release 1, C5: a current report is the stored copy
         return (client or self.client).get(made.json()['download_url']).content
 
     # --- L1-1: what is open is one list; the count and the status agree with it ------------------------------------------

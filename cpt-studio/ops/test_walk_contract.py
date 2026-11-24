@@ -91,7 +91,7 @@ def encounter():
 def session():
     return {'user': {'id': 'u1', 'label': 'Coder1', 'initials': 'C', 'actor_kind': 'human'},
             'workspace': {'id': 'w1', 'name': 'Gastroenterology', 'specialty': 'Gastroenterology'}, 'role': 'reviewer',
-            'can_review': True,
+            'can_review': True, 'can_manage_team': False,
             'acknowledgement': 'I reviewed this code against the document.', 'counts': {'documents': 1, 'queue': 0}}
 
 

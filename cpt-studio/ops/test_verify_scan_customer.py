@@ -52,7 +52,7 @@ def session_json() -> dict:
                      'actor_kind': 'agent'},
             'workspace': {'id': 'fa000000-0000-4000-8000-000000000002', 'name': 'Gastroenterology',
                           'specialty': 'Gastroenterology'},
-            'role': 'reviewer', 'can_review': True,
+            'role': 'reviewer', 'can_review': True, 'can_manage_team': False,
             'acknowledgement': 'I read the whole source document. This synthetic review is not clinical approval.',
             'counts': {'documents': 1, 'queue': 0}}
 

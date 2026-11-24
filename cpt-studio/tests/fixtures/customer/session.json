@@ -12,6 +12,7 @@
  },
  "role": "reviewer",
  "can_review": true,
+ "can_manage_team": false,
  "acknowledgement": "I read the whole source document, not only the quoted passages, and it supports this code as a service performed at this encounter. The coding review can be wrong. This synthetic review is not clinical approval or billing advice.",
  "counts": {
   "documents": 12,

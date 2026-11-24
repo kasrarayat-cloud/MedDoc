@@ -226,7 +226,8 @@ class ConsoleGateTests(AdminHostCase):
             ids = {'<uuid:encounter_id>': str(encounter.pk), '<uuid:user_id>': str(self.member.pk),
                    '<uuid:workspace_id>': str(self.ws.pk)}
             field_sets = [
-                {'username': 'sweep-person', 'workspace': str(self.ws.pk), 'role': 'reviewer', 'name': 'Sweep Person'},
+                {'username': 'sweep-person', 'workspace': str(self.ws.pk), 'role': 'reviewer', 'name': 'Sweep Person',
+                 'requested_by': 'Synthetic ticket 1'},  # release 1, C3: every access act asks who requested it
                 {'membership': str(membership.pk), 'role': 'owner', 'back': '/ops/people'},
                 {'access': 'off', 'back': '/ops/people'}, {'access': 'on', 'back': '/ops/people'},
                 {'name': 'Sweep Workspace', 'category': str(self.ws.category.pk)},

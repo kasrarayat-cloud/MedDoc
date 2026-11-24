@@ -13,7 +13,7 @@ Characters are built with chr() so no invisible or look-alike character sits in 
 import json
 import time
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from studio import customer, models, physician_pdf, state
 from tests.support import rounds as r
@@ -28,6 +28,7 @@ def words(n, start=0):
     return ' '.join(VOCAB[(start + i) % len(VOCAB)] for i in range(n))
 
 
+@override_settings(EXPORT_LIMIT_PER_MEMBER=(10_000, 600), EXPORT_LIMIT_PER_WORKSPACE=(10_000, 3600))  # C5: layout cases, not limits
 class RoundFourCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
@@ -38,7 +39,7 @@ class RoundFourCase(r.CustomerCase, TestCase):
         number = state.latest_round(enc).number
         made = self.client.post(f'/api/encounters/{enc.pk}/reports', data=json.dumps(
             {'kind': kind, 'fmt': 'pdf', 'round': number}), content_type='application/json')
-        self.assertEqual(made.status_code, 201, made.content)
+        self.assertIn(made.status_code, (200, 201), made.content)  # release 1, C5: a current report is the stored copy
         return self.client.get(made.json()['download_url']).content
 
     # --- R4-2-2, R4-2-6, R4-2-9, R4-2-5: the name runs ---------------------------------------------------------------------
