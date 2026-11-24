@@ -1571,12 +1571,14 @@ class SwitchBackArgumentTests(ArgumentTestCase):
         self.assertIs(install.PHASES['switch-back'], install.phase_switch_back)
 
     def test_switch_back_takes_the_previous_pair_s_modes_like_app_and_no_access_check(self):
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--astra-mode', 'live',
-                          '--authorization-ref', RULING)
-        self.assertEqual((args.provider_mode, args.astra_mode, args.fable_mode), ('live', 'live', 'disabled'))
+        # release 1 (A8): the previous pair's legacy providers are started disabled; live is refused (no BAA)
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'disabled')
+        self.assertEqual((args.provider_mode, args.astra_mode, args.fable_mode), ('disabled', 'disabled', 'disabled'))
         self.assertIn('--phase switch-back needs an explicit --provider-mode', self.refused('--phase', 'switch-back'))
-        self.assertIn('--provider-mode live needs --authorization-ref',
-                      self.refused('--phase', 'switch-back', '--provider-mode', 'live'))
+        for extra in (('--provider-mode', 'live'), ('--provider-mode', 'live', '--authorization-ref', RULING),
+                      ('--provider-mode', 'disabled', '--astra-mode', 'live', '--authorization-ref', RULING)):
+            with self.subTest(extra=extra):
+                self.assertIn('live is refused', self.refused('--phase', 'switch-back', *extra))
         self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--access-check')
 
 
@@ -2115,20 +2117,23 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts('reload'), [])
 
     def test_a_previous_pair_that_runs_the_interpreter_is_started_with_the_mode_it_is_given(self):
+        # release 1 (A8): never live again (the earlier interpreter's vendor has no BAA) - refused, nothing started
         world = self.switched_in()
         args = switch_back_args(self.tmp, interpreter_mode='live', authorization_ref=RULING)
         details, error = run_holding_the_key(world, install.phase_switch_back, args)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('--interpreter-mode live is refused', str(error))
+        self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost'), [])
+        self.assertEqual([shot for shot in world.oneshots if shot[1][-1] == install.INTERPRETER_CREDENTIALS_CHECK], [])
+        # replayed it sends nothing: started so, and no key is bound or checked
+        world = self.switched_in()
+        details, error = run_holding_the_key(world, install.phase_switch_back,
+                                             switch_back_args(self.tmp, interpreter_mode='replay'))
         self.assertIsNone(error, error and str(error))
-        self.assertEqual(flags(world.runs[WORKER], '--mount')[-1], KEY_MOUNT)
+        self.assertNotIn(KEY_MOUNT, flags(world.runs[WORKER], '--mount'))
         webs_never_hold_the_key(self, world)
-        self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(world.runs[NEXT], '-e'))
-        # its loader check ran in the PREVIOUS pair's image, before anything was started
-        (image, command, kwargs), = [shot for shot in world.oneshots
-                                     if shot[1][-1] == install.INTERPRETER_CREDENTIALS_CHECK]
-        self.assertEqual((image, kwargs), (OLD_IMAGE, {'network': 'none', 'interpreter_file': True, 'timeout': 120}))
-        self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
-                        world.events.index(('run', 'web', NEXT, 9150, OLD_IMAGE)))
-        self.assertIn('interpreter live) on 9150', details['summary'])
+        self.assertIn('CPT_STUDIO_GEMINI_MODE=replay', flags(world.runs[NEXT], '-e'))
+        self.assertIn('interpreter replay) on 9150', details['summary'])
 
 
     def test_a_previous_pair_that_codes_is_started_with_the_coding_mode_it_is_given(self):

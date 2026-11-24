@@ -41,6 +41,7 @@ import traceback
 import zipfile
 from inspect import getsource
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -525,13 +526,14 @@ def parse_args(argv=None):
                              '(disabled when not given)')
     parser.add_argument('--authorization-ref')
     parser.add_argument('--provider-mode', choices=('disabled', 'live'),
-                        help='switch-back only, and required there: Corti\'s mode for the previous pair, as its own '
-                             'app phase was given it (the Fable coding build has no Corti)')
+                        help='switch-back only, and required there: Corti\'s mode for the previous pair (the Fable '
+                             'coding build has no Corti); release 1 refuses live (A8: no BAA)')
     parser.add_argument('--astra-mode', choices=('disabled', 'live'),
-                        help='switch-back only: Astra (OpenAI) for the previous pair; disabled when not given')
+                        help='switch-back only: Astra (OpenAI) for the previous pair; disabled when not given; '
+                             'release 1 refuses live (A8)')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'),
                         help='switch-back only: the Fable participant (Anthropic) for the previous pair; disabled when '
-                             'not given')
+                             'not given; release 1 refuses live (A8)')
     parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
                         help='switch-back only: the previous pair\'s interpreter (Claude Fable 5.2, AMENDMENT-2: the '
                              'Fable participant\'s Anthropic key; design/FINAL.md 13), disabled when not given; live '
@@ -563,6 +565,26 @@ def parse_args(argv=None):
     return args
 
 
+# Release 1 (RELEASE-1-SPEC A8; VEN-8): no way back to a vendor that has no BAA. The earlier pipelines' live modes - Corti
+# (--provider-mode), the harness participants Astra (OpenAI) and the old Fable participant, and the Gemini-era interpreter
+# - are refused in app and in switch-back, so an earlier pair is started only with no provider of those (disabled, or the
+# interpreter replayed). The Fable coder (--coding-mode) is not one of them. Their key copies stay untouched on the host:
+# deleting them is the owner's decision (D21, an accepted capability loss).
+LEGACY_LIVE_MODES = {'provider_mode': 'Corti', 'astra_mode': 'Astra (OpenAI)',
+                     'fable_mode': 'the earlier Fable participant', 'interpreter_mode': 'the earlier interpreter'}
+
+
+def legacy_live_problem(args) -> str:
+    """The refusal of a live legacy mode (A8), or ''."""
+    for name, vendor in LEGACY_LIVE_MODES.items():
+        if getattr(args, name, None) == 'live':
+            flag = '--' + name.replace('_', '-')
+            return (f'{flag} live is refused: it would start an earlier pair sending to {vendor}, a vendor with no '
+                    f'business associate agreement (RELEASE-1-SPEC A8). Give {flag} disabled'
+                    + (' or replay' if name == 'interpreter_mode' else '') + '; nothing was changed.')
+    return ''
+
+
 def argument_problem(args) -> str:
     if not SHA_RE.fullmatch(args.revision):
         return '--revision must be a full 40-character lowercase commit sha.'
@@ -581,8 +603,11 @@ def argument_problem(args) -> str:
         if args.phase == 'app' and coding is None:
             return '--phase app needs an explicit --coding-mode (disabled or live).'
         if args.phase == 'switch-back' and args.provider_mode is None:
-            return ("--phase switch-back needs an explicit --provider-mode (disabled or live): the previous pair's, as "
-                    'its own app phase was given it.')
+            return ("--phase switch-back needs an explicit --provider-mode (disabled): the previous pair's, which "
+                    'release 1 starts with no provider that has no business associate agreement (A8).')
+        problem = legacy_live_problem(args)
+        if problem:
+            return problem
         # The Fable coder sends under the recorded authority every live mode needs (jobs._live_gate).
         if coding == 'live' and not args.authorization_ref:
             return '--coding-mode live needs --authorization-ref (a ruling file tracked at the revision).'
@@ -599,8 +624,7 @@ def argument_problem(args) -> str:
             return '--interpreter-mode live needs --authorization-ref (a ruling file tracked at the revision).'
         if (args.authorization_ref and coding != 'live' and args.provider_mode != 'live' and not participants
                 and not interpreting):
-            return ('--authorization-ref only applies to --coding-mode live, or to a switch-back\'s --provider-mode '
-                    'live, --astra-mode live, --fable-mode live or --interpreter-mode live.')
+            return '--authorization-ref only applies to --coding-mode live.'
         reference = args.authorization_ref
         if reference and (not AUTH_REF_RE.fullmatch(reference) or '..' in reference.split('/') or len(reference) > 200):
             return '--authorization-ref must be a relative repository path.'
@@ -1990,10 +2014,40 @@ def routing_diff(before: dict, after: dict):
     return sorted(key for key in keys if before.get(key) != after.get(key))
 
 
+# Release 1 (RELEASE-1-SPEC B7): /health/ answers a request that came through nginx (it carries X-Forwarded-For) with
+# 'release_digest' - the first 16 hex characters of sha256(HEALTH_DIGEST_PREFIX + the release) - instead of 'release';
+# a direct probe of the web's own port (wait_service, the container's health check) still gets 'release'. An earlier
+# revision answers 'release' on both paths. HEALTH_DIGEST_PREFIX is cptstudio/settings.py's (a test pins the two).
+HEALTH_DIGEST_PREFIX = 'cpt-studio-release:'
+
+
+def release_digest(revision) -> str:
+    """The digest a release-1 web answers through nginx for ``revision`` (B7)."""
+    return sha256((HEALTH_DIGEST_PREFIX + str(revision)).encode())[:16]
+
+
 def health_ok(body, revision) -> bool:
-    return (isinstance(body, dict) and body.get('status') == 'ok' and body.get('service') == 'cpt-studio'
-            and body.get('data_mode') == 'synthetic-only' and body.get('database') == 'ok'
-            and body.get('release') == revision)
+    """Whether a /health/ answer is a healthy ``revision``: 'release' equal to it, or 'release_digest' equal to its
+    digest (B7: the shape a release-1 web answers through nginx) - whichever the answer carries, and each it carries;
+    an answer that names neither is refused, as is one whose two disagree."""
+    if not (isinstance(body, dict) and body.get('status') == 'ok' and body.get('service') == 'cpt-studio'
+            and body.get('data_mode') == 'synthetic-only' and body.get('database') == 'ok'):
+        return False
+    release, digest = body.get('release'), body.get('release_digest')
+    if release is None and digest is None:
+        return False
+    return (release is None or release == revision) and (digest is None or digest == release_digest(revision))
+
+
+def health_release(body):
+    """What a /health/ answer names of its build, for a record: its 'release', else its 'release_digest' (B7), else
+    None. A 40-character value is a release, a 16-character one a digest."""
+    if not isinstance(body, dict):
+        return None
+    for key in ('release', 'release_digest'):
+        if isinstance(body.get(key), str):
+            return body[key]
+    return None
 
 
 def poll(check, *, attempts, interval):
@@ -4316,7 +4370,8 @@ class AvailabilityRecorder:
     """https://cpt.quillmd.com/health/ through the public path - DNS, this host's nginx and whichever web it routes to,
     as a customer reaches it - every AVAILABILITY_INTERVAL_SECONDS in a daemon thread, from start() to stop(), which
     returns {'samples', 'statuses' (count per status, 'error' for no answer), 'releases_seen' (in the order first
-    seen), 'non_200' (the first AVAILABILITY_KEPT, each {at, status, error}), 'non_200_count', 'started_at',
+    seen: each answer's release, or the release digest a release-1 web answers through nginx - health_release, B7),
+    'non_200' (the first AVAILABILITY_KEPT, each {at, status, error}), 'non_200_count', 'started_at',
     'finished_at', 'interval_seconds'}. One request per sample (Connection: close), so each lands on the configuration
     nginx holds at that moment. A sample that raises is recorded as an error; nothing here raises into the phase."""
 
@@ -4342,7 +4397,7 @@ class AvailabilityRecorder:
             record['samples'] += 1
             key = str(status) if status is not None else 'error'
             record['statuses'][key] = record['statuses'].get(key, 0) + 1
-            release = body.get('release')
+            release = health_release(body)  # B7: the release, or its digest through nginx
             if isinstance(release, str) and release not in record['releases_seen']:
                 record['releases_seen'].append(release)
             if status != 200:
@@ -5842,7 +5897,12 @@ def check_credential_files(mode, live, interpreter='disabled', coding='disabled'
     """Every credentials file a live provider, participant, interpreter or Fable coder needs, before anything changes:
     a missing source leaves no file, and its holder is installed disabled or not at all (HARNESS.md 8); a live
     interpreter or coder needs the file the secrets phase copied (design/FINAL.md 13; CODER). An app phase names the
-    coder alone; a switch-back names the previous pair's modes."""
+    coder alone; a switch-back names the previous pair's modes. Release 1 (A8): a live legacy mode - Corti, a harness
+    participant, the earlier interpreter - is refused here too, whatever the arguments said: none of them has a BAA."""
+    problem = legacy_live_problem(SimpleNamespace(provider_mode=mode, interpreter_mode=interpreter,
+                                                  **{f'{name}_mode': 'live' for name in live}))
+    if problem:
+        raise InstallError(problem)
     wanted = (([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
               + ([INTERPRETER['target']] if interpreter == 'live' else [])
               + ([CODER['target']] if coding == 'live' else []))

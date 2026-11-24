@@ -511,10 +511,17 @@ class CodingArgumentTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 self.assertIn(f'{extra[0]} is not used by --phase app',
                               self.refused('--phase', 'app', '--coding-mode', 'disabled', *extra))
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--astra-mode', 'live', '--fable-mode',
-                          'live', '--interpreter-mode', 'live', '--authorization-ref', RULING)
+        # release 1 (A8): the earlier revision's providers start disabled (the interpreter may replay); live is refused
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
+                          '--fable-mode', 'disabled', '--interpreter-mode', 'replay')
         self.assertEqual((args.provider_mode, args.astra_mode, args.fable_mode, args.interpreter_mode,
-                          install.coding_mode(args)), ('live', 'live', 'live', 'live', 'disabled'))
+                          install.coding_mode(args)), ('disabled', 'disabled', 'disabled', 'replay', 'disabled'))
+        for flag in ('--provider-mode', '--astra-mode', '--fable-mode', '--interpreter-mode'):
+            with self.subTest(flag=flag):
+                modes = {'--provider-mode': 'disabled', flag: 'live'}
+                said = self.refused('--phase', 'switch-back', *[part for item in modes.items() for part in item],
+                                    '--authorization-ref', RULING)
+                self.assertIn(f'{flag} live is refused', said)
         self.assertIn('--phase switch-back needs an explicit --provider-mode', self.refused('--phase', 'switch-back'))
 
     def test_a_switch_back_may_name_the_previous_pairs_coding_mode(self):

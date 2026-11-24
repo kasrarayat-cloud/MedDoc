@@ -63,8 +63,11 @@ class StubStudio:
         self.behaviour = {'login_redirect': '/', 'login_sets_session': True, 'session_status': None, 'session_json': {},
                           'session_username': None, 'logout_status': 302, 'logout_redirect': '/login/',
                           'logout_ends_session': True, 'logout_clears_cookie': True, 'echo_password': False,
-                          'page': 'form', 'csrf_cookie': True, **behaviour}
+                          'page': 'form', 'csrf_cookie': True, 'forced_change': False, **behaviour}
         self.sessions, self.csrf, self.log = {}, set(), []
+        # cptstudio/settings.py's cookie names: the __Host- names under HTTPS (release 1, B6), the plain ones without
+        self.session_cookie = ('__Host-' if tls is not None else '') + 'cptstudio_session'
+        self.csrf_cookie = ('__Host-' if tls is not None else '') + 'cptstudio_csrf'
         stub = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -124,7 +127,7 @@ class StubStudio:
     def new_csrf(self):
         secret = secrets.token_hex(16)
         self.csrf.add(secret)
-        return secret, ('Set-Cookie', f'cptstudio_csrf={secret}; Max-Age=31449600; Path=/; SameSite=Strict')
+        return secret, ('Set-Cookie', f'{self.csrf_cookie}={secret}; Max-Age=31449600; Path=/; SameSite=Strict')
 
     def page(self, token, error='', username=''):
         field = f'<input type="hidden" name="csrfmiddlewaretoken" value="{token}">' if token else ''
@@ -142,8 +145,8 @@ class StubStudio:
 
     def csrf_ok(self, request, form, cookies):
         token = (form.get('csrfmiddlewaretoken') or [request.headers.get('X-CSRFToken', '')])[0]
-        return (request.headers.get('Origin') == self.base and cookies.get('cptstudio_csrf') in self.csrf
-                and token == cookies.get('cptstudio_csrf'))
+        return (request.headers.get('Origin') == self.base and cookies.get(self.csrf_cookie) in self.csrf
+                and token == cookies.get(self.csrf_cookie))
 
     def login(self, request, body, cookies):
         form = parse_qs(body.decode(), keep_blank_values=True)
@@ -155,19 +158,23 @@ class StubStudio:
             said = 'The username or password is not correct.'
             if self.behaviour['echo_password']:
                 said += f' You typed {password}.'
-            return self.send(request, 400, self.page(cookies.get('cptstudio_csrf'), said, username))
+            return self.send(request, 400, self.page(cookies.get(self.csrf_cookie), said, username))
         headers = []
         if self.behaviour['login_sets_session']:
             sid = secrets.token_hex(16)
             self.sessions[sid] = username
-            headers.append(('Set-Cookie', f'cptstudio_session={sid}; HttpOnly; Path=/; SameSite=Strict'))
+            headers.append(('Set-Cookie', f'{self.session_cookie}={sid}; HttpOnly; Path=/; SameSite=Strict'))
         headers.append(self.new_csrf()[1])  # django's login() rotates the CSRF token
-        return self.send(request, 302, b'', [('Location', self.behaviour['login_redirect']), *headers])
+        # release 1 (B4): a password staff set signs in, and leads to the forced change only
+        location = '/account/?required=1' if self.behaviour['forced_change'] else self.behaviour['login_redirect']
+        return self.send(request, 302, b'', [('Location', location), *headers])
 
     def session(self, request, cookies):
-        username = self.sessions.get(cookies.get('cptstudio_session'))
+        username = self.sessions.get(cookies.get(self.session_cookie))
         if username is None:
             return self.send(request, 401, b'{"error": "Sign in to continue."}', content_type='application/json')
+        if self.behaviour['forced_change']:  # B4: the API answers 403 while the forced change stands
+            return self.send(request, 403, b'{"error": "password_change_required"}', content_type='application/json')
         user = self.accounts[username]
         data = {'user': {'id': 'u-1', 'username': self.behaviour['session_username'] or username, 'label': user['label'],
                          'actor_kind': user['actor_kind'], 'initials': 'DR'},
@@ -185,10 +192,10 @@ class StubStudio:
         if not self.csrf_ok(request, form, cookies):
             return self.send(request, 403, b'<h1>Forbidden (403)</h1><p>CSRF verification failed. Request aborted.</p>')
         if self.behaviour['logout_ends_session']:
-            self.sessions.pop(cookies.get('cptstudio_session'), None)
+            self.sessions.pop(cookies.get(self.session_cookie), None)
         headers = [('Location', self.behaviour['logout_redirect'])] if self.behaviour['logout_status'] == 302 else []
         if self.behaviour['logout_clears_cookie']:
-            headers.append(('Set-Cookie', 'cptstudio_session=""; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; '
+            headers.append(('Set-Cookie', f'{self.session_cookie}=""; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; '
                                           'Path=/; SameSite=Strict'))
         return self.send(request, self.behaviour['logout_status'], b'', headers)
 
@@ -369,6 +376,42 @@ class SignInTests(Base):
         self.assertEqual(self.requests(stub), EXPECTED)
         self.assertEqual(stub.sessions, {})
         self.assertIn('session.username', self.failed(evidence))
+
+    def test_a_password_staff_set_is_a_recorded_state_never_changed_and_the_session_is_signed_out(self):
+        # release 1 (A11, B4): the sign-in leads to /account/ and the session read answers 403 password_change_required;
+        # the run records the state, never posts a password anywhere, and still signs out and proves it
+        stub = self.stub(forced_change=True)
+        code, out, err, evidence, text = self.run_tool(stub.base)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.requests(stub), EXPECTED)
+        self.assertNotIn('/account/', ' '.join(self.requests(stub)))
+        self.assertEqual((evidence['state'], evidence['result']), ('password_change_required', 'password_change_required'))
+        self.assertEqual(self.failed(evidence), ['login.password_change_required'])
+        self.assertEqual(stub.sessions, {})  # signed out on the server
+        statuses = {item['id']: item['status'] for item in evidence['checks']}
+        self.assertEqual((statuses['login.redirect'], statuses['logout.redirect'], statuses['logout.session_refused']),
+                         ('pass', 'pass', 'pass'))
+        self.assertIsNone(evidence['session'])
+        self.assertIn('password_change_required', out)
+        # the two POSTs are the sign-in's own fields and the sign-out's token: no new password in either
+        self.assertEqual(sorted(parse_qs(stub.log[1]['body'].decode())), ['csrfmiddlewaretoken', 'next', 'password', 'username'])
+        self.assertEqual(sorted(parse_qs(stub.log[3]['body'].decode())), ['csrfmiddlewaretoken'])
+        self.assert_no_password(out, err, text)
+
+    def test_the_session_read_alone_naming_the_forced_change_is_the_same_state(self):
+        stub = self.stub(session_status=403, session_json={'error': 'password_change_required'})
+        stub.behaviour['forced_change'] = False
+        original = stub.session
+
+        def session(request, cookies):  # a server that redirects to / but answers the API with the forced change
+            if stub.sessions.get(cookies.get(stub.session_cookie)) is None:
+                return original(request, cookies)
+            return stub.send(request, 403, b'{"error": "password_change_required"}', content_type='application/json')
+        stub.session = session
+        code, out, err, evidence, text = self.run_tool(stub.base)
+        self.assertEqual((code, evidence['state'], evidence['result']), (1, 'password_change_required',
+                                                                          'password_change_required'))
+        self.assertEqual(self.requests(stub), EXPECTED)
 
     def test_the_cli_runs_as_a_script(self):
         stub = self.stub()
@@ -564,6 +607,20 @@ class TlsTests(Base):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.requests(stub), EXPECTED)
         self.assertTrue(evidence['tool']['transport'].startswith('https: certificate and host name verified'))
+        # release 1 (A11, B6): on https the tool reads and sends the __Host- names, as the server sets them
+        self.assertEqual(sorted(stub.log[3]['cookies']), ['__Host-cptstudio_csrf', '__Host-cptstudio_session'])
+        self.assertEqual(sorted(stub.log[4]['cookies']), ['__Host-cptstudio_session'])
+
+    def test_an_https_server_that_sets_the_plain_names_is_refused(self):
+        # a server that does not set the __Host- names over https is not the release the tool verifies
+        stub = self.tls_stub('loopback')
+        stub.session_cookie, stub.csrf_cookie = 'cptstudio_session', 'cptstudio_csrf'
+        with mock.patch.dict(os.environ, {'SSL_CERT_FILE': str(self.certs / 'loopback.pem')}):
+            code, out, err, evidence, text = self.run_tool(stub.base)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.failed(evidence), ['login.form'])
+        self.assertIn('__Host-cptstudio_csrf', evidence['checks'][0]['reason'])
+        self.assertEqual(self.requests(stub), ['GET /login/'])
 
 
 class PureCheckTests(unittest.TestCase):
@@ -584,6 +641,8 @@ class PureCheckTests(unittest.TestCase):
     def test_a_pass_needs_every_required_check_present_and_passing(self):
         full = [vl.check(name, 'hard', True, '') for name in vl.REQUIRED_CHECKS]
         self.assertEqual(vl.result_of(full, None), 'pass')
+        # release 1 (A11): the forced password change is its own result, never a pass
+        self.assertEqual(vl.result_of(full, None, 'password_change_required'), 'password_change_required')
         self.assertEqual(vl.result_of(full, 'GET /login/: timed out'), 'fail')
         self.assertEqual(vl.result_of(full + [vl.check('logout.cookie_cleared', 'soft', False, '')], None), 'pass')
         for name in vl.REQUIRED_CHECKS:
@@ -616,6 +675,24 @@ class PureCheckTests(unittest.TestCase):
         self.assertEqual(vl.account_view(data)['user'], {'username': None, 'label': data['user']['label'], 'actor_kind': 'human'})
         # the evidence keeps the workspace's specialty as the session serves it (refutation N2-2-4)
         self.assertEqual(vl.account_view(data)['workspace'], {'name': WORKSPACE, 'specialty': WORKSPACE})
+
+    def test_the_build_is_recorded_as_served_its_release_or_its_digest(self):
+        # release 1 (B7): a release-1 server may answer a digest through nginx; whichever is served is recorded
+        base = {'user': {}, 'workspace': {}}
+        self.assertEqual(vl.account_view({**base, 'release': 'a' * 40})['release'], 'a' * 40)
+        digest = vl.account_view({**base, 'release_digest': '0123456789abcdef'})
+        self.assertEqual((digest['release_digest'], 'release' in digest), ('0123456789abcdef', False))
+        self.assertIsNone(vl.account_view(base)['release'])
+
+    def test_the_cookie_names_follow_the_scheme_as_the_settings_do(self):
+        self.assertEqual(vl.cookie_names('https://cpt.quillmd.com'), ('__Host-cptstudio_session', '__Host-cptstudio_csrf'))
+        self.assertEqual(vl.cookie_names('http://127.0.0.1:8123'), ('cptstudio_session', 'cptstudio_csrf'))
+        for target, forced in (('https://cpt.quillmd.com/account/?required=1', True), ('https://cpt.quillmd.com/account/', True),
+                               ('https://cpt.quillmd.com/', False), ('https://evil.example/account/', False),
+                               ('https://cpt.quillmd.com/account/x', False)):
+            with self.subTest(target=target):
+                self.assertIs(vl.forced_change('https://cpt.quillmd.com', 302, target), forced)
+        self.assertFalse(vl.forced_change('https://cpt.quillmd.com', 200, 'https://cpt.quillmd.com/account/'))
 
     def test_a_response_keeps_every_header_it_carried(self):
         stub = StubStudio()

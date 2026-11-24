@@ -601,9 +601,10 @@ class ArgumentTests(unittest.TestCase):
                           'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         self.assertEqual((args.coding_mode, args.provider_mode), ('live', None))
         self.assertEqual(self.parse('--phase', 'app', '--coding-mode', 'disabled').coding_mode, 'disabled')
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--authorization-ref',
-                          'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-        self.assertEqual((args.provider_mode, args.coding_mode), ('live', None))  # the previous pair's Corti
+        # release 1 (A8): the previous pair's Corti is started disabled (live is refused: no BAA), its coder as given
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--coding-mode', 'live',
+                          '--authorization-ref', 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+        self.assertEqual((args.provider_mode, args.coding_mode), ('disabled', 'live'))
         args = self.parse('--phase', 'provision', '--owner-username', 'owner')
         self.assertEqual((args.agent_username, args.workspace_name), ('review-agent', 'Gastroenterology'))
         self.assertEqual(self.parse('--phase', 'reference', '--pfs-zip', '/x/a.zip', '--mue-zip', '/x/b.zip',

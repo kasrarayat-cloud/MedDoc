@@ -98,23 +98,23 @@ class ParticipantArgumentTests(unittest.TestCase):
         # the Fable coding build has no participant (DECISIONS D351): only a switch-back names one, for the previous pair
         args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled')
         self.assertEqual((args.astra_mode, args.fable_mode), ('disabled', 'disabled'))
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live',
-                          '--authorization-ref', RULING)
-        self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'disabled'))
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--astra-mode', 'live', '--fable-mode',
-                          'live', '--authorization-ref', RULING)
-        self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'live'))
+        # release 1 (A8): a participant is never started live again (no BAA); disabled is the only mode left
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
+                          '--fable-mode', 'disabled')
+        self.assertEqual((args.astra_mode, args.fable_mode), ('disabled', 'disabled'))
         self.assertEqual(self.parse('--phase', 'passages').phase, 'passages')
         # an app phase names none: its pair runs them disabled
         args = self.parse('--phase', 'app', '--coding-mode', 'disabled')
         self.assertEqual((args.astra_mode, args.fable_mode, args.provider_mode), ('disabled', 'disabled', None))
 
     def test_refusals(self):
-        # live needs the recorded authority, as Corti's live mode does
-        self.assertIn('--astra-mode live needs --authorization-ref',
-                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live'))
-        self.assertIn('--fable-mode live needs --authorization-ref',
-                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--fable-mode', 'live'))
+        # release 1 (A8): live is refused whatever authority is given - no participant has a BAA
+        for flag in ('--astra-mode', '--fable-mode'):
+            for authority in ((), ('--authorization-ref', RULING)):
+                with self.subTest(flag=flag, authority=authority):
+                    said = self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', flag, 'live', *authority)
+                    self.assertIn(f'{flag} live is refused', said)
+                    self.assertIn('business associate agreement', said)
         # replay is for tests and development only (HARNESS.md 8): the installer offers disabled and live
         self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'replay')
         self.assertIn('only applies to',

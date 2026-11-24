@@ -24,6 +24,15 @@ A step that fails ends the run there (a refused sign-in makes no further request
 always signed out. The contract is studio/views.py login_view and logout_view, studio/api.py session (api_view
 answers 401 without a session) and the cookie names in cptstudio/settings.py; the unit tests hold each to the source.
 
+Release 1 (RELEASE-1-SPEC A11, B4, B6, B7). The cookie names are the __Host- names on an https origin and the plain
+names on a loopback http test server, as cptstudio/settings.py gives them with and without HTTPS. An account whose
+password staff set must choose its own at its next sign-in: the sign-in then leads to /account/ and the session read
+answers 403 password_change_required. That is recorded as the run's state, password_change_required, and the run
+stops there - the session is still signed out and the sign-out proven - and its result is password_change_required,
+never a pass. This check never changes a password: the person signs in and chooses one, or asks for a reset. The
+session's build is recorded as the session served it: its release, or the release digest a release-1 server may
+answer through nginx.
+
 --credentials names a JSON file {"username": ..., "password": ...}; or --username names the account and
 --password-file a file holding only its password (one trailing line break is not part of it), the form in which the
 demonstration reviewer's password is kept. Either file must be a regular file no group or other user may read or
@@ -58,11 +67,16 @@ from urllib.parse import quote, quote_plus, urlencode, urljoin, urlsplit
 
 EVIDENCE_SCHEMA = 'cpt-studio-login-evidence@1'
 EVIDENCE_NAME = 'login-evidence.json'
-# cptstudio/settings.py SESSION_COOKIE_NAME and CSRF_COOKIE_NAME; the form field {% csrf_token %} renders.
+# cptstudio/settings.py SESSION_COOKIE_NAME and CSRF_COOKIE_NAME as it names them without HTTPS; under HTTPS both carry
+# HOST_PREFIX (release 1, B6: '__Host-cptstudio_session' if HTTPS else 'cptstudio_session') - cookie_names. The form
+# field {% csrf_token %} renders.
 SESSION_COOKIE = 'cptstudio_session'
 CSRF_COOKIE = 'cptstudio_csrf'
+HOST_PREFIX = '__Host-'
 CSRF_FIELD = 'csrfmiddlewaretoken'
 LOGIN_PATH, LOGOUT_PATH, SESSION_PATH = '/login/', '/logout/', '/api/session'
+# Release 1 (B4): where a sign-in with a password staff set leads, and the session read's answer while it stands.
+ACCOUNT_PATH, PASSWORD_CHANGE_REQUIRED = '/account/', 'password_change_required'
 EXPECTED_REQUESTS = (('GET', LOGIN_PATH), ('POST', LOGIN_PATH), ('GET', SESSION_PATH), ('POST', LOGOUT_PATH),
                      ('GET', SESSION_PATH))
 HUMAN, REVIEWER = 'human', 'reviewer'  # studio/models.py User.HUMAN, Membership.REVIEWER
@@ -96,6 +110,13 @@ def utc_now() -> str:
 def check(check_id: str, severity: str, ok: bool, reason: str) -> dict:
     status = 'pass' if ok else ('fail' if severity == 'hard' else 'warn')
     return {'id': check_id, 'severity': severity, 'status': status, 'reason': reason}
+
+
+def cookie_names(origin: str) -> tuple[str, str]:
+    """(session cookie, CSRF cookie) the server at ``origin`` sets: the __Host- names on https (release 1, B6), the
+    plain names on a loopback http test server - cptstudio/settings.py's names with and without HTTPS."""
+    prefix = HOST_PREFIX if urlsplit(origin).scheme == 'https' else ''
+    return prefix + SESSION_COOKIE, prefix + CSRF_COOKIE
 
 
 # --- inputs -----------------------------------------------------------------------------------------------------------
@@ -408,7 +429,10 @@ def account_view(data) -> dict | None:
             'workspace': {'name': space.get('name'), 'specialty': space.get('specialty')},
             'role': data.get('role'), 'can_review': data.get('can_review'),
             'synthetic_only': data.get('synthetic_only'), 'provider_mode': data.get('provider_mode'),
-            'release': data.get('release')}
+            # the build as the session served it: its release, or the digest a release-1 server answers in its place
+            # through nginx (RELEASE-1-SPEC B7) - whichever it carries
+            **({'release': data.get('release')} if 'release' in data or 'release_digest' not in data else {}),
+            **({'release_digest': data.get('release_digest')} if 'release_digest' in data else {})}
 
 
 def request_list_check(made: list[dict], signed_in: bool) -> dict:
@@ -427,9 +451,13 @@ def request_list_check(made: list[dict], signed_in: bool) -> dict:
     return check('requests.only_expected', 'hard', prefix and (complete or not signed_in), reason)
 
 
-def result_of(checks: list[dict], run_error: str | None) -> str:
+def result_of(checks: list[dict], run_error: str | None, state: str | None = None) -> str:
+    """'pass' only when every required check passed and nothing failed; 'password_change_required' when the account
+    must choose its own password first (the run's recorded state, never a pass); else 'fail'."""
     passed = {item['id'] for item in checks if item['status'] == 'pass'}
     failed = any(item['status'] == 'fail' for item in checks)
+    if state == PASSWORD_CHANGE_REQUIRED:
+        return PASSWORD_CHANGE_REQUIRED
     return 'pass' if not run_error and not failed and all(name in passed for name in REQUIRED_CHECKS) else 'fail'
 
 
@@ -442,19 +470,30 @@ def _headers(origin: str, accept: str, cookies: str = '', form: bool = False, re
     return headers
 
 
+def forced_change(origin: str, status: int | None, target: str | None) -> bool:
+    """Whether a sign-in's answer leads to the forced password change (release 1, B4): a redirect to /account/ of
+    this origin, whatever its query (?required=1)."""
+    if status not in (302, 303) or not target:
+        return False
+    parts = urlsplit(target)
+    return f'{parts.scheme}://{parts.netloc}' == origin and parts.path == ACCOUNT_PATH
+
+
 def sign_in_and_out(transport: Transport, origin: str, username: str, password: str, workspace: str) -> dict:
-    """The five requests and their checks: {'checks', 'session', 'signed_in', 'error'}."""
-    checks, jar, out = [], {}, {'session': None, 'signed_in': False, 'error': None}
+    """The five requests and their checks: {'checks', 'session', 'signed_in', 'error', 'state'}. 'state' is
+    'password_change_required' when the account must choose its own password first (B4): recorded, never changed."""
+    session_cookie, csrf_cookie = cookie_names(origin)
+    checks, jar, out = [], {}, {'session': None, 'signed_in': False, 'error': None, 'state': None}
     try:
         page = transport.send('GET', LOGIN_PATH, headers=_headers(origin, 'text/html'))
         apply_cookies(jar, page.set_cookies)
         hidden, problems = login_form(read_page(page.body), origin) if page.status == 200 else (None, [])
         if page.status != 200:
             problems = [f'GET {LOGIN_PATH} answered HTTP {page.status}']
-        if CSRF_COOKIE not in jar:
-            problems.append(f'no CSRF cookie ({CSRF_COOKIE}) was set')
+        if csrf_cookie not in jar:
+            problems.append(f'no CSRF cookie ({csrf_cookie}) was set')
         checks.append(check('login.form', 'hard', not problems, '; '.join(problems)
-                            or f'the sign-in form, its CSRF token and the {CSRF_COOKIE} cookie'))
+                            or f'the sign-in form, its CSRF token and the {csrf_cookie} cookie'))
         if problems:
             return {**out, 'checks': checks}
 
@@ -462,14 +501,16 @@ def sign_in_and_out(transport: Transport, origin: str, username: str, password: 
         answer = transport.send('POST', LOGIN_PATH, body=urlencode(fields).encode('utf-8'), headers=_headers(
             origin, 'text/html', cookie_header(jar), form=True, referer=f'{origin}{LOGIN_PATH}'))
         apply_cookies(jar, answer.set_cookies)
-        session = jar.get(SESSION_COOKIE)
+        session = jar.get(session_cookie)
         target = urljoin(f'{origin}{LOGIN_PATH}', answer.location) if answer.location else None
         redirected = answer.status in (302, 303) and target == f'{origin}/'
-        said = '' if redirected else ' '.join(' '.join(read_page(answer.body).errors).split())
-        checks.append(check('login.redirect', 'hard', redirected and bool(session),
+        forced = bool(session) and forced_change(origin, answer.status, target)
+        said = '' if redirected or forced else ' '.join(' '.join(read_page(answer.body).errors).split())
+        checks.append(check('login.redirect', 'hard', (redirected or forced) and bool(session),
                             f'POST {LOGIN_PATH} answered HTTP {answer.status}'
                             + (f', redirecting to {target}' if target else ', with no redirect')
-                            + ('' if redirected else f' (the app, {origin}/, is expected)')
+                            + ('' if redirected or forced else f' (the app, {origin}/, is expected)')
+                            + (' (the forced password change)' if forced else '')
                             + ('; a session cookie was set' if session else '; no session cookie was set')
                             + (f'; the page said: {said}' if said else '')))
         if not session:
@@ -479,8 +520,18 @@ def sign_in_and_out(transport: Transport, origin: str, username: str, password: 
         try:  # whatever happens reading the session, the session is signed out
             reply = transport.send('GET', SESSION_PATH, headers=_headers(origin, 'application/json', cookie_header(jar)))
             data = reply.json()
-            checks.extend(session_checks(reply.status, data, username, workspace))
-            out['session'] = account_view(data) if reply.status == 200 else None
+            required = reply.status == 403 and isinstance(data, dict) and data.get('error') == PASSWORD_CHANGE_REQUIRED
+            if forced or required:
+                # recorded and stopped there: this check never changes a password (A11)
+                out['state'] = PASSWORD_CHANGE_REQUIRED
+                checks.append(check('login.password_change_required', 'hard', False,
+                                    'the account must choose its own password before anything else (a password staff '
+                                    f'set; GET {SESSION_PATH} answered HTTP {reply.status}'
+                                    + (f' {PASSWORD_CHANGE_REQUIRED}' if required else '') + '): this check never '
+                                    'changes a password - the person signs in and chooses one, or asks for a reset'))
+            else:
+                checks.extend(session_checks(reply.status, data, username, workspace))
+                out['session'] = account_view(data) if reply.status == 200 else None
         except Exception as exc:  # noqa: BLE001 - recorded, and the sign-out below still runs
             out['error'] = str(exc) if isinstance(exc, RequestFailed) else f'{type(exc).__name__}: {exc}'
         out['error'] = sign_out(transport, origin, jar, session, checks) or out['error']
@@ -492,9 +543,10 @@ def sign_in_and_out(transport: Transport, origin: str, username: str, password: 
 def sign_out(transport: Transport, origin: str, jar: dict, session: str, checks: list) -> str | None:
     """POST /logout/ with the CSRF token the sign-in rotated, then GET /api/session with the session cookie the
     sign-in set, replayed: it must be refused. Returns the first request error, if any."""
+    session_cookie, csrf_cookie = cookie_names(origin)
     error = None
     try:
-        answer = transport.send('POST', LOGOUT_PATH, body=urlencode([(CSRF_FIELD, jar.get(CSRF_COOKIE, ''))]).encode(),
+        answer = transport.send('POST', LOGOUT_PATH, body=urlencode([(CSRF_FIELD, jar.get(csrf_cookie, ''))]).encode(),
                                 headers=_headers(origin, 'text/html', cookie_header(jar), form=True, referer=f'{origin}/'))
         deleted = apply_cookies(jar, answer.set_cookies)
         target = urljoin(f'{origin}{LOGOUT_PATH}', answer.location) if answer.location else None
@@ -502,13 +554,13 @@ def sign_out(transport: Transport, origin: str, jar: dict, session: str, checks:
                             f'POST {LOGOUT_PATH} answered HTTP {answer.status}'
                             + (f', redirecting to {target}' if target else ', with no redirect')
                             + f' ({origin}{LOGIN_PATH} is expected)'))
-        checks.append(check('logout.cookie_cleared', 'soft', SESSION_COOKIE in deleted,
-                            f'the sign-out {"deleted" if SESSION_COOKIE in deleted else "did not delete"} the session cookie'))
+        checks.append(check('logout.cookie_cleared', 'soft', session_cookie in deleted,
+                            f'the sign-out {"deleted" if session_cookie in deleted else "did not delete"} the session cookie'))
     except RequestFailed as exc:
         error = str(exc)
         checks.append(check('logout.redirect', 'hard', False, error))
     try:
-        probe = transport.send('GET', SESSION_PATH, headers=_headers(origin, 'application/json', f'{SESSION_COOKIE}={session}'))
+        probe = transport.send('GET', SESSION_PATH, headers=_headers(origin, 'application/json', f'{session_cookie}={session}'))
         checks.append(check('logout.session_refused', 'hard', probe.status == 401,
                             f'the session cookie the sign-in set, replayed after the sign-out: GET {SESSION_PATH} answered '
                             f'HTTP {probe.status} ({"refused: the session ended on the server" if probe.status == 401 else "401 is expected"})'))
@@ -569,7 +621,8 @@ def main(argv=None) -> int:
     try:
         outcome = sign_in_and_out(transport, origin, username, password, args.workspace)
     except Exception as exc:  # noqa: BLE001 - a defect of this check: recorded (scrubbed), and the run fails
-        outcome = {'checks': [], 'session': None, 'signed_in': None, 'error': f'{type(exc).__name__}: {exc}'}
+        outcome = {'checks': [], 'session': None, 'signed_in': None, 'error': f'{type(exc).__name__}: {exc}',
+                   'state': None}
     checks = outcome['checks'] + [request_list_check(transport.requests, outcome['signed_in'] is not False)]
     evidence = {
         'schema': EVIDENCE_SCHEMA, 'run_id': f'login-{started.replace("-", "").replace(":", "").replace(".", "")}-'
@@ -582,7 +635,8 @@ def main(argv=None) -> int:
         'expected': {'username': username, 'actor_kind': HUMAN, 'role': REVIEWER, 'workspace': args.workspace,
                      'requests': [f'{method} {path}' for method, path in EXPECTED_REQUESTS]},
         'requests': transport.requests, 'session': outcome['session'], 'checks': checks,
-        'run_error': outcome['error'], 'result': result_of(checks, outcome['error']),
+        'run_error': outcome['error'], 'state': outcome.get('state'),
+        'result': result_of(checks, outcome['error'], outcome.get('state')),
     }
     write_evidence(evidence_path, evidence, secret)
     failed = [item['id'] for item in checks if item['status'] == 'fail']
