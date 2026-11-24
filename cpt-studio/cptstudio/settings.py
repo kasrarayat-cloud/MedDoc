@@ -129,6 +129,9 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 0
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
 
+# Django's database store over the same django_session table, which also keeps which accounts each session names, so
+# ending one account's sessions reads that account's own (refutation round 1 of release 1, avail-0; studio.session_store)
+SESSION_ENGINE = 'studio.session_store'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Strict'
 CSRF_COOKIE_SAMESITE = 'Strict'
@@ -161,6 +164,11 @@ SESSION_MAX_MEMBER_SECONDS = 8 * 60 * 60  # today's 8 hours (SESSION_COOKIE_AGE)
 SESSION_MAX_OPERATOR_SECONDS = 8 * 60 * 60
 SESSION_IDLE_WARNING_SECONDS = 2 * 60
 SESSION_ACTIVITY_WRITE_SECONDS = 60
+# Refutation round 1 (avail-0): the live sessions one account holds of each kind - signed in, a checked password waiting
+# for its key at the admin door, a setup under way (studio.session_store). A new one beyond it ends that account's oldest
+# of the same kind, so one account's own sign-ins cannot grow the session table without bound, and a pending sign-in -
+# made with a password alone - never ends a signed-in session.
+SESSION_LIVE_PER_ACCOUNT = 20
 
 # B1, sign-in slows down instead of locking anyone out (OWNER DECISIONS D6, D23): the window; failures per (username,
 # address) that refuse that pair; failures per username before its delay starts, the delay's base (doubled per further
@@ -193,6 +201,9 @@ RECOVERY_CODE_COUNT = 10
 
 # C1: a member's poll of a document writes at most one read record per session and document in this many seconds.
 READ_AUDIT_DETAIL_DEDUPE_SECONDS = 60
+# Refutation round 1 (avail-3): a member's list read that repeats one of the same session (and address, practice, count
+# and filters) made within this many seconds is counted on that record (AccessRecordRepeat) instead of writing its own.
+READ_AUDIT_LIST_REPEAT_SECONDS = 60
 # C2 (OWNER DECISION D24): how long an operator's opening of one document's content lasts, in that session only.
 CONTENT_GRANT_SECONDS = 15 * 60
 # C5 and D2 (OWNER DECISION D8): (requests, per seconds) - report creations per member and per practice, uploads per

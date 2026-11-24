@@ -9,7 +9,8 @@ import uuid
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
+from django.db.models.functions import Upper
 
 
 DECISION_SEQUENCE = 'studio_decision_sequence'
@@ -867,6 +868,31 @@ class ReferencePassage(models.Model):
         indexes = [models.Index(fields=['topic', 'topic_value'])]
 
 
+class LoginAttemptQuerySet(models.QuerySet):
+    """The bounded reads of sign-in rows (refutation round 1 of release 1, avail-5; B1 item 6: every read stops at its
+    limit), each served by an index of migration 0018 however many rows one name holds."""
+
+    def latest_sign_ins(self, usernames) -> dict:
+        """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
+        succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
+        by aggregating every succeeded row of each name."""
+        latest = {}
+        for name in sorted(set(usernames)):
+            last = (self.filter(succeeded=True, username=name).order_by('-created_at')
+                    .values_list('created_at', flat=True).first())
+            if last is not None:
+                latest[name] = last
+        return latest
+
+    def signed_in_clients(self, username, since, limit=None) -> set:
+        """The clients (addresses) of ``username``'s newest successful sign-ins at or after ``since``, at most ``limit``
+        rows of them (SIGNED_IN_CLIENTS_READ): read newest first by studio_login_name_signed_in, so the cost stays the
+        limit's however many times the name signed in - what throttle.Door.known_address reads unbounded."""
+        rows = (self.filter(username=username, succeeded=True, created_at__gte=since).order_by('-created_at')
+                .values_list('client', flat=True)[:limit or self.model.SIGNED_IN_CLIENTS_READ])
+        return set(rows)
+
+
 class LoginAttempt(models.Model):
     # Release 1, B1: the door an attempt was made at (studio.request_meta.CPT or ADMIN) and its outcome. ``outcome`` is
     # a plain column with no choices, so a new outcome needs no migration (the installer's gate refuses AlterField).
@@ -886,11 +912,24 @@ class LoginAttempt(models.Model):
     door = models.CharField(max_length=8, null=True, blank=True)
     outcome = models.CharField(max_length=24, null=True, blank=True)
     sign_in_ref = models.UUIDField(null=True, blank=True)  # the session's reference (request_meta.sign_in_ref)
+    # a name's newest successful sign-ins read for its known addresses (LoginAttemptQuerySet.signed_in_clients): more
+    # than one a day for 90 days, so only a name signed in again and again ever has an older one left out
+    SIGNED_IN_CLIENTS_READ = 1_000
+
+    objects = LoginAttemptQuerySet.as_manager()
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at']),
                    # release 1 (AUTH-6): the per-address count reads this, not the whole table
-                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time')]
+                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time'),
+                   # refutation round 1 (avail-5), however many rows one name holds: the console's sign-ins page newest
+                   # first and page by page, and by result; clear_failures' case-insensitive name (username__iexact is
+                   # UPPER(username)); and a name's newest successful sign-ins (LoginAttemptQuerySet)
+                   models.Index(fields=['created_at', 'id'], name='studio_login_time'),
+                   models.Index(fields=['succeeded', 'created_at', 'id'], name='studio_login_result_time'),
+                   models.Index(Upper('username'), F('created_at'), name='studio_login_upper_name_time'),
+                   models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True),
+                                name='studio_login_name_signed_in')]
 
 
 class WorkerBeat(models.Model):
@@ -1051,7 +1090,24 @@ class AccessRecord(ImmutableModel):
     class Meta:
         ordering = ['created_at']
         indexes = [models.Index(fields=['workspace_id', 'created_at'], name='studio_access_ws_time'),
-                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time')]
+                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time'),
+                   # refutation round 1 (avail-3): the console's reads page, newest first - unfiltered, by day and by
+                   # page (studio_access_time), and by kind, a rare kind included (studio_access_view_time)
+                   models.Index(fields=['created_at', 'id'], name='studio_access_time'),
+                   models.Index(fields=['view', 'created_at', 'id'], name='studio_access_view_time')]
+
+
+class AccessRecordRepeat(models.Model):
+    """How many more times one member's list read was made again (refutation round 1 of release 1, avail-3; migration
+    0018): a served member.list read that repeats one of the same sign-in, account, address, practice, count and filters,
+    written within READ_AUDIT_LIST_REPEAT_SECONDS, writes no AccessRecord of its own - it adds one to ``repeats`` here and
+    moves ``last_at`` (studio.read_audit.record), so one session listing again and again grows the trail by at most one
+    record a window. AccessRecord stays append-only: its count of repeats lives here, keyed by the record's id - a plain
+    value, as every id of the record tables is. Counts and times only."""
+    id = models.BigAutoField(primary_key=True)
+    record_id = models.UUIDField(unique=True)  # the member.list AccessRecord this counts for
+    repeats = models.PositiveIntegerField(default=0)
+    last_at = models.DateTimeField()  # the latest repeat
 
 
 class SecurityEvent(ImmutableModel):
@@ -1177,3 +1233,24 @@ class FileKey(models.Model):
     wrapped_key = models.BinaryField()
     created_at = models.DateTimeField(auto_now_add=True)
     destroyed_at = models.DateTimeField(null=True, blank=True)
+
+
+class SessionAccountLink(models.Model):
+    """One way a session names an account (refutation round 1 of release 1, avail-0; migration 0018): signed in as it, or
+    waiting on it - a checked password waiting for its key at the admin door, a setup under way. Written by the site's
+    session store (studio.session_store) in the transaction that saves the session, and removed in the one that deletes
+    it, so ending one account's sessions reads that account's rows and never the whole django_session table. The session
+    key and the account are plain values, never foreign keys: the revision before release 1 deletes django_session rows
+    and the installer deletes all of them at a forward, and neither may be refused or need to know of this table; a row
+    either leaves behind names a session that is gone, which every reader re-checks, and the daily maintenance removes."""
+    SIGNED_IN, PENDING, SETUP = 'signed_in', 'pending', 'setup'
+    id = models.BigAutoField(primary_key=True)
+    session_key = models.CharField(max_length=40)  # django_session.session_key
+    account_id = models.UUIDField()
+    kind = models.CharField(max_length=12)  # SIGNED_IN | PENDING | SETUP
+    created_at = models.DateTimeField()  # when the session first named the account this way: the cap ends the oldest
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['session_key', 'account_id', 'kind'],
+                                               name='one_session_account_kind')]
+        indexes = [models.Index(fields=['account_id', 'kind', 'created_at'], name='studio_session_link_account')]
