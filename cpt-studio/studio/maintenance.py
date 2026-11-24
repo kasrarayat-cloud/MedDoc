@@ -12,7 +12,11 @@
                                        keyed hash after 30 days (B1; the row stays), the orphan sweep (deleting), stale
                                        conversion folders removed, and LoginAttempt rows older than the retention
                                        removed (OWNER DECISION D25: six years, so in practice none). One SecurityEvent
-                                       maintenance.daily holds the counts, and the names of any step that failed.
+                                       maintenance.daily holds the counts, and the names of any step that failed: the
+                                       rows go in one transaction with it, and the files once it has committed, so a
+                                       record that cannot be written leaves everything in place (refutation round 2);
+                                       one more, maintenance.daily_files_removed, then holds what the files' removal
+                                       did.
     verify_originals()                 the integrity check (164.312(c)(1)): a sample of stored originals and converted
                                        PDFs read again and their sha256 checked; each mismatch, missing or unreadable
                                        file writes a SecurityEvent storage.original_mismatch (ids only), and the run one
@@ -21,7 +25,7 @@
                                        stale conversion folders; then, under a Postgres advisory lock so one process
                                        does it, the daily maintenance once a day and verify_originals once a week (each
                                        due when its SecurityEvent is older than its period, so a restart does not run it
-                                       again).
+                                       again); a due run that failed is tried again DUE_RETRY_SECONDS later.
 
 Every value below is a constant of the release, like the settings' own figures (cptstudio/settings.py is the
 foundation lane's file, so D3's figures live here). Ids, counts and fixed words only in every record (studio/audit.py).
@@ -37,7 +41,7 @@ from types import SimpleNamespace
 
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
 
@@ -52,6 +56,7 @@ SIGNIN_NAMES_PER_RUN = 10_000  # distinct names hashed in one run, so one run st
 LOGIN_ATTEMPT_RETENTION = timedelta(days=6 * 365 + 2)  # OWNER DECISION D25, recommended answer: kept six years
 STALE_WORK_DIR_SECONDS = 60 * 60  # far above a conversion's own limit (fable.document.CONVERT_SECONDS)
 HOURLY_SECONDS = 60 * 60
+DUE_RETRY_SECONDS = 60 * 60  # a due run that failed (its record could not be written) waits this long, not one tick
 DAILY_EVERY = timedelta(days=1)
 WEEKLY_EVERY = timedelta(days=7)
 VERIFY_SAMPLE = 200  # stored originals read again per weekly check, and as many converted PDFs
@@ -59,6 +64,7 @@ VERIFY_SAMPLE = 200  # stored originals read again per weekly check, and as many
 LOCK_KEY = 0x4350544D4E54
 HASHED_NAME_PREFIX = 'hash:'  # no username can hold ':' (Django's username validator), so a hashed name is never one
 DAILY_EVENT = 'maintenance.daily'
+REMOVED_EVENT = 'maintenance.daily_files_removed'  # what the daily run removed once its record committed (run_daily)
 VERIFIED_EVENT = 'maintenance.originals_verified'
 MISMATCH_EVENT = 'storage.original_mismatch'
 SWEPT_EVENT = 'maintenance.orphans_swept'
@@ -84,17 +90,25 @@ def sweep_orphan_files(*, delete=False, now=None, min_age_seconds=ORPHAN_MIN_AGE
     """Count - or with ``delete`` remove - the files under ORIGINALS_DIR that no row names and that were last changed at
     least ``min_age_seconds`` ago. A young file is kept (its upload's transaction may still be open). Anything that is not
     a regular file in a practice's folder is counted as unexpected and never touched. Counts only."""
+    counts, orphans = scan_orphan_files(now=now, min_age_seconds=min_age_seconds)
+    if delete:
+        counts.update(remove_orphan_files(orphans))
+    return counts
+
+
+def scan_orphan_files(*, now=None, min_age_seconds=ORPHAN_MIN_AGE_SECONDS):
+    """The orphan sweep's dry run: (its counts, the storage names of the orphans it found - never logged or recorded)."""
     counts = {'folders': 0, 'files': 0, 'named': 0, 'orphans': 0, 'young': 0, 'deleted': 0, 'unexpected': 0,
               'failed': 0}
     cutoff = (now or timezone.now()).timestamp() - min_age_seconds
     named = named_files()  # read before the folders are listed: a file named after this read is a young one
-    root = storage.root_path()
+    root, orphans = storage.root_path(), []
     for folder_name, kind in storage.folder_entries(root):
         if kind != storage.FOLDER or not _is_uuid(folder_name):
             counts['unexpected'] += 1
             continue
         counts['folders'] += 1
-        folder, removed = root / folder_name, False
+        folder = root / folder_name
         for name, entry_kind in storage.folder_entries(folder):
             if entry_kind != storage.FILE:
                 counts['unexpected'] += 1
@@ -112,17 +126,27 @@ def sweep_orphan_files(*, delete=False, now=None, min_age_seconds=ORPHAN_MIN_AGE
                 counts['young'] += 1
                 continue
             counts['orphans'] += 1
-            if not delete:
-                continue
-            try:
-                if storage.delete_stored(storage_name):
-                    counts['deleted'] += 1
-                    removed = True
-            except (OSError, storage.StoreRefused) as exc:
-                counts['failed'] += 1
-                log.error('an orphan file could not be removed (%s)', type(exc).__name__)
-        if removed:
-            storage.sync_folder(folder)
+            orphans.append(storage_name)
+    return counts, orphans
+
+
+def remove_orphan_files(orphans) -> dict:
+    """Remove the orphans a scan found (scan_orphan_files), each folder synced once a file of it went; one that no
+    longer is an orphan - a row names it now - is kept. {'deleted', 'failed'}."""
+    counts, named, removed = {'deleted': 0, 'failed': 0}, named_files(), set()
+    for storage_name in orphans:
+        if storage_name in named:
+            continue
+        try:
+            if storage.delete_stored(storage_name):
+                counts['deleted'] += 1
+                removed.add(storage_name.split('/', 1)[0])
+        except (OSError, storage.StoreRefused) as exc:
+            counts['failed'] += 1
+            log.error('an orphan file could not be removed (%s)', type(exc).__name__)
+    root = storage.root_path()
+    for folder_name in sorted(removed):
+        storage.sync_folder(root / folder_name)
     return counts
 
 
@@ -173,29 +197,55 @@ def clear_expired_sessions(now=None) -> int:
 
 def run_daily(now=None) -> dict:
     """The daily maintenance (module docstring): every step runs even when another failed; one SecurityEvent
-    maintenance.daily holds every count and the names of the steps that failed (their errors are logged by type)."""
+    maintenance.daily holds every count and the names of the steps that failed (their errors are logged by type).
+
+    What it deletes and its record commit together, or neither does (refutation round 2, records-2): the rows it removes
+    or rewrites - and the orphan sweep's dry run - in one transaction with that SecurityEvent, each step in a savepoint
+    of its own, so a failing step rolls back alone; a record that cannot be written rolls every one of them back. What
+    cannot be rolled back waits for that commit: the orphans the scan counted (sweep_orphans) are removed once the record
+    has committed, and so are the stale conversion folders (which the worker's tick removes every hour besides). What
+    they removed and what failed - sweep_deleted, sweep_failed, work_dirs_removed and the steps' names - then go in one
+    more SecurityEvent, REMOVED_EVENT, naming the run's record (daily: its id), and in the answer. That record is written
+    after the commit: one that cannot be written is logged by type and never raised, so it neither undoes the committed
+    run nor makes the next tick run it again (the run is not due for a day)."""
     now = now or timezone.now()
-    counts, failed = {}, []
+    counts, failed, orphans, removed, removal_failed = {}, [], [], {}, []
     steps = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
              ('sessions_cleared', lambda: clear_expired_sessions(now)),
              ('rate_windows_pruned', lambda: prune_rate_windows(now)),
              ('signin_names_hashed', lambda: hash_unmatched_signin_names(now)),
-             ('orphan_sweep', lambda: sweep_orphan_files(delete=True, now=now)),
-             ('work_dirs_removed', lambda: jobs.remove_stale_work_dirs(older_than=STALE_WORK_DIR_SECONDS)),
-             ('login_attempts_pruned', lambda: prune_login_attempts(now)))
-    for name, step in steps:
+             ('login_attempts_pruned', lambda: prune_login_attempts(now)),
+             ('orphan_sweep', lambda: scan_orphan_files(now=now)))
+    with transaction.atomic():
+        for name, step in steps:
+            try:
+                with transaction.atomic():
+                    result = step()
+            except Exception as exc:  # noqa: BLE001 - one step's failure never stops the others; logged by type
+                log.error('the daily maintenance step %s failed (%s)', name, type(exc).__name__)
+                failed.append(name)
+                continue
+            if name == 'orphan_sweep':
+                scanned, orphans = result
+                counts.update({f'sweep_{key}': value for key, value in scanned.items()
+                               if key not in ('deleted', 'failed')})
+            else:
+                counts[name] = result
+        daily = security_events.record(DAILY_EVENT, **counts, failed=list(failed))
+    later = (('orphan_sweep', lambda: {f'sweep_{key}': value for key, value in remove_orphan_files(orphans).items()}),
+             ('work_dirs_removed', lambda: {'work_dirs_removed': jobs.remove_stale_work_dirs(
+                 older_than=STALE_WORK_DIR_SECONDS)}))
+    for name, step in later:
         try:
-            result = step()
-        except Exception as exc:  # noqa: BLE001 - one step's failure never stops the others; logged by type
+            removed.update(step())
+        except Exception as exc:  # noqa: BLE001 - after the record: logged by type, named in the next one
             log.error('the daily maintenance step %s failed (%s)', name, type(exc).__name__)
-            failed.append(name)
-            continue
-        if isinstance(result, dict):
-            counts.update({f'sweep_{key}': value for key, value in result.items()})
-        else:
-            counts[name] = result
-    security_events.record(DAILY_EVENT, **counts, failed=failed)
-    return {**counts, 'failed': failed}
+            removal_failed.append(name)
+    try:
+        security_events.record(REMOVED_EVENT, daily=daily.pk, **removed, failed=removal_failed)
+    except Exception as exc:  # noqa: BLE001 - the run is committed: logged by type, never raised (see above)
+        log.error("the record of the daily maintenance's removed files could not be written (%s)", type(exc).__name__)
+    return {**counts, **removed, 'failed': failed + removal_failed}
 
 
 def _check(item, counts, kind):
@@ -284,9 +334,18 @@ def run_due(now=None) -> dict:
 
 def tick(state, *, clock=time.monotonic, now=None) -> dict:
     """One maintenance tick of the worker's main thread (jobs.work, every jobs.STALE_SWEEP_SECONDS): once an hour (by
-    ``state``, the worker's own memory) the stale conversion folders, then whatever run_due finds due."""
-    removed = None
-    if clock() - state.get('hourly_at', -math.inf) >= HOURLY_SECONDS:
+    ``state``, the worker's own memory) the stale conversion folders, then whatever run_due finds due. When run_due
+    fails - a daily run whose record cannot be written rolled back and raised - it waits DUE_RETRY_SECONDS in this
+    worker before it is tried again, never at every tick (refutation round 2, records-2: _due reads that very record);
+    the failure is raised as before, and logged by jobs._maintain."""
+    removed, moment = None, clock()
+    if moment - state.get('hourly_at', -math.inf) >= HOURLY_SECONDS:
         removed = jobs.remove_stale_work_dirs(older_than=STALE_WORK_DIR_SECONDS)
         state['hourly_at'] = clock()
-    return {'work_dirs_removed': removed, **run_due(now)}
+    if moment - state.get('due_failed_at', -math.inf) < DUE_RETRY_SECONDS:
+        return {'work_dirs_removed': removed, 'daily': None, 'verified': None, 'locked': False}
+    try:
+        return {'work_dirs_removed': removed, **run_due(now)}
+    except Exception:
+        state['due_failed_at'] = clock()
+        raise

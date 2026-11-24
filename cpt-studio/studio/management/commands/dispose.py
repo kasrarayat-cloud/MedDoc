@@ -8,12 +8,15 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
     dispose --execute --plan <plan id> --by <name> --approved-by <name> --authorization-ref R
         the plan carried out by two different people, and the destruction certificate printed for the receipt. A run
         that did not complete is recorded 'failed' with what it left, prints a certificate saying so and ends with an
-        error; one interrupted after its commit (Ctrl-C, or a stop signal: SIGTERM and SIGHUP raise while the command
-        runs) is recorded and printed the same way before the interrupt goes on - a stop signal ends the command with
-        128 + its number. Whatever happens after the commit, the destruction's 'committed' DisposalEvent, written in its
-        own transaction, records it. To finish a run, remove what stopped it and plan the same scope again (a destroyed
-        document may be planned again while any of its files remains or its last run did not complete): the new plan
-        takes in what was left.
+        error; one interrupted after its commit (Ctrl-C, or a stop signal: SIGTERM and SIGHUP) is recorded and printed
+        the same way before the interrupt goes on - a stop signal ends the command with 128 + its number. Before a
+        commit a stop signal or Ctrl-C raises where the command is, and nothing is destroyed; from the moment a commit
+        begins it is held (studio.disposal.STOP_SIGNAL_HOLD: refutation round 2): the commit and the run's record go to
+        their end, the steps after the commit stop at the next one, and the command acts on it once it has printed what
+        it recorded (a replay, before its next ledger entry). Whatever happens after the commit, the destruction's
+        'committed' DisposalEvent, written in its own transaction, records it. To finish a run, remove what stopped it
+        and plan the same scope again (a destroyed document may be planned again while any of its files remains or its
+        last run did not complete): the new plan takes in what was left.
     dispose --ledger
         every DisposalEvent as a signed ledger line, to keep beside the backups.
     dispose --replay-ledger FILE [--execute --by <name> --approved-by <name> --authorization-ref R]
@@ -45,9 +48,11 @@ from studio import disposal
 
 MODES = ('close', 'plan', 'execute', 'ledger', 'replay_ledger')
 DECISION_EXIT = 3  # a replay whose only open item is an entry that needs a person's decision (Lane 6's contract)
-STOP_SIGNALS = ('SIGTERM', 'SIGHUP')
+STOP_SIGNALS = ('SIGTERM', 'SIGHUP')  # and Ctrl-C (SIGINT) while Python's own handler is the one in place
 INTERRUPTED_TEXT = ("Interrupted once the destruction's commit was attempted: the certificate above records what it did "
                     'and what it left. To finish it, plan the same scope again and carry that plan out.')
+HELD_TEXT = ('A stop signal came while the command recorded what it did: it was held until everything above was written, '
+             'and ends the command now.')
 DECIDE_TEXT = ("  whether its rows were destroyed is not known (its commit's answer was lost), so it is not carried out "
                'again: a person decides. To destroy what of it remains, plan it again (dispose --plan) and carry that '
                'plan out; a later replay carries out that run.')
@@ -62,7 +67,9 @@ class Stopped(KeyboardInterrupt):
     A KeyboardInterrupt itself (refutation dataloss-2), because psycopg cancels the statement in flight - a VACUUM
     waiting for a lock, a count - only for one: after any other exception libpq is left with that statement still
     running, every later statement of the run fails ('another command is already in progress'), and the run's 'failed'
-    DisposalEvent could not be written. Cancelled, the connection answers again, and the run is recorded."""
+    DisposalEvent could not be written. Cancelled, the connection answers again, and the run is recorded. Raised only
+    before a commit (refutation round 2): from a commit on, a stop signal is held (_stop), so no interrupt goes through
+    Django's commit or psycopg, and a statement in flight after the commit is cancelled by a cancel request instead."""
 
     def __init__(self, signum):
         super().__init__(signal.Signals(signum).name)
@@ -70,23 +77,48 @@ class Stopped(KeyboardInterrupt):
 
 
 def _stop(signum, frame):
-    raise Stopped(signum)
+    """The handler of the stop signals and of Ctrl-C: held from a commit to the command's next safe point
+    (disposal.STOP_SIGNAL_HOLD, refutation round 2), else raised where the command is - Stopped, or for Ctrl-C the
+    KeyboardInterrupt Python's own handler raises."""
+    interrupt = KeyboardInterrupt() if signum == signal.SIGINT else Stopped(signum)
+    if disposal.STOP_SIGNAL_HOLD.keep(interrupt):
+        return
+    raise interrupt
+
+
+def signal_status(interrupt):
+    """The exit status a stop signal's interrupt ends the command with: 128 + the signal's number (Ctrl-C's: 130); None
+    for anything else."""
+    if isinstance(interrupt, Stopped):
+        return 128 + interrupt.signum
+    if isinstance(interrupt, KeyboardInterrupt):
+        return 128 + signal.SIGINT
+    return None
 
 
 @contextmanager
 def stop_signals_raise():
-    """While the command runs, SIGTERM and SIGHUP raise Stopped instead of ending the process where it stands (in the
-    main thread only: no other can set a signal handler); the handlers before are put back afterwards."""
+    """While the command runs, SIGTERM and SIGHUP - and Ctrl-C, while Python's own handler is the one in place - go to
+    _stop instead of ending the process where it stands (in the main thread only: no other can set a signal handler),
+    and disposal.STOP_SIGNAL_HOLD is armed; the handlers before are put back afterwards, held meanwhile, and the hold
+    disarmed."""
     if threading.current_thread() is not threading.main_thread():
         yield
         return
-    previous = {number: signal.signal(number, _stop)
-                for number in (getattr(signal, name, None) for name in STOP_SIGNALS) if number is not None}
+    numbers = [number for number in (getattr(signal, name, None) for name in STOP_SIGNALS) if number is not None]
+    if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+        numbers.append(signal.SIGINT)
+    previous = {}
+    disposal.STOP_SIGNAL_HOLD.reset(armed=True)
     try:
+        for number in numbers:
+            previous[number] = signal.signal(number, _stop)
         yield
     finally:
+        disposal.STOP_SIGNAL_HOLD.hold()  # the command is over: a signal now ends nothing more
         for number, handler in previous.items():
             signal.signal(number, handler)
+        disposal.STOP_SIGNAL_HOLD.reset(armed=False)
 
 
 def _reason(path):
@@ -119,24 +151,43 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         with stop_signals_raise():
             try:
-                self._handle(options)
-            except disposal.Refused as exc:  # raised only before anything was destroyed (studio.disposal)
-                raise CommandError('Refused, nothing was destroyed: ' + ' '.join(exc.reasons))
-            except disposal.NotDestroyed as exc:
-                raise CommandError(str(exc))
-            except disposal.Unrecorded as exc:
-                self.stdout.write(exc.text)
-                raise CommandError("The destruction ran, but its final DisposalEvent could not be written: its "
-                                   "'committed' DisposalEvent (named above) records the destruction, and the "
-                                   'certificate above what happened to its files. Keep it with the receipt.')
-            except BaseException as exc:  # an interrupt after a destruction's commit brings its record: printed first
-                certificate = getattr(exc, 'disposal_certificate', '')
-                if certificate and getattr(exc, 'disposal_report', None) is None:
-                    self.stdout.write(certificate)
-                    self.stderr.write(INTERRUPTED_TEXT)
-                if isinstance(exc, Stopped):
-                    raise SystemExit(128 + exc.signum) from exc
+                self._act(options)
+                if disposal.STOP_SIGNAL_HOLD.pending is not None:
+                    self.stderr.write(HELD_TEXT)
+                disposal.STOP_SIGNAL_HOLD.safe_point()  # everything recorded and printed: a stop signal held till now
+            except Stopped as exc:  # a stop signal ends the command with 128 + its number
+                raise SystemExit(128 + exc.signum) from exc
+            except KeyboardInterrupt:  # Ctrl-C ends it as Python ends it
                 raise
+            except BaseException as exc:  # anything else ends it as it is - with the status of a stop signal held
+                status = signal_status(disposal.STOP_SIGNAL_HOLD.pending)
+                if status is None or isinstance(exc, SystemExit):
+                    raise
+                if isinstance(exc, CommandError):
+                    exc.returncode = status  # its message as Django prints it, and the signal's status
+                    raise
+                self.stderr.write(f'A stop signal came while the command recorded what it did, and it then ended on an '
+                                  f'error ({type(exc).__name__}).')
+                raise SystemExit(status) from exc
+
+    def _act(self, options):
+        try:
+            self._handle(options)
+        except disposal.Refused as exc:  # raised only before anything was destroyed (studio.disposal)
+            raise CommandError('Refused, nothing was destroyed: ' + ' '.join(exc.reasons))
+        except disposal.NotDestroyed as exc:
+            raise CommandError(str(exc))
+        except disposal.Unrecorded as exc:
+            self.stdout.write(exc.text)
+            raise CommandError("The destruction ran, but its final DisposalEvent could not be written: its "
+                               "'committed' DisposalEvent (named above) records the destruction, and the "
+                               'certificate above what happened to its files. Keep it with the receipt.')
+        except BaseException as exc:  # an interrupt after a destruction's commit brings its record: printed first
+            certificate = getattr(exc, 'disposal_certificate', '')
+            if certificate and getattr(exc, 'disposal_report', None) is None:
+                self.stdout.write(certificate)
+                self.stderr.write(INTERRUPTED_TEXT)
+            raise
 
     def _mode(self, options):
         plan = options['plan']

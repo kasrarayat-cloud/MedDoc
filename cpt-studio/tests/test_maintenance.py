@@ -372,8 +372,11 @@ class SweepTests(OriginalsCase, TestCase):
         for text in (dry.getvalue(), out.getvalue()):
             for name in (self.original, self.converted, self.orphan, self.young):
                 self.assertNotIn(name.split('/')[1], text)  # never a file's name
+        # recorded first (round 2, records-2): what the sweep found and goes on to remove; what it removed is printed
         event = models.SecurityEvent.objects.get(event=maintenance.SWEPT_EVENT)
-        self.assertEqual((event.data['deleted'], event.data['orphans'], event.data['named']), (1, 1, 2))
+        self.assertEqual((event.data['orphans'], event.data['named'], event.data['young']), (1, 2, 1))
+        self.assertNotIn('deleted', event.data)
+        self.assertIn('deleted 1', out.getvalue())
         self.assertNotIn(self.orphan, stored_files(self.root))
 
 
@@ -440,14 +443,21 @@ class DailyTests(OriginalsCase, TestCase):
             ids, orphan, stale = self.seed(scratch)
             counts = maintenance.run_daily(self.now)
             self.assertFalse(stale.exists())
-        expected = {'sessions_cleared': 1, 'rate_windows_pruned': 1, 'signin_names_hashed': 2, 'work_dirs_removed': 1,
-                    'login_attempts_pruned': 1, 'sweep_orphans': 1, 'sweep_deleted': 1, 'sweep_named': 0,
-                    'sweep_young': 0, 'sweep_failed': 0}
+        # what committed with the record (round 2, records-2: the rows in one transaction with it, and the orphans the
+        # sweep found to remove), and what was removed once it had committed - files, which cannot be rolled back - in
+        # the answer alone
+        recorded = {'sessions_cleared': 1, 'rate_windows_pruned': 1, 'signin_names_hashed': 2, 'login_attempts_pruned': 1,
+                    'sweep_orphans': 1, 'sweep_named': 0, 'sweep_young': 0}
+        removed_after = {'sweep_deleted': 1, 'sweep_failed': 0, 'work_dirs_removed': 1}
         event = models.SecurityEvent.objects.get(event=maintenance.DAILY_EVENT)
-        for name, value in expected.items():
+        for name, value in recorded.items():
             with self.subTest(count=name):
                 self.assertEqual(event.data[name], value)
                 self.assertEqual(counts[name], value)
+        for name, value in removed_after.items():
+            with self.subTest(count=name):
+                self.assertEqual(counts[name], value)
+                self.assertNotIn(name, event.data)
         self.assertEqual(event.data['failed'], [])
         self.assertEqual(list(Session.objects.values_list('session_key', flat=True)), ['lane4live' + 'y' * 23])
         self.assertEqual(models.RateWindow.objects.count(), 1)
@@ -463,12 +473,14 @@ class DailyTests(OriginalsCase, TestCase):
     def test_a_failing_step_is_named_and_the_others_still_run(self):
         with tempfile.TemporaryDirectory() as scratch, mock.patch('tempfile.gettempdir', return_value=scratch), \
                 mock.patch.object(maintenance, 'prune_rate_windows', side_effect=DatabaseError('synthetic')):
-            self.seed(scratch)
-            maintenance.run_daily(self.now)
+            _, orphan, _ = self.seed(scratch)
+            counts = maintenance.run_daily(self.now)
         event = models.SecurityEvent.objects.get(event=maintenance.DAILY_EVENT)
         self.assertEqual(event.data['failed'], ['rate_windows_pruned'])
         self.assertNotIn('rate_windows_pruned', event.data)
-        self.assertEqual((event.data['signin_names_hashed'], event.data['sweep_deleted']), (2, 1))
+        self.assertEqual((event.data['signin_names_hashed'], event.data['sweep_orphans']), (2, 1))
+        self.assertEqual((counts['sweep_deleted'], counts['failed']), (1, ['rate_windows_pruned']))
+        self.assertNotIn(orphan, stored_files(self.root))
 
     def test_a_hashed_name_is_the_throttle_key_of_the_name_and_holds_no_text(self):
         hashed = maintenance.hashed_signin_name('Someone@Example.invalid')

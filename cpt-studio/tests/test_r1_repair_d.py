@@ -10,6 +10,8 @@
   was kept; a copy that cannot be removed is said to remain.
 - D4 (dataloss-4): a real SIGTERM at any line from the commit to the final DisposalEvent's INSERT leaves the run recorded
   'failed' with its certificate printed; at any line before the commit it destroys and records nothing, as before.
+  (Round 2, repair d2, tests/test_r1_repair_d2.py: the stop signals are held from the block's last statement, so the
+  with block's exit is on the commit's side, and a signal after the run's steps leaves its record as it stands.)
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -280,7 +282,10 @@ class StopSignalDuringAStatementTests(TransactionTestCase):
     handlers, and when its VACUUM (ANALYZE) starts another session holds a lock it waits for, as an autovacuum or an
     ANALYZE would. Once the VACUUM is seen waiting (pg_stat_activity, never a timer), a real SIGTERM or SIGHUP goes to
     the main thread. The statement is cancelled, the run is recorded 'failed' with its certificate, and the command ends
-    with 128 + the signal's number. The control: Ctrl-C (SIGINT), which psycopg always cancelled for."""
+    with 128 + the signal's number. The control: Ctrl-C (SIGINT), which psycopg always cancelled for. Since round 2
+    (repair d2) the signal is held from the commit on and the VACUUM ended by a cancel request, so it ends on an error
+    result, read as one: _vacuum reports it failed (vacuum=failed), where the interrupt raised through it used to leave it
+    'not run'."""
 
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -368,7 +373,7 @@ class StopSignalDuringAStatementTests(TransactionTestCase):
         self.assertIsNotNone(final)
         self.assertEqual(final.counts['problems'], [f'vacuum: {raised_as}'])
         self.assertIsInstance(final.counts['audit_rows_kept'], int)  # the count after the interrupt ran
-        self.assertIn('vacuum=not run', final.notes)
+        self.assertIn('vacuum=failed', final.notes)  # cancelled (round 2): it ended on an error
         self.assertTrue(printed.startswith('CPT Studio destruction: NOT COMPLETE'), printed[:200])
         self.assertIn(f'Disposal {final.pk} (failed)', printed)
         self.assertIn(dispose_cmd.INTERRUPTED_TEXT, errors)
@@ -608,7 +613,14 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
     been written), the 'committed' row standing either way. And at every line event of destroy before the commit: the
     transaction rolls back, nothing is destroyed or recorded, nothing is printed - an interrupt before the commit does
     what it did - the line event of the with block's exit included, where the interrupt comes before Django's __exit__
-    ran (destroy's guard closes the block; DestroyBlockExitTests has the real-signal case)."""
+    ran (destroy's guard closes the block; DestroyBlockExitTests has the real-signal case).
+
+    Round 2 (repair d2, disposal-0 to disposal-4) moved the line between the two: the block's last statement holds the
+    stop signals (disposal.STOP_SIGNAL_HOLD), so from the with block's exit on the commit and the run's record go to
+    their end. A signal that comes before the steps after the commit is recorded 'failed', named as the problem of the
+    step it stopped ('files: Stopped'); one that comes after them changes nothing in the record - written as it stands,
+    'completed' here - and the command says it held the signal; either way its certificate is printed, it names only
+    rows that exist (never "may not have been written": the INSERT is not interrupted), and the command ends with 143."""
 
     def one_document(self, number):
         enc = f.encounter(self.ws, self.reviewer, title=f'ZZ-TITLE-MARKER sweep {number}')
@@ -627,19 +639,21 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
                 code = exc.code
             finally:
                 sys.settrace(None)
+        self.errors = err.getvalue()
         return code, out.getvalue()
 
     def points(self):
-        """(before the commit, between the commit and the final INSERT): the line events of an uninterrupted run."""
+        """(before the commit, between the commit and the final INSERT): the line events of an uninterrupted run - the
+        commit's side beginning just after the block's last statement, which holds the stop signals (round 2)."""
         events = []
         _, plan = self.one_document('recorded')
         code, printed = self.run_plan(plan, traced(lambda *event: events.append(event)))
         self.assertIsNone(code, printed)
         loops = {function.__name__: loop_lines(function) for function in SWEPT}
         events = [event for event in events if event[2] == 1 or event[1] not in loops[event[0]]]
-        exit_ = events.index(('destroy', line_of(disposal.destroy, 'with block:'), 2))
+        hold = events.index(('destroy', line_of(disposal.destroy, "marks['committing'] = STOP_SIGNAL_HOLD.hold()"), 1))
         insert = events.index(('_record', line_of(disposal._record, 'DisposalEvent.objects.create(**values)'), 1))
-        return [event for event in events[:exit_ + 1] if event[0] == 'destroy'], events[exit_ + 1:insert + 1]
+        return [event for event in events[:hold + 1] if event[0] == 'destroy'], events[hold + 1:insert + 1]
 
     def interrupted_at(self, point, number):
         enc, plan = self.one_document(number)
@@ -648,7 +662,7 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
         def on_line(*event):
             if event == point and not fired:
                 fired.append(event)
-                os.kill(os.getpid(), signal.SIGTERM)  # the command's handler raises Stopped here
+                os.kill(os.getpid(), signal.SIGTERM)  # the command's handler takes it here: held, or raised
         code, printed = self.run_plan(plan, traced(on_line))
         self.assertEqual(fired, [point])
         self.assertEqual(code, 128 + signal.SIGTERM)
@@ -658,19 +672,21 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
     def test_a_sigterm_at_any_line_between_the_commit_and_the_record_is_recorded(self):
         _, after = self.points()
         self.assertGreaterEqual(len(after), 10)
-        insert_line = line_of(disposal._record, 'DisposalEvent.objects.create(**values)')
+        steps = after.index(('destroy', line_of(disposal.destroy, '_after_commit(scope, outcome)'), 1))
         for number, point in enumerate(after):
             with self.subTest(point=point):
                 enc, events, printed = self.interrupted_at(point, number)
                 committed = events.get(stage=disposal.COMMITTED)  # the record that stands whatever follows
                 self.assertIn(f'DisposalEvent {committed.pk} (committed)', printed)
-                final = events.filter(stage__in=(Event.COMPLETED, Event.FAILED)).first()
-                if final is not None:
+                final = events.get(stage__in=(Event.COMPLETED, Event.FAILED))  # never "may not have been written"
+                self.assertIn(f'Disposal {final.pk} ({final.stage})', printed)
+                self.assertNotIn('NOT RECORDED', printed)
+                if after.index(point) <= steps:  # before the steps after the commit: they stop, and say why
                     self.assertEqual(final.stage, Event.FAILED)
-                    self.assertIn(f'Disposal {final.pk} (failed)', printed)
-                else:  # interrupted at the INSERT itself: whether it was written is not known, and that is printed
-                    self.assertEqual(point[:2], ('_record', insert_line))
-                    self.assertIn('NOT RECORDED (its DisposalEvent may not have been written', printed)
+                    self.assertEqual(final.counts['problems'], ['files: Stopped'])
+                else:  # after them: the record as it stands, and the signal held to the end
+                    self.assertEqual(final.stage, Event.COMPLETED)
+                    self.assertIn(dispose_cmd.HELD_TEXT, self.errors)
                 self.assertNotIn('ZZ-TITLE-MARKER', printed)
 
     def test_a_sigterm_at_any_line_before_the_commit_destroys_and_records_nothing(self):
@@ -715,9 +731,12 @@ class DestroyBlockExitTests(TransactionTestCase):
     block's __exit__ is entered - before its first line, so before it began the commit (the trace hook sends it at that
     call: where CPython checks for a signal on entering a function). The block was left open: the 'committed' and
     'failed' rows were written into that open transaction, which the process's exit rolled back, and the certificate
-    printed - "whether the rows were destroyed is not known" - named a DisposalEvent that never existed. Now destroy's
-    guard closes the block itself: rolled back, nothing destroyed, recorded or printed, as before the commit. In
-    autocommit, as the command runs."""
+    printed - "whether the rows were destroyed is not known" - named a DisposalEvent that never existed. Round 1 made
+    destroy's guard close the block itself (rolled back, nothing destroyed). Round 2 (repair d2, disposal-2: one line
+    later in __exit__ the same ghost came back) holds the stop signals from the block's last statement on: the commit
+    goes to its end, and the run is recorded 'failed' - its steps after the commit stopped before the first one, so the
+    document's file is left, named, for a new plan - with a certificate naming only rows that exist, nothing left open.
+    In autocommit, as the command runs."""
 
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -730,15 +749,16 @@ class DestroyBlockExitTests(TransactionTestCase):
         self.enc = f.encounter(ws, member, title='ZZ-TITLE-MARKER block exit')
         f.upload(self.enc, member, data=f.PDF_BYTES + b' block exit', filename='zz-file-marker.pdf')
 
-    def test_a_sigterm_as_the_block_exit_is_entered_rolls_back_and_records_nothing(self):
+    def test_a_sigterm_as_the_block_exit_is_entered_is_held_to_the_runs_record(self):
         plan = disposal.plan(disposal.document_scope(self.enc.pk), by='Synthetic Operator', reason='Synthetic.')
+        name = models.SourceFile.objects.get(encounter=self.enc).storage_name
         exit_code, fired = transaction.Atomic.__exit__.__code__, []
 
         def at_the_exit(frame, event, arg):
             if (event == 'call' and frame.f_code is exit_code and not fired and frame.f_back is not None
                     and frame.f_back.f_code is disposal.destroy.__code__):
                 fired.append(True)
-                os.kill(os.getpid(), signal.SIGTERM)  # handled here, before __exit__'s first line
+                os.kill(os.getpid(), signal.SIGTERM)  # taken here, before __exit__'s first line: held
             return None
         out, code = io.StringIO(), None
         with td.installer_idle():
@@ -754,8 +774,13 @@ class DestroyBlockExitTests(TransactionTestCase):
         self.assertEqual(code, 128 + signal.SIGTERM)
         self.assertFalse(connection.in_atomic_block)  # no transaction left open for a record to vanish with
         self.assertEqual(connection.atomic_blocks, [])
-        self.assertEqual(list(Event.objects.values_list('stage', flat=True)), [Event.PLANNED])
-        self.assertIsNone(models.Encounter._base_manager.get(pk=self.enc.pk).destroyed_at)
-        source = models.SourceFile.objects.get(encounter=self.enc)
-        self.assertTrue(storage.stored_path(source.storage_name).exists())
-        self.assertEqual(out.getvalue(), '')  # nothing happened, so no certificate claims anything
+        connection.close()  # what the process's exit does: what follows is what committed
+        self.assertEqual(sorted(Event.objects.values_list('stage', flat=True)),
+                         sorted([Event.PLANNED, disposal.COMMITTED, Event.FAILED]))
+        committed, failed = Event.objects.get(stage=disposal.COMMITTED), Event.objects.get(stage=Event.FAILED)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=self.enc.pk).destroyed_at)
+        self.assertEqual((failed.counts['problems'], failed.files['remaining_names']), (['files: Stopped'], [name]))
+        self.assertTrue(storage.stored_path(name).exists())  # left for a new plan, and named
+        for pk, stage in ((committed.pk, 'committed'), (failed.pk, 'failed')):
+            self.assertIn(f'{pk} ({stage})', out.getvalue())
+        self.assertNotIn('NOT RECORDED', out.getvalue())
