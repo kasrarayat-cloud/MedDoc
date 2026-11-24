@@ -44,7 +44,7 @@ class AdminCase(r.CustomerCase, TestCase):
         super().setUp()
         self.owner = r.f.member(self.ws, role=Membership.OWNER)
         self.operator_user = r.f.user('platform-operator')
-        self.ops = ops.client(self.operator_user)
+        self.ops = ops.admin_client(self.operator_user)
         self.neuro = models.Category.objects.create(slug='neurosurgery', name='Neurosurgery',
                                                     profiles_version='synthetic@1')
 
@@ -87,13 +87,15 @@ class GateTests(AdminCase):
         self.assertEqual(self.ops.get('/ops/people').status_code, 200)
         from studio import operator
         operator.revoke(self.operator_user, 'Synthetic test revocation of the console grant.', 'tests')
+        # the revocation ended the old session (C3); a new one, second factor and all (and no new grant)
+        again = ops.mark_signed_in(self.client_for(self.operator_user, HTTP_HOST='admin.quillmd.com'), door='admin')
         for url in ('/ops/people', '/ops/workspaces', '/ops/spending', '/ops/activity'):
             with self.subTest(url=url):
-                self.assertEqual(self.ops.get(url).status_code, 404)
+                self.assertEqual(again.get(url).status_code, 404)
+                self.assertEqual(self.ops.get(url)['Location'], '/login/?next=' + url.replace('/', '%2F'))
 
     def test_the_acts_check_the_csrf_token_after_the_gate(self):
-        strict = Client(enforce_csrf_checks=True)
-        strict.force_login(self.operator_user)
+        strict = ops.admin_client(self.operator_user, enforce_csrf_checks=True)
         before = self.counts()
         for url, body in ((f'/ops/people/{self.viewer.pk}/access', {'access': 'off'}),
                           (f'/ops/people/{self.viewer.pk}/password', {}),
@@ -465,7 +467,8 @@ class LookTests(AdminCase):
     def test_signing_out_from_the_console(self):
         response = self.ops.post('/logout/')
         self.assertEqual((response.status_code, response['Location']), (302, '/login/'))
-        self.assertEqual(self.ops.get('/ops/people').status_code, 404)
+        # signed out on the console's own host: the operator sign-in, and back to the page (D396; release 1, B3)
+        self.assertEqual(self.ops.get('/ops/people')['Location'], '/login/?next=%2Fops%2Fpeople')
 
 
 class PasswordTests(TestCase):

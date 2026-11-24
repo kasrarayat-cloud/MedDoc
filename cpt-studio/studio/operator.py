@@ -1,15 +1,19 @@
 """The platform-operator console (BUILD-SPEC 9): server-rendered pages under /ops/.
 
-An operator is a user holding an OperatorGrant that no OperatorRevocation ended - nothing else. No workspace role
-confers it (a practice owner is not an operator) and nothing here reads a Membership to decide it. Grants are recorded
-by the ``grant_operator`` management command only, never over HTTP.
+An operator is a person's account (actor_kind human: release 1, C3) holding an OperatorGrant that no OperatorRevocation
+ended - nothing else. An automated account is never one, whatever grant row it has, and is refused a grant. No workspace
+role confers it (a practice owner is not an operator) and nothing here reads a Membership to decide it. Grants are
+recorded by the ``grant_operator`` management command only, never over HTTP, each tied to an approval
+(authorization_ref) and a review date; a revocation also ends every session of the account; both write a SecurityEvent.
 
-Every URL under /ops/ answers anyone who is not an operator - signed out, a member of any role, the owner of any
-workspace, a revoked operator - exactly what an unknown URL answers (Django's 404), before the method, the body, the
-CSRF token or any record is read, so the surface's existence is not disclosed. On the console's own host,
-admin.quillmd.com (D396; studio.hosts), a signed-out request goes to the operator sign-in first - a GET or HEAD back to the
-page asked for (302), any other method to the console's front page (303) - and the 404 holds for every signed-in account
-that is not an operator. An operator's read of an encounter page
+The console answers only on admin.quillmd.com, and only to a session that passed the second factor at the admin door
+(release 1, B3 and B2: may_use_console). Every URL under /ops/ answers anyone else - signed out, a member of any role,
+the owner of any workspace, a revoked operator, an operator with a password alone or with a session from cpt.quillmd.com,
+any request on any other host - exactly what an unknown URL answers (Django's 404), before the method, the body, the CSRF
+token or any record is read, so the surface's existence is not disclosed. On the console's own host, admin.quillmd.com
+(D396; studio.hosts), a signed-out request goes to the operator sign-in first - a GET or HEAD back to the page asked for
+(302), any other method to the console's front page (303) - and the 404 holds for every signed-in request that may not
+use the console. An operator's read of an encounter page
 or its original is audited as ``operator.viewed`` (never shown to customers: their activity is a fixed set of sentences,
 studio.customer). Vendor and model names, usage, costs, hashes and request ids are shown here; this is the record.
 
@@ -35,7 +39,7 @@ from __future__ import annotations
 import functools
 import json
 import re
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from importlib import import_module
 
@@ -48,7 +52,7 @@ from django.utils import timezone
 from django.views.decorators.common import no_append_slash
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 
-from . import audit, jobs, models, spend, state
+from . import audit, hosts, jobs, models, second_factor, security_events, sessions, spend, state
 from .fable import pricing
 from .fable import result as fable_result
 from .storage import OriginalCorrupted, read_original
@@ -76,9 +80,12 @@ def active_grant(user):
 
 
 def is_operator(user) -> bool:
-    """Whether ``user`` is a platform operator now: signed in, active, and holding a grant no revocation ended. A workspace
-    role never makes one, and no Membership is read."""
+    """Whether ``user`` is a platform operator now: signed in, active, a person's account (release 1, C3: an automated
+    account never holds operator power, whatever grant row it has), and holding a grant no revocation ended. A workspace
+    role never makes one, and no Membership is read: the account is already loaded, so this is one query."""
     if not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', False):
+        return False
+    if getattr(user, 'actor_kind', None) != models.User.HUMAN:
         return False
     return models.OperatorGrant.objects.filter(user_id=user.pk, revocation__isnull=True).exists()
 
@@ -96,23 +103,92 @@ def clean_reason(text) -> str:
     return reason
 
 
-def grant(user, reason, granted_by):
-    """Record a grant for ``user`` (the management command's one write). (grant, created): an operator who already holds
-    a grant keeps it and nothing is written."""
+AGENT_GRANT_REFUSED = ('An automated account cannot be an operator: operator power is for people only (release 1, '
+                       'C3); nothing was recorded.')
+AUTHORIZATION_REF_CHARS = 200  # OperatorGrant.authorization_ref
+REVIEW_MONTHS = 12  # a grant's review date is at most this far away (ADM-8, ADM-13)
+
+
+def clean_authorization_ref(text) -> str:
+    """The approval a grant rests on (for example a committed ruling's path, or a declaration and its commit): stripped;
+    refused when empty, too long, or holding a character that cannot be stored or seen."""
+    value = str(text or '').strip()
+    if not value:
+        raise ValueError('The authorization reference is required: the approval the grant rests on.')
+    if len(value) > AUTHORIZATION_REF_CHARS:
+        raise ValueError(f'The authorization reference can be at most {AUTHORIZATION_REF_CHARS} characters.')
+    if UNSTORABLE.search(value) or any(ord(ch) < 32 for ch in value):
+        raise ValueError('The authorization reference contains a control character or an invalid Unicode code point.')
+    return value
+
+
+def review_limit(today):
+    """The latest review date a grant made ``today`` may carry: the same day REVIEW_MONTHS months later (the 28th for a
+    29 February that year has none)."""
+    month = today.month - 1 + REVIEW_MONTHS
+    year, month = today.year + month // 12, month % 12 + 1
+    for day in (today.day, 30, 29, 28):
+        try:
+            return today.replace(year=year, month=month, day=day)
+        except ValueError:
+            continue
+    raise ValueError('No review date could be computed.')  # unreachable: every month has a 28th
+
+
+def clean_review_by(value, today=None):
+    """A grant's review date (a date, or YYYY-MM-DD): refused when it is not a date, already past, or more than
+    REVIEW_MONTHS months away."""
+    today = today or timezone.localdate()
+    if isinstance(value, str):
+        try:
+            value = date.fromisoformat(value.strip()) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', value.strip()) else None
+        except ValueError:
+            value = None
+    if not isinstance(value, date) or isinstance(value, datetime):
+        raise ValueError('The review date is a date, YYYY-MM-DD.')
+    if value < today:
+        raise ValueError('The review date has already passed.')
+    if value > review_limit(today):
+        raise ValueError(f'The review date can be at most {REVIEW_MONTHS} months away (by {review_limit(today)}).')
+    return value
+
+
+def grant(user, reason, granted_by, *, authorization_ref=None, review_by=None):
+    """Record a grant for ``user`` (the management command's one write) with the approval it rests on and the date it
+    must be reviewed by, and a SecurityEvent operator.granted. (grant, created): an operator who already holds a grant
+    keeps it and nothing is written. An automated account is refused (ValueError) - operator power is for people only.
+
+    grant_operator requires the approval, the review date and the named person who runs it (release 1, C3) and is the
+    only path that records a grant outside the tests; here both are checked when given (tests.support.operator, Lane 1's
+    shared helper, grants a test operator with the reason and the label alone)."""
+    if getattr(user, 'actor_kind', None) != models.User.HUMAN:
+        raise ValueError(AGENT_GRANT_REFUSED)
     existing = active_grant(user)
     if existing is not None:
         return existing, False
-    return models.OperatorGrant.objects.create(user=user, reason=clean_reason(reason),
-                                               granted_by=str(granted_by or '')[:120]), True
+    reason = clean_reason(reason)
+    reference = clean_authorization_ref(authorization_ref) if authorization_ref is not None else None
+    review = clean_review_by(review_by) if review_by is not None else None
+    label = str(granted_by or '')[:120]
+    record = models.OperatorGrant.objects.create(user=user, reason=reason, granted_by=label,
+                                                 authorization_ref=reference, review_by=review)
+    security_events.record('operator.granted', actor_label=label, subject=user, grant=record.pk, review_by=review)
+    return record, True
 
 
 def revoke(user, reason, revoked_by):
-    """End every grant of ``user`` that no revocation ended; the revocations recorded (none when there was none)."""
+    """End every grant of ``user`` that no revocation ended, end every session of the account at once (release 1, C3:
+    studio.sessions.end_sessions) and write a SecurityEvent operator.revoked; the revocations recorded (none, and
+    nothing ended or written, when there was none)."""
     reason = clean_reason(reason)
+    label = str(revoked_by or '')[:120]
     out = []
     for item in models.OperatorGrant.objects.filter(user_id=user.pk, revocation__isnull=True).order_by('created_at'):
-        out.append(models.OperatorRevocation.objects.create(grant=item, reason=reason,
-                                                            revoked_by=str(revoked_by or '')[:120]))
+        out.append(models.OperatorRevocation.objects.create(grant=item, reason=reason, revoked_by=label))
+    if out:
+        ended = sessions.end_sessions(user)
+        security_events.record('operator.revoked', actor_label=label, subject=user,
+                               grants=[item.grant_id for item in out], sessions_ended=ended)
     return out
 
 
@@ -137,19 +213,29 @@ def _as_an_unknown_url(request):
         request.session = store(request.COOKIES.get(settings.SESSION_COOKIE_NAME))
 
 
+def may_use_console(request) -> bool:
+    """Whether ``request`` reaches the console (release 1, B3 and B2 step 4): all three must hold - the request is on the
+    admin host (studio.hosts.is_admin_host: admin.quillmd.com, read from the Host header Django checked; never
+    X-Forwarded-Host), its session passed the second factor at the admin door (studio.second_factor.satisfied: a password
+    alone, a session opened at cpt.quillmd.com or one from before release 1 never does), and its account is a person
+    holding an operator grant (is_operator). The host is read first, so on any other host the session is not read."""
+    return hosts.is_admin_host(request) and second_factor.satisfied(request) and is_operator(request.user)
+
+
 def operator_view(view):
-    """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404 - before the method, the body,
-    the CSRF token or the record is read; an operator gets the view. Django resolves a URL before CsrfViewMiddleware runs
-    and an unknown URL stops there, so the global CSRF check is skipped here (csrf_exempt) and the same check
-    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash. On the admin
-    host (admin.quillmd.com, D396) studio.hosts.signed_out_to_sign_in first sends any signed-out request to the operator
-    sign-in (a GET or HEAD back to the page, any other method to the front page with a 303); this gate answers every
-    signed-in account that is not an operator, there as on cpt.quillmd.com."""
+    """Any request that may not use the console (may_use_console) gets exactly what an unknown URL gets - Django's 404 -
+    before the method, the body, the CSRF token or the record is read; an operator who passed the second factor on the
+    admin host gets the view. Django resolves a URL before CsrfViewMiddleware runs and an unknown URL stops there, so the
+    global CSRF check is skipped here (csrf_exempt) and the same check (csrf_protect) runs after the gate, for operators
+    only; no operator URL is reached by appending a slash. On the admin host (admin.quillmd.com, D396)
+    studio.hosts.signed_out_to_sign_in first sends any signed-out request to the operator sign-in (a GET or HEAD back to
+    the page, any other method to the front page with a 303); this gate answers every signed-in request that may not use
+    the console, there as on cpt.quillmd.com, where the console answers nobody (release 1, B3)."""
     protected = csrf_protect(view)
 
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
-        if not is_operator(request.user):
+        if not may_use_console(request):
             _as_an_unknown_url(request)
             raise Http404()
         return protected(request, *args, **kwargs)

@@ -17,7 +17,7 @@ class ConsoleCase(r.CustomerCase, TestCase):
         self.enc = self.done(title='Synthetic EGD for the console')
         self.round = Round.objects.get(encounter=self.enc)
         self.operator_user = r.f.user('platform-operator')
-        self.ops = ops.client(self.operator_user)
+        self.ops = ops.admin_client(self.operator_user)
 
     def urls(self):
         run = Run.objects.filter(encounter=self.enc).first()
@@ -54,7 +54,12 @@ class GateTests(ConsoleCase):
         self.assertEqual(self.ops.get('/ops/').status_code, 200)
         from studio import operator
         operator.revoke(self.operator_user, 'Synthetic test revocation of the console grant.', 'tests')
-        self.assertEqual(self.ops.get('/ops/').status_code, 404)
+        # the revocation ended the session (release 1, C3): signed out, the admin host sends it to the sign-in
+        self.assertEqual(self.ops.get('/ops/')['Location'], '/login/?next=%2Fops%2F')
+        # and a new session of the account, second factor and all (no new grant), is a stranger's
+        again = Client(HTTP_HOST='admin.quillmd.com')
+        again.force_login(self.operator_user)
+        self.assertEqual(ops.mark_signed_in(again, door='admin').get('/ops/').status_code, 404)
 
 
 class PageTests(ConsoleCase):
@@ -147,8 +152,7 @@ class PageTests(ConsoleCase):
 class ActTests(ConsoleCase):
     def test_reconcile_records_an_unknown_run_with_a_note_and_needs_the_token(self):
         run = self.unknown()
-        strict = Client(enforce_csrf_checks=True)
-        strict.force_login(self.operator_user)
+        strict = ops.admin_client(self.operator_user, enforce_csrf_checks=True)
         url = f'/ops/encounters/{self.enc.pk}/reconcile'
         self.assertEqual(strict.post(url, {'run': str(run.pk), 'note': 'Checked the console.'}).status_code, 403)
         short = self.ops.post(url, {'run': str(run.pk), 'note': 'too short'})
