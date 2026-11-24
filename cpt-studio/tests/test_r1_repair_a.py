@@ -6,12 +6,15 @@ A1  A security act whose SecurityEvent cannot be written does not happen. Postgr
     patched; the tests are TransactionTestCases, so every write autocommits as it does in production (no
     ATOMIC_REQUESTS). Each act is shown not to have happened, then to happen with its record once the record can be
     written (the non-vacuity control).
+A2  The console's activity list shows no CPT code and no line of any document: the document's own page keeps them
+    closed until a reason is given (C2), and the list spans every practice. What the list shows otherwise stays.
 """
 from __future__ import annotations
 
 import io
 import json
 import tempfile
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -20,9 +23,9 @@ from django.contrib.sessions.models import Session
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import Client, TransactionTestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 
-from studio import models, rate, second_factor, throttle
+from studio import audit, console, models, rate, second_factor, throttle
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -360,3 +363,52 @@ class ActWithItsRecordTests(TransactionTestCase):
         self.assertEqual((used.status_code, used['Location']), (302, '/ops/security'))
         self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT - 1)
         self.assertEqual(security_events('second_factor.recovery_used'), 1)
+
+
+# --- A2: the activity list (bypass-0, phileak-3) -------------------------------------------------------------------------
+
+A2_CODES = ('45385', '45380')
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ActivityListWithoutContentTests(TestCase):
+    """A2: a decided code and its line are a document's content (its page shows them only with a content grant), so the
+    activity list - every practice's events, read with no reason - shows neither, for this release's decisions and for
+    an earlier version's answered details alike."""
+
+    def setUp(self):
+        self.ws = f.workspace('Synthetic practice A2')
+        self.member = f.member(self.ws)
+        self.encounter = f.encounter(self.ws, self.member, title='ZZ-TITLE-A2')
+        self.decided = audit.record(self.ws, 'decision.recorded', encounter=self.encounter, actor=self.member,
+                                    decision=str(uuid.uuid4()), round=str(uuid.uuid4()), number=1, action='approve',
+                                    line='L7', code=A2_CODES[0])
+        # an earlier version's answered detail, as it was written then: its code and the member's answer
+        self.answered = audit.record(self.ws, 'detail.answered', encounter=self.encounter, actor=self.member,
+                                     fact='ZZ-FACT-A2', family='synthetic', code=A2_CODES[1], value='ZZ-ANSWER-A2',
+                                     answer=str(uuid.uuid4()))
+
+    def test_the_list_shows_no_code_and_no_line_and_keeps_the_rest(self):
+        client = ops.admin_client(f.user('a2-operator'))
+        for address in ('/ops/activity', '/ops/activity?kind=decisions', f'/ops/activity?workspace={self.ws.pk}',
+                        f'/ops/activity?kind=decisions&workspace={self.ws.pk}'):
+            with self.subTest(address):
+                answer = client.get(address)
+                self.assertEqual(answer.status_code, 200)
+                body = answer.content.decode()
+                self.assertIn(str(self.encounter.pk)[:8], body, 'the document is listed by its reference')
+                self.assertIn('number 1', body, 'what the row shows otherwise stays')
+                for marker in A2_CODES + ('line L7', 'code ' + A2_CODES[0], 'ZZ-ANSWER-A2', 'ZZ-TITLE-A2'):
+                    self.assertFalse(marker in body, f'{marker!r} is on the list')
+        self.assertFalse(models.AccessRecord.objects.filter(view='ops.content_open').exists(), 'no grant was asked')
+
+    def test_each_event_keeps_its_other_details(self):
+        self.assertEqual(console.describe(self.decided)['details'], 'number 1')
+        self.assertEqual(console.describe(self.answered)['details'], '')
+        changed = audit.record(self.ws, 'operator.role_changed', actor=self.member, user=str(self.member.pk),
+                               username='synthetic-person', requested_by='Ticket 4417',
+                               **{'from': 'reviewer', 'to': 'owner'})
+        self.assertEqual(console.describe(changed)['details'],
+                         'username synthetic-person · from reviewer · to owner · requested_by Ticket 4417')
+        self.assertNotIn('line', console.DETAIL_KEYS)
+        self.assertNotIn('code', console.DETAIL_KEYS)
