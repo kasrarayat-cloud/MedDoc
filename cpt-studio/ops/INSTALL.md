@@ -877,11 +877,30 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `release_digest` alone (an answer with its release means B7 is not in force,
   and is refused), and an older revision - the pair before release 1, after a
   switch-back - its release; the web's own port answers the release either way.
-  After a switch-back to that pair, `verify --revision <its revision>` passes,
-  and so do the walk (`--release <its revision>`: it reads B7 from that tree)
-  and `verify_login.py` and `scan_customer.py`, which read the cookie names the
-  server sets - the plain ones before release 1, the `__Host-` ones from it -
-  never the scheme's.
+  After a switch-back to that pair, `verify --revision <its revision>` passes.
+  Release 1's own `verify_login.py`, `scan_customer.py` and walk do not, and
+  are not meant to (refutation round 2, switchback-1; round 1 recorded it as
+  rollback-4): each sends release 1's client version (`X-CPT-Studio-Client:
+  customer-2026-11-24`, which the server pins: specification 3.6), so that
+  pair's web answers `/api/session` and `/api/encounters` with `409`
+  (`client_outdated`); and release 1's shared contract
+  (`ops/verification/customer-contract.json`) lists keys that pair's session
+  does not have (`can_manage_team`). Each fails closed - a fail, never a pass:
+  `verify_login.py` on `session.read` and every check read from it,
+  `scan_customer.py` on `session.contract` and `customer.list_contract`, the
+  walk with `refusing to upload: GET /api/session served no object` (its
+  `--release <that revision>` judges only `/health/`, reading B7 from that
+  tree). Run that pair's own tools instead, from a checkout of its revision
+  (for example `git worktree add <dir> <its revision>`): its
+  `ops/verify_login.py` and `ops/scan_customer.py` send its own client version
+  and read its own contract, and pass against it (measured in round 2 against
+  the pair before release 1 serving a database release 1 had migrated). Its
+  `ops/walk.cjs` speaks its version too but has no `--release` (it predates B7)
+  and reads that revision's own operator credentials file, which release 1
+  writes none of; it was not run against that pair, so read what it reports
+  as that revision's own walk. Every one of these tools reads the cookie names
+  the server sets - the plain ones before release 1, the `__Host-` ones from
+  it - never the scheme's.
 
 ## The admin host and the coupling invariant (D396, release 2)
 

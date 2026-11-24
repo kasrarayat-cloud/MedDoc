@@ -10,10 +10,13 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
         an older web without the session policy can serve again - in the S4 keep layout before the switch back, in the
         removal before the pair is removed (the parked pair without the policy, or none parked); a failed end is never
         skipped (the keep layout's new web keeps serving; the removal leaves the pair stopped, not removed).
+  I2-4  switchback-1: the guide no longer says release 1's verify_login.py, scan_customer.py and walk pass against the
+        pair before release 1 after a switch-back; it says why they fail closed and what to run instead.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
 import hashlib
+import io
 import json
 import sys
 import unittest
@@ -513,6 +516,39 @@ class RollbackRemovalSessionTests(TemporaryDirectoryTest):
             details, error, calls = self.run_phase(self.containers(self.OLD))
         self.assertIn('Nothing was stopped or removed.', str(error))
         self.assertEqual(calls, [])
+
+
+# --- I2-4: what the guide says passes after a switch-back to the pair before release 1 --------------------------------
+
+class SwitchBackVerificationGuideTests(unittest.TestCase):
+    OPS = Path(__file__).resolve().parent
+
+    def said(self):
+        return ' '.join((self.OPS / 'INSTALL.md').read_text(encoding='utf-8').split())
+
+    def test_the_guide_no_longer_says_release_1s_tools_pass_against_the_pair_before_it(self):
+        said = self.said()
+        # switchback-1: the sentence that said the walk, verify_login.py and scan_customer.py pass after a switch-back
+        self.assertNotIn('and so do the walk (`--release <its revision>`: it reads B7 from that tree) and '
+                         '`verify_login.py` and `scan_customer.py`', said)
+        for phrase in ("Release 1's own `verify_login.py`, `scan_customer.py` and walk do not, and are not meant to",
+                       'Each fails closed - a fail, never a pass',
+                       "Run that pair's own tools instead, from a checkout of its revision",
+                       "its `ops/verify_login.py` and `ops/scan_customer.py` send its own client version and read its "
+                       'own contract, and pass against it'):
+            with self.subTest(phrase=phrase[:40]):
+                self.assertIn(phrase, said)
+
+    def test_the_facts_it_gives_for_why_are_the_tools_own(self):
+        said = self.said()
+        sys.path.insert(0, str(self.OPS))
+        import verify_login  # noqa: E402 - the release's own tool, read for its client version
+        self.assertIn(f'`X-CPT-Studio-Client: {verify_login.CLIENT_VERSION}`', said)
+        walk = (self.OPS / 'walk.cjs').read_text(encoding='utf-8')
+        self.assertIn(f"const CLIENT_HEADERS = {{ 'X-CPT-Studio-Client': '{verify_login.CLIENT_VERSION}' }};", walk)
+        contract = (self.OPS / 'verification' / 'customer-contract.json').read_text(encoding='utf-8')
+        self.assertIn('"can_manage_team"', contract)
+        self.assertIn('(`can_manage_team`)', said)
 
 
 if __name__ == '__main__':
