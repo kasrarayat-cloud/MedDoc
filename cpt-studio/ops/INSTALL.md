@@ -54,7 +54,12 @@ bash scripts/run-ruled-mutation.sh --declaration "$DECL" -- \
 The tree must be clean, and HEAD must be the revision or a descendant that
 changed nothing under `cpt-studio/` or the ruled-mutation door (so a docs-only
 commit carrying the declaration is accepted). The declaration must name the
-revision and carry no unfilled revision placeholder.
+revision and carry no unfilled revision placeholder. Every option is given
+once: one given twice (as `--name value` or `--name=value`) is refused before
+anything runs, the receipt's `given_more_than_once` naming it (refutation round
+2, installer-2: the last value had run and the first was dropped without a
+word - a command line edited from an earlier one closed the practice named
+last, for good).
 
 **The door's ceiling.** The door kills what it runs after `RULED_ACT_MAX_SECS`
 of wall clock (`scripts/lib/run-watched.sh`; by default as long as one worker's
@@ -86,7 +91,7 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
 | 9 | `provision` | `--owner-username <name> --by <person>` (optional `--specialty`, `--agent-username`, display names, `--reset-passwords`) | a specialty's workspace (Gastroenterology unless `--specialty` names neurosurgery or orthopedic-surgery), its owner (who chooses a new password at the first sign-in) and - only when `--agent-username` names one - a review agent; credentials files |
-| 9a | `operators` | optional `--reset-passwords`; `--by <person> --review-by <YYYY-MM-DD>` when it grants; `--regrant <name>` for a revoked account the declaration names | the human platform-operator account (no membership, an unusable password), its grant, and a setup code kept root-only |
+| 9a | `operators` | optional `--reset-passwords`; `--by <person> --review-by <YYYY-MM-DD>` when it grants; `--regrant <name>` for a revoked account the declaration approves (`Approved: --regrant <name>`) | the human platform-operator account (no membership, an unusable password), its grant, and a setup code kept root-only |
 | 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload (a fresh host; refused while `quillmd-cpt` claims admin's :443) |
 | 11 | `cert` | — | lineage `cpt-studio` for both hosts (on a fresh host after `http-vhost`, or on a served site) |
 | 12 | `ingress` | — | admin.quillmd.com's :443 moved onto `quillmd-cpt`: this revision's HTTPS stage and the `quillmd` vhost's line 26, one root-helper write, one nginx reload |
@@ -108,7 +113,10 @@ a worker of different images, it refuses and stops nothing: which web serves, an
 whose records to read, cannot be told from the names. It removes only this
 revision's own pair: a web or worker under the canonical names that carries
 another revision - the old pair an undo put back - is refused, and nothing is
-stopped.) It keeps the database,
+stopped.) When the web that serves next has no session policy - in the keep
+layout the old web, in the removal the parked pair, or a pair not known when
+none is parked - it ends every session first (refutation round 2,
+sessions-2: **Known limits**), as a `switch-back` does at B4. It keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
 the pair's own image, it reads the records their revision made that an older
 revision would act on, or show, wrongly (listed under **Reinstalling an older
@@ -744,13 +752,17 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   --authorization-ref <declaration>@<commit> --review-by <date>` (C3): `--by`
   and `--review-by` are then required, `--by` names a person, never a role. An
   account any of whose grants was ever revoked is never granted again unless the
-  run passes `--regrant <name>` and the declaration names `--regrant <name>`
-  (ADM-10 3(i)): a line of the committed declaration that is exactly
-  `--regrant <name>`, or exactly that in backticks, with nothing else on it but
-  spaces (refutation round 1, installer-0). The words inside a sentence ("do
-  not --regrant ali"), a list item (`- --regrant ali`) or another name that
-  starts with it (`--regrant alice` for `ali`) name nothing. It is read back: an
-  active human operator with no membership.
+  run passes `--regrant <name>` and the committed declaration approves it
+  (ADM-10 3(i)) with one line: `Approved: --regrant <name>` (the words may be
+  in backticks), the whole of a line that starts with it, outside any fenced
+  block or HTML comment - and names `--regrant <name>` nowhere else
+  (refutation round 2, installer-3: a list of re-grants NOT approved held the
+  words alone on lines of their own, which round 1 read as approval).
+  Nothing else approves: the words alone on a line, inside a sentence ("do
+  not --regrant ali"), a list item, a quote, an indented or fenced block, a
+  comment; and another name that starts with them (`--regrant alice` for
+  `ali`) is not even a mention. It is read back: an active human operator
+  with no membership.
   An account created or reset then gets a single-use setup code: generated by
   the installer, handed to `manage issue_enrolment` as a RAM-only `--code-file`
   (only its sha256 reaches the database), committed root-only to
@@ -769,8 +781,9 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   --by`), `grant-operator` (also `--review-by`; the declaration is passed as
   `--authorization-ref <declaration>@<commit>`; the account is read first, and
   one any of whose grants was ever revoked is refused unless the run passes
-  `--regrant <name>` and the declaration names `--regrant <name>` - as in
-  **operators** - and the command is then told `--regrant`), `issue-enrolment` and
+  `--regrant <name>` and the declaration approves it with the line
+  `Approved: --regrant <name>` - as in **operators** - and the command is then
+  told `--regrant`), `issue-enrolment` and
   `reset-second-factor` (`--username --reason-file --by`; each issues a new
   setup code, kept as **operators** keeps one), `require-password-change`
   (`--username` or `--all-human-accounts`, which the command is given as its
@@ -787,9 +800,8 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   phileak-1 and dataloss-3: a destruction's certificate that repeated the plan's
   reason was discarded with its log): every occurrence of the setup code, the
   application's own secret values and the reason's text (whole, or any line of
-  12 characters or more, as written or as JSON writes it inside a string; a
-  shorter reason only where no letter or digit adjoins it, so no id or digest
-  is altered) is replaced by `[redacted by the installer]` before the log and
+  12 characters or more, as written or as JSON writes it inside a string) is
+  replaced by `[redacted by the installer]` before the log and
   the receipt are written, and the receipt's `redacted` counts them by kind
   (`secret`, `reason`), never a value; the summary says so, and a secret the
   command printed is a FINDING. A setup code it printed is never kept (the
@@ -799,8 +811,24 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   ever take its record away: when its RAM folder's wipe or an export's seal
   fails, the receipt fails with the act's record (its exit, its log, its
   output) and says what did not finish, and a signal or a Ctrl-C there is
-  recorded beside it (a setup code is then not kept). The receipt keeps the
-  command's stdout (ids and counts) and its log. Nothing that is not on the list
+  recorded beside it (a setup code is then not kept). Nor does the one-shot's
+  own leftover check: it runs only when the run gave no answer (a timeout, an
+  interrupt) - once the act answered, `docker run --rm` has removed its
+  container (the CLI waits for the removal, and answers 125 when it cannot), so
+  no daemon error or signal there can take the answer away (refutation round
+  2, installer-1). A one-shot whose run timed out is first sent its own
+  SIGTERM, with 10 s to record (a disposal then records its run 'failed'),
+  then removed; one interrupted is removed at once, since the door's SIGKILL
+  follows its SIGTERM by 15 s, which the RAM folder's wipe and the receipt
+  need. The receipt keeps the
+  command's stdout (ids and counts) and its log. A reason must be in words, so
+  that its redaction can never touch an id or a count: its text 12 characters
+  or more that are not white space and three words or more (as the release's
+  act script requires), and each line of 12 characters or more two words or
+  more. A ticket number alone, or a line that is an id, a link or a number
+  alone, is refused before the act (refutation round 2, installer-5: a reason
+  `4521` was redacted inside a plan id's group, which `--plan-id` then needs,
+  and inside a byte count). Nothing that is not on the list
   runs. An act holds the receipts' lock for its whole run, as every phase does,
   so no install, `switch-back` or `rollback-app` can start while it runs (and
   none of them can be running when it starts). An act's own time ends 300 s
@@ -811,9 +839,18 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   its undo run, and its receipt says `interrupted` (exit 143, or 129). One that
   lands while the RAM files are being wiped - or a Ctrl-C there - is acted on
   once the wipe has finished (refutation round 1, installer-3: it had stopped
-  the wipe and left the reason in `/dev/shm`); only the door's SIGKILL, 15 s
-  after its SIGTERM, or a `kill -9` can still leave a
-  `/dev/shm/cpt-studio-<word>-<32 hex>` folder, which holds the act's RAM-only
+  the wipe and left the reason in `/dev/shm`). The root helper's wipe of a
+  folder handed to the application's uid runs in a session of its own, so a
+  signal sent to the installer's whole process group never reaches the
+  docker CLI running it - the door's ceiling is `timeout`, which signals the
+  group, its SIGKILL too (refutation round 2, installer-4: that CLI died
+  before the wipe began and left the reason). A wipe that fails while a
+  signal is held is said beside the interrupt (`details.after_act`), with the
+  folder it may leave. Only a SIGKILL (the door's, 15 s after its SIGTERM, or
+  a `kill -9`) can still leave a `/dev/shm/cpt-studio-<word>-<32 hex>`
+  folder - one that lands before the root helper's wipe has begun, during the
+  installer's own wipe of a folder it never handed over, or on the wipe's own
+  CLI - which holds the act's RAM-only
   files (the reason, a code): overwrite and remove it as root (the root-via-
   docker path), never read it. Every
   phase's receipt is written before its journal (A13), so an interrupt while the
@@ -874,11 +911,30 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `release_digest` alone (an answer with its release means B7 is not in force,
   and is refused), and an older revision - the pair before release 1, after a
   switch-back - its release; the web's own port answers the release either way.
-  After a switch-back to that pair, `verify --revision <its revision>` passes,
-  and so do the walk (`--release <its revision>`: it reads B7 from that tree)
-  and `verify_login.py` and `scan_customer.py`, which read the cookie names the
-  server sets - the plain ones before release 1, the `__Host-` ones from it -
-  never the scheme's.
+  After a switch-back to that pair, `verify --revision <its revision>` passes.
+  Release 1's own `verify_login.py`, `scan_customer.py` and walk do not, and
+  are not meant to (refutation round 2, switchback-1; round 1 recorded it as
+  rollback-4): each sends release 1's client version (`X-CPT-Studio-Client:
+  customer-2026-11-24`, which the server pins: specification 3.6), so that
+  pair's web answers `/api/session` and `/api/encounters` with `409`
+  (`client_outdated`); and release 1's shared contract
+  (`ops/verification/customer-contract.json`) lists keys that pair's session
+  does not have (`can_manage_team`). Each fails closed - a fail, never a pass:
+  `verify_login.py` on `session.read` and every check read from it,
+  `scan_customer.py` on `session.contract` and `customer.list_contract`, the
+  walk with `refusing to upload: GET /api/session served no object` (its
+  `--release <that revision>` judges only `/health/`, reading B7 from that
+  tree). Run that pair's own tools instead, from a checkout of its revision
+  (for example `git worktree add <dir> <its revision>`): its
+  `ops/verify_login.py` and `ops/scan_customer.py` send its own client version
+  and read its own contract, and pass against it (measured in round 2 against
+  the pair before release 1 serving a database release 1 had migrated). Its
+  `ops/walk.cjs` speaks its version too but has no `--release` (it predates B7)
+  and reads that revision's own operator credentials file, which release 1
+  writes none of; it was not run against that pair, so read what it reports
+  as that revision's own walk. Every one of these tools reads the cookie names
+  the server sets - the plain ones before release 1, the `__Host-` ones from
+  it - never the scheme's.
 
 ## The admin host and the coupling invariant (D396, release 2)
 
@@ -1846,7 +1902,18 @@ release 1), run only through `--phase manage`, never over HTTP:
   dataloss-1: a cut copy was refused, or replayed without the oldest
   disposals). A secret the command printed in it is redacted there, and that
   line no longer verifies: the summary says so (a FINDING), and the ledger is
-  printed again once that is fixed;
+  printed again once that is fixed. The ledger step keeps only a ledger the
+  replay step reads - at most `LEDGER_LIMIT` (16 MiB) and UTF-8, the one limit
+  both steps read (refutation round 2, installer-0: the replay had refused, at
+  1 MiB, a 5,000-document practice's ledger the ledger step called kept whole).
+  The limit is sized for the largest practice this release serves: at the
+  owner's figure (1,000 practices at 50 uploads a day) a practice reaches
+  18,250 documents in a year, and its whole-practice disposal adds about
+  3.8 MB of ledger at one file a document (209 bytes a document, 92 more for
+  each further file, about 5 KB a disposal), 8.9 MB at four files. A ledger past
+  the limit is written to no file: the step fails, says why, and changes
+  nothing (the database keeps every row the ledger is printed from); see
+  **Known limits**;
 - `--dispose-step replay-ledger --ledger-file <file>` is,
   on its own, a dry run that changes nothing (the receipt's `mode` says `dry
   run`, and its summary never says done); with `--execute --approved-by
@@ -1871,22 +1938,41 @@ release 1), run only through `--phase manage`, never over HTTP:
   **After a database restore, replay the ledger BEFORE the site is opened**
   (web and worker stopped): a whole practice's replay destroys again everything
   of that practice, including anything a member added to the restored copy, and
-  the replay's report counts such documents. A replay stopped by a signal
-  prints its record and exits 143 (SIGTERM) or 129 (SIGHUP). So does a
-  destruction that a signal or Ctrl-C reaches after its commit: any statement
-  still running is cancelled first, and the run is recorded 'failed' with its
-  certificate. Only an interrupt while the final DisposalEvent is being written
-  leaves the 'committed' row as the record, with a certificate saying the final
-  event may not have been written.
+  the replay's report counts such documents. A signal (SIGTERM, SIGHUP) or
+  Ctrl-C before a destruction's commit stops it with nothing destroyed. From the
+  moment a commit begins it is held: the commit and the run's record go to their
+  end, the steps after the commit stop at the next one (a statement still
+  running is cancelled; the run is recorded 'failed', the signal named as the
+  problem of the step it stopped), a signal that comes once those steps are done
+  leaves the record as it stands, and the command, once it has printed its
+  record, ends with 143 (SIGTERM), 129 (SIGHUP) or 130 (Ctrl-C). A replay stops
+  the same way before its next ledger entry and prints its record. Every
+  certificate and ledger line it prints names only what the database committed.
 
 The first closure or destruction ends the way back to every revision before
 release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
 revision without disposal (**Switching back**, above); the way on is a fix
-forward.
+forward. Nor is a practice closed or a document destroyed while such a
+revision serves (below).
 
 Every disposal step refuses while an install or switch-back is in progress (a
-`cpt-studio-web-next` or a `*-previous` container); only after that reading is
-the command told so (`CPT_STUDIO_SWITCH_STATE=idle`, which it requires). It runs
+`cpt-studio-web-next` or a `*-previous` container). A step that changes rows -
+`close`, `execute`, `replay-ledger --execute` (the receipt's mode `executed`) -
+also refuses, running nothing, unless the pair under the canonical names
+(`cpt-studio-web` and `cpt-studio-worker`, running or stopped) is a revision
+with disposal, read from its tree as `switch-back` reads it (refutation round
+2, switchback-0: a switch-back allowed because nothing was closed, followed by
+a closure and a destruction while the revision before release 1 served, handed
+that revision the very rows the switch-back refuses to hand it). No web there,
+a container this installer did not start, one with no revision label, or a
+revision this checkout cannot read refuses too. Install a revision with
+disposal (`--phase app`), then run the step again. The dry runs (`plan`, and
+`replay-ledger` without `--execute`) and `ledger` stay open: they change no
+row an older revision reads (a plan writes only its own `planned`
+DisposalEvent, a release-1 table), and the step that would carry a plan out is
+refused until a revision with disposal serves. Only after these readings is
+the command told no switch is under way (`CPT_STUDIO_SWITCH_STATE=idle`, which
+it requires). It runs
 as the application's user with the files volume, the declaration passed as
 `--authorization-ref <declaration>@<commit>`. `--command export-workspace
 --workspace-id <id> --reason-file <file> --by <person>` writes one practice's
@@ -1977,6 +2063,19 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   the new server's). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
+- A ruled act's reason in words is still redacted wherever the act's output
+  repeats it, as any echo of it is: one written as the act's own printed words
+  around an id or a count (a reason line such as `Files in scope: 1`) is
+  redacted there too. The receipt counts every redaction (`redacted`) and the
+  summary says how many, so such a record is seen, never silent.
+- The disposal ledger holds every disposal ever made, and this release replays
+  and keeps one of at most 16 MiB (`LEDGER_LIMIT`; **Disposal, returns and the
+  ledger**): about four whole-practice disposals of a practice-year at one
+  file a document. Past it the ledger step fails and keeps none, and a release
+  must raise the limit (the replay's one-shot has 768 MiB; its reading of a
+  16 MiB ledger peaks under 90 MiB) before a ledger can be kept again. Until
+  then, never restore the database from a backup older than its newest
+  disposal: no ledger could destroy that data again.
 - Release 1's front door (A1) starts with the spec's numbers (D5), sized on a
   copy before the live publish, the sign-in and the upload raised for an office
   behind one address: every request 30 r/s with a burst of 120 per client, the
@@ -2043,12 +2142,25 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   and at a `switch-back`'s B4 to one, every `django_session` row is deleted
   with one SecurityEvent `sessions.ended_at_install` (a count and the two
   revisions). An `app` or `switch-back` between two revisions that both have
-  the policy ends none. Left (refutation round 1, rollback-3's window): a
-  sign-in on the older web in the seconds between S2's end and the end of S5's
-  drain keeps its row; it signs nobody in on release 1 (its cookie's name is
-  not read), and the next `switch-back` ends it at B4. `rollback-app` ends no
-  session: after one that returns an older web, a sign-in made on that web in
-  those seconds is valid there again until its own 8-hour limit.
+  the policy ends none. A sign-in on the older web in the seconds between S2's
+  end and the end of S5's drain (refutation round 1, rollback-3's window) keeps
+  its row: it signs nobody in on release 1 (its cookie's name is not read), and
+  release 1's sign-out everywhere cannot find it (it reads only the rows
+  release 1 linked to the account: refutation round 2, sessions-2). Every way
+  back to the older web through this installer ends it first: a `switch-back`
+  at B4, and `rollback-app` (sessions-2) - in the S4 keep layout before it
+  switches the upstream back, and in its removal of this revision's pair before
+  the pair is removed, when the parked pair has no session policy or none is
+  parked (what runs next is then not known) - with the same receipt fields
+  (`sessions_ended`) and SecurityEvent. A failed end is never skipped: the keep
+  layout's new web keeps serving, the removal leaves the pair stopped and not
+  removed, and `rollback-app` is run again. Left: an `app`'s own undo at S3 or
+  S4 returns the older web within seconds of S2's end without ending them
+  again, and `rollback-app` in the back layout (which such an undo can leave)
+  finds the older web already serving and ends none; a sign-in made on it in
+  those seconds stays valid there until its own 8-hour limit. So does one under
+  an older revision that its own installer puts back over release 1 without
+  `rollback-app` (it predates the policy).
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:

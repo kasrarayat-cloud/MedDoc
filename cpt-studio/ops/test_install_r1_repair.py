@@ -9,7 +9,8 @@ never passed, without one). Synthetic data only.
       keep layout, rollback-app's removal when the next pair is such a revision or not known) while a practice is closed
       or a document destroyed; refused before anything starts or stops, and again at the switch-back's B4.
   I3  installer-0: a re-grant is approved only by a line of the committed declaration that is exactly
-      `--regrant <username>` (optionally in backticks), whitespace-trimmed.
+      `--regrant <username>` (optionally in backticks), whitespace-trimmed - since repair round 2 (I2-6,
+      installer-3) only by the line 'Approved: --regrant <username>', the words named nowhere else.
   I4  installer-1: every manage step refuses an argument it does not pass to its command (dispose execute's
       --workspace-id and --encounter-id), and --address is refused outside manage.
   I5  installer-2: the database's swap-off decision counts memory.swap.peak (memory peak plus swap peak), and skips the
@@ -635,6 +636,9 @@ class RollbackRemovalDisposalTests(TemporaryDirectoryTest):
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
         def coded(image_id, env_bytes, body, params, **kwargs):
+            if body == install.END_EVERY_SESSION:  # repair round 2, sessions-2: no pair parked, or one before the
+                calls.append(('end_sessions', params['to_revision']))  # session policy: ended before the removal
+                return {'ended': 1, 'event': EVENT_ID}
             assert body == install.CODING_MADE, body[:60]
             return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
                                'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
@@ -701,12 +705,18 @@ class RegrantDeclarationTests(TemporaryDirectoryTest):
             with self.subTest(text=text):
                 self.assertIs(self.names(text, '--regrant ali'), False)
 
-    def test_a_line_of_its_own_names_it_bare_or_in_backticks_whitespace_trimmed(self):
-        for text in ('--regrant ali\n', '`--regrant ali`\n', '  --regrant ali\t\n', 'x\r\n`--regrant ali`\r\ny\r\n',
-                     ALICE_SENTENCE + '\n`--regrant ali`\n', '--regrant ali'):
+    def test_the_approval_line_names_it_bare_or_in_backticks(self):
+        # repair round 2 (I2-6, installer-3): the words on a line of their own no longer approve - a list of re-grants
+        # NOT approved holds exactly such lines; the approval is the line 'Approved: --regrant <name>'
+        for text in ('Approved: --regrant ali\n', 'Approved: `--regrant ali`\n', 'Approved: --regrant ali\t\n',
+                     'x\r\nApproved: `--regrant ali`\r\ny\r\n', ALICE_SENTENCE + '\nApproved: `--regrant ali`\n',
+                     'Approved: --regrant ali'):
             with self.subTest(text=text):
                 self.assertIs(self.names(text, '--regrant ali'), True)
-        self.assertIs(self.names('`--regrant alice`\n', '--regrant alice'), True)
+        self.assertIs(self.names('Approved: `--regrant alice`\n', '--regrant alice'), True)
+        for text in ('--regrant ali\n', '`--regrant ali`\n', '  --regrant ali\t\n', 'x\r\n`--regrant ali`\r\ny\r\n'):
+            with self.subTest(old_form=text):
+                self.assertIs(self.names(text, '--regrant ali'), False)
 
     def test_a_declaration_that_cannot_be_read_names_nothing(self):
         ctx = SimpleNamespace(door={'declaration': 'docs/missing.md', 'declaration_commit': 'd' * 40})
@@ -751,8 +761,8 @@ class RegrantAtTheDoorTests(TemporaryDirectoryTest):
         self.assertIn('stays revoked', str(error))
         self.assertEqual(world.acts(), [])
 
-    def test_a_line_of_its_own_grants_it_again(self):
-        details, error, world = self.run_grant(ALICE_SENTENCE + '\n`--regrant ali`\n')
+    def test_the_approval_line_grants_it_again(self):
+        details, error, world = self.run_grant(ALICE_SENTENCE + '\nApproved: `--regrant ali`\n')
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.acts()[0][:2], ['manage', 'grant_operator'])
         self.assertEqual(world.acts()[0][-1], '--regrant')
@@ -1036,19 +1046,26 @@ class ExecuteWithThePlansReasonTests(TemporaryDirectoryTest):
         self.assertEqual(Path(details['log']).read_bytes(), certificate())
 
     def test_a_reason_line_the_output_happens_to_repeat_never_discards_the_record(self):
-        # builder D's example: a reason file whose line is just the approver's name, which the act's output also says
+        # builder D's example: a reason file whose line is just the approver's name, which the act's output also says.
+        # Since repair round 2 (I2-7, installer-5) it is refused before the act: a name alone is not a reason in words,
+        # and its redaction took the approver's name out of the certificate's own record
         r1, world = self.world(certificate())
+        with self.assertRaisesRegex(install.InstallError, 'must give the reason in words'):
+            world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                      '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'Grace Hopper\n')
+        self.assertEqual(world.acts(), [])
+        # a reason in words that the output happens to repeat is redacted there, and the record is kept
         details = world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
-                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'Grace Hopper\n')
+                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'approved by: Grace Hopper\n')
         self.assertEqual(details['exit'], 0)
-        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 2})  # the text line and the ledger line's value
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
         self.assertIn(f'Plan {CERTIFICATE_PLAN}: completed', details['stdout'])
         self.assertIn('Rows destroyed: 12', details['stdout'])
-        self.assertNotIn('Grace Hopper', details['stdout'])
+        self.assertNotIn('approved by: Grace Hopper', details['stdout'])
         log = Path(details['log']).read_bytes()
         self.assertIn(b'Destruction certificate', log)
-        self.assertNotIn(b'Grace Hopper', log)
-        self.assertIn('2 occurrence(s) of the reason', details['summary'])
+        self.assertNotIn(b'approved by: Grace Hopper', log)
+        self.assertIn('1 occurrence(s) of the reason', details['summary'])
 
     def test_the_shape_before_builder_ds_repair_is_kept_with_the_reason_redacted(self):
         reason_text = PLAN_REASON.decode().strip()

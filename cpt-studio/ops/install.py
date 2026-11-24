@@ -413,8 +413,9 @@ def assert_no_secret(outputs, values):
 # (reason_values) - is replaced by REDACTED_MARK before the log and the receipt are written, and the receipt counts how
 # many were (redact_output; never a value). A secret is replaced wherever it occurs (a long random value cannot occur by
 # chance); a value of the reason as written and as JSON writes it inside a string (a ledger line's), and one shorter than
-# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it, so an id or a digest that happens to contain a short
-# reason is never altered.
+# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it. Since refutation round 2 (installer-5: '-' bounds every
+# group of an id, so a 4-digit reason altered a plan id) an operator's reason is refused before the act unless every
+# value of it is in words (reason_words_problem), so that last rule is reached only by none of them.
 REDACTED_MARK = b'[redacted by the installer]'
 REDACT_BOUNDED_BELOW = 12
 _ALNUM = b'0-9A-Za-z'
@@ -477,10 +478,17 @@ def raise_after_act(error, record, what):
     the receipt beside the interrupt."""
     if isinstance(error, Exception):
         said = str(error) or type(error).__name__
-        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: {record.get("log")}), '
+        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: '
+                           f'{record.get("log") or "none kept"}), '
                            f'but what follows the act did not finish: {said}. If it was the RAM folder\'s wipe, a '
                            f'/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, never read it.',
                            details={**record, 'after_act': said}) from error
+    cause = error.__cause__  # signals_deferred raises a held signal from what its body raised: a wipe that failed
+    if isinstance(cause, Exception):  # (refutation round 2, installer-4: the receipt had said neither)
+        record = {**record, 'after_act': f'{str(cause) or type(cause).__name__}; then the {str(error) or "Ctrl-C"} held '
+                                         'meanwhile was acted on. If it was the RAM folder\'s wipe, a '
+                                         '/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, '
+                                         'never read it.'}
     error.details = record
     raise error
 
@@ -712,6 +720,23 @@ def parse_args(argv=None):
     # unset shell variable must not land accounts in the default workspace (refutation N6-1-4)
     args.workspace_name = SPECIALTY_NAMES[args.specialty] if args.workspace_name is None else args.workspace_name
     return args
+
+
+def repeated_options(argv, args) -> list:
+    """The options ``argv`` gives more than once, sorted (refutation round 2, installer-2: argparse keeps an option's
+    last value and drops the others without a word, so a command line edited from an earlier one closed the practice
+    named last, for good, and the first was in no receipt). Each is '--' and its destination with '-' for '_', as
+    parse_args names every option, counted as '--name value' or '--name=value', up to a bare '--' (argparse reads no
+    value that starts with '--' as a value, so none is counted for another option)."""
+    names = {'--' + name.replace('_', '-') for name in vars(args)}
+    counts = {}
+    for token in argv:
+        if token == '--':
+            break
+        name = str(token).split('=', 1)[0]
+        if name in names:
+            counts[name] = counts.get(name, 0) + 1
+    return sorted(name for name, count in counts.items() if count > 1)
 
 
 # Release 1 (RELEASE-1-SPEC A8; VEN-8): no way back to a vendor that has no BAA. The earlier pipelines' live modes - Corti
@@ -1003,17 +1028,19 @@ def helper_source(body: str, params: dict) -> str:
     return HELPER_PRELUDE + f'P=json.loads(base64.b64decode({payload!r}))\n' + body
 
 
-def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False, journal_run=True) -> dict:
+def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False, journal_run=True,
+               own_session=False) -> dict:
     """Run fixed helper code as root; return its final JSON line. ``sensitive`` drops stderr. Release 1 (A13): each run
     is one line of the one-shot journal (its name and exit code, never a value or its output) - except the journal's own
-    write (``journal_run`` False), which the receipt records instead."""
+    write (``journal_run`` False), which the receipt records instead. ``own_session``: its docker CLI runs in a session
+    of its own, which no signal sent to the installer's process group reaches (the RAM folder's wipe: RamFiles)."""
     token = secrets.token_hex(12)
     name = f'cpt-studio-helper-{token}'
     source = helper_source(body, params).encode()
     proc = None
     try:
         proc = subprocess.run(helper_argv(name, token, mounts, network, time.time() + timeout), input=source,
-                              capture_output=True, timeout=timeout + 15, env=COMMAND_ENV)
+                              capture_output=True, timeout=timeout + 15, env=COMMAND_ENV, start_new_session=own_session)
     except subprocess.TimeoutExpired:
         pass
     finally:
@@ -3107,6 +3134,12 @@ def db_args() -> list:
             POSTGRES_IMAGE, *[part for name, value in DB_LOG_SETTINGS for part in ('-c', f'{name}={value}')]]
 
 
+# A one-shot whose run timed out is sent its own SIGTERM and this long to record before it is removed (builder d2's
+# point, repair round 2: a dispose stopped so records its run 'failed'; a command with no handler of its own - the
+# entrypoint execs python as PID 1, which ignores a SIGTERM it does not handle - is removed when the time is up).
+ONESHOT_STOP_SECONDS = 10
+
+
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
             network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False,
             coding_file=False, what=None, by=''):
@@ -3128,15 +3161,29 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
             *[part for mount in mounts for part in ('--mount', mount)], image_id, *command]
-    result = None
+    result, timed_out = None, False
     try:
         result = run(argv, input=env_bytes, timeout=timeout, check=False)
         return result
+    except InstallError:  # with check=False, run raises one only for its own timeout
+        timed_out = True
+        raise
     finally:
         journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
-        leftover = inspect('container', name)
-        if leftover is not None and owned(leftover, 'oneshot'):
-            docker('rm', '--force', leftover['Id'], check=False)
+        # refutation round 2, installer-1: a leftover is looked for only when the run gave no answer (a timeout, an
+        # interrupt). Once the act answered, `docker run --rm` has removed its container - the CLI waits for the
+        # removal, and answers 125 when it fails - and a daemon error or a signal in this check replaced the return,
+        # so the act's answer, and its whole record, were lost after it ran
+        if result is None:
+            leftover = inspect('container', name)
+            if leftover is not None and owned(leftover, 'oneshot'):
+                if timed_out:  # its own SIGTERM first; never after an interrupt, where the door's SIGKILL follows
+                    try:  # its SIGTERM by 15 s, which the RAM folder's wipe and the receipt need
+                        docker('stop', '--time', str(ONESHOT_STOP_SECONDS), leftover['Id'], check=False,
+                               timeout=ONESHOT_STOP_SECONDS + 30)
+                    except InstallError:  # the stop's own timeout: the removal below forces it
+                        pass
+                docker('rm', '--force', leftover['Id'], check=False)
 
 
 def oneshot_label(command) -> str:
@@ -5300,6 +5347,10 @@ def sessions_summary(sessions) -> str:
     """'; every session ended (12): ...' for a receipt's summary ('' when none was ended)."""
     if not isinstance(sessions, dict) or not isinstance(sessions.get('ended'), int):
         return ''
+    if sessions.get('to_revision') is None:  # rollback-app's removal with no parked pair: what runs next is not known
+        return (f'; every session ended ({sessions["ended"]}: the revision that runs after '
+                f'{str(sessions.get("from_revision"))[:12]} is not known, and one before release 1 has no session '
+                'policy)')
     return (f'; every session ended ({sessions["ended"]}: {str(sessions.get("from_revision"))[:12]} and '
             f'{str(sessions.get("to_revision"))[:12]} do not share release 1\'s session policy)')
 
@@ -8155,9 +8206,16 @@ def operator_reason(ctx, username, kind) -> str:
             f'({door_of(ctx)["declaration_commit"]}).\n')
 
 
-# The lines a declaration names an act with (declaration_names; ops/INSTALL.md, operators): the words alone, or in
-# backticks, on a line of their own.
-DECLARED_LINE_FORMS = ('{words}', '`{words}`')
+# The one line a declaration approves a re-grant with (declaration_names; ops/INSTALL.md, operators): 'Approved: ' and
+# the words - in backticks or not - as the whole of a line that starts with it, outside any fenced block and any HTML
+# comment. Nothing else approves: refutation round 2, installer-3 found that a list of re-grants NOT approved holds
+# exactly the lines round 1 read as approval (the words alone on a line, under 'NOT approved:', in a fence, an indented
+# block, a comment), and any reading of the words around such a line would be a list of refusing phrases, which the
+# next wording passes. So a refusal, however its lines break, names nothing - and a declaration that also mentions the
+# words anywhere else approves nothing (fail closed: it says two things of one re-grant).
+REGRANT_APPROVAL_FORMS = ('Approved: {words}', 'Approved: `{words}`')
+DECLARATION_FENCES = ('```', '~~~')
+DECLARATION_COMMENT_RE = re.compile(r'<!--.*?(?:-->|\Z)', re.S)
 
 
 def door_of(ctx) -> dict:
@@ -8180,16 +8238,31 @@ def authorization_of(ctx) -> str:
 
 
 def declaration_names(ctx, words) -> bool:
-    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there): one of
-    its lines, split at line feeds and whitespace-trimmed, is exactly ``words`` or exactly ``words`` in backticks
-    (DECLARED_LINE_FORMS) - a line of its own, never a part of one (refutation round 1, installer-0: a substring test
-    read '--regrant alice' as naming '--regrant ali', and so did a sentence such as 'do not --regrant ali')."""
+    """Whether the committed declaration this run is bound to approves ``words`` (A6: a re-grant is approved there):
+    some line of it is exactly one of REGRANT_APPROVAL_FORMS (trailing white space aside) - not indented, not inside a
+    fenced block or an HTML comment - and the words are mentioned nowhere else in it. A mention is the words not
+    followed by a character a username may go on with, so '--regrant alice' is no mention of '--regrant ali' (refutation
+    round 1, installer-0) while 'do not --regrant ali.' is one."""
     try:
         text = (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError, ValueError):
         return False
-    forms = {form.format(words=words) for form in DECLARED_LINE_FORMS}
-    return any(line.strip() in forms for line in text.split('\n'))
+    approvals = {form.format(words=words) for form in REGRANT_APPROVAL_FORMS}
+    mention = re.compile(re.escape(words) + r'(?![a-z0-9_-])(?!\.[a-z0-9_.-])')
+    comments = [match.span() for match in DECLARATION_COMMENT_RE.finditer(text)]
+    approved, elsewhere, fenced, start = False, False, False, 0
+    for line in text.split('\n'):
+        fence = line.strip().startswith(DECLARATION_FENCES)
+        for found in mention.finditer(line):
+            at = start + found.start()
+            if (line.rstrip() in approvals and not fenced and not fence
+                    and not any(begin <= at < end for begin, end in comments)):
+                approved = True
+            else:
+                elsewhere = True
+        fenced = fenced != fence
+        start += len(line) + 1
+    return approved and not elsewhere
 
 
 def person_problem(value, flag) -> str:
@@ -8265,6 +8338,31 @@ def reason_values(reason) -> list:
     return [text, *[line.strip() for line in text.splitlines() if len(line.strip()) >= 12]]
 
 
+# A reason the redaction can never alter an id or a count with (refutation round 2, installer-5: a reason under 12
+# characters - a bare ticket number, '4521' - was redacted wherever no letter or digit stood beside it, and '-' bounds
+# every group of an id: it changed a group of the plan id execute needs, which the receipt then no longer showed, and hid
+# a count). Every text redact_output replaces of a reason (reason_values: its whole text, and each of its lines of 12
+# characters or more) must be in words: the whole text REASON_MIN_CHARACTERS characters or more that are not white
+# space and REASON_MIN_WORDS words or more (the release's act script, act_r1.sh, refuses the same), and each such line
+# two words or more - white space, which no id, digest, link or number holds. Anything else is refused before the act.
+REASON_MIN_CHARACTERS = 12
+REASON_MIN_WORDS = 3
+
+
+def reason_words_problem(reason: bytes) -> str:
+    """'' when ``reason`` is in words (above), else the refusal."""
+    whole, *lines = reason_values(reason)
+    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or len(whole.split()) < REASON_MIN_WORDS:
+        return (f'--reason-file must give the reason in words - {REASON_MIN_CHARACTERS} characters or more that are not '
+                f'white space, and {REASON_MIN_WORDS} words or more: a shorter or plainer one (a ticket number alone) '
+                "would be redacted from the act's output wherever it stands, inside an id or a count too")
+    if any(len(line.split()) < 2 for line in lines):
+        return ('--reason-file has a line of 12 characters or more that is one word - an id, a link or a number alone: '
+                "each such line is redacted on its own wherever it stands in the act's output, inside an id or a count "
+                'too; put it in a sentence')
+    return ''
+
+
 def read_reason_file(path) -> bytes:
     """A ruled act's reason (A6): a regular file, never a link, of UTF-8 text, not empty, at most REASON_LIMIT bytes. Its
     bytes go to the command as a RAM-only file; the receipt keeps its sha256 and size, never its text."""
@@ -8278,6 +8376,9 @@ def read_reason_file(path) -> bytes:
         raise InstallError('--reason-file is not UTF-8 text.') from None
     if not text.strip():
         raise InstallError('--reason-file is empty.')
+    problem = reason_words_problem(data)  # refutation round 2, installer-5: in words, before the act
+    if problem:
+        raise InstallError(f'{problem}; nothing was run.')
     return data
 
 
@@ -8359,10 +8460,13 @@ class RamFiles:
 
     def __exit__(self, *exc):
         # refutation round 1, installer-3: a SIGTERM, SIGHUP or Ctrl-C that lands while the folder is wiped is acted on
-        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm
+        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm.
+        # Round 2, installer-4: that holds the signal in this process only, and the door's ceiling (`timeout`, which
+        # signals the whole process group) also reached the docker CLI running the wipe, which died before the wipe
+        # began: so that CLI runs in a session of its own (own_session), which a signal to the group never reaches
         with signals_deferred():
             if self.given:
-                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
+                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT], own_session=True)
                 return False
             for path in self.path.iterdir():
                 path.write_bytes(b'\0' * max(64, path.stat().st_size))
@@ -8485,7 +8589,8 @@ def phase_operators(ctx) -> dict:
             if regrant != username or not declaration_names(ctx, f'--regrant {username}'):
                 raise InstallError(f'{username} was revoked as an operator, and a revoked grant stays revoked: '
                                    f'nothing was granted. To grant it again, run with --regrant {username} under a '
-                                   f'declaration that names "--regrant {username}".',
+                                   f'committed declaration with the line "Approved: --regrant {username}", which '
+                                   'names it nowhere else.',
                                    details={'accounts': outcome, 'check': before})
         problem = person_problem(by, '--by') or review_by_problem(review_by)
         if problem:
@@ -8586,7 +8691,18 @@ DISPOSE_STEP_ARGUMENTS = {
     'replay-ledger': ('ledger_file', 'execute', 'approved_by'),
 }
 DISPOSE_ARGUMENTS = ('workspace_id', 'encounter_id', 'plan_id', 'approved_by', 'reason_file', 'ledger_file', 'execute')
-LEDGER_LIMIT = 1024 * 1024
+# A ledger's one limit (refutation round 2, installer-0: the replay refused, at 1 MiB, the ledger the ledger step had kept
+# "whole"): what --dispose-step replay-ledger reads (read_ledger_file) and so what --dispose-step ledger keeps as a ledger
+# (ledger_problem) - one name, read by both. It is sized for the largest practice this release serves: at the owner's
+# figure (1,000 practices at 50 uploads a day) a practice reaches 18,250 documents in a year, and its whole-practice
+# disposal adds about 209 bytes of ledger a document with one file, 92 more for each further file, and about 5 KB
+# (round 2's measurement): about 3.8 MB for that year at one file a document, 8.9 MB at four. 16 MiB holds that with
+# room - four such one-file practice-years in one ledger. Where the ledger travels none is smaller: the ledger step's
+# one-shot prints it whole (its stdout read whole), its log is written whole, its receipt keeps STDOUT_KEPT characters
+# and its sha256, size and lines; a replay hands it over in the RAM folder (/dev/shm: a tmpfs of half the host's
+# memory, 16 GiB here) to a one-shot of 768 MiB, whose reading of a 16 MiB ledger (the text, its lines, each line's JSON
+# and MAC: studio.disposal.read_ledger) peaks under 90 MiB (measured, repair round 2).
+LEDGER_LIMIT = 16 * 1024 * 1024
 # D2: a practice's export is written into a NEW folder of its own under EXPORTS_DIR on the host (root 0700), which the
 # one-shot writes as the application's user; afterwards the root helper makes everything in it root-only. [TO CONFIRM
 # the path on this host.]
@@ -8755,6 +8871,34 @@ def install_in_progress() -> list:
             if inspect('container', name) is not None]
 
 
+def serving_disposal_problem() -> str:
+    """'' when the pair under the canonical names - the one that serves, or serves once started: cpt-studio-web and
+    cpt-studio-worker, running or stopped - has release 1's disposal, else why not (refutation round 2, switchback-0: a
+    switch-back to a revision without disposal, refused once anything is closed or destroyed, was passed by switching
+    back first and then closing and destroying while that revision served). Read as the switch-back's refusal reads a
+    revision (has_disposal: its tree's DISPOSAL_FILES). No web there, a container that is not this installer's, or one
+    with no revision label is not known, and never read as one with disposal (fail closed)."""
+    revisions = {}
+    for role in ('web', 'worker'):
+        container = inspect('container', SERVICES[role])
+        if container is None:
+            continue
+        if not owned(container, role):
+            return f'{SERVICES[role]} is not a CPT Studio {role} container, so what serves is not known'
+        revision = labels_of(container).get(REVISION_LABEL)
+        if not SHA_RE.fullmatch(str(revision or '')):
+            return f'{SERVICES[role]} carries no revision label, so what serves is not known'
+        revisions[role] = revision
+    if 'web' not in revisions:
+        return f'there is no {SERVICES["web"]}, so the revision that serves next is not known'
+    for role, revision in revisions.items():
+        if not has_disposal(revision):
+            return (f'{SERVICES[role]} is revision {revision[:12]}, which has no disposal (its tree has no '
+                    f'{DISPOSAL_FILES[0]}): it takes uploads into a closed practice and sends them for coding, and lists '
+                    'each destroyed document again')
+    return ''
+
+
 def manage_argv(ctx, args, entry) -> list:
     """The command line of the act (the installer's half of each command's contract; RAM-only files at MANAGE_MOUNT)."""
     command, reason = ['manage', entry['command']], ['--reason-file', f'{MANAGE_MOUNT}/reason']
@@ -8847,24 +8991,36 @@ print(json.dumps(R))
 EXPORTS_MOUNT = 'type=bind,src=/var/lib,dst=/host-var-lib'
 
 
+def ledger_problem(data: bytes) -> str:
+    """'' when ``data`` is a ledger --dispose-step replay-ledger reads (read_ledger_file: at most LEDGER_LIMIT bytes, and
+    UTF-8), else why not - so the ledger step keeps no ledger the replay would refuse (refutation round 2, installer-0)."""
+    if len(data) > LEDGER_LIMIT:
+        return f'it is {len(data)} bytes, more than the {LEDGER_LIMIT} --dispose-step replay-ledger reads (LEDGER_LIMIT)'
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        return 'it is not UTF-8 text'
+    return ''
+
+
 def read_ledger_file(path) -> bytes:
-    """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8. Its MAC is
-    the command's to check (keyed by the application's SECRET_KEY, so a restore keeps the same key)."""
+    """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8 (the rules
+    ledger_problem states, which the ledger step keeps a ledger by). Its MAC is the command's to check (keyed by the
+    application's SECRET_KEY, so a restore keeps the same key)."""
     given = Path(path or '')
     if not given.is_absolute():
         raise InstallError(f'--ledger-file must be an absolute path to a regular file of at most {LEDGER_LIMIT} bytes.')
     data = read_bounded_file(given, LEDGER_LIMIT, '--ledger-file')
-    try:
-        data.decode('utf-8')
-    except UnicodeDecodeError:
-        raise InstallError('--ledger-file is not UTF-8 text.') from None
+    if ledger_problem(data):
+        raise InstallError(f'--ledger-file is not a ledger --dispose-step replay-ledger reads: {ledger_problem(data)}.')
     return data
 
 
 def grant_problem(ctx, image_id, env) -> dict:
     """The account a manage grant-operator names, read (GRANT_CHECK) and judged before the act: it must exist; one any of
     whose grants was ever revoked - or whose answer does not say - is refused unless --regrant names it and the committed
-    declaration names "--regrant <username>" (A6; ADM-10 3(i); refutation, installer lens A-1). Returns what was read."""
+    declaration approves it, with the line "Approved: --regrant <username>" (declaration_names; A6; ADM-10 3(i);
+    refutation, installer lens A-1). Returns what was read."""
     args = ctx.args
     found = app_script(image_id, env, GRANT_CHECK, {'username': args.username}, what='Reading the account to grant')
     if not isinstance(found, dict) or found.get('exists') is not True:
@@ -8873,8 +9029,9 @@ def grant_problem(ctx, image_id, env) -> dict:
     if found.get('revoked') is not False:
         if args.regrant != args.username or not declaration_names(ctx, f'--regrant {args.username}'):
             raise InstallError(f'{args.username} was revoked as an operator, and a revoked grant stays revoked: nothing '
-                               f'was granted. To grant it again, run with --regrant {args.username} under a declaration '
-                               f'that names "--regrant {args.username}".', details={'grant_check': found})
+                               f'was granted. To grant it again, run with --regrant {args.username} under a committed '
+                               f'declaration with the line "Approved: --regrant {args.username}", which names it '
+                               'nowhere else.', details={'grant_check': found})
     elif args.regrant is not None:
         raise InstallError(f'--regrant {args.regrant}: that account was never revoked, so there is nothing to grant '
                            'again; nothing was granted.', details={'grant_check': found})
@@ -8904,6 +9061,21 @@ def phase_manage(ctx) -> dict:
         if busy:
             raise InstallError(f'An install or switch-back is in progress ({", ".join(busy)}), and the installer assumes '
                                'no row is deleted during one: nothing was disposed of (RELEASE-1-SPEC D1).')
+        # refutation round 2, switchback-0: a step that changes a row (close, execute, a replay with --execute: the
+        # receipt's mode 'executed') runs only while the serving pair has disposal; the dry runs (plan, a replay
+        # without --execute) and the ledger change no row such a revision reads, and stay open
+        if dispose_mode(args) == 'executed':
+            try:
+                problem = serving_disposal_problem()
+            except InstallError as error:
+                raise InstallError(f'{error} Nothing was disposed of.') from error
+            if problem:
+                raise InstallError(f'--dispose-step {args.dispose_step}' + (' --execute' if args.execute else '')
+                                   + f' changes rows, and {problem}: nothing was disposed of. A practice is closed, and '
+                                   'a document destroyed, only while a revision with disposal (release 1 or later) '
+                                   'serves (RELEASE-1-SPEC 6.3): install one (--phase app), then run this step again. '
+                                   'The plan, the ledger and a replay without --execute stay open meanwhile: they '
+                                   'change no row an older revision reads.')
         # only now, the reading above made: Lane 4's dispose refuses unless it is told no switch is in progress (this
         # phase holds the receipts' lock, so no install starts on them while it runs)
         environment = runtime_env('disabled', '') + ['-e', 'CPT_STUDIO_SWITCH_STATE=idle']
@@ -8970,13 +9142,18 @@ def phase_manage(ctx) -> dict:
     stdout, stdout_counts = redact_output(result.stdout, hidden, reasons)
     stderr, stderr_counts = redact_output(result.stderr, hidden, reasons)
     record.update(redaction_record(stdout_counts, stderr_counts))
+    unkept = ''
     if args.command == 'dispose' and args.dispose_step == 'ledger':
         # refutation round 1, dataloss-1: the ledger is the act's whole stdout, kept whole in a log of its own - the
-        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by
-        log = ctx.log('dispose-ledger', stdout)
+        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by.
+        # Refutation round 2, installer-0: only a ledger the replay step reads is kept as one (ledger_problem); another
+        # is written to no file, and the step fails below saying why
+        unkept = ledger_problem(stdout)
+        log = None if unkept else ctx.log('dispose-ledger', stdout)
         record['ledger_printed'] = {'log': log, 'sha256': sha256(stdout), 'bytes': len(stdout),
                                     'lines': sum(1 for line in stdout.splitlines() if line.strip()),
-                                    'redacted': bool(sum(stdout_counts.values()))}
+                                    'redacted': bool(sum(stdout_counts.values())),
+                                    **({'not_kept': unkept} if unkept else {})}
         if stderr:
             record['stderr_log'] = ctx.log('dispose-ledger-stderr', stderr)
     else:
@@ -8984,6 +9161,15 @@ def phase_manage(ctx) -> dict:
     record.update(exit=result.returncode, log=log, argv=argv, **kept_stdout(stdout))  # ids and counts only
     if after_act is not None:
         raise_after_act(after_act, record, f'manage {entry["command"]}')
+    if unkept:
+        raise InstallError(f'dispose ledger (exit {result.returncode}): the ledger it printed is not kept, since {unkept}, '
+                           'so --dispose-step replay-ledger could not replay it after a restore. Nothing was changed: '
+                           'this step only reads, and the database keeps every row the ledger is printed from. '
+                           'LEDGER_LIMIT is sized for one whole-practice disposal of the largest practice this release '
+                           'serves (ops/INSTALL.md, Disposal, returns and the ledger); a ledger past it needs a release '
+                           'that raises it, printed again with that release. Until then, never restore the database '
+                           'from a backup older than its newest disposal: no ledger could destroy that data again.',
+                           details=record)
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
@@ -10160,6 +10346,11 @@ def rollback_from_keep(ctx, keep) -> dict:
     if refusal:
         raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
                            details={'disposal': disposed})
+    try:  # refutation round 2, sessions-2: decided before anything is stopped, from both revisions' trees
+        ends_sessions = sessions_end_needed(ctx.revision, old_revision)
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was stopped or removed.') from error
+    sessions = {}
     baseline = own_baseline()
     parked_worker = keep['parked_worker']
     previous = {'image': (parked_worker or keep['web'])['Image'], 'revision': old_revision}
@@ -10191,10 +10382,27 @@ def rollback_from_keep(ctx, keep) -> dict:
             # revision coded that is not carried back (coding_note)
             base = coding_note(image_id, env, ctx.revision)
             record['not_carried_back'] = with_update_note(base, [first])
-            message, _, outcome = return_to_old_web(
-                ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
-                old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
-                first=first, first_at=first_at, details=record)
+            ended = None
+            if ends_sessions:
+                # refutation round 2, sessions-2: the old web reads its own rows again once it serves - a sign-in made
+                # on it in the seconds of the switch to this revision that this revision could not end (its sign-out
+                # everywhere reads only its own) - so every session is ended first, as a switch-back's B4 does before
+                # B5; one that does not finish leaves this revision's web serving, never the old one over them
+                record['sessions_ended'] = sessions
+                try:
+                    end_every_session(image_id, env, ctx.revision, old_revision, sessions)
+                except Exception as error:  # noqa: BLE001 — an interrupt goes on to the handler below, which says it
+                    ended = str(error) or type(error).__name__
+            if ended is None:
+                message, _, outcome = return_to_old_web(
+                    ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
+                    old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
+                    first=first, first_at=first_at, details=record)
+            else:
+                message, outcome = (f'{cause}: the end of every session did not finish ({ended}), so nothing more was '
+                                    f'done: {keep_note(live, idle)}. Rerun --phase rollback-app once it can end them.'
+                                    + kept_serving(image_id, env, [first], record)), \
+                    'kept'
             if record.get('stages_closed_after_drain') is not None:
                 record['not_carried_back'] = with_update_note(base, [first, record['stages_closed_after_drain']])
             if outcome == 'kept':  # refutation 6b-r1 P2: the old web served nothing, so the note was handed to none
@@ -10207,18 +10415,21 @@ def rollback_from_keep(ctx, keep) -> dict:
         raise InstallError(f'{cause}: {str(failure) or type(failure).__name__}; read "left" in this receipt, then '
                            'ops/INSTALL.md, Recovery notes.'
                            + (f' The close was started and gave no answer: it '
-                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else ''),
+                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else '')
+                           + sessions_ended_said(sessions),
                            details={**record, 'availability': stop_recorder(recorder),
                                     'left': left_summary()}) from failure
     if outcome != 'switched' or record.get('incoming_left'):
-        raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
     note = (record.get('not_carried_back') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'switched back to {old_revision[:12]} on {live} (the S4 keep layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')
+                       + sessions_summary(record.get('sessions_ended'))}
 
 
 def rollback_back(ctx, keep) -> dict:
@@ -10383,6 +10594,15 @@ def phase_rollback_app(ctx) -> dict:
         if refusal:
             raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
                                details={'disposal': disposed})
+        # refutation round 2, sessions-2: so may neither be handed a session this revision could not end - a sign-in
+        # made on an older web in the seconds of the switch to this revision, which its sign-out everywhere never
+        # reads and the older web honours again - so every session is ended before the pair is removed, when the
+        # parked pair has no session policy or none is parked (fail closed: the next is not known)
+        try:
+            ends_sessions = parked_next is None or sessions_end_needed(ctx.revision, parked_next)
+        except InstallError as error:
+            raise InstallError(f'{error} Nothing was stopped or removed.') from error
+    sessions = {}
     for role in pair:
         stop_service_container(SERVICES[role], role)
     if pair:
@@ -10448,6 +10668,16 @@ def phase_rollback_app(ctx) -> dict:
                                + '. Rerun --phase rollback-app.' + set_back_clause([closed]),
                                details={'stages_closed': closed, 'states_put_back': put_back}) from error
         made = with_update_note(base, [closed])
+        if ends_sessions:  # the pair is stopped and nothing else serves: no sign-in can follow the end
+            try:
+                end_every_session(first['Image'], env, ctx.revision, parked_next, sessions)
+            except BaseException as error:  # noqa: BLE001 — an interrupt is said too; nothing is removed
+                raise InstallError(f'Web and worker stopped, not removed: the end of every session did not finish '
+                                   f'({str(error) or type(error).__name__}), and no earlier pair may serve over '
+                                   'the sessions it would honour again. Rerun --phase rollback-app once it can end '
+                                   'them.' + sessions_ended_said(sessions) + set_back_clause([closed]),
+                                   details={'stages_closed': closed, 'states_put_back': put_back,
+                                            'not_carried_back': made, 'sessions_ended': sessions}) from error
     else:
         made = None
     removed = {}
@@ -10460,8 +10690,16 @@ def phase_rollback_app(ctx) -> dict:
         changed = (put_back or {}).get('changed')
         parts = _undo_parts([closed]) if closed is not None else None
         if not changed and not (closed is not None and (parts is None or parts[1])):
+            if sessions.get('started_at'):  # refutation round 2, sessions-2: the receipt says they were ended
+                ended_record = {'stages_closed': closed, 'not_carried_back': made, 'sessions_ended': sessions}
+                if not isinstance(error, Exception):
+                    error.details = ended_record
+                    raise
+                raise InstallError(f'{str(error) or type(error).__name__}: rerun --phase rollback-app.'
+                                   + sessions_ended_said(sessions), details=ended_record) from error
             raise
-        details = {'stages_closed': closed, 'states_put_back': put_back, 'not_carried_back': made}
+        details = {'stages_closed': closed, 'states_put_back': put_back, 'not_carried_back': made,
+                   **sessions_ended_of(sessions)}
         states = (f'; before it, the list states of {len(changed)} encounter(s) were put back to what the older '
                   'revision derives, which this revision labels otherwise' if changed else '')
         # refutation 6b-r2 F1 (DECISIONS D247): the message offers to keep this revision, so the saves the close set
@@ -10477,12 +10715,12 @@ def phase_rollback_app(ctx) -> dict:
                                                                'set back were put back (reapplied)')
         raise InstallError(f'{str(error) or type(error).__name__}{states}: rerun --phase rollback-app; or, to keep '
                            'this revision, rerun --phase app' + (', which recomputes them' if changed else '') + '.'
-                           + said, details=details) from error
+                           + said + sessions_ended_said(sessions), details=details) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
     return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
-            'not_carried_back': made,
+            'not_carried_back': made, **sessions_ended_of(sessions),
             'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
-                       'secrets kept' + (f'; {made["note"]}' if made else '')}
+                       'secrets kept' + (f'; {made["note"]}' if made else '') + sessions_summary(sessions)}
 
 
 def recorded_vhosts(ctx) -> dict:
@@ -10655,6 +10893,12 @@ def main(argv=None) -> int:
     journal_begin(args.phase)
     handlers = {each: signal.signal(each, interrupt) for each in (signal.SIGTERM, signal.SIGHUP)}
     try:
+        # refutation round 2, installer-2: an option given twice is refused before anything runs, the receipt naming it
+        repeated = repeated_options(sys.argv[1:] if argv is None else list(argv), args)
+        if repeated:
+            raise InstallError(f'{", ".join(repeated)} given more than once: the installer would run with the last '
+                               'value of each and drop the others without a word, so nothing was run. Give each option '
+                               'once.', details={'given_more_than_once': repeated})
         record['door'] = check_door(os.environ, args.revision)
         ctx.door = record['door']
         journal_begin(args.phase, record['door'])
