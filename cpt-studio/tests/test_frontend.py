@@ -245,6 +245,32 @@ class ShellTemplateTests(SimpleTestCase):
     def test_login_without_an_error_shows_no_alert(self):
         html = render_to_string('studio/login.html', {'error': '', 'next': '/'}, request=RequestFactory().get('/login/'))
         self.assertNotIn('role="alert"', html)
+        self.assertNotIn('role="status"', html)
+
+    def test_login_says_why_a_session_ended(self):
+        # B5, item 5: the sentence the view gives (studio.views._signed_out_notice), as a status, escaped
+        html = render_to_string('studio/login.html', {'error': '', 'next': '/', 'notice': 'You were signed out <b>'},
+                                request=RequestFactory().get('/login/'))
+        self.assertIn('<p class="upload-status" role="status">You were signed out &lt;b&gt;</p>', html)
+
+    def test_the_console_signs_itself_out_and_without_script_moves_away_after_the_operators_limit(self):
+        # B5, item 4: ops_session.js on every signed-in console page; without script a refresh ten seconds after the
+        # operators' idle limit, by which time the session policy has ended the session
+        source = (TEMPLATES / 'ops_base.html').read_text(encoding='utf-8')
+        self.assertIn('{% if user.is_authenticated %}<script src="/static/studio/ops_session.js" defer></script>', source)
+        self.assertIn(f'<noscript><meta http-equiv="refresh" content="{settings.SESSION_IDLE_OPERATOR_SECONDS + 10};'
+                      'url=/login/?reason=idle"></noscript>{% endif %}', source)
+
+    def test_release_one_s_pages_obey_the_content_security_policy(self):
+        allowed = {'/static/studio/ops_session.js', '/static/studio/ops_second_factor.js'}
+        for name in ('ops_base.html', 'ops_login.html', 'ops_second_factor.html', 'ops_enrol.html', 'ops_security.html',
+                     'account_security.html', 'login.html', 'index.html'):
+            with self.subTest(name):
+                audit = _audit((TEMPLATES / name).read_text(encoding='utf-8'))
+                self.assertFalse(audit.inline_script)
+                self.assertEqual(audit.handlers, [])
+                self.assertEqual(audit.unsafe_urls, [])
+                self.assertEqual([src for src in audit.script_sources if src not in allowed and '{% static' not in src], [])
 
 
 class StaticAssetTests(SimpleTestCase):
@@ -648,6 +674,7 @@ class BrowserLogicTests(SimpleTestCase):
                                         r'wherever it is drawn$')
 
     def test_scripts_parse(self):
-        for path in (STATIC / 'app.js', ROOT / 'ops' / 'dev_preview_server.cjs'):
+        for path in (STATIC / 'app.js', STATIC / 'ops_session.js', STATIC / 'ops_second_factor.js',
+                     ROOT / 'ops' / 'dev_preview_server.cjs'):
             result = subprocess.run([self.node, '--check', str(path)], capture_output=True, text=True, timeout=60, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)

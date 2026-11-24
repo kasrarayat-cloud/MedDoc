@@ -133,6 +133,12 @@
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
   </style>
   {% block head_extra %}{% endblock %}
+  {# B5: a signed-in console page signs itself out after the operators' idle limit (ops_session.js: the shared timer, the #}
+  {# warning, then the sign-out form); without script the page moves to the sign-in after SESSION_IDLE_OPERATOR_SECONDS #}
+  {# and ten more (610), when the session policy has already ended the session. The script is named by its own path, #}
+  {# as the fonts above are, so a console page renders without the static manifest (WhiteNoise serves the path). #}
+  {% if user.is_authenticated %}<script src="/static/studio/ops_session.js" defer></script>
+  <noscript><meta http-equiv="refresh" content="610;url=/login/?reason=idle"></noscript>{% endif %}
 </head>
 <body>
   <a class="skip" href="#main">Skip to the console</a>
@@ -145,6 +151,7 @@
       <a href="/ops/workspaces"{% if section == "workspaces" %} aria-current="page"{% endif %}>Workspaces</a>
       <a href="/ops/spending"{% if section == "spending" %} aria-current="page"{% endif %}>Spending</a>
       <a href="/ops/activity"{% if section == "activity" %} aria-current="page"{% endif %}>Activity</a>
+      <a href="/ops/security"{% if section == "security" %} aria-current="page"{% endif %}>Security keys</a>
     </nav>
     <span class="meta">Synthetic data only · release {{ release }}</span>
     <form method="post" action="/logout/">{% csrf_token %}<button class="signout" type="submit">Sign out</button></form>

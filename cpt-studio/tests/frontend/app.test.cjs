@@ -711,9 +711,20 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
       assert.equal(note, null, `${name}: nothing to mark where nothing is shown`);
     }
     assert.deepEqual(page.all('.viewer-panel .viewer-note').map(note => note.text), doc.document.converted ? [app.CONVERTED_NOTE] : [], name);
+    // the download of the original (C6): a PDF or a text as it was; a Word document's is the PDF the coding review read,
+    // and its Word file only behind a warning, as ?format=original - the Word file of one not converted yet too
     const download = page.one('#downloadOriginal');
-    if (doc.document.original_url) assert.deepEqual([download.attr('href'), download.text, download.attr('download')], [doc.document.original_url, 'Download original', ''], name);
-    else assert.equal(download, null, name);
+    const word = page.one('#downloadWord');
+    if (!doc.document.original_url) assert.deepEqual([download, word], [null, null], name);
+    else if (doc.document.media_type !== DOCX) {
+      assert.deepEqual([download.attr('href'), download.text, download.attr('download')], [doc.document.original_url, 'Download original', ''], name);
+      assert.equal(word, null, name);
+    } else {
+      if (doc.document.converted) assert.deepEqual([download.attr('href'), download.text, download.attr('download')], [doc.document.original_url, 'Download PDF', ''], name);
+      else assert.equal(download, null, name);
+      assert.deepEqual([word.tag, word.attr('href'), word.attr('data-word-original'), word.text],
+        ['button', null, `${doc.document.original_url}?format=original`, 'Download the Word file'], name);
+    }
     // every quote, once, in the quotes panel, named by its code and its line
     const quotes = page.all('#quotesPanel .quote[data-code][data-line][data-page]');
     assert.deepEqual(quotes.map(quote => [quote.attr('data-code'), quote.attr('data-line'), quote.attr('data-page')]),
@@ -931,10 +942,12 @@ test('the viewer follows document.view_media_type, never media_type: a PDF or a 
   const viewed = dom(render(fixture('encounter-ready.json')));
   assert.equal(viewed.one('#quotesPanel .quote').attr('title'), 'Show this passage in the document');
   assert.equal(viewed.one('section.viewer-panel').attr('class'), 'viewer-panel');
-  // the earlier review of a Word file the earlier version never converted: no viewer, the download only
+  // the earlier review of a Word file the earlier version never converted: no viewer, and the Word file is offered only
+  // behind its warning (C6)
   const earlier = dom(render(fixture('encounter-earlier.json')));
   assert.equal(earlier.all('iframe').length, 0);
-  assert.equal(earlier.one('#downloadOriginal').attr('href'), fixture('encounter-earlier.json').document.original_url);
+  assert.equal(earlier.one('#downloadOriginal'), null);
+  assert.equal(earlier.one('#downloadWord').attr('data-word-original'), `${fixture('encounter-earlier.json').document.original_url}?format=original`);
 });
 
 test('a Word document is viewed as the PDF the coding review read, with the note saying so under the viewer', () => {
@@ -948,7 +961,10 @@ test('a Word document is viewed as the PDF the coding review read, with the note
   assert.equal(panel.all('iframe').length, 0);
   assert.equal(panel.one('.viewer-note').text, app.CONVERTED_NOTE);
   assert.equal(panel.one('.viewer-name').text, 'synthetic-colonoscopy-report.docx');
-  assert.equal(panel.one('#downloadOriginal').attr('href'), doc.document.original_url, 'the download is the Word file itself');
+  // C6: the download is the PDF the coding review read (the server's default for a Word document), and the Word file
+  // itself is a separate choice behind a warning
+  assert.deepEqual([panel.one('#downloadOriginal').attr('href'), panel.one('#downloadOriginal').text], [doc.document.original_url, 'Download PDF']);
+  assert.equal(panel.one('#downloadWord').attr('data-word-original'), `${doc.document.original_url}?format=original`);
   // its quotes open their pages: the PDF's pages are the pages the quotes name
   const page = dom(render(doc));
   assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page and mark its words/);
@@ -2737,8 +2753,10 @@ test('the review dialog: #reviewAcknowledgement holds exactly the session\'s sta
   assert.ok(page.one('dialog#reviewDialog small#reviewLine.review-line'));
   assert.ok(page.one('dialog#reviewDialog textarea#reviewNote'));
   assert.ok(page.one('dialog#reviewDialog button#saveReview[type="submit"]'));
-  for (const id of ['uploadDialog', 'reviewDialog', 'exportDialog', 'aboutDialog']) assert.ok(page.one(`dialog#${id}`), id);
-  assert.equal(page.all('dialog').length, 4);
+  // and release 1's two: the idle warning (B5) and the one confirmation the team and the Word download ask (C4, C6)
+  const dialogs = ['uploadDialog', 'reviewDialog', 'exportDialog', 'aboutDialog', 'idleDialog', 'confirmDialog'];
+  for (const id of dialogs) assert.ok(page.one(`dialog#${id}`), id);
+  assert.equal(page.all('dialog').length, dialogs.length);
 });
 
 test('Approve opens the dialog with the session\'s statement; the approval posts {round, line, code, action, acknowledgement, note}', async () => {
@@ -3946,7 +3964,8 @@ test('Stop, Resume and Retry post to their own address; a refusal says why in th
 test('api(): a 401 sends the member to sign in, a stale build shows the update notice, a bodiless change reads as done', async () => {
   await withPage({ answers: [{ match: () => true, status: 401, body: {} }] }, async ({ calls }) => {
     await assert.rejects(app.api('/api/session'), { status: 401 });
-    assert.deepEqual(calls.pop(), { assign: '/login/?next=%2F' });
+    // B5: a session that ended for a reason the server does not name is simply over
+    assert.deepEqual(calls.pop(), { assign: '/login/?reason=expired&next=%2F' });
   });
   await withPage({ answers: [{ status: 409, body: { error_code: 'client_outdated' } }] }, async ({ element }) => {
     await assert.rejects(app.api('/api/encounters'), { message: app.OUTDATED_TEXT });
@@ -4917,4 +4936,267 @@ test('the page drops a question only where the server also calls it blank', () =
   assert.equal(kept(listed.map(point => String.fromCodePoint(point)).join('')), 0);
   // a question with any other text is shown: U+FEFF before a word, U+200B and U+180E, which trim() keeps
   for (const text of ['\uFEFFWas a biopsy taken?', '\u200B', '\u180E', '?']) assert.equal(kept(text), 1, JSON.stringify(text));
+});
+
+// --- release 1: sign-in state (B4, B5, B6), the team (C4), limits (C5) and the Word download (C6) -----------------------
+
+const opsSession = require('../../studio/static/studio/ops_session.js');
+const opsSecondFactor = require('../../studio/static/studio/ops_second_factor.js');
+
+// withPage, with the browser's location protocol and its cookies as given, and the idle timer's own state put back after
+function withSignedInPage(options, fn, { protocol = 'http:', cookie = 'cptstudio_csrf=token123', hash = '' } = {}) {
+  const idleBefore = { ...app.idle };
+  return withPage(options, async page => {
+    global.document.cookie = cookie;
+    Object.assign(global.location, { protocol, hash });
+    try {
+      await fn(page);
+    } finally {
+      clearTimeout(app.idle.timer);
+      Object.assign(app.idle, idleBefore);
+    }
+  });
+}
+
+test('B6: the CSRF cookie is read by its __Host- name under HTTPS only, so a stale cookie of the old name never wins', async () => {
+  assert.equal(app.csrfCookieName('https:'), '__Host-cptstudio_csrf');
+  assert.equal(app.csrfCookieName('http:'), 'cptstudio_csrf');
+  assert.equal(app.csrfCookieName(undefined), 'cptstudio_csrf');
+  const header = async (protocol, cookie) => {
+    let sent = null;
+    await withSignedInPage({}, async ({ calls }) => {
+      await app.api('/api/encounters/x/stop', { method: 'POST', json: {} });
+      sent = calls.find(call => call.method === 'POST').headers['X-CSRFToken'];
+    }, { protocol, cookie });
+    return sent;
+  };
+  assert.equal(await header('https:', 'cptstudio_csrf=stale; __Host-cptstudio_csrf=fresh'), 'fresh');
+  assert.equal(await header('https:', '__Host-cptstudio_csrf=fresh; cptstudio_csrf=stale'), 'fresh');
+  assert.equal(await header('https:', 'cptstudio_csrf=stale'), '', 'the old name is never read under HTTPS');
+  assert.equal(await header('http:', 'cptstudio_csrf=plain; __Host-cptstudio_csrf=other'), 'plain');
+});
+
+test('B5: the document poll and the refresh on return carry X-CPT-Poll; a read the member asked for does not', async () => {
+  assert.equal(app.POLL_HEADER, 'X-CPT-Poll');
+  const doc = fixture('encounter-checking.json');
+  await withSignedInPage({ answers: [{ match: (method, url) => url === `/api/encounters/${doc.id}`, status: 200, body: clone(doc) },
+    { match: (method, url) => url === `/api/encounters/${doc.id}`, status: 200, body: clone(doc) },
+    { match: (method, url) => url === `/api/encounters/${doc.id}`, status: 200, body: clone(doc) }] }, async ({ calls }) => {
+    Object.assign(app.state, { doc, route: { name: 'doc', id: doc.id }, routeSerial: 7 });
+    await app.loadDocument(doc.id, 7, true, true);  // what schedulePoll's timer calls
+    app.refreshIfWaiting();  // the return to the tab
+    await settle(() => calls.filter(call => call.url === `/api/encounters/${doc.id}`).length >= 2);
+    await app.refreshDocument();  // the read after the member's own act
+    const reads = calls.filter(call => call.url === `/api/encounters/${doc.id}`).map(call => call.headers['X-CPT-Poll'] ?? null);
+    assert.deepEqual(reads, ['1', '1', null]);
+  });
+  const bundle = fs.readFileSync(BUNDLE, 'utf8');
+  assert.match(bundle, /state\.poll\.timer = setTimeout\(\(\) => loadDocument\(id, serial, true, true\), delay\);/);
+  assert.match(bundle, /refreshDocument\(\{ poll: true \}\)/);
+});
+
+test('B5: the shared idle timer warns before the end, then signs out; its sentences and its reasons', () => {
+  const minute = 60000;
+  assert.deepEqual(app.idleStep(0, 2 * minute, 1000), { step: 'wait', in: null, left: null });
+  assert.deepEqual(app.idleStep(15 * minute, 2 * minute, 0), { step: 'wait', in: 13 * minute, left: 15 * minute });
+  assert.deepEqual(app.idleStep(15 * minute, 2 * minute, 13 * minute), { step: 'warn', in: 2 * minute, left: 2 * minute });
+  assert.deepEqual(app.idleStep(15 * minute, 2 * minute, 15 * minute), { step: 'out', in: 0, left: 0 });
+  assert.equal(app.idleWarningText(2 * minute), 'You will be signed out in 2 minutes');
+  assert.equal(app.idleWarningText(90000), 'You will be signed out in 2 minutes');
+  assert.equal(app.idleWarningText(59000), 'You will be signed out in 1 minute');
+  assert.equal(app.signedOutReason({ error: 'signed_out', reason: 'idle' }), 'idle');
+  for (const data of [{ error: 'signed_out', reason: 'expired' }, { error: 'Sign in to continue.' }, null, { error: 'signed_out', reason: 'x' }]) {
+    assert.equal(app.signedOutReason(data), 'expired', JSON.stringify(data));
+  }
+  assert.equal(app.loginAddress('idle', '#doc/abc'), '/login/?reason=idle&next=%2F%23doc%2Fabc');
+  // the console's own timer is the same rule
+  assert.deepEqual(opsSession.step(15 * minute, 2 * minute, 13 * minute), app.idleStep(15 * minute, 2 * minute, 13 * minute));
+  assert.equal(opsSession.warningText(2 * minute), app.idleWarningText(2 * minute));
+  assert.equal(opsSession.reasonOf({ error: 'signed_out', reason: 'idle' }), 'idle');
+  assert.equal(opsSession.reasonOf({}), 'expired');
+});
+
+test('B5: at the limit the viewer closes, #main and every dialog are emptied, and the sign-out form is sent with its reason', async () => {
+  const main = fakeElement({ innerHTML: '<section>Synthetic document text ZZ-TEXT-MARKER</section>' });
+  const dialog = fakeElement({ open: true, children: ['x'], replaceChildren() { this.children = []; } });
+  const form = fakeElement({ submitted: 0, submit() { this.submitted += 1; } });
+  await withSignedInPage({ elements: { main, signoutForm: form } }, async () => {
+    global.document.querySelectorAll = selector => (selector === 'dialog' ? [dialog] : []);
+    Object.assign(app.idle, { deadline: Date.now() - 1, gone: false, warningMs: 120000 });
+    app.scheduleIdle();
+    assert.equal(main.innerHTML, '');
+    assert.deepEqual([dialog.open, dialog.children], [false, []]);
+    assert.equal(form.submitted, 1);
+    assert.equal(form.attributes.action, '/logout/?reason=idle');
+    assert.equal(app.idle.gone, true);
+    app.scheduleIdle();
+    assert.equal(form.submitted, 1, 'once only');
+  });
+});
+
+test('B5: a tab in use keeps the session signed in while another tab sits idle, and a sign-out reaches every tab', async () => {
+  const form = fakeElement({ submitted: 0, submit() { this.submitted += 1; } });
+  await withSignedInPage({ elements: { signoutForm: form } }, async ({ calls }) => {
+    const now = Date.now();
+    // this tab has sat idle: its own deadline is about to pass
+    Object.assign(app.idle, { deadline: now + 50, gone: false, warningMs: 120000 });
+    // the tab in use pinged: its later deadline reaches this one, which adopts it and does not sign out
+    app.receiveSession({ type: 'deadline', deadline: now + 15 * 60000, warningMs: 120000 });
+    assert.equal(app.idle.deadline, now + 15 * 60000);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    app.scheduleIdle();
+    assert.equal(form.submitted, 0);
+    assert.equal(app.idle.gone, false);
+    // an earlier deadline never shortens a tab's time
+    app.receiveSession({ type: 'deadline', deadline: now + 1000 });
+    assert.equal(app.idle.deadline, now + 15 * 60000);
+    // a tab that signed out takes this one to the sign-in page, its screen cleared first
+    app.receiveSession({ type: 'signed-out', reason: 'idle' });
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=idle&next=%2F' }]);
+    assert.equal(form.submitted, 0, 'the other tab already sent the sign-out');
+  });
+});
+
+test('B5: the ping is sent on input at most once a minute, and its answer is the timer', async () => {
+  await withSignedInPage({ answers: [{ match: (method, url) => url === '/session/activity', status: 200, body: { idle_seconds: 900, cap_seconds: 28000, warning_seconds: 120 } }] }, async ({ calls }) => {
+    Object.assign(app.idle, { deadline: 0, lastPing: 0, gone: false, pinging: null });
+    const before = Date.now();
+    app.noteInput();
+    await app.idle.pinging;
+    const pings = calls.filter(call => call.url === '/session/activity');
+    assert.equal(pings.length, 1);
+    assert.equal(pings[0].method, 'POST');
+    assert.equal(pings[0].headers['X-CPT-Poll'], undefined, 'the ping is activity');
+    assert.ok(app.idle.deadline >= before + 900000 && app.idle.deadline <= Date.now() + 900000);
+    assert.equal(app.idle.warningMs, 120000);
+    app.noteInput();
+    app.noteInput();
+    assert.equal(calls.filter(call => call.url === '/session/activity').length, 1, 'not again within the minute');
+  });
+});
+
+test('B5: a 401 clears the screen before the sign-in page, with the reason the server gave', async () => {
+  const main = fakeElement({ innerHTML: '<p>ZZ-TEXT-MARKER</p>' });
+  await withSignedInPage({ elements: { main }, answers: [{ match: () => true, status: 401, body: { error: 'signed_out', reason: 'idle' } }] }, async ({ calls }) => {
+    await assert.rejects(app.api('/api/encounters'), { status: 401 });
+    assert.equal(main.innerHTML, '');
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/login/?reason=idle&next=%2F%23doc%2Fx' }]);
+  }, { hash: '#doc/x' });
+});
+
+test('B4: a forced password change answers 403 and the page goes to the account page', async () => {
+  await withSignedInPage({ answers: [{ match: () => true, status: 403, body: { error: 'password_change_required' } }] }, async ({ calls }) => {
+    await assert.rejects(app.api('/api/encounters'), { status: 403 });
+    assert.deepEqual(calls.filter(call => call.assign), [{ assign: '/account/?required=1' }]);
+  });
+  // a code the server answers for the page is never shown as a sentence
+  assert.equal(app.errorText(403, { error: 'password_change_required' }), app.errorText(403, null));
+  assert.equal(app.errorText(409, { error: 'some_code' }), app.errorText(409, null));
+});
+
+test('C5: a limit is said in plain words, with the wait the server gives', () => {
+  assert.equal(app.errorText(429, { error: 'rate_limited', retry_after: 600 }), 'Too many requests in a short time. Wait 10 minutes and try again.');
+  assert.equal(app.errorText(429, { error: 'rate_limited', retry_after: 61 }), 'Too many requests in a short time. Wait 2 minutes and try again.');
+  assert.equal(app.errorText(429, { error: 'rate_limited', retry_after: 30 }), 'Too many requests in a short time. Wait a minute and try again.');
+  assert.equal(app.errorText(429, { error: 'rate_limited' }), 'Too many requests in a short time. Wait a moment and try again.');
+  assert.equal(app.errorText(429, null), 'Too many requests in a short time. Wait a moment and try again.');
+  assert.equal(app.errorText(429, { error: 'Wait before making another report.' }), 'Wait before making another report.');
+  for (const status of [429]) assert.doesNotMatch(app.errorText(status, { error: 'rate_limited', retry_after: 9 }), /rate_limited|\d{3}/);
+});
+
+test('C4: the owners\' Team panel lists the practice and turns a person off, after asking, or on', async () => {
+  const me = '6f2c1d8e-4b3a-4c5d-9e8f-0a1b2c3d4e5f';
+  const them = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f';
+  const bot = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+  const data = { members: [
+    { id: me, label: 'Dr Owner', username: 'owner', role: 'owner', active: true, actor_kind: 'human', last_sign_in: '2026-11-24T08:00:00Z', password_change_required: false },
+    { id: them, label: 'Dr Reviewer', username: 'reviewer', role: 'reviewer', active: true, actor_kind: 'human', last_sign_in: null, password_change_required: true },
+    { id: bot, label: '<b>Reviewbot</b>', username: 'review-agent', role: 'reviewer', active: false, actor_kind: 'agent', last_sign_in: null, password_change_required: false },
+    { id: 'not-an-id', label: 'Dropped', role: 'viewer', active: true }, null] };
+  assert.deepEqual(app.teamMembers(data).map(member => member.id), [me, them, bot]);
+  const page = dom(app.teamList(app.teamMembers(data), me));
+  const rows = page.all('.team-row');
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].one('button'), null, 'nobody turns themself off');
+  assert.match(rows[0].text, /Dr Owner.*Owner · Person · owner/);
+  assert.match(rows[0].text, /24 Nov 2026, 08:00 UTC/);
+  assert.deepEqual([rows[1].one('button').attr('data-member-access'), rows[1].one('button').attr('data-member')], ['off', them]);
+  assert.match(rows[1].text, /Must choose a password/);
+  assert.match(rows[1].text, /Never signed in/);
+  assert.deepEqual([rows[2].one('button').attr('data-member-access'), rows[2].one('button').text], ['on', 'Turn on']);
+  assert.match(rows[2].text, /Automated account/);
+  assert.ok(!app.teamList(app.teamMembers(data), me).includes('<b>'), 'every value is escaped');
+  assert.match(dom(app.teamView()).text, /Turning a person off ends their access to this practice only/);
+  await withSignedInPage({ answers: [{ match: (method, url) => method === 'GET' && url === '/api/members', status: 200, body: data },
+    { match: (method, url) => method === 'POST' && url === `/api/members/${them}/access`, status: 200, body: {} },
+    { match: (method, url) => method === 'GET' && url === '/api/members', status: 200, body: data }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session: { ...fixture('session.json'), user: { ...fixture('session.json').user, id: me } }, route: { name: 'team' }, routeSerial: 3 });
+    await app.showTeam(3);
+    assert.match(element('#teamList').innerHTML, /Dr Reviewer/);
+    // turning off asks first; Cancel sends nothing, Continue posts {active: false} and reads the team again
+    click('[data-member-access]', { memberAccess: 'off', member: them, label: 'Dr Reviewer' });
+    assert.equal(element('#confirmDialog').open, true);
+    assert.match(element('#confirmTitle').textContent, /Turn off Dr Reviewer's access\?/);
+    assert.deepEqual(posted(calls), []);
+    app.confirmChosen();
+    await settle(() => calls.filter(call => call.url === '/api/members').length === 2);
+    assert.deepEqual(posted(calls), [{ url: `/api/members/${them}/access`, body: { active: false } }]);
+    assert.equal(element('#confirmDialog').open, false);
+  });
+  await withSignedInPage({ answers: [{ match: () => true, status: 403, body: { error: 'Only an owner can do that.' } }] }, async ({ element }) => {
+    Object.assign(app.state, { route: { name: 'team' }, routeSerial: 4 });
+    await app.showTeam(4);
+    assert.match(element('#teamList').innerHTML, /Only the practice&#x27;s owners see the team\./);
+  });
+  assert.equal(app.ROUTE_TITLES.team, 'Team');
+});
+
+test('C4: the session shows the Team link to an owner only', async () => {
+  await withSignedInPage({}, async ({ element }) => {
+    for (const [value, hidden] of [[true, false], [false, true], [undefined, true], ['yes', true], [1, true]]) {
+      app.renderSession({ ...fixture('session.json'), can_manage_team: value });
+      assert.equal(element('#teamNav').hidden, hidden, String(value));
+    }
+  });
+});
+
+test('C6: the Word file is downloaded only after its warning, as ?format=original', async () => {
+  const address = `/api/encounters/${UUID}/original?format=original`;
+  await withSignedInPage({}, async ({ calls, element }) => {
+    click('[data-word-original]', { wordOriginal: address });
+    assert.equal(element('#confirmDialog').open, true);
+    assert.equal(element('#confirmText').textContent, app.WORD_ORIGINAL_TEXT);
+    assert.equal(app.WORD_ORIGINAL_TEXT, 'The original Word file can contain links and embedded content. Download it anyway?');
+    assert.deepEqual(calls.filter(call => call.download), [], 'nothing before the member chooses');
+    app.confirmChosen();
+    assert.deepEqual(calls.filter(call => call.download), [{ download: address, filename: '' }]);
+    // an address of any other shape is never downloaded
+    for (const bad of ['https://evil.test/x?format=original', `/api/encounters/${UUID}/original`, '/api/reports/x/download?format=original']) {
+      element('#confirmDialog').open = false;
+      app.askWordOriginal(bad);
+      assert.equal(element('#confirmDialog').open, false, bad);
+    }
+  });
+});
+
+test('B2: the console\'s key script converts the options to bytes and the answer back to base64url', () => {
+  const bytes = Uint8Array.from([0, 1, 2, 250, 251, 252, 253, 254, 255]);
+  const text = opsSecondFactor.toText(bytes.buffer);
+  assert.equal(text, Buffer.from(bytes).toString('base64url'));
+  assert.deepEqual([...opsSecondFactor.toBytes(text)], [...bytes]);
+  const request = opsSecondFactor.requestOptions({ challenge: text, rpId: 'admin.quillmd.com', allowCredentials: [{ id: 'AAEC', type: 'public-key' }] });
+  assert.deepEqual([[...request.challenge], [...request.allowCredentials[0].id], request.rpId], [[...bytes], [0, 1, 2], 'admin.quillmd.com']);
+  const creation = opsSecondFactor.creationOptions({ challenge: text, user: { id: 'AAEC', name: 'op' }, excludeCredentials: [] });
+  assert.deepEqual([[...creation.user.id], creation.user.name], [[0, 1, 2], 'op']);
+  const answered = opsSecondFactor.answer({ id: 'AAEC', rawId: Uint8Array.from([0, 1, 2]).buffer, type: 'public-key', authenticatorAttachment: 'cross-platform',
+    response: { clientDataJSON: Uint8Array.from([123, 125]).buffer, authenticatorData: Uint8Array.from([1]).buffer, signature: Uint8Array.from([2]).buffer, userHandle: null } });
+  assert.deepEqual(answered, { id: 'AAEC', rawId: 'AAEC', type: 'public-key', authenticatorAttachment: 'cross-platform',
+    response: { clientDataJSON: 'e30', authenticatorData: 'AQ', signature: 'Ag', userHandle: null } });
+  const registered = opsSecondFactor.answer({ id: 'AAEC', rawId: Uint8Array.from([0, 1, 2]).buffer, type: 'public-key',
+    response: { clientDataJSON: Uint8Array.from([123, 125]).buffer, attestationObject: Uint8Array.from([3]).buffer, getTransports: () => ['usb'] } });
+  assert.deepEqual(registered.response, { clientDataJSON: 'e30', attestationObject: 'Aw', transports: ['usb'] });
+  for (const file of ['ops_session.js', 'ops_second_factor.js']) {
+    const source = fs.readFileSync(path.join(ROOT, 'studio', 'static', 'studio', file), 'utf8');
+    assert.ok(!/eval\(|new Function|innerHTML|document\.write/.test(source), file);
+  }
 });

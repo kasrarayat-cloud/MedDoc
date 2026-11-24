@@ -35,6 +35,20 @@ const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
 // line of it, is no longer the latest): nothing was recorded, and the page has read the document again.
 const CHANGED_TEXT = 'This coding review has changed, so nothing was recorded. The page now shows the latest.';
 const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
+// Release 1 (RELEASE-1-SPEC B4 to B6, C4 to C6): the sign-in state the page keeps up with, the practice's team, the plain
+// sentence of a limit and the download of a Word document.
+const POLL_HEADER = 'X-CPT-Poll';  // the document poll and the refresh on return carry it: neither is the member's activity
+const ACTIVITY_URL = '/session/activity';
+const ACTIVITY_EVERY_MS = 60000;  // the activity ping goes at most once a minute, while there is input
+const ACTIVITY_INPUTS = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'];
+const SESSION_CHANNEL = 'cpt-studio-session';  // the tabs of this browser share one idle timer
+const ACCOUNT_REQUIRED_URL = '/account/?required=1';
+const WORD_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const WORD_ORIGINAL_TEXT = 'The original Word file can contain links and embedded content. Download it anyway?';
+const ROLE_LABELS = { owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' };
+// a code the server answers for the page to act on (signed_out, password_change_required, rate_limited), never a
+// sentence to show
+const MACHINE_WORD = /^[a-z][a-z0-9_]*$/;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
 
@@ -114,7 +128,7 @@ const INSURANCE_VALUES = new Set(INSURANCE_CHOICES.map(([value]) => value));
 const INSURANCE_SHOWN = { medicare: 'Medicare', medicaid: 'Medicaid', commercial: 'Commercial or other' };
 const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text' };
 const TRIGGER_TEXT = { answers: 'after your answers', retry: 'after a retry' };
-const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
+const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review', team: 'Team' };
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
 
 // --- pure helpers ----------------------------------------------------------------
@@ -238,7 +252,8 @@ function isClientOutdated(status, data) {
 // status. Never the status code or a technical payload.
 function errorText(status, data) {
   const served = typeof data?.error === 'string' ? data.error.trim() : '';
-  if (served) return served;
+  if (status === 429) return served && !MACHINE_WORD.test(served) ? served : rateLimitText(data);
+  if (served && !MACHINE_WORD.test(served)) return served;
   if (status === 400) return 'This could not be saved. Check the form and try again.';
   if (status === 403) return 'This action is not allowed for your account, or the page is out of date. Reload the page and try again.';
   if (status === 404) return 'Not found, or not in your workspace.';
@@ -246,6 +261,88 @@ function errorText(status, data) {
   if (status === 413) return 'The file is too large. Choose a file up to 15 MB.';
   if (status === 429) return 'Too many attempts in a short time. Wait a moment and try again.';
   return 'Something went wrong on our side. Nothing was changed by this attempt; try again in a moment.';
+}
+
+// C5: a limit the server counts (429 {"error": "rate_limited", "retry_after": seconds}) in plain words.
+function rateLimitText(data) {
+  const seconds = Number(data?.retry_after);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 'Too many requests in a short time. Wait a moment and try again.';
+  if (seconds <= 60) return 'Too many requests in a short time. Wait a minute and try again.';
+  return `Too many requests in a short time. Wait ${Math.ceil(seconds / 60)} minutes and try again.`;
+}
+
+// B6: under HTTPS the site's cookies carry the __Host- prefix (cptstudio/settings.py) and only that name is read, so a
+// cookie of the name before release 1, left in this browser, never wins; without HTTPS, the plain name.
+function csrfCookieName(protocol) {
+  return protocol === 'https:' ? '__Host-cptstudio_csrf' : 'cptstudio_csrf';
+}
+
+// B5: why the server signed the member out ({"error": "signed_out", "reason": "idle" | "expired"}): idle when it says
+// so, else expired - a session that ended for any other reason is simply over.
+function signedOutReason(data) {
+  return data?.error === 'signed_out' && data.reason === 'idle' ? 'idle' : 'expired';
+}
+
+// The sign-in page, saying why, and coming back to the page the member was on.
+function loginAddress(reason, hash) {
+  return `/login/?${new URLSearchParams({ reason, next: `/${hash || ''}` })}`;
+}
+
+// B5: the shared idle timer's next step at `now` (ms): 'out' at or after the deadline the tabs share, 'warn' inside the
+// warning's lead before it, 'wait' until then; `in` is how long until the step after it, `left` how long until the end.
+function idleStep(deadline, warningMs, now) {
+  if (!Number.isFinite(deadline) || deadline <= 0) return { step: 'wait', in: null, left: null };
+  if (now >= deadline) return { step: 'out', in: 0, left: 0 };
+  if (now >= deadline - warningMs) return { step: 'warn', in: deadline - now, left: deadline - now };
+  return { step: 'wait', in: deadline - warningMs - now, left: deadline - now };
+}
+
+function idleWarningText(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  return `You will be signed out in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+// C4: the practice's team as GET /api/members serves it to an owner: {"members": [{id, label, username, role, active,
+// actor_kind, last_sign_in, password_change_required}]}; a row without an id of its own is never drawn.
+function teamMembers(data) {
+  return objects(data?.members).filter(member => typeof member.id === 'string' && UUID.test(member.id));
+}
+
+function memberRow(member, selfId) {
+  const self = member.id === selfId;
+  const label = text(member.label) || text(member.username) || 'Unnamed account';
+  const detail = [lookup(ROLE_LABELS, member.role, 'Member'), member.actor_kind === 'agent' ? 'Automated account' : 'Person', text(member.username)]
+    .filter(Boolean).join(' · ');
+  const access = member.active === true ? badge('green', 'Access on') : badge('gray', 'Access off');
+  const password = member.password_change_required === true ? badge('amber', 'Must choose a password') : '';
+  const signIn = formatTimestamp(member.last_sign_in) || 'Never signed in';
+  const id = escapeHtml(member.id);
+  const action = self ? '<span class="card-empty">You</span>'
+    : member.active === true ? `<button type="button" class="button secondary" data-member-access="off" data-member="${id}" data-label="${escapeHtml(label)}">Turn off</button>`
+      : `<button type="button" class="button secondary" data-member-access="on" data-member="${id}" data-label="${escapeHtml(label)}">Turn on</button>`;
+  return `<div class="document-row team-row" data-member-row="${id}"><span class="doc-row-main"><span class="doc-file-icon">${icon('shield')}</span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span><span>${access}${password}</span><span class="doc-row-date">${escapeHtml(signIn)}</span><span>${action}</span></div>`;
+}
+
+const TEAM_HEADER = '<div class="list-header"><span>PERSON</span><span>ACCESS</span><span class="date-header">LAST SIGN-IN</span><span></span></div>';
+
+function teamList(members, selfId) {
+  if (members === null) return `${TEAM_HEADER}<p class="empty-state">Loading the team…</p>`;
+  return TEAM_HEADER + (members.length ? members.map(member => memberRow(member, selfId)).join('') : '<p class="empty-state">Nobody else has access to this practice.</p>');
+}
+
+function teamView() {
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">YOUR PRACTICE</span><h1>Team.</h1><p>Everyone with access to this practice's documents. Turning a person off ends their access to this practice only, at their next step; their other practices are not changed. Adding people and changing roles is done by CPT Studio on the practice's request.</p></div></div><div class="document-list" id="teamList">${teamList(null, '')}</div></section>`;
+}
+
+// C6: a Word document downloads as the PDF the coding review read; the Word file itself only after a warning, as
+// ?format=original, and so does the original of a Word document not yet converted. A PDF or a text downloads as before.
+function downloadLinks(part) {
+  const original = safeOriginalUrl(part?.original_url);
+  if (!original) return '';
+  const plain = label => `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}${label}</a>`;
+  if (part.media_type !== WORD_MEDIA_TYPE) return plain('Download original');
+  const word = `<button type="button" class="viewer-download meta-link" id="downloadWord" data-word-original="${escapeHtml(`${original}?format=original`)}">${icon('download')}Download the Word file</button>`;
+  return part.converted === true ? plain('Download PDF') + word : word;
 }
 
 // A version-4 UUID from 16 random bytes: the key one upload attempt carries, so a retried attempt whose answer was
@@ -1147,6 +1244,9 @@ const state = {
   // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for and how many times it has
   // been asked for (a failed load is tried again at fresh addresses), and the passage of a text document being marked
   viewer: null, pdfLibrary: null, pdfAttempt: 0, framePassage: null,
+  // release 1: what the confirmation dialog runs on Continue (askConfirm), and the object addresses the page made, which
+  // it lets go of when it signs out (clearScreen)
+  confirming: null, objectUrls: new Set(),
 };
 
 function uiState(overrides = {}) {
@@ -1284,7 +1384,7 @@ function viewerPanel(doc) {
     + '<button type="button" class="zoom-button zoom-fit" data-zoom="fit">Fit width</button></span>' : '';
   const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
   const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
-  const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
+  const download = original ? downloadLinks(part) : '';
   return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${page}${zoom}</div>${frame}${marked}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
 }
 
@@ -1637,13 +1737,23 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 function csrfValue() {
-  return readCookie(document.cookie, 'cptstudio_csrf') || $('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const cookieName = csrfCookieName(globalThis.location?.protocol);
+  return readCookie(document.cookie, cookieName) || $('input[name="csrfmiddlewaretoken"]')?.value || '';
 }
 
-function goToLogin() {
+function goToLogin(reason = 'expired') {
   if (state.leaving) return;
   state.leaving = true;
-  location.assign(`/login/?next=${encodeURIComponent(`/${location.hash}`)}`);
+  clearScreen();
+  location.assign(loginAddress(reason, location.hash));
+}
+
+// B4: a password staff set must be replaced before anything else opens (403 {"error": "password_change_required"}).
+function goToAccount() {
+  if (state.leaving) return;
+  state.leaving = true;
+  clearScreen();
+  location.assign(ACCOUNT_REQUIRED_URL);
 }
 
 function showUpdateNotice() {
@@ -1654,9 +1764,10 @@ function showUpdateNotice() {
 }
 
 // One call to the customer API. A change the server accepts with no body reads as an empty answer; a read must be JSON.
-async function api(path, { method = 'GET', json, form } = {}) {
+async function api(path, { method = 'GET', json, form, poll = false } = {}) {
   const headers = { Accept: 'application/json', [CLIENT_HEADER]: CLIENT_VERSION };
   let body;
+  if (poll) headers[POLL_HEADER] = '1';
   if (method !== 'GET') headers['X-CSRFToken'] = csrfValue();
   if (json !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -1670,12 +1781,17 @@ async function api(path, { method = 'GET', json, form } = {}) {
   } catch {
     throw new ApiError(OFFLINE_TEXT);
   }
+  const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
-    goToLogin();
+    const answer = isJson ? await response.json().catch(() => null) : null;
+    goToLogin(signedOutReason(answer));
     throw new ApiError('Your session has ended. Sign in again.', 401);
   }
-  const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   const data = isJson ? await response.json().catch(() => null) : null;
+  if (response.status === 403 && data?.error === 'password_change_required') {
+    goToAccount();
+    throw new ApiError('Choose a new password to continue.', 403, data);
+  }
   if (isClientOutdated(response.status, data)) {
     showUpdateNotice();
     throw new ApiError(OUTDATED_TEXT, 409, data);
@@ -1786,6 +1902,8 @@ function renderSession(session) {
   $('#profileRole').textContent = lookup({ owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' }, session.role, 'Member');
   setCount('#documentsCount', session.counts?.documents);
   setCount('#queueCount', session.counts?.queue);
+  const team = $('#teamNav');
+  if (team) team.hidden = session.can_manage_team !== true;
 }
 
 async function loadSession() {
@@ -1846,7 +1964,70 @@ function route() {
     $('#main').innerHTML = howItWorksView();
     return undefined;
   }
+  if (next.name === 'team') return showTeam(serial);
   return showList(next.name, serial);
+}
+
+// C4: the owners' Team panel. A reviewer or viewer who opens it is told it is the owners'; any change reads the team again.
+async function showTeam(serial) {
+  $('#main').innerHTML = teamView();
+  let data;
+  try {
+    data = await api('/api/members');
+  } catch (error) {
+    if (serial !== state.routeSerial) return;
+    const sentence = error.status === 403 || error.status === 404 ? 'Only the practice\'s owners see the team.' : `The team could not be loaded. ${error.message}`;
+    $('#teamList').innerHTML = `${TEAM_HEADER}<p class="empty-state">${escapeHtml(sentence)}</p>`;
+    return;
+  }
+  if (serial !== state.routeSerial) return;
+  $('#teamList').innerHTML = teamList(teamMembers(data), state.session?.user?.id || '');
+}
+
+async function setMemberAccess(id, active, button) {
+  if (!UUID.test(String(id))) return;
+  setBusy(button, true);
+  try {
+    await api(`/api/members/${encodeURIComponent(id)}/access`, { method: 'POST', json: { active } });
+    toast(active ? 'Access turned on.' : 'Access turned off.');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(button, false);
+  }
+  if (state.route?.name === 'team') await showTeam(state.routeSerial);
+}
+
+// One confirmation at a time (#confirmDialog): its Continue runs `run`, its Cancel or Close runs nothing.
+function askConfirm({ title, text: body, action, run }) {
+  state.confirming = run;
+  $('#confirmTitle').textContent = title;
+  $('#confirmText').textContent = body;
+  $('#confirmGo').textContent = action;
+  openDialog('confirmDialog');
+}
+
+function confirmChosen() {
+  const run = state.confirming;
+  state.confirming = null;
+  closeDialog('confirmDialog');
+  if (typeof run === 'function') run();
+}
+
+function askMemberAccess(button) {
+  const active = button.dataset.memberAccess === 'on';
+  const id = button.dataset.member;
+  if (active) return setMemberAccess(id, true, button);
+  askConfirm({ title: `Turn off ${button.dataset.label || 'this person'}'s access?`,
+    text: 'They can no longer open this practice\'s documents, from their next step. Their other practices are not changed, and you can turn their access on again here.',
+    action: 'Turn off', run: () => setMemberAccess(id, false, button) });
+  return undefined;
+}
+
+// C6: the Word file itself is downloaded only once the member has read why it is not the default.
+function askWordOriginal(address) {
+  if (!/^\/api\/encounters\/[0-9a-f-]{36}\/original\?format=original$/i.test(String(address))) return;
+  askConfirm({ title: 'Download the Word file?', text: WORD_ORIGINAL_TEXT, action: 'Download it anyway', run: () => startDownload(address, '') });
 }
 
 async function showList(name, serial) {
@@ -1909,13 +2090,13 @@ function setReconnecting(on) {
 // Reads can answer out of order (a poll, the read after an act, the read after a download): one that answers after a
 // read asked later than it was shown is older than what the page shows, and changes nothing - nor does its failure.
 // Each read shown draws an open export dialog again (redrawExportDialog).
-async function loadDocument(id, serial, silent) {
+async function loadDocument(id, serial, silent, poll = false) {
   clearTimeout(state.poll.timer);
   const read = ++state.reads.asked;
   const older = () => read < state.reads.applied;
   let doc;
   try {
-    doc = await api(`/api/encounters/${encodeURIComponent(id)}`);
+    doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
     if (serial !== state.routeSerial || state.outdated || older()) return;
     if (silent && state.doc) {
@@ -1957,18 +2138,19 @@ function schedulePoll(serial) {
   const delay = pollDelay(state.poll.count, state.poll.errors);
   state.poll.count += 1;
   const id = state.doc.id;
-  state.poll.timer = setTimeout(() => loadDocument(id, serial, true), delay);
+  state.poll.timer = setTimeout(() => loadDocument(id, serial, true, true), delay);
 }
 
-async function refreshDocument() {
+async function refreshDocument({ poll = false } = {}) {
   if (state.route?.name !== 'doc') return;
   state.poll.count = 0;
   state.poll.errors = 0;
-  await loadDocument(state.route.id, state.routeSerial, true);
+  await loadDocument(state.route.id, state.routeSerial, true, poll);
 }
 
+// the refresh on return to the tab or on reconnecting is a poll: it never counts as the member's activity (B5)
 function refreshIfWaiting() {
-  if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument();
+  if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument({ poll: true });
 }
 
 // Where the focus was, so a redraw can put it back: the element's id, the code row it sits in (its line and its code),
@@ -3742,6 +3924,191 @@ function generateReport(kind, fmt) {
   }).then(() => (refused ? rereadAfterRefusal(exporting.encounter) : undefined));
 }
 
+// --- automatic sign-out after inactivity (B5) ---------------------------------------------------------------------
+// The server ends a session idle longer than its limit (studio.sessions); the page keeps one timer with it, shared by the
+// tabs of this browser (BroadcastChannel, else localStorage events; every access in try/catch), so an idle tab never
+// signs out a tab in use. Input sends the activity ping at most once a minute; the ping's answer is the server's own
+// remaining time, so the timer never drifts from the session. A warning comes SESSION_IDLE_WARNING_SECONDS before the end,
+// with a button that sends the ping. At the end the page closes the viewer, lets go of its object addresses, empties #main
+// and every dialog, and submits the sign-out form. Answers typed and not sent are lost then: the warning is their
+// protection (no drafts are kept, because a draft would put a document's text in the browser's storage).
+const idle = { deadline: 0, warningMs: 120000, lastPing: 0, pinging: null, timer: 0, channel: null, gone: false, started: false };
+
+function seconds(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function releaseObjectUrls() {
+  for (const address of state.objectUrls || []) {
+    try {
+      URL.revokeObjectURL(address);
+    } catch {
+      // already gone
+    }
+  }
+  state.objectUrls = new Set();
+}
+
+// Everything the page shows of the workspace goes: the viewer, its addresses, #main, every dialog, the notices.
+function clearScreen() {
+  stopPolling();
+  stopTicker();
+  closeViewer();
+  releaseObjectUrls();
+  closeDocumentDialogs();
+  state.doc = null;
+  state.docKey = '';
+  state.viewerKey = '';
+  const main = $('#main');
+  if (main) main.innerHTML = '';
+  for (const dialog of $$('dialog')) {
+    if (dialog.open) dialog.close();
+    dialog.replaceChildren?.();
+  }
+  const notice = $('#toast');
+  if (notice) notice.textContent = '';
+}
+
+function shareSession(message) {
+  const data = { ...message, at: Date.now() };
+  try {
+    if (idle.channel) {
+      idle.channel.postMessage(data);
+      return;
+    }
+  } catch {
+    // fall through to the storage events
+  }
+  try {
+    localStorage.setItem(SESSION_CHANNEL, JSON.stringify(data));
+  } catch {
+    // no storage here: this tab keeps its own timer
+  }
+}
+
+function receiveSession(message) {
+  if (!message || typeof message !== 'object') return;
+  if (message.type === 'deadline') adoptDeadline(Number(message.deadline), Number(message.warningMs), false);
+  else if (message.type === 'signed-out') leaveSignedOut(message.reason === 'idle' ? 'idle' : 'expired');
+}
+
+function openSessionChannel() {
+  try {
+    idle.channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(SESSION_CHANNEL) : null;
+    if (idle.channel) idle.channel.onmessage = event => receiveSession(event.data);
+  } catch {
+    idle.channel = null;
+  }
+  try {
+    window.addEventListener('storage', event => {
+      if (event.key !== SESSION_CHANNEL || !event.newValue) return;
+      try {
+        receiveSession(JSON.parse(event.newValue));
+      } catch {
+        // not a message of this page
+      }
+    });
+  } catch {
+    // no storage events here
+  }
+}
+
+// Only a later deadline moves the timer: the server's last activity only moves forward, and another tab's news never
+// shortens this one's time.
+function adoptDeadline(deadline, warningMs, share = true) {
+  if (Number.isFinite(warningMs) && warningMs > 0) idle.warningMs = warningMs;
+  if (!Number.isFinite(deadline) || deadline <= idle.deadline) return;
+  idle.deadline = deadline;
+  if (share) shareSession({ type: 'deadline', deadline, warningMs: idle.warningMs });
+  scheduleIdle();
+}
+
+function sendActivity() {
+  if (idle.gone) return Promise.resolve();
+  if (idle.pinging) return idle.pinging;
+  idle.lastPing = Date.now();
+  idle.pinging = (async () => {
+    try {
+      const data = await api(ACTIVITY_URL, { method: 'POST', json: {} });
+      const left = seconds(data?.idle_seconds);
+      const lead = seconds(data?.warning_seconds);
+      if (left !== null) adoptDeadline(Date.now() + left * 1000, lead === null ? null : lead * 1000);
+    } catch {
+      // a 401 has already signed the page out; offline, the timer stands
+    } finally {
+      idle.pinging = null;
+    }
+  })();
+  return idle.pinging;
+}
+
+function noteInput() {
+  if (idle.gone || idle.pinging) return;
+  if (Date.now() - idle.lastPing >= ACTIVITY_EVERY_MS) sendActivity();
+}
+
+function showIdleWarning(left) {
+  const dialog = $('#idleDialog');
+  if (!dialog) return;
+  const title = $('#idleTitle');
+  if (title) title.textContent = idleWarningText(left);
+  if (!dialog.open) dialog.showModal();
+}
+
+function hideIdleWarning() {
+  const dialog = $('#idleDialog');
+  if (dialog?.open) dialog.close();
+}
+
+function scheduleIdle() {
+  clearTimeout(idle.timer);
+  if (idle.gone) return;
+  const next = idleStep(idle.deadline, idle.warningMs, Date.now());
+  if (next.step === 'out') {
+    signOutIdle();
+    return;
+  }
+  if (next.step === 'warn') showIdleWarning(next.left);
+  else hideIdleWarning();
+  if (next.in === null) return;
+  idle.timer = setTimeout(scheduleIdle, next.step === 'warn' ? Math.min(1000, next.in) : Math.max(1000, next.in));
+}
+
+// Another tab signed out (or the server did): this one clears its screen and goes to the sign-in page too.
+function leaveSignedOut(reason) {
+  if (idle.gone) return;
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  goToLogin(reason);
+}
+
+function signOutIdle() {
+  if (idle.gone) return;
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  shareSession({ type: 'signed-out', reason: 'idle' });
+  state.leaving = true;
+  clearScreen();
+  const form = $('#signoutForm');
+  if (!form) return;
+  form.setAttribute('action', '/logout/?reason=idle');
+  form.submit?.();
+}
+
+function startIdleWatch() {
+  if (idle.started) return;
+  idle.started = true;
+  openSessionChannel();
+  for (const type of ACTIVITY_INPUTS) document.addEventListener(type, noteInput, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleIdle(); });
+  $('#signoutForm')?.addEventListener('submit', () => {
+    if (!idle.gone) shareSession({ type: 'signed-out', reason: 'expired' });
+    idle.gone = true;
+  });
+  sendActivity();
+}
+
 function hasFiles(event) {
   return [...(event.dataTransfer?.types || [])].includes('Files');
 }
@@ -3784,6 +4151,16 @@ function onClick(event) {
     handleDecision(decision.dataset.decision, decision.dataset.line, decision);
     return;
   }
+  const access = target.closest('[data-member-access]');
+  if (access) {
+    askMemberAccess(access);
+    return;
+  }
+  const word = target.closest('[data-word-original]');
+  if (word) {
+    askWordOriginal(word.dataset.wordOriginal);
+    return;
+  }
   const report = target.closest('[data-export-kind]');
   if (report) {
     // the second (or third) click of one gesture - a double click - is not a choice of its own
@@ -3803,6 +4180,8 @@ function onClick(event) {
     retry: () => progressAction('retry', action),
     reload: () => location.reload(),
     'reload-view': route,
+    confirm: confirmChosen,
+    'stay-signed-in': () => sendActivity(),
   })[action.dataset.action]?.();
 }
 
@@ -3884,6 +4263,7 @@ function boot() {
   window.addEventListener('offline', () => { if (shouldPoll(state.doc)) setReconnecting(true); });
   document.addEventListener('visibilitychange', refreshIfWaiting);
   window.matchMedia('(max-width:760px)').addEventListener('change', closeNavigation);
+  startIdleWatch();
   loadSession().then(route);
 }
 
@@ -3908,6 +4288,11 @@ if (typeof module === 'object' && module.exports) {
     paintPage, layoutPages, zoomViewer, renderDocument, PDF_VIEW, ZOOM_STEPS, ZOOM_FIT,
     continuesDrawing, keepsEdge, NUMBER_SEPARATORS, libraryWatchdog, startWorker, downloadDocument, scrollToQuote, relayoutPages,
     buildPages, frameHolds, noteFrameLoad, markInFrame, paintFrame,
+    csrfCookieName, csrfValue, signedOutReason, loginAddress, idleStep, idleWarningText, rateLimitText, teamMembers, memberRow,
+    teamList, teamView, downloadLinks, showTeam, setMemberAccess, askConfirm, confirmChosen, askWordOriginal, clearScreen,
+    goToLogin, goToAccount, sendActivity, adoptDeadline, scheduleIdle, signOutIdle, receiveSession, shareSession, noteInput,
+    idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
+    refreshIfWaiting, renderSession,
   };
 }
 if (typeof document !== 'undefined') boot();
