@@ -1229,10 +1229,10 @@ class UnknownEntryTests(InterruptCase, TestCase):
         ledger = self.ledger_file()
         self.forget_the_ledger()
         output, error = self.replay(ledger)
+        self.assertIsNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)  # never destroyed by the replay
+        self.assertTrue(models.SourceRevision.objects.filter(encounter=enc).exists())
         self.assertIn(f"1 ledger entry needs a person's decision ({failed.pk})", error)
         self.assertIn("whether its rows were destroyed is not known (its commit's answer was lost)", output)
-        self.assertIsNone(models.Encounter.objects.get(pk=enc.pk).destroyed_at)  # never destroyed by the replay
-        self.assertTrue(models.SourceRevision.objects.filter(encounter=enc).exists())
         self.assertFalse(Event.objects.filter(notes__startswith='replay=').exists())
         _, error = self.dispose_command('--replay-ledger', str(ledger))  # the dry run lists it the same way
         self.assertIsNone(error)
