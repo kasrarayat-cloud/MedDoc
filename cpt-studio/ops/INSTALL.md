@@ -724,11 +724,20 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `--all`, D22; never an automated account),
   `dispose` and `export-workspace` (below: **Disposal, returns and the
   ledger**). The reason file must be a short UTF-8 text file; it reaches the
-  command as a RAM-only file under `/dev/shm`, and the receipt keeps its
-  sha256 and size, never its text. Every output is checked first: the setup
-  code and the application's own secret values must not be in it
-  (`assert_no_secret`), or nothing is kept. The receipt keeps the command's
-  stdout (ids and counts) and its log. Nothing that is not on the list runs.
+  command as a RAM-only file under `/dev/shm` - 0600, in a 0700 folder with an
+  unguessable name; a disposal or an export runs as the application's uid, so
+  the root helper hands that folder to it for the act and wipes it afterwards -
+  and the receipt keeps its sha256 and size, never its text. Every output is
+  checked first: the setup code and the application's own secret values must
+  not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
+  command's stdout (ids and counts) and its log. Nothing that is not on the list
+  runs. An act's own time ends 300 s before the door's ceiling
+  (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the
+  receipt their time. A SIGTERM - the door's kill at its ceiling - or a SIGHUP
+  stops any phase where it is: its RAM files are wiped, its one-shot removed,
+  its undo run, and its receipt says `interrupted` (exit 143, or 129). Every
+  phase's receipt is written before its journal (A13), so an interrupt while the
+  journal is written never costs a finished phase its receipt.
 - **http-vhost / https-vhost / ingress / ingress-rollback / rollback-vhost**
   validate with `sudo -n /usr/sbin/nginx -t`, refuse any new nginx warning,
   reload with `sudo -n /usr/bin/systemctl reload nginx`, then probe with bounded

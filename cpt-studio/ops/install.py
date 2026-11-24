@@ -28,6 +28,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import ssl
 import stat
@@ -7718,27 +7719,86 @@ def read_reason_file(path) -> bytes:
     return data
 
 
-class RamFiles:
-    """A RAM-only folder under /dev/shm for a ruled act's files, wiped and removed whatever happens. ``shared`` makes
-    it readable by the one-shot's own uid (10150) - a folder 0711 and files 0644 under a random name - for a reason
-    file only, never a secret; otherwise it is private (0700, files 0600) to this user."""
+RAM_NAME_RE = re.compile(r'cpt-studio-[a-z]+-[0-9a-f]{32}')
+SHM_MOUNT = 'type=bind,src=/dev/shm,dst=/host-shm'
+# A RAM folder handed to the uid a one-shot runs as (RamFiles.give): the folder and its files chowned, their modes
+# (0700, 0600) and this user's ownership checked first, nothing else touched.
+H_RAM_GIVE = '''
+path = '/host-shm/' + P['name']
+i = os.lstat(path)
+if not (stat.S_ISDIR(i.st_mode) and i.st_uid == P['from'] and stat.S_IMODE(i.st_mode) == 0o700):
+    R = {'error': 'the RAM folder is not a 0700 folder of the installer user; nothing was changed'}
+else:
+    names, odd = sorted(os.listdir(path)), 0
+    for name in names:
+        f = os.lstat(os.path.join(path, name))
+        if not (stat.S_ISREG(f.st_mode) and f.st_uid == P['from'] and stat.S_IMODE(f.st_mode) == 0o600):
+            odd += 1
+    if odd:
+        R = {'error': str(odd) + ' file(s) in the RAM folder are not 0600 files of the installer user; nothing was changed'}
+    else:
+        for name in names:
+            os.chown(os.path.join(path, name), P['uid'], P['gid'])
+        os.chown(path, P['uid'], P['gid'])
+        R = {'given': len(names), 'uid': P['uid']}
+print(json.dumps(R))
+'''
+# ... and wiped and removed afterwards: each file overwritten, unlinked, then the folder (anything but a file refuses).
+H_RAM_WIPE = '''
+path = '/host-shm/' + P['name']
+names = sorted(os.listdir(path))
+if [name for name in names if not stat.S_ISREG(os.lstat(os.path.join(path, name)).st_mode)]:
+    R = {'error': 'the RAM folder holds something that is not a file; nothing was removed'}
+else:
+    for name in names:
+        full = os.path.join(path, name)
+        size = os.lstat(full).st_size
+        with open(full, 'r+b') as handle:
+            handle.write(bytes(max(64, size)))
+        os.unlink(full)
+    os.rmdir(path)
+    R = {'wiped': len(names)}
+print(json.dumps(R))
+'''
 
-    def __init__(self, prefix, *, shared=False):
-        self.path = Path(tempfile.mkdtemp(prefix=prefix, dir='/dev/shm'))
-        self.shared = shared
-        if shared:
-            os.chmod(self.path, 0o711)
+
+class RamFiles:
+    """A RAM-only folder under /dev/shm for a ruled act's files, wiped and removed whatever happens (a SIGTERM too:
+    Interrupted). The folder is 0700 and every file 0600, under an unguessable name (32 random hex characters); a
+    one-shot that runs as another uid (``owner``, the application's: a disposal or an export) gets the folder handed to
+    it by the root helper (give), modes kept, so no other local user can read a reason while the act runs (refutation,
+    installer lens A-3c), and the root helper wipes it afterwards."""
+
+    def __init__(self, prefix, *, owner=None):
+        name = f'{prefix}{secrets.token_hex(16)}'
+        if not RAM_NAME_RE.fullmatch(name):
+            raise InstallError(f'A RAM folder prefix {prefix!r} is not cpt-studio-<word>-.')
+        self.path = Path('/dev/shm') / name
+        os.mkdir(self.path, 0o700)
+        os.chmod(self.path, 0o700)
+        self.owner, self.given = owner, False
 
     def add(self, name, data: bytes, destination) -> str:
+        if self.given:
+            raise InstallError('A RAM folder already handed to the one-shot takes no more files.')
         written = write_private(self.path, name, data)
-        if self.shared:
-            os.chmod(written, 0o644)
         return f'type=bind,src={written},dst={destination},readonly'
+
+    def give(self):
+        """The folder and its files handed to ``owner`` (uid, gid) by the root helper, for a one-shot of that uid."""
+        if self.owner is None or self.given:
+            return None
+        self.given = True  # from here on only the root helper can wipe it, whatever give answers
+        return run_helper(H_RAM_GIVE, {'name': self.path.name, 'uid': self.owner[0], 'gid': self.owner[1],
+                                       'from': os.getuid()}, mounts=[SHM_MOUNT])
 
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
+        if self.given:
+            run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
+            return False
         for path in self.path.iterdir():
             path.write_bytes(b'\0' * max(64, path.stat().st_size))
             path.unlink()
@@ -7768,7 +7828,7 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
             argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code', '--reason-file',
                     f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
             result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
-                             what=f'manage {command}', by=by)
+                             timeout=act_timeout(600), what=f'manage {command}', by=by)
         assert_no_secret([result.stdout, result.stderr], [code, *env_values(env)])
         log = ctx.log(command.replace('_', '-'), result.stdout + result.stderr)
         if result.returncode:
@@ -7998,6 +8058,24 @@ def allowed_extra(command, name) -> bool:
             ('grant-operator', 'regrant'), ('dispose', 'execute')}.__contains__((command, name))
 
 
+# What a manage act leaves for after its one-shot (refutation, installer lens A-3b): the one-shot's removal, the RAM
+# files' wipe, an export's seal, the receipt and the journal's flush - so the act's own timeout ends well before the
+# door's ceiling (RULED_ACT_MAX_SECS), whose kill would otherwise land first and skip them.
+MANAGE_CLEANUP_SECONDS = 300
+MANAGE_MIN_ACT_SECONDS = 60
+
+
+def act_timeout(default) -> int:
+    """A manage act's one-shot timeout: ``default``, or less when the door's ceiling leaves less after
+    MANAGE_CLEANUP_SECONDS; refused when that leaves under MANAGE_MIN_ACT_SECONDS."""
+    budget = door_ceiling(os.environ) - MANAGE_CLEANUP_SECONDS
+    if budget < MANAGE_MIN_ACT_SECONDS:
+        raise InstallError(f'The door\'s ceiling ({door_ceiling(os.environ)} s, RULED_ACT_MAX_SECS) leaves the act less '
+                           f'than {MANAGE_MIN_ACT_SECONDS} s after {MANAGE_CLEANUP_SECONDS} s for its cleanup and '
+                           'receipt; nothing was run. Raise RULED_ACT_MAX_SECS.')
+    return min(default, budget)
+
+
 def export_name(args) -> str:
     """The export's folder name, <workspace>-<UTC>: made once per run (the host folder and Lane 4's --out subfolder
     inside it share it)."""
@@ -8196,21 +8274,23 @@ def phase_manage(ctx) -> dict:
                    mounts=[EXPORTS_MOUNT])
         record['export'] = {'folder': f'{EXPORTS_DIR}/{export}', 'out': f'{EXPORTS_DIR}/{export}/{export}'}
     try:
-        with RamFiles('cpt-studio-manage-', shared=bool(files)) as ram:
+        with RamFiles('cpt-studio-manage-', owner=(APP_UID, APP_UID) if files else None) as ram:
             mounts = [ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')] if reason is not None else []
             if ledger is not None:
                 mounts.append(ram.add('ledger', ledger, f'{MANAGE_MOUNT}/ledger'))
             if files:
+                ram.give()  # 0600 in 0700, the application's uid's for the act alone
                 # a disposal deletes files (read-write); an export reads them and writes its own folder - as the
                 # application's user, whose files they are
                 mounts.append(f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}' + (',readonly' if export else ''))
                 if export:
                     mounts.append(f'type=bind,src={EXPORTS_DIR}/{export},dst={EXPORT_MOUNT}')
-                result = oneshot(image_id, argv, env, mounts=mounts, timeout=3600, what=f'manage {entry["command"]}',
-                                 by=args.by, **({'environment': environment} if environment else {}))
+                result = oneshot(image_id, argv, env, mounts=mounts, timeout=act_timeout(3600),
+                                 what=f'manage {entry["command"]}', by=args.by,
+                                 **({'environment': environment} if environment else {}))
             else:
-                result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', timeout=600,
-                                 what=f'manage {entry["command"]}', by=args.by)
+                result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
+                                 timeout=act_timeout(600), what=f'manage {entry["command"]}', by=args.by)
     finally:
         if export:  # done or not, everything in it is made root-only
             record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
@@ -9770,6 +9850,27 @@ PHASES = {
 }
 
 
+class Interrupted(BaseException):
+    """A SIGTERM or SIGHUP - the door's `timeout -k 15` at its ceiling, a closed terminal - raised where the phase is, so
+    every finally and __exit__ runs (RAM files wiped, a one-shot removed, an undo) and the receipt says so (refutation,
+    installer lens A-3a). Python's default ends the process without either."""
+
+
+def interrupt(signum, frame):
+    # later ones are ignored while the cleanup runs (the door's SIGKILL follows 15 s after its SIGTERM)
+    for each in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(each, signal.SIG_IGN)
+    raise Interrupted(signal.Signals(signum).name)
+
+
+def rewrite_receipt(path: Path, record: dict) -> Path:
+    """``path`` replaced in one step (a temporary file, then rename) by ``record``."""
+    data = (json.dumps(record, indent=2, sort_keys=True) + '\n').encode()
+    temporary = write_private(path.parent, f'.{path.name}.tmp', data)
+    os.replace(temporary, path)
+    return path
+
+
 def main(argv=None) -> int:
     os.umask(0o077)
     args = parse_args(argv)
@@ -9790,6 +9891,7 @@ def main(argv=None) -> int:
               'installer_sha256': sha256(SELF.read_bytes())}
     code = 1
     journal_begin(args.phase)
+    handlers = {each: signal.signal(each, interrupt) for each in (signal.SIGTERM, signal.SIGHUP)}
     try:
         record['door'] = check_door(os.environ, args.revision)
         ctx.door = record['door']
@@ -9806,11 +9908,30 @@ def main(argv=None) -> int:
     except Exception as error:  # noqa: BLE001 — recorded, never swallowed silently
         record.update(ok=False, error=f'unexpected {type(error).__name__}; see failure log')
         record['failure_log'] = ctx.log('failure', traceback.format_exc().encode())
+    except Interrupted as error:  # the phase's cleanup has run; the receipt says what stopped it
+        record.update(ok=False, interrupted=str(error), error=f'interrupted by {error} before the phase finished')
+        code = 128 + getattr(signal, str(error), signal.SIGTERM)
+    except KeyboardInterrupt:
+        record.update(ok=False, interrupted='SIGINT', error='interrupted (Ctrl-C) before the phase finished')
+        raise
     finally:
         record.setdefault('ok', False)
-        record['oneshot_log'] = flush_journal()  # A13: one line per one-shot and helper run, root-only
         record['finished_at'] = utc_now()
+        # the receipt first (refutation, rollback lens B-10): a second Ctrl-C or a SIGTERM while the journal's
+        # helper runs below must never cost a finished phase its receipt, which the next phase reads
+        record['oneshot_log'] = {'written': False, 'why': 'pending: the receipt is written before the journal'}
         path = write_receipt(receipts, args.phase, record)
+        try:
+            record['oneshot_log'] = flush_journal()  # A13: one line per one-shot and helper run, root-only
+        except BaseException as error:  # noqa: BLE001 — the receipt stands; this one says why the journal did not
+            record['oneshot_log'] = {'written': False,
+                                     'why': f'interrupted while it was written ({type(error).__name__})'}
+        try:
+            rewrite_receipt(path, record)
+        except BaseException:  # noqa: BLE001 — the receipt written above stands, its journal said pending
+            pass
+        for each, handler in handlers.items():
+            signal.signal(each, handler)
         summary = (record.get('details') or {}).get('summary') if record['ok'] else record.get('error')
         print(json.dumps({'phase': args.phase, 'ok': record['ok'], 'summary': summary, 'receipt': str(path)}))
     return code

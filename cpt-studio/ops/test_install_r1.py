@@ -17,6 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+import test_install  # noqa: E402
 from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -494,7 +495,14 @@ class ManageWorld:
         return self.grant
 
     def run_helper(self, body, params, *, mounts, **kwargs):
-        """The export folder's two helpers, their bodies run here on a temporary /var/lib."""
+        """The export folder's two helpers, their bodies run here on a temporary /var/lib; the RAM folder's two on the
+        real /dev/shm, a chown recorded (FakeOwnership) instead of made."""
+        if mounts == [install.SHM_MOUNT]:
+            self.helpers.append(body)
+            answer = run_body(body, params, {'/host-shm': '/dev/shm'}, fake_os=self.owner)
+            if answer.get('error'):
+                raise install.InstallError(f'Root helper refused: {answer["error"]}')
+            return answer
         assert mounts == [install.EXPORTS_MOUNT], mounts
         var_lib = self.tmp / 'var-lib'
         var_lib.mkdir(exist_ok=True)
@@ -648,8 +656,18 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', kwargs['environment'])
         self.assertNotIn('user', kwargs)  # the application's own uid: the files are its own
         self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR}', kwargs['mounts'])  # read-write
+        # refutation, installer lens A-3c: 0600 in 0700, handed to that uid by the root helper - never readable by
+        # another local user - and wiped by it afterwards
         text, mode, folder = world.mounted['reason']
-        self.assertEqual((mode, folder), (0o644, 0o711))  # readable by that uid; a reason, never a secret
+        self.assertEqual((mode, folder), (0o600, 0o700))
+        source = next(mount for mount in kwargs['mounts'] if 'dst=/run/cpt-manage/reason,' in mount)
+        path = source.split('src=', 1)[1].split(',', 1)[0]
+        self.assertRegex(path, r'^/dev/shm/cpt-studio-manage-[0-9a-f]{32}/reason$')
+        self.assertEqual(world.owner.owners[path], (install.APP_UID, install.APP_UID))
+        self.assertEqual(world.owner.owners[str(Path(path).parent)], (install.APP_UID, install.APP_UID))
+        self.assertEqual([body for body in world.helpers if body in (install.H_RAM_GIVE, install.H_RAM_WIPE)],
+                         [install.H_RAM_GIVE, install.H_RAM_WIPE])
+        self.assertFalse(Path(path).parent.exists())
         self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
         self.assertEqual(details['step'], 'execute')
         # no other act is ever told the switch is idle
@@ -712,7 +730,8 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertNotIn('environment', kwargs)  # an export is told nothing about the switch
         self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR},readonly', kwargs['mounts'])
         self.assertIn(f'type=bind,src={folder},dst={install.EXPORT_MOUNT}', kwargs['mounts'])
-        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_SEAL_EXPORT])
+        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_RAM_GIVE, install.H_RAM_WIPE,
+                                         install.H_SEAL_EXPORT])
         self.assertEqual((details['export']['files'], details['export']['folders'], details['export']['bytes']), (2, 4, 10))
         # everything in it is root's: the folders 0700 and the files 0600; the base folder too
         local = self.tmp / 'var-lib' / 'cpt-studio-exports'
@@ -728,7 +747,8 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         with self.assertRaisesRegex(install.InstallError, 'failed'):
             world.run('--command', 'export-workspace', '--workspace-id', WORKSPACE, '--reason-file', 'REASON', '--by',
                       'Ada Lovelace')
-        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_SEAL_EXPORT])
+        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_RAM_GIVE, install.H_RAM_WIPE,
+                                         install.H_SEAL_EXPORT])
         (partial,) = (self.tmp / 'var-lib' / 'cpt-studio-exports').rglob('partial.json')
         self.assertEqual(stat.S_IMODE(os.stat(partial).st_mode), 0o600)
         # a link the command left refuses the seal, and nothing is changed
@@ -945,6 +965,237 @@ class InstallDocR1Tests(unittest.TestCase):
                       'container', limits)
         for later in ('(A10;', '(A12)', 'malware scan', 'D21, an accepted capability loss'):
             self.assertIn(later, limits)
+
+
+
+class RamFilesTests(TemporaryDirectoryTest):
+    """Refutation, installer lens A-3c: a ruled act's RAM files are 0600, in a 0700 folder with an unguessable name."""
+
+    def test_private_files_in_a_private_folder_with_an_unguessable_name_wiped_afterwards(self):
+        names = set()
+        for _ in range(3):
+            with install.RamFiles('cpt-studio-manage-') as ram:
+                mount = ram.add('reason', b'Ticket 4521.\n', '/run/cpt-manage/reason')
+                self.assertRegex(ram.path.name, r'^cpt-studio-manage-[0-9a-f]{32}$')
+                self.assertEqual(stat.S_IMODE(os.stat(ram.path).st_mode), 0o700)
+                self.assertEqual(stat.S_IMODE(os.stat(ram.path / 'reason').st_mode), 0o600)
+                self.assertEqual(mount, f'type=bind,src={ram.path}/reason,dst=/run/cpt-manage/reason,readonly')
+                names.add(ram.path.name)
+            self.assertFalse(ram.path.exists())
+        self.assertEqual(len(names), 3)
+        with self.assertRaisesRegex(install.InstallError, 'prefix'):
+            install.RamFiles('../etc-')
+
+    def test_a_folder_for_another_uid_is_handed_over_by_the_root_helper_and_wiped_by_it(self):
+        world = ManageWorld(self.tmp)
+        with mock.patch.object(install, 'run_helper', world.run_helper):
+            with install.RamFiles('cpt-studio-manage-', owner=(install.APP_UID, install.APP_UID)) as ram:
+                ram.add('reason', b'Ticket 4521.\n', '/run/cpt-manage/reason')
+                self.assertEqual(ram.give(), {'given': 1, 'uid': install.APP_UID})
+                self.assertIsNone(ram.give())  # once
+                with self.assertRaisesRegex(install.InstallError, 'takes no more files'):
+                    ram.add('ledger', b'{}', '/run/cpt-manage/ledger')
+                for path in (ram.path, ram.path / 'reason'):
+                    self.assertEqual(world.owner.owners[str(path)], (install.APP_UID, install.APP_UID))
+                self.assertEqual((stat.S_IMODE(os.stat(ram.path).st_mode),
+                                  stat.S_IMODE(os.stat(ram.path / 'reason').st_mode)), (0o700, 0o600))
+        self.assertEqual(world.helpers, [install.H_RAM_GIVE, install.H_RAM_WIPE])
+        self.assertFalse(ram.path.exists())
+        # the helper refuses a folder or file that is not the installer user's private one, changing nothing
+        folder = Path('/dev/shm') / f'cpt-studio-manage-{"e" * 32}'
+        folder.mkdir(mode=0o711)
+        try:
+            os.chmod(folder, 0o711)
+            with mock.patch.object(install, 'run_helper', world.run_helper), \
+                    self.assertRaisesRegex(install.InstallError, 'not a 0700 folder'):
+                world.run_helper(install.H_RAM_GIVE, {'name': folder.name, 'uid': 1, 'gid': 1, 'from': os.getuid()},
+                                 mounts=[install.SHM_MOUNT])
+            os.chmod(folder, 0o700)
+            (folder / 'reason').write_bytes(b'x')
+            os.chmod(folder / 'reason', 0o644)
+            with self.assertRaisesRegex(install.InstallError, 'not 0600 files'):
+                world.run_helper(install.H_RAM_GIVE, {'name': folder.name, 'uid': 1, 'gid': 1, 'from': os.getuid()},
+                                 mounts=[install.SHM_MOUNT])
+        finally:
+            for path in folder.iterdir():
+                path.unlink()
+            folder.rmdir()
+
+
+class ActTimeoutTests(unittest.TestCase):
+    """Refutation, installer lens A-3b: an act ends well before the door's ceiling, leaving time for its cleanup."""
+
+    def test_each_act_keeps_its_time_below_the_ceiling_less_the_cleanup(self):
+        cases = ((None, 3600, 3300), (None, 600, 600), ('1200', 3600, 900), ('1200', 600, 600), ('700', 600, 400),
+                 ('360', 600, 60))
+        for ceiling, default, expected in cases:
+            with self.subTest(ceiling=ceiling, default=default), \
+                    mock.patch.dict(os.environ, {} if ceiling is None else {'RULED_ACT_MAX_SECS': ceiling}, clear=False):
+                if ceiling is None:
+                    os.environ.pop('RULED_ACT_MAX_SECS', None)
+                self.assertEqual(install.act_timeout(default), expected)
+        with mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '359'}), \
+                self.assertRaisesRegex(install.InstallError, 'Raise RULED_ACT_MAX_SECS'):
+            install.act_timeout(600)
+
+    def test_a_disposal_and_an_export_are_given_the_ceiling_less_the_cleanup(self):
+        with mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '3600'}):
+            tmp = Path(__import__('tempfile').mkdtemp())
+            try:
+                world = ManageWorld(tmp)
+                world.run('--command', 'dispose', '--dispose-step', 'ledger', '--by', 'Ada Lovelace')
+                self.assertEqual(world.oneshots[-1][1]['timeout'], 3600 - install.MANAGE_CLEANUP_SECONDS)
+                world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
+                          '--by', 'Ada Lovelace')
+                self.assertEqual(world.oneshots[-1][1]['timeout'], 600)
+            finally:
+                __import__('shutil').rmtree(tmp)
+
+
+SIGTERM_CHILD = r'''
+import json, sys, time
+from pathlib import Path
+from unittest import mock
+sys.path.insert(0, sys.argv[4])
+import install, test_install
+import test_install_r1 as r1
+work, marker, command = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+(work / 'reason.txt').write_bytes(b'Ticket 4521: the operator lost the key.\n')
+world = r1.ManageWorld(work)
+real = world.oneshot
+
+
+def oneshot(image_id, argv, env, **kwargs):
+    if argv[:3] == ['manage', 'migrate', '--check']:
+        return real(image_id, argv, env, **kwargs)
+    ram = [m.split('src=', 1)[1].split(',', 1)[0] for m in kwargs.get('mounts', ()) if 'src=/dev/shm/' in m]
+    marker.write_text(json.dumps({'ram': ram, 'timeout': kwargs.get('timeout')}))
+    time.sleep(120)  # the act runs; the door's ceiling (timeout -k 15) sends SIGTERM here
+
+
+args = {'issue-enrolment': ['--command', 'issue-enrolment', '--username', 'platform-operator'],
+        'export-workspace': ['--command', 'export-workspace', '--workspace-id', r1.WORKSPACE]}[command]
+test_install.guard_host()
+try:
+    with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                             require_db=mock.Mock(), oneshot=oneshot, inspect=world.inspect, root_file=world.root,
+                             run_helper=world.run_helper, app_script=world.app_script,
+                             read_protected_env=mock.Mock(return_value=b'CPT_STUDIO_SECRET_KEY=' + b'S' * 48 + b'\n'),
+                             check_door=mock.Mock(return_value={'declaration': r1.DECLARATION,
+                                                                'declaration_commit': r1.COMMIT}),
+                             check_tree=mock.Mock(return_value={'mode': 'exact'})), mock.patch('sys.stdout'):
+        code = install.main(['--phase', 'manage', '--revision', r1.REVISION, '--receipts', str(work / 'receipts'),
+                             *args, '--reason-file', str(work / 'reason.txt'), '--by', 'Ada Lovelace'])
+finally:
+    test_install.release_host()
+(work / 'helpers.json').write_text(json.dumps([install.helper_name(body) for body in world.helpers]))
+sys.exit(code)
+'''
+
+
+class InterruptTests(TemporaryDirectoryTest):
+    """Refutation, installer lens A-3a: the door's SIGTERM at its ceiling ran no cleanup - the setup code stayed in
+    /dev/shm and no receipt was written. Now SIGTERM and SIGHUP raise where the phase is."""
+
+    def run_child(self, command):
+        import signal as signals
+        import subprocess
+        import time
+        script = self.tmp / 'child.py'
+        script.write_text(SIGTERM_CHILD)
+        work = self.tmp / 'work'
+        work.mkdir()
+        marker = work / 'marker.json'
+        ops = str(Path(install.__file__).resolve().parent)
+        child = subprocess.Popen([sys.executable, '-B', str(script), str(work), str(marker), command, ops], cwd=ops,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for _ in range(400):
+            if marker.exists() or child.poll() is not None:
+                break
+            time.sleep(0.05)
+        self.assertTrue(marker.exists(), child.communicate(timeout=30)[0][-2000:] if child.poll() is not None else '')
+        seen = json.loads(marker.read_text())
+        child.send_signal(signals.SIGTERM)
+        out, _ = child.communicate(timeout=60)
+        return child.returncode, out, seen, work
+
+    def test_a_sigterm_mid_act_wipes_the_setup_code_discards_the_staged_file_and_writes_an_interrupted_receipt(self):
+        code, out, seen, work = self.run_child('issue-enrolment')
+        self.assertEqual(code, 143, out[-2000:])
+        self.assertTrue(seen['ram'])
+        for path in seen['ram']:  # the setup code's RAM file and its folder are gone
+            self.assertFalse(Path(path).exists(), path)
+            self.assertFalse(Path(path).parent.exists(), path)
+        self.assertEqual(list((work / 'etc').iterdir()), [])  # the staged enrolment discarded, nothing committed
+        (receipt,) = (work / 'receipts').glob('manage-*.json')
+        record = json.loads(receipt.read_text())
+        self.assertEqual((record['ok'], record['interrupted']), (False, 'SIGTERM'))
+        self.assertIn('interrupted by SIGTERM', record['error'])
+        self.assertEqual(seen['timeout'], install.act_timeout(600))
+
+    def test_a_sigterm_mid_export_still_wipes_its_ram_folder_and_seals_the_export(self):
+        code, out, seen, work = self.run_child('export-workspace')
+        self.assertEqual(code, 143, out[-2000:])
+        for path in seen['ram']:
+            self.assertFalse(Path(path).parent.exists(), path)
+        helpers = json.loads((work / 'helpers.json').read_text())
+        self.assertEqual(helpers, ['export-dir', 'ram-give', 'ram-wipe', 'seal-export'])
+        (receipt,) = (work / 'receipts').glob('manage-*.json')
+        self.assertEqual(json.loads(receipt.read_text())['interrupted'], 'SIGTERM')
+        self.assertLess(seen['timeout'], install.door_ceiling(os.environ))
+
+    def test_the_handlers_are_put_back_after_main(self):
+        import signal as signals
+        before = (signals.getsignal(signals.SIGTERM), signals.getsignal(signals.SIGHUP))
+        receipts = self.tmp / 'receipts'
+        with mock.patch.object(install, 'check_door', return_value={'declaration': 'd.md', 'declaration_commit': 'd' * 40}), \
+                mock.patch.object(install, 'check_tree', return_value={'mode': 'exact'}), \
+                mock.patch.dict(install.PHASES, {'verify': lambda ctx: {'summary': 'ok'}}), mock.patch('sys.stdout'):
+            self.assertEqual(install.main(['--phase', 'verify', '--revision', REVISION, '--receipts', str(receipts)]), 0)
+        self.assertEqual((signals.getsignal(signals.SIGTERM), signals.getsignal(signals.SIGHUP)), before)
+
+
+class ReceiptBeforeJournalTests(TemporaryDirectoryTest):
+    """Refutation, rollback lens B-10: a second Ctrl-C while the journal's helper ran, before write_receipt, left a
+    finished app with no receipt - which a switch-back reads. The receipt is now written first."""
+
+    def run_main(self, phase_body, helper):
+        receipts = self.tmp / 'receipts'
+        with mock.patch.multiple(install, check_door=mock.Mock(return_value={'declaration': 'd.md',
+                                                                             'declaration_commit': 'd' * 40}),
+                                 check_tree=mock.Mock(return_value={'mode': 'exact'}), run_helper=helper,
+                                 flush_journal=test_install.REAL_FLUSH_JOURNAL), \
+                mock.patch.dict(install.PHASES, {'verify': phase_body}), mock.patch('sys.stdout'):
+            try:
+                code = install.main(['--phase', 'verify', '--revision', REVISION, '--receipts', str(receipts)])
+            except KeyboardInterrupt:
+                code = 'KeyboardInterrupt'
+        return code, [json.loads(path.read_text()) for path in sorted(receipts.glob('verify-*.json'))]
+
+    def test_an_interrupt_while_the_journal_is_written_keeps_the_finished_phases_receipt(self):
+        def finished(ctx):
+            install.journal('oneshot', 'migrate', 0)
+            return {'summary': 'verified'}
+
+        def helper(body, params, **kwargs):
+            assert body is install.H_JOURNAL
+            raise KeyboardInterrupt  # the operator's second Ctrl-C, while the journal's helper container runs
+        code, records = self.run_main(finished, helper)
+        self.assertEqual(code, 0)
+        (record,) = records
+        self.assertTrue(record['ok'])
+        self.assertEqual(record['details'], {'summary': 'verified'})
+        self.assertEqual(record['oneshot_log'], {'written': False,
+                                                 'why': 'interrupted while it was written (KeyboardInterrupt)'})
+        self.assertEqual(list(self.tmp.joinpath('receipts').glob('.*.tmp')), [])
+
+    def test_a_ctrl_c_in_the_phase_is_recorded_and_still_raised(self):
+        def stopped(ctx):
+            raise KeyboardInterrupt
+        code, records = self.run_main(stopped, lambda *a, **k: {'appended': {}, 'pruned': {}})
+        self.assertEqual(code, 'KeyboardInterrupt')
+        (record,) = records
+        self.assertEqual((record['ok'], record['interrupted']), (False, 'SIGINT'))
 
 
 if __name__ == '__main__':
