@@ -8283,6 +8283,9 @@ def export_name(args) -> str:
 
 
 DECISION_NEEDED = "needs a person's decision"
+# Lane 4's contract: `dispose --replay-ledger ... --execute` exits DISPOSE_DECISION_EXIT when an entry needs a person's
+# decision (its commit's outcome was unknown) and nothing else failed; any other non-zero exit is a failure.
+DISPOSE_DECISION_EXIT = 3
 
 
 def dispose_mode(args) -> str:
@@ -8497,10 +8500,12 @@ def phase_manage(ctx) -> dict:
     assert_no_secret([output], [*env_values(env), *reason_values(reason)])
     record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
                   stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
-    if result.returncode and args.command == 'dispose' and args.dispose_step == 'replay-ledger' and args.execute:
-        # Lane 4: a replay exits non-zero when an entry needs a person's decision - one whose commit's outcome was
-        # unknown - even when every other entry ran. Never done, and never an installer failure to undo: recorded so,
-        # with the command's ids-only output; a person decides by planning that scope again, with two people.
+    if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
+            and args.dispose_step == 'replay-ledger' and args.execute):
+        # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
+        # outcome was unknown - and nothing else failed. Never done, and never an installer failure: recorded so, with
+        # the command's ids-only output; a person decides by planning that scope again, with two people. Every other
+        # non-zero exit is the failure below, its ids-only output in the receipt too.
         record['mode'] = DECISION_NEEDED
         return {**record, 'summary': f'dispose replay-ledger: {DECISION_NEEDED} (exit {result.returncode}): an entry '
                                      'whose outcome was unknown is left to a person - plan that scope again and '

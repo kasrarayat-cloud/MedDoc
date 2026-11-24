@@ -1754,10 +1754,11 @@ release 1), run only through `--phase manage`, never over HTTP:
   <another person>` it re-applies the ledger after a database restore, so
   destroyed data stays destroyed - two different named people, as for a
   disposal (D14). A replay with `--execute` that ends with an entry needing a
-  person's decision - one whose commit's outcome was unknown, even when every
-  other entry ran (the command then exits non-zero) - is recorded so: the
-  receipt's `mode` says `needs a person's decision`, with the command's
-  ids-only output, never done and never undone. The decision is made by
+  person's decision - one whose commit's outcome was unknown, while nothing
+  else failed: the command exits 3 - is recorded so: the receipt's `mode` says
+  `needs a person's decision`, with the command's ids-only output, never done
+  and never undone. Any other non-zero exit is a failure, its ids-only output
+  in the receipt too. The decision is made by
   planning that scope again (`--dispose-step plan` for its workspace or
   encounter) and executing that plan with two people. The ledger holds ids,
   counts and storage names (random ids), never a document's text or title.

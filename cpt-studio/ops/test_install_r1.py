@@ -821,23 +821,33 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})
 
     def test_a_replay_that_leaves_an_entry_to_a_person_is_recorded_so_never_done_nor_a_failure(self):
-        # Lane 4: --replay-ledger --execute exits non-zero when an entry's commit outcome was unknown
+        # Lane 4's contract: --replay-ledger --execute exits 3 when an entry's commit outcome was unknown and nothing
+        # else failed; every other non-zero exit is a failure
         said = b'replayed 7 of 8 entries; entry 3f2a0c1e-0000-4000-8000-000000000003 needs a decision\n'
-        world = ManageWorld(self.tmp, output=said, exit_code=2)
-        details = world.run('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER',
-                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--execute', '--approved-by',
-                            'Grace Hopper')
-        self.assertEqual((details['mode'], details['exit']), ("needs a person's decision", 2))
+        replay = ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--reason-file',
+                  'REASON', '--by', 'Ada Lovelace')
+        world = ManageWorld(self.tmp, output=said, exit_code=3)
+        details = world.run(*replay, '--execute', '--approved-by', 'Grace Hopper')
+        self.assertEqual(install.DISPOSE_DECISION_EXIT, 3)
+        self.assertEqual((details['mode'], details['exit']), ("needs a person's decision", 3))
         self.assertEqual(details['stdout'], said.decode())  # the command's ids-only output, in the receipt
         self.assertIn("needs a person's decision", details['summary'])
         self.assertNotRegex(details['summary'], r': done|executed')
-        # a dry run, a plan's execution or any other act that exits non-zero is still a failure
-        for extra in ((), ):
-            world = ManageWorld(self.tmp, exit_code=2)
+        # any other non-zero exit is a failure - with the ids-only output kept in the failure's receipt
+        failed = b'replay refused: the ledger MAC did not verify\n'
+        for code in (1, 2, 4, 125, 255):
+            with self.subTest(code=code):
+                world = ManageWorld(self.tmp, output=failed, exit_code=code)
+                with self.assertRaisesRegex(install.InstallError, f'failed \\(exit {code}\\)') as caught:
+                    world.run(*replay, '--execute', '--approved-by', 'Grace Hopper')
+                self.assertEqual(caught.exception.details['stdout'], failed.decode())
+                self.assertEqual(caught.exception.details['exit'], code)
+        # exit 3 anywhere else - a dry run, a plan's execution - is a failure too
+        for extra, step in (((), 'replay-ledger'),):
+            world = ManageWorld(self.tmp, exit_code=3)
             with self.assertRaisesRegex(install.InstallError, 'failed'):
-                world.run('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER',
-                          '--reason-file', 'REASON', '--by', 'Ada Lovelace', *extra)
-        world = ManageWorld(self.tmp, exit_code=2)
+                world.run(*replay, *extra)
+        world = ManageWorld(self.tmp, exit_code=3)
         with self.assertRaisesRegex(install.InstallError, 'failed'):
             world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by', 'Ada Lovelace',
                       '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
