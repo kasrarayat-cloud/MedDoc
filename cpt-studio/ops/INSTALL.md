@@ -1934,13 +1934,16 @@ release 1), run only through `--phase manage`, never over HTTP:
   **After a database restore, replay the ledger BEFORE the site is opened**
   (web and worker stopped): a whole practice's replay destroys again everything
   of that practice, including anything a member added to the restored copy, and
-  the replay's report counts such documents. A replay stopped by a signal
-  prints its record and exits 143 (SIGTERM) or 129 (SIGHUP). So does a
-  destruction that a signal or Ctrl-C reaches after its commit: any statement
-  still running is cancelled first, and the run is recorded 'failed' with its
-  certificate. Only an interrupt while the final DisposalEvent is being written
-  leaves the 'committed' row as the record, with a certificate saying the final
-  event may not have been written.
+  the replay's report counts such documents. A signal (SIGTERM, SIGHUP) or
+  Ctrl-C before a destruction's commit stops it with nothing destroyed. From the
+  moment a commit begins it is held: the commit and the run's record go to their
+  end, the steps after the commit stop at the next one (a statement still
+  running is cancelled; the run is recorded 'failed', the signal named as the
+  problem of the step it stopped), a signal that comes once those steps are done
+  leaves the record as it stands, and the command, once it has printed its
+  record, ends with 143 (SIGTERM), 129 (SIGHUP) or 130 (Ctrl-C). A replay stops
+  the same way before its next ledger entry and prints its record. Every
+  certificate and ledger line it prints names only what the database committed.
 
 The first closure or destruction ends the way back to every revision before
 release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
