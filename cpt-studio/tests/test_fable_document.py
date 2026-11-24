@@ -197,6 +197,19 @@ def opendocument(href):
 PLAIN_PACKAGE = word_package()
 
 
+def private_tempdir(test):
+    """Gives ``test`` a temporary directory of its own for the work folders its conversions make, and returns it. In
+    the full suite, test processes running beside this one start a worker, whose start-up clean-up
+    (studio.jobs.remove_stale_work_dirs) removes every cpt-convert-* folder in the shared TMPDIR - an in-flight
+    conversion's too."""
+    folder = Path(tempfile.mkdtemp())
+    test.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+    patcher = mock.patch.object(tempfile, 'tempdir', str(folder))
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    return folder
+
+
 # Runners: run in the bounded child (Django-free) on the package safe_package made and the work folder its parent made.
 def fake_runner(data, work):
     return CONVERTED + data[:4]
@@ -455,6 +468,9 @@ class PrepareTests(TestCase):
 
 @override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
 class ConvertTests(SimpleTestCase):
+    def setUp(self):
+        private_tempdir(self)
+
     def test_the_conversion_runs_in_the_bounded_child(self):
         self.assertEqual(document.convert_docx(PLAIN_PACKAGE, runner=fake_runner), CONVERTED + b'PK\x03\x04')
 
@@ -683,11 +699,7 @@ class ConversionCleanupTests(SimpleTestCase):
     reported by the child, is killed by the parent whatever happens."""
 
     def setUp(self):
-        self.temp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.temp, ignore_errors=True)
-        patcher = mock.patch.object(tempfile, 'tempdir', str(self.temp))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self.temp = private_tempdir(self)
 
     def leftovers(self):
         return sorted(path.name for path in self.temp.glob(f'{docx_package.WORK_PREFIX}*'))
@@ -766,6 +778,9 @@ class LibreOfficeTimeTests(SimpleTestCase):
     """The time limits after the lead's real-LibreOffice measurement: LibreOffice keeps the 55 s it had before release
     1 (a 5,000-row table converts in 48.4 s, which spec E1's 45 s refused), and the parent's limit is the sum of the
     package checks, LibreOffice and a margin, so the bounds cannot drift apart."""
+
+    def setUp(self):
+        private_tempdir(self)
 
     def test_a_conversion_longer_than_45_s_and_shorter_than_55_s_is_not_refused(self):
         folder = Path(tempfile.mkdtemp())
@@ -1576,6 +1591,9 @@ class _Listener:
 
 @override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
 class ListenerTests(SimpleTestCase):
+    def setUp(self):
+        private_tempdir(self)
+
     def crafted(self, url):
         return word_package(TEXT + LINKED_PICTURE, [relationship('rIdImg', 'image', f'{url}/linked.png', 'External')])
 

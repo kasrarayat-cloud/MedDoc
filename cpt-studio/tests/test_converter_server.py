@@ -31,7 +31,7 @@ from studio.fable import BUSY, CONVERT, client as fable_client, document, docx_p
 from tests.support import coding as f
 from tests.test_fable_document import (CONVERTED, DANGEROUS, DOCX, PLAIN_PACKAGE, TEXT, _echo_package, _follower,
                                        complex_field, failing_runner, fake_runner, full_package, no_pdf_runner,
-                                       paragraph, simple_field, word_package)
+                                       paragraph, private_tempdir, simple_field, word_package)
 
 CPT_STUDIO = Path(__file__).resolve().parent.parent
 MIB = 1024 * 1024
@@ -100,6 +100,9 @@ def slow_runner(data, work):
 
 @override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
 class ServiceTests(SimpleTestCase):
+    def setUp(self):
+        private_tempdir(self)  # the in-thread server's conversions make their work folders here
+
     def test_the_service_pdf_equals_the_in_process_pdf_for_the_same_input_and_runner(self):
         packages = [PLAIN_PACKAGE, full_package(paragraph(complex_field(' PAGE ', '1')) + TEXT),
                     full_package(paragraph(complex_field(DANGEROUS['INCLUDETEXT'])) + paragraph(simple_field(
@@ -314,6 +317,9 @@ class SocketTests(SimpleTestCase):
 
 
 class CommandTests(SimpleTestCase):
+    def setUp(self):
+        private_tempdir(self)
+
     def run_main(self, *argv):
         out = io.StringIO()
         with redirect_stdout(out), mock.patch.object(converter_server.logging, 'basicConfig'):
