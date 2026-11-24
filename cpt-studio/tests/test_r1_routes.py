@@ -12,8 +12,13 @@ import re
 
 from django.test import Client, TestCase, override_settings
 from django.urls import Resolver404, get_resolver, resolve
+from django.views.decorators.common import no_append_slash
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 from studio import request_meta
+from studio.hosts import signed_out_to_sign_in
+from studio.operator import operator_view
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -67,6 +72,33 @@ def stub_mark(view):
 # R1 stub: Lane 9 replaces this (Z9)
 def _marked(request):  # the detector's positive control
     raise AssertionError('never called')
+
+
+def wrapper_chain(callback):
+    """The callback a URL resolves to, then every function it wraps (functools.wraps' __wrapped__), outermost first."""
+    chain = [callback]
+    while hasattr(chain[-1], '__wrapped__'):
+        chain.append(chain[-1].__wrapped__)
+    return chain
+
+
+# the function Django's csrf_exempt wraps a view in, and operator_view's gate, whose own csrf_protect runs after the gate
+CSRF_EXEMPT_WRAPPER = csrf_exempt(lambda request: None).__code__
+OPERATOR_GATE = operator_view(lambda request: None).__code__
+
+
+def csrf_check_skipped(callback) -> bool:
+    """Whether an unsafe request that reaches ``callback`` is served without Django's CSRF check: a layer made by
+    csrf_exempt anywhere in its chain (a stub's decorator left on the view that replaced it); behind operator_view, a
+    view below the gate marked exempt (the gate's csrf_protect then skips it); else a callback marked exempt
+    (CsrfViewMiddleware then skips it - the admin host's console wrapper is marked so, and only a gate inside checks)."""
+    chain = wrapper_chain(callback)
+    if any(getattr(layer, '__code__', None) is CSRF_EXEMPT_WRAPPER for layer in chain):
+        return True
+    gates = [index for index, layer in enumerate(chain) if getattr(layer, '__code__', None) is OPERATOR_GATE]
+    if gates:
+        return bool(getattr(chain[gates[0] + 1], 'csrf_exempt', False))
+    return bool(getattr(callback, 'csrf_exempt', False))
 
 
 class RouteTableTests(TestCase):
@@ -166,3 +198,57 @@ class StubAnswerTests(TestCase):
                     session = callers[who].session
                     self.assertTrue(session.get('_auth_user_id'))
                     self.assertEqual(session[request_meta.SESSION_DOOR], ops.door_of(host))
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ReplacedViewTests(TestCase):
+    """A lane that replaces a stub takes the stub's csrf_exempt away with it: every R1 view that is no longer a stub
+    keeps Django's CSRF check - CsrfViewMiddleware's, before the view, or behind operator_view the gate's own
+    csrf_protect, after it. Today every R1 view is a stub, so the sweep checks none; each lane's replacement is held to it
+    the moment its stub comment goes."""
+
+    def test_the_detector_reads_the_csrf_check_as_django_applies_it(self):
+        def replaced(request):  # a lane's view, as its stub's place-taker
+            return None
+        marked = require_POST(replaced)
+        marked.csrf_exempt = True
+        caught = {
+            "a stub's decorators left on the view": csrf_exempt(no_append_slash(replaced)),
+            'csrf_exempt below the gate': operator_view(csrf_exempt(replaced)),
+            'a view below the gate marked exempt': operator_view(marked),
+            "the admin host's console wrapper with no gate inside": signed_out_to_sign_in(require_POST(replaced)),
+            'a real exempt view (the admin front page)': resolve('/', urlconf=URLCONF[ADMIN]).func,
+        }
+        kept = {
+            'a plain view': require_POST(replaced),
+            'a view behind the gate': operator_view(require_POST(replaced)),
+            'the admin host console wrapper around the gate': signed_out_to_sign_in(operator_view(require_POST(replaced))),
+            'a real console act (cpt host)': resolve(concrete('ops/people/<uuid:user_id>/role'), urlconf=URLCONF[CPT]).func,
+            'a real console act (admin host)': resolve(concrete('ops/people/<uuid:user_id>/role'),
+                                                       urlconf=URLCONF[ADMIN]).func,
+            'a real customer route': resolve('/api/encounters', urlconf=URLCONF[CPT]).func,
+        }
+        for label, callback in caught.items():
+            with self.subTest(label=label):
+                self.assertTrue(csrf_check_skipped(callback))
+        for label, callback in kept.items():
+            with self.subTest(label=label):
+                self.assertFalse(csrf_check_skipped(callback))
+
+    def test_where_the_detector_sees_the_check_django_refuses_a_post_without_a_token(self):
+        # the behavioural control for a "kept" reading: an operator who passed the admin door's second factor posting a
+        # real console act with no CSRF token is refused 403 - the gate's csrf_protect ran
+        operator = f.user('platform-operator')
+        member = f.member(f.workspace())
+        client = ops.client(operator, HTTP_HOST=ADMIN, enforce_csrf_checks=True)
+        answer = client.post(f'/ops/people/{member.pk}/role', {'role': 'viewer'})
+        self.assertEqual(answer.status_code, 403)
+
+    def test_a_replaced_view_keeps_the_csrf_check(self):
+        for route, (route_hosts, _, _, _) in ROUTES.items():
+            for host in route_hosts:
+                callback = resolve(concrete(route), urlconf=URLCONF[host]).func
+                if stub_mark(inspect.unwrap(callback)) is not None:
+                    continue  # still a stub: exempt by design, and held to the unknown URL's 404 (StubAnswerTests)
+                with self.subTest(route=route, host=host):
+                    self.assertFalse(csrf_check_skipped(callback))
