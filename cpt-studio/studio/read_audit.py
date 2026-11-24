@@ -8,12 +8,13 @@ BEFORE any byte of PHI is produced.
         the contract (an unknown view kind, typed text in the filters) raises ValueError before anything is written.
         One exception, bounding what one session adds (refutation round 1 of release 1, avail-3): a served member.list
         read that repeats a served member.list row of the same sign-in, account, role, host, address, practice, count
-        and filters written within READ_AUDIT_LIST_REPEAT_SECONDS writes no row of its own - it is counted on that row
-        (AccessRecordRepeat: one more repeat, the latest time), in the same savepoint, and answers that row; a count
-        that cannot be written refuses the read like any row. The list holds the whole practice with no paging, so the
-        row and its count say exactly what was shown: the practice's documents at each read from as_of to the count's
-        latest time, by that session, from that address. Every detail, view, download, report and bundle read, and
-        every refused read, still writes its own row.
+        and filters written within READ_AUDIT_LIST_REPEAT_SECONDS, and on the same UTC day as the repeat (the day the
+        console's reads page files a read under; refutation round 2, phi-3), writes no row of its own - it is counted
+        on that row (AccessRecordRepeat: one more repeat, the latest time), in the same savepoint, and answers that row;
+        a count that cannot be written refuses the read like any row. The list holds the whole practice with no paging,
+        so the row and its count say exactly what was shown: the practice's documents at each read from as_of to the
+        count's latest time, by that session, from that address, all on the row's own day. Every detail, view,
+        download, report and bundle read, and every refused read, still writes its own row.
     detail_seen_recently(request, encounter_id)
         whether this sign-in already has a served member.detail row for the document within
         READ_AUDIT_DETAIL_DEDUPE_SECONDS: a poll (studio.request_meta.is_poll) then writes no new row (TEC-9 (4)); every
@@ -155,11 +156,15 @@ def _counted_list_repeat(fields):
     if fields['view'] != MEMBER_LIST or fields['outcome'] != SERVED or fields.get('sign_in_ref') is None:
         return None
     now = timezone.now()
+    # only a record of this repeat's own UTC day: the day the console's reads page files a read under (its ?day= is a
+    # UTC day, read on created_at), so each day's page holds every list read made that day (refutation round 2, phi-3)
+    day = now.astimezone(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    since = max(now - timedelta(seconds=settings.READ_AUDIT_LIST_REPEAT_SECONDS), day)
     first = (AccessRecord.objects.filter(
         actor_id=fields['actor_id'], sign_in_ref=fields['sign_in_ref'], view=MEMBER_LIST, outcome=SERVED,
         actor_role=fields['actor_role'], host=fields['host'], client=fields.get('client', ''),
         workspace_id=fields['workspace_id'], count=fields['count'], filters=fields['filters'],
-        created_at__gte=now - timedelta(seconds=settings.READ_AUDIT_LIST_REPEAT_SECONDS), created_at__lte=now)
+        created_at__gte=since, created_at__lte=now)
         .order_by('-created_at', '-pk').first())
     if first is None:
         return None

@@ -420,8 +420,17 @@ class ListRepeatTests(ReadCase):
     def at(self, start, seconds):
         return mock.patch.object(timezone, 'now', return_value=start + timedelta(seconds=seconds))
 
+    def start(self):
+        """Now - or, when now is less than two minutes before UTC midnight, half a minute after it: a repeat is counted
+        only on a record of its own UTC day (refutation round 2, phi-3), so these reads, at most 61 s apart, fall on one
+        day whenever the suite runs. Never earlier than now: a session's times are never in the future."""
+        now = timezone.now()
+        if (now + timedelta(minutes=2)).date() != now.date():
+            return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1, seconds=30)
+        return now
+
     def test_one_session_listing_again_and_again_is_one_record_with_a_count(self):
-        start = timezone.now()
+        start = self.start()
         for second in range(0, 50, 10):  # five reads in 40 seconds
             with self.at(start, second):
                 self.assertEqual(self.member.get(LIST).status_code, 200)
@@ -436,7 +445,7 @@ class ListRepeatTests(ReadCase):
         self.assertEqual(len(self.lists()), 2)
 
     def test_anything_new_in_a_list_read_is_a_record_of_its_own(self):
-        start = timezone.now()
+        start = self.start()
         with self.at(start, 0):
             self.member.get(LIST)
         with self.at(start, 1):
@@ -450,7 +459,7 @@ class ListRepeatTests(ReadCase):
         self.assertFalse(models.AccessRecordRepeat.objects.exists())
 
     def test_every_detail_view_and_download_read_still_writes_its_own_record(self):
-        start = timezone.now()
+        start = self.start()
         reads = self.reads()
         for second in range(3):
             with self.at(start, second):
