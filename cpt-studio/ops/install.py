@@ -8363,8 +8363,7 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
         printed_code = code.encode() in result.stdout or code.encode() in result.stderr
         log = ctx.log(command.replace('_', '-'), stdout + stderr)
         record = {'command': command, 'exit': result.returncode, 'log': log,
-                  **redaction_record(stdout_counts, stderr_counts),
-                  'stdout': stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:]}
+                  **redaction_record(stdout_counts, stderr_counts), **kept_stdout(stdout)}
         if printed_code:
             raise InstallError(f'manage {command} printed the setup code (exit {result.returncode}), so no setup code '
                                f'was kept: the act ran, and its output is kept in {log} with the code redacted. Run '
@@ -8534,6 +8533,13 @@ LEDGER_LIMIT = 1024 * 1024
 EXPORTS_DIR = '/var/lib/cpt-studio-exports'
 EXPORT_MOUNT = '/run/cpt-export'
 STDOUT_KEPT = 16000  # characters of an act's stdout a receipt keeps (ids and counts only; the log keeps all of it)
+
+
+def kept_stdout(stdout: bytes) -> dict:
+    """What a receipt keeps of an act's stdout: its last STDOUT_KEPT characters, how many it had, and whether it was cut
+    (refutation round 1, dataloss-1: a cut copy carried no mark of the cut)."""
+    text = stdout.decode('utf-8', 'replace')
+    return {'stdout': text[-STDOUT_KEPT:], 'stdout_chars': len(text), 'stdout_cut': len(text) > STDOUT_KEPT}
 
 
 def manage_problem(args) -> str:
@@ -8888,8 +8894,18 @@ def phase_manage(ctx) -> dict:
     stdout, stdout_counts = redact_output(result.stdout, hidden, reasons)
     stderr, stderr_counts = redact_output(result.stderr, hidden, reasons)
     record.update(redaction_record(stdout_counts, stderr_counts))
-    record.update(exit=result.returncode, log=ctx.log(args.command, stdout + stderr), argv=argv,
-                  stdout=stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
+    if args.command == 'dispose' and args.dispose_step == 'ledger':
+        # refutation round 1, dataloss-1: the ledger is the act's whole stdout, kept whole in a log of its own - the
+        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by
+        log = ctx.log('dispose-ledger', stdout)
+        record['ledger_printed'] = {'log': log, 'sha256': sha256(stdout), 'bytes': len(stdout),
+                                    'lines': sum(1 for line in stdout.splitlines() if line.strip()),
+                                    'redacted': bool(record.get('redacted'))}
+        if stderr:
+            record['stderr_log'] = ctx.log('dispose-ledger-stderr', stderr)
+    else:
+        log = ctx.log(args.command, stdout + stderr)
+    record.update(exit=result.returncode, log=log, argv=argv, **kept_stdout(stdout))  # ids and counts only
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
@@ -8905,11 +8921,18 @@ def phase_manage(ctx) -> dict:
         raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
                            details=record)
     done = 'done'
-    if args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
+    if record.get('ledger_printed'):
+        printed = record['ledger_printed']
+        done = (f'read; the ledger ({printed["lines"]} line(s), sha256 {printed["sha256"][:12]}) is kept whole in '
+                f'{printed["log"]}' + ('; a value in it was redacted, so the line holding it no longer verifies: print '
+                                       'it again without --reason-file' if printed['redacted'] else ''))
+    elif args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
         done = ('dry run, nothing was changed' + ('; to replay it, run again with --execute and --approved-by'
                                                    if args.dispose_step == 'replay-ledger' else ''))
     elif args.command == 'dispose':
         done = record['mode']
+    if record.get('stdout_cut'):
+        done += f'; the receipt keeps the last {STDOUT_KEPT} of its {record["stdout_chars"]} characters of output'
     return {**record, 'summary': f'{args.command}' + (f' {args.dispose_step}' if args.command == 'dispose' else '')
                                  + (f' {args.username}' if args.username else '') + f': {done}'
                                  + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')

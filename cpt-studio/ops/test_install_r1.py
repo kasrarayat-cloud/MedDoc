@@ -858,7 +858,11 @@ class ManagePhaseTests(TemporaryDirectoryTest):
                     self.assertIn('dry run, nothing was changed', details['summary'])
                     self.assertNotRegex(details['summary'], r': done|executed')
                 else:
-                    self.assertTrue(details['summary'].endswith(f'{step}: {mode}'), details['summary'])
+                    # the ledger step's summary goes on with where the ledger is kept whole (refutation round 1,
+                    # dataloss-1)
+                    self.assertIn(f'{step}: {mode}' + ('; the ledger (' if step == 'ledger' else ''), details['summary'])
+                    if step != 'ledger':
+                        self.assertTrue(details['summary'].endswith(f'{step}: {mode}'), details['summary'])
         # the replayed ledger travelled as a RAM-only file, its digest in the receipt, never its text
         self.assertEqual(world.mounted['ledger'][0], '{"ledger": []}\n')
         self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})

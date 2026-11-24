@@ -1818,7 +1818,17 @@ release 1), run only through `--phase manage`, never over HTTP:
   --approved-by`), each with `--by` - and refuses any other, so what was
   typed is what ran;
 - `--dispose-step ledger` prints the ledger - the MAC-signed list of every
-  disposal - into the receipt; keep it with the receipts;
+  disposal - into a log file of its own in the receipts folder
+  (`manage-<UTC>-NN-dispose-ledger.log`; the receipt's `ledger_printed` names
+  it with its sha256, size and line count). **Keep that log file whole** with
+  the backups, and before a replay check its sha256 against the receipt's: the
+  receipt's own `stdout` keeps only the last 16,000 characters of any act's
+  output (its `stdout_cut` and `stdout_chars` say whether it was cut and how
+  long it was), so it is never the copy to keep (refutation round 1,
+  dataloss-1: a cut copy was refused, or replayed without the oldest
+  disposals). A `--reason-file` is optional here; one that a ledger line
+  repeats is redacted there, and that line no longer verifies - the summary
+  says so: print the ledger again without it;
 - `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
   on its own, a dry run that changes nothing (the receipt's `mode` says `dry
   run`, and its summary never says done); with `--execute --approved-by

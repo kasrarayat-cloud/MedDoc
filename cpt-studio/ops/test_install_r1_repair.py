@@ -16,10 +16,13 @@ never passed, without one). Synthetic data only.
       change when the swap peak cannot be read.
   I6  phileak-1, dataloss-3 (the installer's half): once an act has run, a secret or the reason's text in its output
       never discards its record - each is redacted before the log and the receipt are written, and counted.
+  I7  dataloss-1: a receipt says whether an act's stdout was cut and how long it was; the ledger step keeps the ledger
+      whole in a log of its own and records its sha256, size and line count.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
 import datetime as dt
+import hashlib
 import io
 import json
 import sys
@@ -1066,6 +1069,66 @@ class ProvisionPrintedPasswordTests(TemporaryDirectoryTest):
         self.assertIn('created human account owner-gi (owner)', log)
         self.assertNotIn(password, log)
         self.assertNotIn(password, json.dumps(caught.exception.details))
+
+
+# --- I7: the ledger is kept whole, and a cut receipt copy says it was cut ---------------------------------------------
+
+def synthetic_ledger(lines=14, width=1420):
+    """A ledger as `dispose --ledger` prints it: one signed JSON line per DisposalEvent (synthetic ids and MACs), each
+    about ``width`` characters - dataloss-1's 14 lines and 19,922 characters by default."""
+    out = []
+    for number in range(lines):
+        entry = {'id': str(uuid.UUID(int=number + 1)), 'stage': 'completed', 'counts': {'rows': number},
+                 'pad': 'x' * (width - 140)}
+        out.append(json.dumps({'entry': entry, 'mac': f'{number:064x}'}, sort_keys=True))
+    return ('\n'.join(out) + '\n').encode()
+
+
+class LedgerKeptWholeTests(TemporaryDirectoryTest):
+    def run_ledger(self, output, *extra, reason=None):
+        import test_install_r1 as r1
+        world = r1.ManageWorld(self.tmp, output=output)
+        kwargs = {'reason': reason} if reason is not None else {}
+        return world.run('--command', 'dispose', '--dispose-step', 'ledger', '--by', 'Ada Lovelace', *extra, **kwargs)
+
+    def test_a_ledger_longer_than_the_receipt_keeps_is_whole_in_its_log_and_the_cut_is_said(self):
+        ledger = synthetic_ledger()
+        self.assertGreater(len(ledger), install.STDOUT_KEPT)
+        details = self.run_ledger(ledger)
+        printed = details['ledger_printed']
+        self.assertEqual(Path(printed['log']).read_bytes(), ledger)  # whole: the copy to keep
+        self.assertEqual(printed['sha256'], hashlib.sha256(ledger).hexdigest())
+        self.assertEqual((printed['bytes'], printed['lines'], printed['redacted']), (len(ledger), 14, False))
+        self.assertEqual(details['log'], printed['log'])
+        self.assertIs(details['stdout_cut'], True)
+        self.assertEqual(details['stdout_chars'], len(ledger.decode()))
+        self.assertEqual(len(details['stdout']), install.STDOUT_KEPT)
+        self.assertIn(f'the receipt keeps the last {install.STDOUT_KEPT} of its {len(ledger)} characters',
+                      details['summary'])
+        self.assertIn('is kept whole in', details['summary'])
+
+    def test_a_short_output_is_not_cut_and_says_so(self):
+        ledger = synthetic_ledger(lines=2, width=300)
+        details = self.run_ledger(ledger)
+        self.assertIs(details['stdout_cut'], False)
+        self.assertEqual(details['stdout'], ledger.decode())
+        self.assertNotIn('the receipt keeps the last', details['summary'])
+        import test_install_r1 as r1
+        world = r1.ManageWorld(self.tmp, output=b'revoked ops-agent\n')
+        other = world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
+                          'Ada Lovelace')
+        self.assertEqual((other['stdout_cut'], other['stdout_chars']), (False, len('revoked ops-agent\n')))
+        self.assertNotIn('ledger_printed', other)
+
+    def test_a_ledger_line_that_repeats_a_given_reason_is_said_to_no_longer_verify(self):
+        reason = b'Ticket 4521: the practice asked to end access.\n'
+        ledger = synthetic_ledger(lines=2, width=300).replace(b'"stage": "completed"',
+                                                              b'"reason": "Ticket 4521: the practice asked to end '
+                                                              b'access.", "stage": "completed"', 1)
+        details = self.run_ledger(ledger, '--reason-file', 'REASON', reason=reason)
+        self.assertIs(details['ledger_printed']['redacted'], True)
+        self.assertIn('no longer verifies: print it again without --reason-file', details['summary'])
+        self.assertNotIn(b'Ticket 4521', Path(details['ledger_printed']['log']).read_bytes())
 
 
 class SessionScriptImportTests(unittest.TestCase):
