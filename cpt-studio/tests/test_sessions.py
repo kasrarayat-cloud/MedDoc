@@ -24,6 +24,9 @@ from tests.test_frontend import PLAIN_STATIC
 from tests.test_second_factor import ADMIN, CPT, MOMENT, NOW, Clock
 
 REQUEST_ID = '0123456789abcdef0123456789abcdef'
+# the session tag's form (studio.sessions.session_tag): 128 bits written as a UUID, never 32 hex digits in a row,
+# which the customer scan's long_hex rule reads as a hash (repair round 2, the switchback-1 verifier)
+SESSION_TAG_FORM = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
 # --- a probe view, served from this module's own urlconf (ROOT_URLCONF overridden), that reads what is bound -----------
 SEEN = []
@@ -338,7 +341,7 @@ class PageConfigTests(TestCase):
                              (str(settings.SESSION_IDLE_MEMBER_SECONDS - 100), str(settings.SESSION_MAX_MEMBER_SECONDS - 100),
                               str(settings.SESSION_IDLE_WARNING_SECONDS)))  # as they stood before this request counted
             tag = data['session']
-            self.assertRegex(tag, r'^[0-9a-f]{32}$')
+            self.assertRegex(tag, SESSION_TAG_FORM)  # 128 bits in the form of a UUID (repair round 2: no long_hex)
             self.assertNotIn(client.session[request_meta.SESSION_SIGN_IN_REF], page.content.decode())
             self.assertEqual(client.post('/session/activity').json()['session'], tag)
             _, other = member_client()
@@ -355,7 +358,7 @@ class PageConfigTests(TestCase):
             data = body_data(page)
             self.assertEqual((data['idle-seconds'], data['cap-seconds']),
                              (str(settings.SESSION_IDLE_OPERATOR_SECONDS - 30), '270'))
-            self.assertRegex(data['session'], r'^[0-9a-f]{32}$')
+            self.assertRegex(data['session'], SESSION_TAG_FORM)
             self.assertIn('<meta http-equiv="refresh" content="280;url=/login/?reason=idle">', page.content.decode())
         sign_in_page = Client(HTTP_HOST=ADMIN).get('/login/')
         self.assertEqual(body_data(sign_in_page), {})  # a page of nobody's session carries none

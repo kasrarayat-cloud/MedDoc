@@ -180,18 +180,31 @@ class AccountCapTests(TestCase):
     @override_settings(SESSION_LIVE_PER_ACCOUNT=3)
     def test_a_pending_sign_in_ends_only_an_older_pending_one_never_a_signed_in_session(self):
         """A checked password alone makes a pending sign-in at the admin door: its cap is its own, so whoever holds an
-        operator's password but not the key can never sign the operator out."""
+        operator's password but not the key can never sign the operator out. And it never ends a pending sign-in that
+        can still complete (repair round 2, sessions-0, which changed what this pins: the cap used to end the oldest of
+        six pending sign-ins made at once): only, beyond the limit, those older than SECOND_FACTOR_PENDING_SECONDS."""
+        from tests.test_second_factor import Clock
         operator = f.user('capped-operator')
-        signed = ops.admin_client(operator)  # signed in at the admin door, with the second factor
-        signed_key = signed.session.session_key
-        for _ in range(6):
+
+        def password_step():
             door = Client(HTTP_HOST=settings.ADMIN_HOST)
             self.assertEqual(door.post('/login/', {'username': operator.username, 'password': PASSWORD},
                                        REMOTE_ADDR=ADDRESS).status_code, 302)
-        live = live_keys_naming(operator)
-        self.assertIn(signed_key, live)
-        self.assertEqual(len(live - {signed_key}), 3)  # the three newest pending sign-ins
-        self.assertEqual(signed.get('/ops/').status_code, 200)
+            return door.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with Clock() as clock:
+            signed = ops.admin_client(operator)  # signed in at the admin door, with the second factor
+            signed_key = signed.session.session_key
+            first = [password_step() for _ in range(6)]
+            live = live_keys_naming(operator)
+            self.assertIn(signed_key, live)
+            self.assertEqual(live - {signed_key}, set(first))  # each can still complete: none ended, beyond 3 too
+            clock.advance(settings.SECOND_FACTOR_PENDING_SECONDS + 1)
+            later = password_step()
+            live = live_keys_naming(operator)
+            self.assertIn(signed_key, live)
+            self.assertEqual(live - {signed_key}, {later, *first[-2:]})  # the limit: the new one and the two newest
+            self.assertEqual(signed.get('/ops/').status_code, 200)
 
 
 # --- avail-0: every session this release honours is indexed -------------------------------------------------------------
@@ -254,8 +267,9 @@ class IndexCompletenessTests(TestCase):
         store.cycle_key()
         self.assertNotEqual(store.session_key, old)
         self.assertFalse(models.SessionAccountLink.objects.filter(session_key=old).exists())
+        # a session signed in at the admin door is its own kind (repair round 2, sessions-1; it was 'signed_in')
         self.assertEqual(set(models.SessionAccountLink.objects.filter(session_key=store.session_key)
-                             .values_list('kind', flat=True)), {'signed_in', 'pending', 'setup'})
+                             .values_list('kind', flat=True)), {'signed_admin', 'pending', 'setup'})
         self.assert_index_exact()
 
 
