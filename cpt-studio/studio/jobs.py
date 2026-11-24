@@ -64,6 +64,9 @@ BUSY_MESSAGE = 'Wait for processing to finish (or stop it) first.'
 RETRY_NOTHING = 'There is no failed coding to try again.'
 # Resume or Retry of a round with a send whose outcome is not known and no operator's reconcile yet (FIX-SPEC 4).
 RECONCILE_FIRST = 'Whether the last coding finished is not known yet. It can run again once it has been checked.'
+# Release 1, D1: a practice closed by `dispose --close` (Workspace.closed_at) starts no new coding; reading stays on.
+CLOSED_MESSAGE = 'This practice is closed, so no coding can be started. Its documents can still be read.'
+CLOSED_JOB_ERROR = 'The practice was closed before this stage started; nothing was sent.'
 FAILURE_TEXT = {
     UNREADABLE: 'The coding result could not be read. Try again.',
     CEILING: 'This document reached its spending limit.',
@@ -128,6 +131,16 @@ def busy(encounter):
     return encounter.jobs.filter(state__in=[Job.QUEUED, Job.RUNNING]).exists()
 
 
+def practice_closed(workspace_id) -> bool:
+    """Whether the practice was closed (release 1, D1: dispose --close sets Workspace.closed_at): read from the database
+    each time, so a close takes effect on the next upload, coding request or claimed job of any process."""
+    return models.Workspace.objects.filter(pk=workspace_id, closed_at__isnull=False).exists()
+
+
+def _closed_for(encounter_id) -> bool:
+    return models.Workspace.objects.filter(encounters__pk=encounter_id, closed_at__isnull=False).exists()
+
+
 def _locked(encounter):
     return models.Encounter.objects.select_for_update().get(pk=encounter.pk)
 
@@ -158,6 +171,8 @@ def start_round(encounter, revision, trigger, by):
         locked = _locked(encounter)
         if revision.encounter_id != locked.pk:
             raise ValueError('The revision belongs to another encounter.')
+        if practice_closed(locked.workspace_id):
+            raise Refused(CLOSED_MESSAGE)
         if busy(locked):
             raise Refused(BUSY_MESSAGE)
         last = latest_round(locked)
@@ -205,6 +220,8 @@ def resume(encounter, user):
     operator's reconcile (awaiting_reconcile)."""
     with transaction.atomic():
         locked = _locked(encounter)
+        if practice_closed(locked.workspace_id):
+            raise Refused(CLOSED_MESSAGE)
         if busy(locked):
             raise Refused(BUSY_MESSAGE)
         round_ = latest_round(locked)
@@ -806,6 +823,9 @@ def claim_next():
         if job.stop_requested_at or is_stopped(job.encounter_id):
             job.state, job.error, job.finished_at = Job.CANCELLED, 'Stopped before it started.', now
             _cancel_queued_round(job)
+        elif _closed_for(job.encounter_id):  # release 1, D1: a closed practice's queued coding never starts
+            job.state, job.error, job.finished_at = Job.CANCELLED, CLOSED_JOB_ERROR, now
+            _cancel_queued_round(job)
         elif job.deadline_at < now:
             job.state, job.error, job.finished_at = (Job.CANCELLED, 'The stage expired before it could start; resume '
                                                      'to run it.', now)
@@ -985,16 +1005,32 @@ def mark_stale(*, startup=False):
             state.refresh(round_.encounter)
 
 
-def remove_stale_work_dirs():
-    """A worker killed mid-conversion (or mid-extraction, before this pipeline) can leave its child's work directory."""
+def remove_stale_work_dirs(*, older_than=None, root=None) -> int:
+    """A worker killed mid-conversion (or mid-extraction, before this pipeline) can leave its child's work directory,
+    and so can a conversion whose child was killed at its time limit. ``older_than`` (seconds): only directories whose
+    last change is at least that old - the hourly clean-up beside running conversions (release 1, D3), each of which
+    lasts at most fable.document.CONVERT_SECONDS; None removes every one, as at the worker's start, when nothing
+    converts. ``root``: the folder holding them (the system's temporary folder by default). A symbolic link is never
+    followed or removed. The number of directories removed."""
     import shutil
     import tempfile
     from pathlib import Path
 
+    cutoff = None if older_than is None else time.time() - older_than
+    removed = 0
     for prefix in (fable_document.WORK_PREFIX, 'cpt-ingest-'):
-        for path in Path(tempfile.gettempdir()).glob(f'{prefix}*'):
-            if path.is_dir() and not path.is_symlink():
-                shutil.rmtree(path, ignore_errors=True)
+        for path in Path(root or tempfile.gettempdir()).glob(f'{prefix}*'):
+            if not path.is_dir() or path.is_symlink():
+                continue
+            if cutoff is not None:
+                try:
+                    if path.lstat().st_mtime > cutoff:
+                        continue
+                except FileNotFoundError:
+                    continue
+            shutil.rmtree(path, ignore_errors=True)
+            removed += not path.exists()
+    return removed
 
 
 # The worker process beats every HEARTBEAT_SECONDS from a thread of its own; a beat older than WORKER_SILENT_SECONDS,
@@ -1084,12 +1120,27 @@ def _run_threads(target, count, *, while_waiting=None, should_stop=None):
             thread.join()
 
 
+def _maintain(state, clock):
+    """The maintenance part of the worker's tick (release 1, D3; studio.maintenance.tick): the hourly clean-up of stale
+    conversion folders, and the daily maintenance and the weekly check of stored originals when they are due, under a
+    Postgres advisory lock. A failure is logged and never stops the worker; the next tick tries again."""
+    from . import maintenance  # here, not at the top: maintenance reads this module
+
+    try:
+        maintenance.tick(state, clock=clock)
+    except Exception:  # noqa: BLE001 - logged; the next tick tries again
+        log.exception('the maintenance tick failed')
+        connection.close()
+
+
 def work(should_stop, *, poll_seconds=1.0, threads=None, clock=time.monotonic):
     """The worker: the startup sweep, then CPT_STUDIO_CONCURRENT_DOCUMENTS threads claiming and running jobs until
-    ``should_stop()`` (each finishes its current job first); the main thread sweeps every STALE_SWEEP_SECONDS."""
+    ``should_stop()`` (each finishes its current job first); the main thread sweeps every STALE_SWEEP_SECONDS, and then
+    runs the maintenance that is due (_maintain)."""
     remove_stale_work_dirs()
     mark_stale(startup=True)
     swept = {'at': clock()}
+    maintained = {}
 
     def sweep():
         if clock() - swept['at'] >= STALE_SWEEP_SECONDS:
@@ -1098,6 +1149,7 @@ def work(should_stop, *, poll_seconds=1.0, threads=None, clock=time.monotonic):
             except Exception:  # noqa: BLE001 - logged; the next sweep tries again
                 log.exception('the stale sweep failed')
                 connection.close()
+            _maintain(maintained, clock)
             swept['at'] = clock()
     try:
         _run_threads(lambda: _worker_thread(should_stop, poll_seconds), _thread_count(threads), while_waiting=sweep,
