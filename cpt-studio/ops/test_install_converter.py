@@ -346,6 +346,81 @@ class ImageSelfTestTests(unittest.TestCase):
             install.image_converter_self_test(IMAGE)  # the line with a failing exit is still a failure
 
 
+
+class SwitchBackParkedLeftTests(TemporaryDirectoryTest):
+    """Refutation, rollback lens B-11: a log copy that failed at the switch-back's B9 - the previous pair already
+    serving - made the receipt ok:false, and the second switch forward refused on the *-previous containers."""
+
+    def receipt(self, phase, details, error):
+        install.write_receipt(self.tmp, phase, {'phase': phase, 'revision': REVISION, 'ok': error is None,
+                                                'started_at': install.utc_now(),
+                                                'details': details if error is None else (error.details or {})})
+
+    def switch_back(self, world):
+        from test_install_bluegreen import switch_back_args
+        patches = world.patches()
+        for patcher in patches:
+            patcher.start()
+        try:
+            return install.phase_switch_back(install.Context(switch_back_args(self.tmp), self.tmp)), None
+        except install.InstallError as error:
+            return None, error
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+
+    def test_a_failed_copy_at_b9_is_a_finding_and_the_next_app_keeps_then_removes_the_pair(self):
+        world = ConverterWorld(self.tmp)
+        details, error = run_app(world)
+        self.assertIsNone(error, error and str(error))
+        self.receipt('app', details, error)
+        world.preflight_receipt()
+
+        def failing_copy(container, role, revision=None):
+            raise install.InstallError('the log copy could not be written (the root helper refused)')
+        with mock.patch.object(world, 'keep_container_log', failing_copy):
+            details, error = self.switch_back(world)
+        self.assertIsNone(error, error and str(error))  # the previous pair serves: the switch-back succeeded
+        self.assertIn('the log copy could not be written', details['parked_left']['why'])
+        self.assertIn('FINDING', details['summary'])
+        left = details['parked_left']['pair']
+        self.assertEqual(sorted(left), ['web', 'worker'])
+        self.assertEqual(sorted(name for name in world.containers if name.endswith('-previous')),
+                         [WEB + '-previous', WORKER + '-previous'])
+        self.receipt('switch-back', details, error)
+        world.events.clear()
+        world.preflight_receipt()
+        details, error = run_app(world)  # the second switch forward
+        self.assertIsNone(error, error and str(error))
+        retired = details['parked_retired']['retired']
+        self.assertEqual(sorted(retired), ['web', 'worker'])
+        kept = [event for event in world.events if event[0] in ('keep-log', 'rm')]
+        self.assertEqual(kept[:4], [('keep-log', WEB + '-previous', 'web'), ('keep-log', WORKER + '-previous', 'worker'),
+                                    ('rm', WEB + '-previous'), ('rm', WORKER + '-previous')])
+
+    def test_a_parked_pair_the_switch_back_did_not_name_is_never_removed(self):
+        install.write_receipt(self.tmp, 'switch-back', {'phase': 'switch-back', 'revision': REVISION, 'ok': True,
+                                                        'details': {'parked_left': {'pair': {'web': 'not-this-one'}}}})
+        world = ConverterWorld(self.tmp)
+        world.containers[WEB + '-previous'] = dict(world.containers[WEB], Id='another-web', running=False)
+        ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION, receipts=str(self.tmp)), self.tmp)
+        patches = world.patches()
+        for patcher in patches:
+            patcher.start()
+        try:
+            with self.assertRaisesRegex(install.InstallError, 'is not the web the switch-back left in place'):
+                install.retire_left_parked(ctx)
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        self.assertEqual([event for event in world.events if event[0] in ('keep-log', 'rm')], [])
+        # and with no switch-back receipt naming one, nothing is read
+        other = self.tmp / 'other'
+        other.mkdir()
+        self.assertIsNone(install.retire_left_parked(install.Context(SimpleNamespace(phase='app', revision=REVISION,
+                                                                                     receipts=str(other)), other)))
+
+
 class EntrypointTests(TemporaryDirectoryTest):
     def run_entrypoint(self, *argv):
         """deploy/entrypoint.sh, its 'cd /app' pointed at a temporary folder and 'python' a stand-in that prints its

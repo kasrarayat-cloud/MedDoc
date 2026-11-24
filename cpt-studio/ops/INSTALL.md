@@ -752,7 +752,10 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   secret values and the reason's text (whole, or any line of 12 characters or
   more) must not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
   command's stdout (ids and counts) and its log. Nothing that is not on the list
-  runs. An act's own time ends 300 s before the door's ceiling
+  runs. An act holds the receipts' lock for its whole run, as every phase does,
+  so no install, `switch-back` or `rollback-app` can start while it runs (and
+  none of them can be running when it starts). An act's own time ends 300 s
+  before the door's ceiling
   (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the
   receipt their time. A SIGTERM - the door's kill at its ceiling - or a SIGHUP
   stops any phase where it is: its RAM files are wiped, its one-shot removed,
@@ -1156,7 +1159,13 @@ here carries it too), the states are put back again, and the previous worker is
 held while the close names a record (an unknown outcome, or a stage it cannot
 run still open: `app` again comes back to this revision); **B8** the previous
 worker starts; **B9** this
-revision's parked pair is removed (its image is kept). Before B5 any failure
+revision's parked pair is removed (its image is kept), each log first kept ids
+only (A13). The previous pair serves by then, so a copy (or a removal) that fails
+at B9 is a recorded finding, never a failed switch-back: the receipt's
+`parked_left` names the pair left parked and why, its summary says FINDING, and
+the next `app` keeps their logs, then removes them, before it plans its switch
+(only the containers that receipt names; any other `*-previous` still refuses).
+Before B5 any failure
 resumes this revision's pair (its worker started again, its list states
 recomputed with its own derivation, the previous web drained when it took
 traffic and removed); from B5 on the previous web serves and the receipt says
@@ -1677,7 +1686,8 @@ recomputes every state.
   were created) and rerun.
 - A parked container's log (release 1, A13): when `app` or a `switch-back` could
   not keep a parked container's log, the container is left in place and the
-  receipt says why. Fix that cause first (a full `/var/log`, a `docker logs`
+  receipt says why (a `switch-back`'s `parked_left` is retried by the next `app`
+  first). Fix that cause first (a full `/var/log`, a `docker logs`
   that fails), then keep the log before removing the container: as root, write
   `docker logs --timestamps <container>` into `/var/log/cpt-studio/containers/`
   (root 0600, named `<role>-<revision12>-<UTC>-by-hand.log`). A copy made by

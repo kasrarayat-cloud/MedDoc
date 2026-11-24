@@ -6896,8 +6896,11 @@ def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnab
     # The coder's mode is named only when it is not the default, as swap_services leaves WEB_PORT to wait_service: a
     # stand-in of replace_services keeps the six arguments it always had. Corti, the participants and the interpreter
     # are started disabled (replace_services' defaults).
+    left = retire_left_parked(ctx)  # refutation B-11: a switch-back's parked pair, kept, then removed first
     services = replace_services(ctx, image_id, env, 'disabled', reference, None,
                                 **({'coding': mode} if mode != 'disabled' else {}))
+    if left is not None:
+        services['parked_retired'] = left
     coding = {'mode': mode, 'effort': CODING_EFFORT, 'credentials_loaded': mode == 'live',
               'figures': coding_figures()}
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
@@ -6925,6 +6928,34 @@ def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnab
             'install_counts': counts,
             'summary': f'web and worker running {image_id[:19]} ({coding_summary(mode)})'
                        + switched_summary(services) + '; no design v1 row' + counts_summary(counts)}
+
+
+def retire_left_parked(ctx):
+    """The parked pair a switch-back left in place because its log could not be kept (its receipt's 'parked_left';
+    refutation, rollback lens B-11): the copy retried, then the pair removed - before this app plans its switch, which a
+    parked pair would refuse. Only the containers that receipt names; any other '*-previous' is refused, nothing started
+    or stopped. None when no switch-back left one; raises when the copy fails again."""
+    entry = latest_receipt_entry(ctx.receipts, 'switch-back', ctx.revision)
+    left = ((entry[1].get('details') or {}).get('parked_left') or {}) if entry is not None else {}
+    if not left:
+        return None
+    parked = {}
+    for role in ('web', 'worker'):
+        container = inspect('container', SERVICES[role] + '-previous')
+        if container is None:
+            continue
+        wanted = (left.get('pair') or {}).get(role)
+        if container.get('Id') != wanted or not owned(container, role):
+            raise InstallError(f'{SERVICES[role]}-previous is not the {role} the switch-back left in place '
+                               f'({str(wanted)[:12]}); nothing was started or stopped (ops/INSTALL.md, Recovery notes).')
+        parked[role] = {'id': container['Id'], 'revision': labels_of(container).get(REVISION_LABEL)}
+    if not parked:
+        return {'retired': {}, 'why': 'the pair the switch-back left was gone already'}
+    try:
+        return {'retired': retire_parked(parked), 'switch_back_receipt': entry[0].name}
+    except InstallError as error:
+        raise InstallError(f'The parked pair the switch-back left in place could not be kept and removed ({error}); '
+                           'nothing was started or stopped.') from error
 
 
 def switched_summary(services) -> str:
@@ -7017,7 +7048,9 @@ def phase_switch_back(ctx) -> dict:
             'summary': f'switched back to {prev_revision[:12]} ({named}) on '
                        f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')
-                       + (f'; {admin}' if admin else '')}
+                       + (f'; {admin}' if admin else '')
+                       + ('; FINDING: this revision\'s parked pair was left in place (its log could not be kept): '
+                          'the next app keeps it, then removes it' if services.get('parked_left') else '')}
 
 
 def switch_back_target(ctx, entry) -> tuple:
@@ -7255,7 +7288,14 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                           **({'coding': coding} if coding else {})), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', prev_revision, prev_image)
         step('B9')
-        record['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
+        try:
+            record['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
+        except InstallError as error:
+            # refutation, rollback lens B-11: the previous pair serves already - a log copy (or the removal) that fails
+            # leaves this revision's parked pair in place, a recorded finding and never a failed switch-back; the next
+            # app retries the copy, then removes the pair (retire_left_parked)
+            record['parked_left'] = {'why': str(error) or type(error).__name__,
+                                     'pair': {role: previous['id'] for role, previous in parked.items() if previous}}
         step('done')
         record['availability'] = recorder.stop()
     except BaseException as failure:
