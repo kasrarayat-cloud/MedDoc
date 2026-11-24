@@ -583,7 +583,9 @@ def clock_seconds(clock):
 class ChallengeRaceTests(TransactionTestCase):
     """The same race over two real database connections, as the refutation's probe ran it (refutation r2, finding 1;
     l2fa/test_race.py): two requests with one session cookie and one signed assertion both load the session, then meet
-    at the challenge's single use (a barrier just before it). One signs in; the other is refused."""
+    at the challenge's single use (a barrier just before it). One signs in; the other is refused - and never reaches the
+    key's check at all: the sign-in's own one-time completion (finding 2) and the first request's new session key would
+    also stop the second from signing in, so the challenge's single use is proven by the checks counted."""
 
     def test_two_requests_at_the_same_moment_sign_in_once(self):
         operator, key = enrolled_operator()
@@ -607,12 +609,15 @@ class ChallengeRaceTests(TransactionTestCase):
             finally:
                 connection.close()
 
-        with mock.patch.object(second_factor, '_challenge_digest', side_effect=digest_once_both_have_loaded):
+        with mock.patch.object(second_factor, '_challenge_digest', side_effect=digest_once_both_have_loaded), \
+                mock.patch.object(second_factor, 'verify_authentication_response',
+                                  wraps=second_factor.verify_authentication_response) as checked:
             threads = [threading.Thread(target=post, args=pair) for pair in (('first', first), ('second', second))]
             for thread in threads:
                 thread.start()
             for thread in threads:
                 thread.join(60)
+        self.assertEqual(checked.call_count, 1, 'the second request reached the key check: the challenge served twice')
         self.assertEqual(sorted(answer.status_code for answer in answers.values()), [302, 400])
         signed_in = [row for row in Session.objects.all() if row.get_decoded().get('_auth_user_id') == str(operator.pk)]
         self.assertEqual(len(signed_in), 1)
