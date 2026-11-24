@@ -68,7 +68,7 @@ def client_key(request) -> str:
         parsed = ipaddress.ip_address(address)
     except ValueError:
         from .rate import key_hash  # here, not at the top: this module needs no model; never taken behind nginx
-        return key_hash('client:' + UNSTORABLE.sub('�', address))
+        return key_hash('client:' + UNSTORABLE.sub('\ufffd', address))
     if parsed.version == 6:
         if parsed.ipv4_mapped is not None:
             return str(parsed.ipv4_mapped)
@@ -138,5 +138,5 @@ def request_fields(request=None) -> dict:
     request = request if request is not None else current_request()
     if request is None:
         return {'client': '', 'sign_in_ref': None, 'request_id': ''}
-    return {'client': UNSTORABLE.sub('�', client_address(request)), 'sign_in_ref': sign_in_ref(request),
+    return {'client': UNSTORABLE.sub('\ufffd', client_address(request)), 'sign_in_ref': sign_in_ref(request),
             'request_id': request_id(request)}

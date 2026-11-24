@@ -1,46 +1,33 @@
 """Release 1's foundation (RELEASE-1-SPEC section 3, Lane 1): the settings every lane reads, the request's own facts
-(studio.request_meta), ending sessions and the session policy's pass-through (studio.sessions). Synthetic data only."""
+(studio.request_meta), the security events (studio.security_events) and the operator test helper's sign-in markers
+(tests.support.operator). Ending sessions and the session policy: tests/test_sessions.py; the second-factor gate:
+tests/test_second_factor.py (both Lane 2's from here). Synthetic data only."""
 from __future__ import annotations
 
 import importlib.util
 import os
 import uuid
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone
+from decimal import Decimal
 from importlib import import_module
 from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
-from django.http import Http404, JsonResponse
+from django.db import DatabaseError
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import path
 from django.utils import timezone
 
-from studio import console, models, request_meta, sessions, views
+from studio import models, request_meta, second_factor, security_events, views
 from tests.support import coding as f
+from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = 'admin.quillmd.com'
 REQUEST_ID = '0123456789abcdef0123456789abcdef'
-
-# --- a probe view, served from this module's own urlconf (ROOT_URLCONF overridden), that reads what is bound -----------
-SEEN = []
-
-
-def probe(request):
-    SEEN.append({'bound': request_meta.current_request() is request, 'fields': request_meta.request_fields()})
-    return JsonResponse({'ok': True})
-
-
-def missing(request):
-    raise Http404()
-
-
-urlpatterns = [path('probe', probe), path('missing', missing)]
 
 
 def load_settings(**environment):
@@ -186,7 +173,7 @@ class RequestMetaTests(TestCase):
             return request_meta.request_id(self.factory.get('/', HTTP_X_REQUEST_ID=value))
         self.assertEqual(rid(REQUEST_ID), REQUEST_ID)
         self.assertEqual(rid(REQUEST_ID.upper()), REQUEST_ID)
-        for value in ('', REQUEST_ID[:-1], REQUEST_ID + '0', 'g' * 32, REQUEST_ID[:31] + 'é',
+        for value in ('', REQUEST_ID[:-1], REQUEST_ID + '0', 'g' * 32, REQUEST_ID[:31] + '\u00e9',
                       REQUEST_ID[:16] + ' ' * 16, 'not-a-request-id'):
             with self.subTest(value=value):
                 self.assertEqual(rid(value), '')
@@ -228,94 +215,108 @@ class RequestMetaTests(TestCase):
         self.assertEqual(request_meta.request_fields(), {'client': '', 'sign_in_ref': None, 'request_id': ''})
         request = self.factory.get('/', REMOTE_ADDR='192.0.2.\x00', HTTP_X_REQUEST_ID=REQUEST_ID)
         self.assertEqual(request_meta.request_fields(request),
-                         {'client': '192.0.2.�', 'sign_in_ref': None, 'request_id': REQUEST_ID})
+                         {'client': '192.0.2.\ufffd', 'sign_in_ref': None, 'request_id': REQUEST_ID})
 
 
-@override_settings(ROOT_URLCONF=__name__, STORAGES=PLAIN_STATIC)
-class SessionPolicyMiddlewareTests(TestCase):
-    def setUp(self):
-        SEEN.clear()
-
-    def test_it_passes_the_request_and_the_response_through_unchanged(self):
-        request = RequestFactory().get('/')
-        sentinel = object()
-        calls = []
-
-        def get_response(passed):
-            calls.append((passed, request_meta.current_request()))
-            return sentinel
-        self.assertIs(sessions.SessionPolicyMiddleware(get_response)(request), sentinel)
-        self.assertEqual(calls, [(request, request)])  # once, with this request, bound while it ran
-        self.assertIsNone(request_meta.current_request())  # and unbound after
-
-    def test_an_exception_passes_through_and_the_request_is_unbound(self):
-        def failing(passed):
-            raise RuntimeError('synthetic failure')
-        with self.assertRaisesMessage(RuntimeError, 'synthetic failure'):
-            sessions.SessionPolicyMiddleware(failing)(RequestFactory().get('/'))
-        self.assertIsNone(request_meta.current_request())
-
-    def test_a_real_request_is_bound_with_its_fields_while_its_view_runs(self):
-        user = f.member(f.workspace())
-        client = Client()
-        client.force_login(user)
-        session = client.session
-        ref = uuid.uuid4()
-        session[request_meta.SESSION_SIGN_IN_REF] = str(ref)
-        session.save()
-        response = client.get('/probe', REMOTE_ADDR='198.51.100.23', HTTP_X_REQUEST_ID=REQUEST_ID)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(SEEN, [{'bound': True, 'fields': {'client': '198.51.100.23', 'sign_in_ref': ref,
-                                                            'request_id': REQUEST_ID}}])
-        self.assertIsNone(request_meta.current_request())
-        self.assertEqual(Client().get('/missing').status_code, 404)  # an exception's answer is unchanged
-        self.assertIsNone(request_meta.current_request())
-
-
-class EndSessionsTests(TestCase):
+class SecurityEventTests(TestCase):
     def setUp(self):
         self.ws = f.workspace()
-        self.user = f.member(self.ws)
-        self.other = f.member(self.ws)
-        self.store = import_module(settings.SESSION_ENGINE).SessionStore
+        self.actor = f.user('synthetic-operator')
+        self.subject = f.member(self.ws)
 
-    def session_of(self, user, *, expired=False):
-        store = self.store()
-        store['_auth_user_id'] = str(user.pk)
-        store.create()
-        if expired:
-            Session.objects.filter(session_key=store.session_key).update(
-                expire_date=timezone.now() - timedelta(days=1))
-        return store.session_key
+    def test_one_event_with_ids_counts_and_the_request_s_fields(self):
+        request = RequestFactory().post('/ops/people', REMOTE_ADDR='198.51.100.23', HTTP_X_REQUEST_ID=REQUEST_ID)
+        request.session = import_module(settings.SESSION_ENGINE).SessionStore()
+        ref = uuid.uuid4()
+        request.session[request_meta.SESSION_SIGN_IN_REF] = str(ref)
+        moment = datetime(2026, 11, 24, 12, 0, tzinfo=dt_timezone.utc)
+        row = security_events.record('signin.throttled', actor=self.actor, subject=self.subject.pk,
+                                     workspace_id=self.ws, request=request, refused=3, user_key='a' * 64,
+                                     window={'start': moment, 'seconds': 60}, cost=Decimal('0.25'), ids=[self.ws.pk])
+        stored = models.SecurityEvent.objects.get()
+        self.assertEqual(stored.pk, row.pk)
+        self.assertEqual((stored.event, stored.actor_id, stored.actor_label, stored.subject_id, stored.workspace_id),
+                         ('signin.throttled', self.actor.pk, '', self.subject.pk, self.ws.pk))
+        self.assertEqual(stored.data, {'refused': 3, 'user_key': 'a' * 64, 'window': {'start': moment.isoformat(),
+                                       'seconds': 60}, 'cost': '0.25', 'ids': [str(self.ws.pk)]})
+        self.assertEqual((stored.client, stored.sign_in_ref, stored.request_id), ('198.51.100.23', ref, REQUEST_ID))
 
-    def keys(self):
-        return set(Session.objects.values_list('session_key', flat=True))
+    def test_a_server_act_names_its_person_and_records_no_request(self):
+        row = security_events.record('operator.revoked', actor_label='Synthetic Person', subject=self.actor)
+        self.assertEqual((row.actor_id, row.actor_label, row.subject_id, row.workspace_id), (None, 'Synthetic Person',
+                                                                                             self.actor.pk, None))
+        self.assertEqual((row.client, row.sign_in_ref, row.request_id, row.data), ('', None, '', {}))
 
-    def test_the_console_s_function_moved_here_and_is_imported_back(self):
-        self.assertIs(console.end_sessions, sessions.end_sessions)
-        self.assertIs(console.Refused, sessions.Refused)
-        self.assertEqual((console.SESSION_STORES, console.NO_SESSION_STORE),
-                         (sessions.SESSION_STORES, sessions.NO_SESSION_STORE))
+    def test_the_request_being_served_is_recorded_when_none_is_given(self):
+        request = RequestFactory().get('/', REMOTE_ADDR='203.0.113.5', HTTP_X_REQUEST_ID=REQUEST_ID)
+        with request_meta.bound(request):
+            row = security_events.record('password.changed', actor=self.subject)
+        self.assertEqual((row.client, row.request_id), ('203.0.113.5', REQUEST_ID))
 
-    def test_every_live_session_of_the_account_ends_and_no_other(self):
-        mine = [self.session_of(self.user) for _ in range(3)]
-        old = self.session_of(self.user, expired=True)
-        theirs = self.session_of(self.other)
-        self.assertEqual(sessions.end_sessions(self.user), 3)
-        self.assertEqual(self.keys(), {old, theirs})
-        self.assertFalse(set(mine) & self.keys())
+    def test_anything_but_ids_counts_and_fixed_words_is_refused(self):
+        cases = {
+            'a name that is no dotted word': dict(event='Signin Throttled'),
+            'a bare word': dict(event='signin'),
+            'a long name': dict(event='signin.' + 'x' * 60),
+            'typed text': dict(event='signin.throttled', note='x' * 201),
+            'an object': dict(event='signin.throttled', what=object()),
+            'a number that is not finite': dict(event='signin.throttled', ratio=float('nan')),
+            'a name in the data that is no word': dict(event='signin.throttled', counts={'Patient Name': 1}),
+            'too deep': dict(event='signin.throttled', a={'b': {'c': {'d': {'e': 1}}}}),  # three levels hold
+            'a role for a person': dict(event='operator.revoked', actor_label='x' * 121),
+            'an actor that is no account': dict(event='operator.revoked', actor='platform-operator'),
+        }
+        for label, arguments in cases.items():
+            event = arguments.pop('event')
+            with self.subTest(label), self.assertRaises(ValueError):
+                security_events.record(event, **arguments)
+        self.assertFalse(models.SecurityEvent.objects.exists())
 
-    def test_keep_session_key_keeps_exactly_that_one(self):
-        mine = [self.session_of(self.user) for _ in range(3)]
-        theirs = self.session_of(self.other)
-        self.assertEqual(sessions.end_sessions(self.user, keep_session_key=mine[1]), 2)
-        self.assertEqual(self.keys(), {mine[1], theirs})
-        # another account's session named as the one to keep keeps nothing of this account
-        self.assertEqual(sessions.end_sessions(self.other, keep_session_key=mine[1]), 1)
-        self.assertEqual(self.keys(), {mine[1]})
+    def test_three_levels_of_data_are_held(self):
+        row = security_events.record('maintenance.ran', counts={'tables': {'studio_ratewindow': {'deleted': 4}}})
+        self.assertEqual(row.data, {'counts': {'tables': {'studio_ratewindow': {'deleted': 4}}}})
 
-    def test_a_store_it_cannot_end_is_refused(self):
-        with self.settings(SESSION_ENGINE='django.contrib.sessions.backends.signed_cookies'):
-            with self.assertRaises(sessions.Refused) as refused:
-                sessions.end_sessions(self.user, keep_session_key='x')
-        self.assertEqual((str(refused.exception), refused.exception.status), (sessions.NO_SESSION_STORE, 409))
+    def test_a_write_that_fails_raises(self):
+        with mock.patch.object(models.SecurityEvent.objects, 'create', side_effect=DatabaseError('synthetic')):
+            with self.assertRaises(DatabaseError):
+                security_events.record('second_factor.failed', actor=self.actor)
+
+
+class OperatorHelperTests(TestCase):
+    """tests.support.operator signs a test operator in as its host's door would (RELEASE-1-SPEC section 5's keys)."""
+
+    def gate_request(self, client, user):
+        request = RequestFactory().get('/ops/', HTTP_HOST=ADMIN)
+        request.session = import_module(settings.SESSION_ENGINE).SessionStore(client.session.session_key)
+        request.user = user
+        return request
+
+    def test_the_admin_door_carries_the_second_factor_and_the_cpt_door_none(self):
+        moment = datetime(2026, 11, 24, 12, 0, tzinfo=dt_timezone.utc)
+        with mock.patch.object(timezone, 'now', return_value=moment):
+            admin = ops.admin_client(f.user('operator-admin'))
+            cpt = ops.client(f.user('operator-cpt'))
+        stamp = request_meta.epoch_seconds(moment)
+        session = admin.session
+        self.assertEqual((session[request_meta.SESSION_DOOR], session[request_meta.SESSION_SECOND_FACTOR_AT],
+                          session[request_meta.SESSION_AUTH_AT], session[request_meta.SESSION_LAST_ACTIVE]),
+                         ('admin', stamp, stamp, stamp))
+        uuid.UUID(session[request_meta.SESSION_SIGN_IN_REF])
+        self.assertEqual(cpt.session[request_meta.SESSION_DOOR], 'cpt')
+        self.assertNotIn(request_meta.SESSION_SECOND_FACTOR_AT, cpt.session)
+        self.assertNotEqual(cpt.session[request_meta.SESSION_SIGN_IN_REF], session[request_meta.SESSION_SIGN_IN_REF])
+
+    def test_the_gate_reads_the_admin_client_as_satisfied_and_the_password_only_one_as_not(self):
+        operator_user, password_only_user = f.user('operator-key'), f.user('operator-password')
+        with_key = ops.admin_client(operator_user)
+        password_only = ops.admin_client(password_only_user, second_factor=False)
+        self.assertTrue(second_factor.satisfied(self.gate_request(with_key, operator_user)))
+        self.assertFalse(second_factor.satisfied(self.gate_request(password_only, password_only_user)))
+        self.assertEqual(password_only.session[request_meta.SESSION_DOOR], 'admin')
+        self.assertTrue(models.OperatorGrant.objects.filter(user=password_only_user).exists())
+        cpt_user = f.user('operator-cpt-door')
+        self.assertFalse(second_factor.satisfied(self.gate_request(ops.client(cpt_user), cpt_user)))
+
+    def test_the_door_follows_the_host(self):
+        self.assertEqual([ops.door_of(host) for host in ('admin.quillmd.com', 'admin.quillmd.com:443', 'testserver',
+                                                         'cpt.quillmd.com')], ['admin', 'admin', 'cpt', 'cpt'])
