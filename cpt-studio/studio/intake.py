@@ -85,8 +85,6 @@ def create_encounter(*, membership, user, title, service_date='', insurance='unk
     """
     if (data is None) == (not text.strip()):
         raise ValidationError('Provide either a file or pasted text.')
-    if jobs.practice_closed(membership.workspace_id):
-        raise ValidationError(CLOSED_TEXT)
     if insurance not in jobs.INSURANCE:
         raise ValidationError('Choose the insurance: Medicare, Medicaid, commercial or other, or not sure.')
     media_type = None
@@ -130,7 +128,7 @@ def _create(membership, user, title, service_date, insurance, data, filename, te
             stored):
     values = {'service_date': service_date, 'insurance': insurance} if service_date else {'insurance': insurance}
     with transaction.atomic():
-        if jobs.practice_closed(membership.workspace_id):  # closed while this request ran
+        if jobs.practice_closed(membership.workspace_id):  # D1: read inside the transaction that would add the document
             raise ValidationError(CLOSED_TEXT)
         encounter = models.Encounter.objects.create(
             workspace=membership.workspace, title=title, created_by=user, client_key=client_key, user_values=values)
