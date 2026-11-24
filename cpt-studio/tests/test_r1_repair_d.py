@@ -31,7 +31,7 @@ from unittest import mock
 
 import psycopg
 from django.core.management import CommandError, call_command
-from django.db import connection
+from django.db import connection, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
 from studio import disposal, models, record_bundle, storage
@@ -607,8 +607,8 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
     'failed' with its certificate printed (or, at the INSERT itself, with the certificate saying its event may not have
     been written), the 'committed' row standing either way. And at every line event of destroy before the commit: the
     transaction rolls back, nothing is destroyed or recorded, nothing is printed - an interrupt before the commit does
-    what it did. (The commit itself - the with block's exit, which a hook would interrupt before Django's __exit__ ran -
-    is not swept: it is the 'unknown' case the earlier rounds' tests pin.)"""
+    what it did - the line event of the with block's exit included, where the interrupt comes before Django's __exit__
+    ran (destroy's guard closes the block; DestroyBlockExitTests has the real-signal case)."""
 
     def one_document(self, number):
         enc = f.encounter(self.ws, self.reviewer, title=f'ZZ-TITLE-MARKER sweep {number}')
@@ -637,9 +637,9 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
         self.assertIsNone(code, printed)
         loops = {function.__name__: loop_lines(function) for function in SWEPT}
         events = [event for event in events if event[2] == 1 or event[1] not in loops[event[0]]]
-        exit_ = events.index(('destroy', line_of(disposal.destroy, 'with transaction.atomic():'), 2))
+        exit_ = events.index(('destroy', line_of(disposal.destroy, 'with block:'), 2))
         insert = events.index(('_record', line_of(disposal._record, 'DisposalEvent.objects.create(**values)'), 1))
-        return [event for event in events[:exit_] if event[0] == 'destroy'], events[exit_ + 1:insert + 1]
+        return [event for event in events[:exit_ + 1] if event[0] == 'destroy'], events[exit_ + 1:insert + 1]
 
     def interrupted_at(self, point, number):
         enc, plan = self.one_document(number)
@@ -707,3 +707,55 @@ class StopSignalSweepTests(td.RepairCase, TestCase):
         self.assertEqual(len(inserts), 2)
         self.assertEqual(events.filter(stage__in=(Event.COMPLETED, Event.FAILED)).count(), 1)
         self.assertIn('NOT RECORDED (its DisposalEvent may not have been written', out.getvalue())
+
+
+@override_settings(SESSION_ENGINE='django.contrib.sessions.backends.db')
+class DestroyBlockExitTests(TransactionTestCase):
+    """D4's class, the commit's own start: a real SIGTERM, through the command's handler, handled as destroy's atomic
+    block's __exit__ is entered - before its first line, so before it began the commit (the trace hook sends it at that
+    call: where CPython checks for a signal on entering a function). The block was left open: the 'committed' and
+    'failed' rows were written into that open transaction, which the process's exit rolled back, and the certificate
+    printed - "whether the rows were destroyed is not known" - named a DisposalEvent that never existed. Now destroy's
+    guard closes the block itself: rolled back, nothing destroyed, recorded or printed, as before the commit. In
+    autocommit, as the command runs."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        override = override_settings(ORIGINALS_DIR=Path(folder.name) / 'originals')
+        override.enable()
+        self.addCleanup(override.disable)
+        ws = f.workspace('Synthetic block-exit practice')
+        member = f.member(ws)
+        self.enc = f.encounter(ws, member, title='ZZ-TITLE-MARKER block exit')
+        f.upload(self.enc, member, data=f.PDF_BYTES + b' block exit', filename='zz-file-marker.pdf')
+
+    def test_a_sigterm_as_the_block_exit_is_entered_rolls_back_and_records_nothing(self):
+        plan = disposal.plan(disposal.document_scope(self.enc.pk), by='Synthetic Operator', reason='Synthetic.')
+        exit_code, fired = transaction.Atomic.__exit__.__code__, []
+
+        def at_the_exit(frame, event, arg):
+            if (event == 'call' and frame.f_code is exit_code and not fired and frame.f_back is not None
+                    and frame.f_back.f_code is disposal.destroy.__code__):
+                fired.append(True)
+                os.kill(os.getpid(), signal.SIGTERM)  # handled here, before __exit__'s first line
+            return None
+        out, code = io.StringIO(), None
+        with td.installer_idle():
+            sys.settrace(at_the_exit)
+            try:
+                call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', td.AUTH, stdout=out)
+            except SystemExit as exc:
+                code = exc.code
+            finally:
+                sys.settrace(None)
+        self.assertEqual(fired, [True])
+        self.assertEqual(code, 128 + signal.SIGTERM)
+        self.assertFalse(connection.in_atomic_block)  # no transaction left open for a record to vanish with
+        self.assertEqual(connection.atomic_blocks, [])
+        self.assertEqual(list(Event.objects.values_list('stage', flat=True)), [Event.PLANNED])
+        self.assertIsNone(models.Encounter._base_manager.get(pk=self.enc.pk).destroyed_at)
+        source = models.SourceFile.objects.get(encounter=self.enc)
+        self.assertTrue(storage.stored_path(source.storage_name).exists())
+        self.assertEqual(out.getvalue(), '')  # nothing happened, so no certificate claims anything

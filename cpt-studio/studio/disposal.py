@@ -893,10 +893,12 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
     failed afterwards is in it, an interrupt included), or CommitUnknown when the commit's own answer was lost; an error
     before it rolls the transaction back and goes on as it is. One guard holds the transaction, its commit and every
     step after it, and the Outcome is made inside the transaction: from the commit's return to the guard nothing runs
-    (refutation dataloss-4), while an interrupt before the commit still rolls back and destroys nothing."""
+    (refutation dataloss-4), while an interrupt before the commit still rolls back and destroys nothing - one at the
+    very start of the block's __exit__ too, before its body began the commit: the guard closes the block itself."""
     marks = {'committing': False, 'committed': False}
+    block, depth = transaction.atomic(), len(connection.atomic_blocks)
     try:
-        with transaction.atomic():
+        with block:
             with connection.cursor() as cursor:  # whatever this session set before: the deletes rely on deferral
                 cursor.execute('SET CONSTRAINTS ALL DEFERRED')
             if scope.kind == WORKSPACE:
@@ -936,6 +938,13 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
         _after_commit(scope, outcome)
         return outcome
     except BaseException as exc:  # noqa: BLE001 - one guard: before the commit, at it, and after it
+        if len(connection.atomic_blocks) > depth:
+            # the block is still open: its __exit__ never ran - a stop signal or Ctrl-C handled as it was entered,
+            # before its first line - so nothing was committed. It rolls back now, as the with statement would have,
+            # and the run ends as before the commit (otherwise the records written next would land in that open
+            # transaction and vanish with the connection, and the certificate would name them)
+            block.__exit__(type(exc), exc, exc.__traceback__)
+            raise
         if not marks['committing'] or (not marks['committed'] and isinstance(exc, (Refused, IntegrityError))):
             # before the commit, or refused by the database at it: rolled back, nothing destroyed - a refusal, an error
             # or an interrupt goes on as it is
