@@ -5,6 +5,10 @@ a random name, mode 0600, exclusive create (never overwrites), and its sha256
 is verified by reading the stored bytes back. Reads verify the hash again, so
 a modified original is detected rather than served.
 
+A read takes only a name of the exact shape store_original writes (STORAGE_NAME_RE), never through a symbolic link and
+never outside its folder; a reader acting for one practice reads only that practice's own files (own_path, the one test
+every such reader and the disposal apply; release 1).
+
 A file whose write or read-back check fails is removed at once (release 1, D3): a failed store never leaves a file that
 no row names. The deletion helpers below are the store's only other way to remove a file, and every caller is one of
 release 1's ruled clean-ups: a practice's disposal (studio.disposal, D1), an upload whose transaction failed
@@ -16,6 +20,7 @@ opens a file (studio.file_crypto stays unused in release 1).
 """
 import hashlib
 import os
+import re
 import secrets
 import stat
 import uuid
@@ -96,34 +101,108 @@ def store_original(workspace_id, data: bytes, filename: str):
     return f'{workspace_id}/{name}', digest, len(data)
 
 
-def read_original(source_file) -> bytes:
-    root = _root().resolve()
-    path = (root / source_file.storage_name).resolve()
-    if root not in path.parents:
-        raise OriginalCorrupted('Original path escapes the original store.')
-    data = path.read_bytes()
-    if hashlib.sha256(data).hexdigest() != source_file.sha256:
+# The exact shape of a name store_original writes: '<the practice's id>/<48 lowercase hex characters><suffix>', the
+# suffix one of ALLOWED_SUFFIXES (intake checks an upload's; a converted PDF's is '.pdf') or none. So one separator, and
+# no '.', '..' or empty segment, no backslash and no capital letter.
+STORAGE_NAME_RE = re.compile(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9a-f]{48}(?:'
+                             + '|'.join(re.escape(suffix) for suffix in sorted(ALLOWED_SUFFIXES)) + r')?)')
+
+
+def _named(storage_name):
+    """The match of ``storage_name`` against STORAGE_NAME_RE (practice id, file name); StoreRefused for any other name."""
+    match = STORAGE_NAME_RE.fullmatch(storage_name) if isinstance(storage_name, str) else None
+    if match is None:
+        raise StoreRefused('not a name the store writes')
+    return match
+
+
+def _checked_path(match) -> Path:
+    """The path of a matched name: neither its folder nor the file a symbolic link (lstat), the folder directly in the
+    store, and the file's resolved path inside the folder's resolved path; StoreRefused otherwise. A path that does not
+    exist passes (reading it then fails as a missing file)."""
+    root = root_path()
+    folder = root / match.group(1)
+    path = folder / match.group(2)
+    for part in (folder, path):
+        try:
+            mode = os.lstat(part).st_mode
+        except FileNotFoundError:
+            break  # nothing exists below a part that does not
+        if stat.S_ISLNK(mode):
+            raise StoreRefused('a symbolic link')
+    own = folder.resolve()
+    if own.parent != root or not path.resolve().is_relative_to(own):
+        raise StoreRefused('outside its folder')
+    return path
+
+
+def own_path(workspace_id, storage_name) -> Path:
+    """The path of ``storage_name`` when it is one of practice ``workspace_id``'s own stored files: the one test every
+    reader and destroyer acting for one practice applies (release 1; refutation finding 6 and round 2's first): a name of
+    the exact shape store_original writes (STORAGE_NAME_RE) whose folder is this practice's id, then _checked_path - no
+    symbolic link, and the resolved path inside the practice's own resolved folder. StoreRefused otherwise, before
+    anything of another practice is touched; OSError when the folder cannot be looked at. A row of one practice that
+    names any other file is a corrupted or crafted row: nothing outside the practice's folder is reached through it."""
+    try:
+        practice = str(uuid.UUID(str(workspace_id)))
+    except (TypeError, ValueError, AttributeError):
+        raise StoreRefused('not a practice id') from None
+    match = _named(storage_name)
+    if match.group(1) != practice:
+        raise StoreRefused('not a file of this practice')
+    return _checked_path(match)
+
+
+def in_practice_folder(workspace_id, storage_name) -> bool:
+    """Whether ``storage_name`` is one of practice ``workspace_id``'s own stored files (own_path); False too when that
+    cannot be told (an OSError): a name that cannot be checked is never taken for the practice's own."""
+    try:
+        own_path(workspace_id, storage_name)
+    except (StoreRefused, OSError):
+        return False
+    return True
+
+
+def _read_bytes(path: Path) -> bytes:
+    """Every byte of the stored file at ``path``, opened through its folder without following a symbolic link at either
+    step (one put there after the checks is refused, ELOOP). The store's one read of a stored file: the tests count it."""
+    nofollow = getattr(os, 'O_NOFOLLOW', 0)
+    folder = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+    try:
+        fd = os.open(path.name, os.O_RDONLY | nofollow, dir_fd=folder)
+    finally:
+        os.close(folder)
+    with os.fdopen(fd, 'rb') as handle:
+        return handle.read()
+
+
+def _verified(path: Path, sha256) -> bytes:
+    data = _read_bytes(path)
+    if hashlib.sha256(data).hexdigest() != sha256:
         raise OriginalCorrupted('Stored original no longer matches its recorded sha256.')
     return data
 
 
-def in_practice_folder(workspace_id, storage_name) -> bool:
-    """Whether ``storage_name`` lies in the practice's own folder: its first part is the practice's id."""
+def read_original(source_file) -> bytes:
+    """The bytes of a stored file - a SourceFile, or anything with ``storage_name`` and ``sha256`` - checked against its
+    sha256. OriginalCorrupted, before any byte is read, for a name that is not one the store writes or leads through a
+    symbolic link or out of its folder (_checked_path), and when the bytes no longer match; OSError when the file is
+    missing or cannot be read. It reads any practice's file: a reader acting for one practice uses read_own_original."""
     try:
-        folder = str(uuid.UUID(str(workspace_id)))
-    except (TypeError, ValueError, AttributeError):
-        return False
-    return isinstance(storage_name, str) and storage_name.split('/', 1)[0] == folder
+        path = _checked_path(_named(source_file.storage_name))
+    except StoreRefused:
+        raise OriginalCorrupted('Original path escapes the original store.') from None
+    return _verified(path, source_file.sha256)
 
 
 def read_own_original(workspace_id, source_file) -> bytes:
-    """read_original for a reader acting for one practice (release 1; refutation finding 6): OriginalCorrupted, before
-    any byte is read, when ``source_file``'s storage name - a SourceFile, or anything with ``storage_name`` and
-    ``sha256``, such as a round's converted PDF - lies outside the practice's own folder (<workspace_id>/). A row of one
-    practice that names another practice's file is a corrupted or crafted row: that file is never read for it."""
-    if not in_practice_folder(workspace_id, getattr(source_file, 'storage_name', None)):
-        raise OriginalCorrupted('A stored file lies outside its practice\'s folder.')
-    return read_original(source_file)
+    """read_original for a reader acting for one practice: OriginalCorrupted, before any byte is read, unless
+    ``source_file``'s storage name is one of the practice's own stored files (own_path)."""
+    try:
+        path = own_path(workspace_id, getattr(source_file, 'storage_name', None))
+    except StoreRefused:
+        raise OriginalCorrupted('A stored file lies outside its practice\'s folder.') from None
+    return _verified(path, source_file.sha256)
 
 
 # --- release 1: finding and removing stored files (D1 disposal, D3 clean-up) ------------------------------------------

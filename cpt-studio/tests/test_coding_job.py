@@ -1186,7 +1186,7 @@ class OwnFolderTests(CodingCase):
             cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE id = %s',
                            [name, digest, self.rev.source_file_id])
         fake = self.use(f.FakeCoder(**self.answers()))  # it would answer, if anything were sent
-        with mock.patch.object(storage, 'read_original', wraps=storage.read_original) as read:
+        with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
             self.start()
             self.run_next()
         round_ = Round.objects.get(encounter=self.enc)
@@ -1194,7 +1194,7 @@ class OwnFolderTests(CodingCase):
         self.assertEqual(crafted, (Round.FAILED, 'storage', fable_document.STORAGE_TEXT))
         self.assertEqual((fake.counts, fake.calls), ([], []))  # nothing counted, nothing sent
         self.assertFalse(Run.objects.filter(encounter=self.enc).exists())
-        self.assertEqual(read.call_count, 0)  # the other practice's file was never read at all
+        self.assertEqual(read.call_count, 0)  # no file was read at all (the store's one read)
         self.assertTrue(decisions.retry_offered(self.enc, round_))
         # exactly how an original of its own practice that no longer reads back fails today
         self.fresh_document()
@@ -1203,6 +1203,25 @@ class OwnFolderTests(CodingCase):
         self.run_next()
         unreadable = Round.objects.get(encounter=self.enc)
         self.assertEqual((unreadable.state, unreadable.failure_kind, unreadable.error), crafted)
+
+    def test_a_name_that_leaves_the_folder_through_dotdot_is_refused_before_anything_is_sent(self):
+        # the lens's probe (refute-lane4 repairs, R6): '<A>/../<B>/<file>' passed the first-segment test, and B's bytes
+        # were sent and counted for A's document
+        name, digest = self.foreign_file()
+        for crafted in (f'{self.ws.pk}/../{name}', f'{self.ws.pk}/./../{name}'):
+            with self.subTest(crafted=crafted):
+                self.fresh_document()
+                with connection.cursor() as cursor:  # a crafted row, as above
+                    cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE id = %s',
+                                   [crafted, digest, self.rev.source_file_id])
+                fake = self.use(f.FakeCoder(**self.answers()))
+                with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
+                    self.start()
+                    self.run_next()
+                round_ = Round.objects.get(encounter=self.enc)
+                self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                 (Round.FAILED, 'storage', fable_document.STORAGE_TEXT))
+                self.assertEqual((fake.counts, fake.calls, read.call_count), ([], [], 0))
 
     def word_document(self):
         """A Word document coded once: its conversion stored in its own practice's folder by round 1."""
@@ -1226,11 +1245,12 @@ class OwnFolderTests(CodingCase):
             first = self.word_document()
             name, digest = self.foreign_file()
             Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
-            with mock.patch.object(storage, 'read_original', wraps=storage.read_original) as read:
+            with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
                 second, fake = self.code_again()
         self.assertEqual(second.state, Round.DONE)
         self.assertEqual(convert.call_count, 2)  # converted again, from this practice's own original
-        self.assertNotIn(name, [call.args[0].storage_name for call in read.call_args_list])
+        self.assertTrue(read.call_args_list)  # the practice's own original was read
+        self.assertNotIn(storage.stored_path(name), [call.args[0] for call in read.call_args_list])
         sent = {request.stored['messages'][0]['content'][0]['source']['data']['$original_sha256']
                 for _, request in fake.calls}
         self.assertEqual(sent, {hashlib.sha256(CONVERTED).hexdigest()})  # never the other practice's bytes

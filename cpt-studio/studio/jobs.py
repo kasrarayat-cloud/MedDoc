@@ -33,7 +33,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import audit, models, state
-from .storage import OriginalCorrupted, read_own_original, store_original
+from .storage import OriginalCorrupted, in_practice_folder, read_own_original, store_original
 from .fable import (BUSY, CEILING, CONVERT, DECLINED, DOCUMENT, FAILED, HOLD, STORAGE, TOO_LONG, UNAVAILABLE,
                     UNKNOWN, UNREADABLE)
 from .fable import client as fable_client
@@ -502,14 +502,17 @@ def _stored_conversion(round_):
 
 def _keep_view(round_, document, encounter):
     """Record on ``round_`` the PDF a Word document was converted to, as it is sent (CodingRound.view_pdf_*): the file
-    an earlier round of the revision stored when the bytes are the same - only one in the document's own practice's
-    folder, so a crafted row's name is never copied onto a new round - else stored now (storage.store_original). A
-    failure to store is logged and coding goes on: the viewer then shows no page of a Word document."""
+    an earlier round of the revision stored when the bytes are the same - only one of the practice's own stored files
+    (storage.in_practice_folder), so a crafted row's name is never copied onto a new round - else stored now
+    (storage.store_original). A failure to store is logged and coding goes on: the viewer then shows no page of a Word
+    document."""
     if document.kind != 'docx' or round_.view_pdf_sha256 == document.sha256:
         return
-    same = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
-                                 view_pdf_storage_name__startswith=f'{encounter.workspace_id}/')
-            .order_by('-number').first())
+    earlier = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
+                                    view_pdf_storage_name__isnull=False).exclude(view_pdf_storage_name='')
+               .order_by('-number'))
+    same = next((row for row in earlier if in_practice_folder(encounter.workspace_id, row.view_pdf_storage_name)),
+                None)
     if same is not None:
         name = same.view_pdf_storage_name
     else:

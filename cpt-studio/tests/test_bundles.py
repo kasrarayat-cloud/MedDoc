@@ -293,6 +293,30 @@ class ForeignFolderTests(BundleCase, TestCase):
         self.assertEqual(answer.status_code, 409)
         self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
 
+    def test_a_name_that_leaves_the_folder_through_dotdot_is_refused_too(self):
+        # the lens's probe (refute-lane4 repairs, R6): '<A>/../<B>/<file>' passed the first-segment test, and B's bytes
+        # went into A's bundle and A's practice export
+        note, word = self.coded(marker='MINE'), self.word(marker='W')
+        name, digest, _ = storage.store_original(self.other_ws.pk, b'%PDF-1.7 ZZ-TEXT-MARKER-FAR %%EOF', 'far.pdf')
+        crafted = f'{self.ws.pk}/../{name}'
+        with connection.cursor() as cursor:  # a crafted row, as above
+            cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE encounter_id = %s',
+                           [crafted, digest, note.pk])
+        Round.objects.filter(encounter=word).update(view_pdf_storage_name=crafted, view_pdf_sha256=digest)
+        for enc in (note, word):  # the original, and the converted PDF
+            with self.subTest(enc=enc.title):
+                answer = self.get_bundle(enc)
+                self.assertEqual(answer.status_code, 409)
+                self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
+        self.assertFalse(Access.objects.exists())
+        with tempfile.TemporaryDirectory() as scratch:
+            reason = Path(scratch) / 'reason.txt'
+            reason.write_text('Synthetic: the practice asked for its data.', encoding='utf-8')
+            with self.assertRaisesMessage(CommandError, "lies outside the practice's folder"):
+                call_command('export_workspace', '--workspace', str(self.ws.pk), '--out', str(Path(scratch) / 'out'),
+                             '--by', 'Synthetic Operator', '--reason-file', str(reason), stdout=io.StringIO())
+            self.assertFalse((Path(scratch) / 'out').exists())
+
     def test_a_practice_export_with_such_a_row_is_abandoned_and_keeps_nothing(self):
         self.crafted()
         with tempfile.TemporaryDirectory() as scratch:

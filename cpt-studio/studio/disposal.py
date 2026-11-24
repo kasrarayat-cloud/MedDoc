@@ -19,9 +19,10 @@ a committed declaration (A6):
                           is needed, and they are checked before the commit (SET CONSTRAINTS ALL IMMEDIATE); the Encounter
                           rows stay as tombstones (title and values blanked, pointers null, destroyed_at set), beside the
                           audit rows, which hold no PHI (OWNER DECISION D25, recommended: kept); for a whole practice the
-                          memberships are turned off, every account with no other active membership and no operator grant
-                          gets an unusable password, is made inactive and has its sessions ended, and the names on its
-                          sign-in rows are replaced by keyed hashes (user rows stay: audit rows name them). After the
+                          memberships are turned off, every account with no membership in another practice still open
+                          and no operator grant gets an unusable password, is made inactive and has its sessions ended,
+                          and the names on its sign-in rows are replaced by keyed hashes (user rows stay: audit rows name
+                          them). After the
                           commit the files in scope are deleted, their folder synced and checked empty; VACUUM (ANALYZE)
                           runs on the tables touched (never VACUUM FULL on this host: it locks each table); the counts
                           prove nothing in scope remains; and a DisposalEvent 'completed' (or 'failed') is written. The
@@ -30,15 +31,22 @@ a committed declaration (A6):
                           'failed' is written only once the transaction's commit was attempted: its counts say
                           rows_destroyed 'yes' (committed; a file, the folder or a count afterwards failed - every error
                           after the commit ends here, never as an escape) or 'unknown' (the commit's own answer was lost),
-                          and files['remaining_names'] lists what was left. A transaction that rolled back writes nothing
-                          (NotDestroyed: nothing was destroyed). To finish a failed disposal, remove what stopped it and
-                          plan the same scope again: the new plan takes in the files the failed run left (leftover_names),
-                          and a destroyed document may be planned again for that.
+                          and files['remaining_names'] lists what was left. An interrupt after the commit (Ctrl-C, a stop
+                          signal) ends the same way - recorded 'failed' and its certificate printed, as far as that can
+                          be done - and then goes on as an interrupt. A transaction that rolled back writes nothing
+                          (NotDestroyed: nothing was destroyed). To finish a failed or interrupted disposal, remove what
+                          stopped it and plan the same scope again: the new plan takes in the files a run of the document
+                          left (leftover_names: those its failed run recorded, and those its plan named), and a destroyed
+                          document may be planned again while any of its files remains or its last run did not complete.
     replay(ledger)        after a restore from a backup older than a disposal, the ledger's disposals whose rows were
-                          destroyed - 'completed', and 'failed' with rows_destroyed 'yes' or 'unknown' - carried out again
-                          and its missing rows written back (needed on the new server; PHY-9). Every entry's refusals are
-                          checked before anything is destroyed, so a replay either refuses having changed nothing or goes
-                          on; one that stops partway reports, entry by entry, what it destroyed. The ledger is what
+                          destroyed - 'completed', and 'failed' with rows_destroyed 'yes' - carried out again and its
+                          missing rows written back (needed on the new server; PHY-9). A 'failed' one whose commit's
+                          answer was lost ('unknown') may have destroyed nothing, so it is never carried out again: the
+                          report lists it as a person's decision, and the person who decides to destroy the scope plans
+                          it again and carries the plan out - that later entry, which a replay does carry out, is what
+                          marks the first decided. Every entry's refusals - its files read too - are checked before
+                          anything is destroyed, so a replay either refuses having changed nothing or goes on; one that
+                          stops partway reports, entry by entry, what it destroyed. The ledger is what
                           ledger_lines() prints: one signed line per DisposalEvent, so a line that was changed, or not
                           written by this installation, is refused before anything is touched.
 
@@ -174,14 +182,49 @@ def name_as_recorded(value) -> str:
     return ' '.join(unicodedata.normalize('NFKC', text).split())
 
 
+SCRIPTS = ('LATIN', 'CYRILLIC', 'GREEK')  # their look-alike letters: one name never mixes two of them
+# what a reader takes for an apostrophe, made ASCII's when two names are compared (a dash: Unicode category Pd, or MINUS)
+APOSTROPHES = frozenset('\u0060\u00b4\u02b9\u02bb\u02bc\u02bd\u02c8\u055a\u05f3\u2018\u2019\u201b\u2032'
+                        '\ua78c\uff07')
+MINUS = '\u2212'
+
+
+def scripts_of(name) -> set:
+    """The scripts of SCRIPTS that ``name``'s letters are written in (by each letter's Unicode name)."""
+    return {word for word in (unicodedata.name(ch, '').split(' ', 1)[0] for ch in name if ch.isalpha())
+            if word in SCRIPTS}
+
+
+def _plain_marks(text) -> str:
+    """``text`` with every apostrophe (APOSTROPHES) and dash (category Pd, MINUS) variant made ASCII's ' and -."""
+    return ''.join("'" if ch in APOSTROPHES else '-' if ch == MINUS or unicodedata.category(ch) == 'Pd' else ch
+                   for ch in text)
+
+
+def comparison_key(value) -> str:
+    """How two given names are compared (two_people): apostrophe and dash variants made ASCII's - first, since NFKC
+    splits an acute accent used as an apostrophe - then as recorded (name_as_recorded), accents and every other mark
+    dropped (NFKD), case folded with the dotless i read as i (Turkish capitals and small letters match), white space
+    collapsed. Generous on purpose: two people refused as one write fuller names; one person accepted as two defeats the
+    rule."""
+    text = name_as_recorded(_plain_marks(str(value or '')))
+    text = _plain_marks(unicodedata.normalize('NFKD', text))
+    text = ''.join(ch for ch in text if not unicodedata.category(ch).startswith('M'))
+    return ' '.join(text.casefold().replace('\u0131', 'i').split())
+
+
 def person(value, label='--by') -> str:
     """A named person (a ruled act's --by or --approved-by) as recorded (name_as_recorded): refused when nothing visible
-    is left of it, or when it is longer than NAME_CHARS."""
+    is left of it, when it is longer than NAME_CHARS, or when its letters mix two of the Latin, Cyrillic and Greek
+    scripts, whose look-alike letters let one name read as another."""
     name = name_as_recorded(value)
     if not name:
         raise Refused(f'{label} is required: a person\'s name, with at least one visible character.')
     if len(name) > NAME_CHARS:
         raise Refused(f'{label} can be at most {NAME_CHARS} characters.')
+    if len(scripts_of(name)) > 1:
+        raise Refused(f'{label} mixes Latin, Cyrillic or Greek letters, which can make one name read as another; write '
+                      'it in one script.')
     return name
 
 
@@ -200,10 +243,10 @@ def authorization(value, *, required) -> str:
 
 
 def two_people(by, approved_by):
-    """(runner, approver): two different named people (FLOW-19 (3)), compared as recorded and ignoring case - so two
-    spellings of one name that draw the same are one person."""
+    """(runner, approver), as recorded: two different named people (FLOW-19 (3)), compared by comparison_key - so two
+    spellings of one name that read the same are one person - and neither name mixing scripts (person)."""
     runner, approver = person(by, '--by'), person(approved_by, '--approved-by')
-    if runner.casefold() == approver.casefold():
+    if comparison_key(by) == comparison_key(approved_by):
         raise Refused('The person who runs a destruction and the person who approves it must be two different people.')
     return runner, approver
 
@@ -281,21 +324,19 @@ def named_in_scope(scope) -> set:
     return names
 
 
-def in_own_folder(scope, name) -> bool:
-    """Whether storage name ``name`` lies in the scope's practice's own folder (<its workspace id>/...)."""
-    return isinstance(name, str) and name.split('/', 1)[0] == str(scope.workspace_id)
-
-
 def leftover_names(scope) -> set:
-    """The files a failed disposal of this scope recorded as left (files['remaining_names']) that are still on the disk:
-    what a new plan of the same scope finishes. Their rows are gone, so no row names them any more. A document's own
-    failed runs only: a whole practice's left-overs lie in its folder, which its plan reads anyway."""
-    events = DisposalEvent.objects.filter(stage=DisposalEvent.FAILED, workspace_id=scope.workspace_id, scope=scope.kind)
-    if scope.kind == DOCUMENT:
-        events = events.filter(encounter_ids__contains=[str(pk) for pk in scope.encounter_ids])
+    """The files of a document a run of it left that are still on the disk: those a failed run recorded as left
+    (files['remaining_names']), and those its plans named (files['names']) - for a run interrupted, or unrecorded,
+    before it could say what it left. What a new plan of the document finishes; their rows are gone, so no row names
+    them any more. A whole practice's left-overs lie in its folder, which its plan reads anyway: none here."""
+    if scope.kind != DOCUMENT:
+        return set()
+    events = DisposalEvent.objects.filter(stage__in=(DisposalEvent.FAILED, DisposalEvent.PLANNED), scope=DOCUMENT,
+                                          workspace_id=scope.workspace_id,
+                                          encounter_ids__contains=[str(pk) for pk in scope.encounter_ids])
     found = set()
     for files in events.values_list('files', flat=True):
-        for name in (files or {}).get('remaining_names') or ():
+        for name in [*((files or {}).get('remaining_names') or ()), *((files or {}).get('names') or ())]:
             try:
                 os.lstat(storage.stored_path(name))
             except FileNotFoundError:
@@ -313,10 +354,10 @@ def scope_files(scope) -> list:
     the folder that is not a regular file, and for any name outside the practice's own folder: a row of one practice that
     names another's file is a corrupted or crafted row, and the other practice's file is never destroyed for it."""
     names = named_in_scope(scope) | leftover_names(scope)
-    foreign = [name for name in names if not in_own_folder(scope, name)]
+    foreign = [name for name in names if not storage.in_practice_folder(scope.workspace_id, name)]
     if foreign:
-        raise Refused(f'{len(foreign)} file name(s) in scope lie outside the practice\'s own folder; nothing was '
-                      'destroyed.')
+        raise Refused(f'{len(foreign)} file name(s) in scope lie outside the practice\'s own folder, or are no stored '
+                      'file\'s name; nothing was destroyed.')
     if scope.kind == WORKSPACE:
         folder = storage.workspace_folder(scope.workspace_id)
         for name, kind in storage.folder_entries(folder):
@@ -462,7 +503,7 @@ def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
     rows = row_counts(scope)
     if scope.kind == DOCUMENT and Encounter._base_manager.filter(pk__in=scope.encounter_ids,
                                                                  destroyed_at__isnull=False).exists():
-        if not names and not any(rows.values()) and not unfinished(scope):
+        if not names and not any(rows.values()) and not last_run_unfinished(scope):
             reasons.insert(0, 'This document was already destroyed, and nothing of it remains.')
     if reasons:
         raise Refused(*reasons)
@@ -470,17 +511,21 @@ def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
     return DisposalEvent.objects.create(
         stage=DisposalEvent.PLANNED, scope=scope.kind, workspace_id=scope.workspace_id,
         encounter_ids=[str(pk) for pk in scope.encounter_ids],
-        counts={'rows': rows, 'documents': len(scope.encounter_ids)}, files=file_counts(entries),
+        counts={'rows': rows, 'documents': len(scope.encounter_ids)},
+        files={**file_counts(entries), **({'names': names} if scope.kind == DOCUMENT else {})},
         manifest_digest=manifest_digest(entries), reason=reason, run_by=by, authorization_ref=authorization_ref)
 
 
-def unfinished(scope) -> bool:
-    """Whether the scope's last disposal run - completed or failed - failed: a new plan then records how it ended."""
-    runs = DisposalEvent.objects.filter(stage__in=(DisposalEvent.COMPLETED, DisposalEvent.FAILED),
+def last_run_unfinished(scope) -> bool:
+    """Whether the scope's latest plan or run event is not a completed run: a failed run, or a plan whose run left no
+    event (interrupted, or its event unwritten) - so a destroyed document may be planned again, and every run can end
+    in a record."""
+    runs = DisposalEvent.objects.filter(stage__in=(DisposalEvent.PLANNED, DisposalEvent.COMPLETED, DisposalEvent.FAILED),
                                         workspace_id=scope.workspace_id, scope=scope.kind)
     if scope.kind == DOCUMENT:
         runs = runs.filter(encounter_ids__contains=[str(pk) for pk in scope.encounter_ids])
-    return runs.order_by('-created_at', '-pk').values_list('stage', flat=True).first() == DisposalEvent.FAILED
+    return runs.order_by('-created_at', '-pk').values_list('stage', flat=True).first() in (DisposalEvent.PLANNED,
+                                                                                         DisposalEvent.FAILED)
 
 
 def plan_manifest(event) -> list:
@@ -497,6 +542,9 @@ def _scope_of(event) -> Scope:
 # --- the destruction --------------------------------------------------------------------------------------------------------
 
 YES, UNKNOWN = 'yes', 'unknown'  # counts['rows_destroyed'] of a run whose commit was attempted (see the module)
+# a replay item's status besides a stage: an 'unknown' entry a person must decide, or one decided or with nothing left;
+# a run stopped by an interrupt
+DECIDE, DECIDED, INTERRUPTED = 'needs a person\'s decision', 'decided', 'interrupted'
 
 
 @dataclass
@@ -515,11 +563,12 @@ class Outcome:
     vacuum: str = ''
     remaining_rows: dict = field(default_factory=dict)
     problems: list = field(default_factory=list)
+    interrupted: BaseException | None = None  # what stopped the run after the commit (Ctrl-C, a stop signal): raised again
 
     @property
     def complete(self) -> bool:
         return (self.rows_destroyed == YES and not self.problems and not self.files_remaining
-                and not any(self.remaining_rows.values()))
+                and not any(self.remaining_rows.values()) and self.interrupted is None)
 
 
 class CommitUnknown(Exception):
@@ -566,16 +615,18 @@ def _tombstone(scope, now) -> int:
 
 
 def _close_accounts(workspace_id) -> dict:
-    """A whole practice's people (module docstring): memberships off; every account that holds no membership in any other
-    practice - active or turned off: a practice turns a person's access off by its membership alone (C4), and turning it
-    on again must still work - and no operator grant is made unusable and inactive, its sessions ended and the names on
-    its sign-in rows hashed."""
+    """A whole practice's people (module docstring): memberships off; every account that holds no membership in another
+    practice that is still open (Workspace.closed_at unset) - active or turned off: a practice turns a person's access
+    off by its membership alone (C4), and turning it on again must still work - and no operator grant is made unusable
+    and inactive, its sessions ended and the names on its sign-in rows hashed. A closed practice keeps no account: once
+    every practice of a person is closed, the disposal of any of them ends the account."""
     memberships = models.Membership.objects.filter(workspace_id=workspace_id)
     users = list(models.User.objects.filter(memberships__workspace_id=workspace_id).distinct().order_by('pk'))
     off = memberships.filter(active=True).update(active=False)
     closed, kept, ended = [], 0, 0
     for user in users:
-        elsewhere = models.Membership.objects.filter(user_id=user.pk).exclude(workspace_id=workspace_id).exists()
+        elsewhere = models.Membership.objects.filter(user_id=user.pk, workspace__closed_at__isnull=True).exclude(
+            workspace_id=workspace_id).exists()
         operator = models.OperatorGrant.objects.filter(user_id=user.pk, revocation__isnull=True).exists()
         if elsewhere or operator:
             kept += 1
@@ -684,20 +735,38 @@ def _left_on_disk(scope, outcome) -> list:
     return sorted(left)
 
 
+def _count_left(scope, outcome) -> None:
+    outcome.remaining_names = _left_on_disk(scope, outcome)
+    outcome.files_remaining = len(outcome.remaining_names)
+
+
 def _after_commit(scope, outcome) -> None:
     """Everything after the commit - the files, the vacuum, the counts that prove nothing remains. The rows are gone, so
-    nothing here may escape: any error is recorded in ``outcome`` (the run then ends 'failed', with what is known)."""
-    try:
+    nothing here escapes the record: an error is recorded in ``outcome`` and the next step goes on; an interrupt (Ctrl-C,
+    a stop signal: any BaseException) is recorded too, the steps left are skipped, and it is kept in
+    ``outcome.interrupted`` for _run to raise again once the run is recorded. Either way the run ends 'failed', with
+    what is known."""
+    def files():
         _remove_files(scope, outcome)
-    except Exception as exc:  # noqa: BLE001 - the one guard: an error after the commit never escapes the record
-        _problem(outcome, 'files', exc)
-        outcome.remaining_names = _left_on_disk(scope, outcome)
-        outcome.files_remaining = len(outcome.remaining_names)
-    outcome.vacuum = _vacuum(touched_tables(scope))
-    try:
+
+    def vacuum():
+        outcome.vacuum = _vacuum(touched_tables(scope))
+
+    def counts():
         outcome.remaining_rows = {table: count for table, count in row_counts(scope).items() if count}
-    except Exception as exc:  # noqa: BLE001 - the same guard for the counts
-        _problem(outcome, 'counts', exc)
+
+    for step, action in (('files', files), ('vacuum', vacuum), ('counts', counts)):
+        try:
+            action()
+        except Exception as exc:  # noqa: BLE001 - the one guard: an error after the commit never escapes the record
+            _problem(outcome, step, exc)
+            if step == 'files':
+                _count_left(scope, outcome)
+        except BaseException as exc:  # noqa: BLE001 - an interrupt: recorded, the steps left skipped, raised again by _run
+            outcome.interrupted = exc
+            _problem(outcome, step, exc)
+            _count_left(scope, outcome)
+            return
 
 
 def destroy(scope, *, expected=None, holds_only=False, close=False) -> Outcome:
@@ -742,15 +811,16 @@ def destroy(scope, *, expected=None, holds_only=False, close=False) -> Outcome:
             marks['committing'] = True  # the block's last statement: whatever raises from here on is the commit
     except (Refused, IntegrityError):
         raise  # refused, or refused by the database inside the block or at its commit: rolled back, nothing destroyed
-    except Exception as exc:
+    except BaseException as exc:  # noqa: BLE001 - an error or an interrupt at the commit: its answer was lost
         if not marks['committing']:
-            raise
+            raise  # before the commit: rolled back, nothing destroyed - an error or an interrupt goes on as it is
         log.error('the commit of a disposal failed (%s): whether its rows were destroyed is not known',
                   type(exc).__name__)
+        left = sorted(entry['name'] for entry in entries if entry['bytes'] is not None)  # no file was touched
         raise CommitUnknown(Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
                                     rows_destroyed=UNKNOWN, problems=[f'commit: {type(exc).__name__}'],
-                                    remaining_names=sorted(entry['name'] for entry in entries),
-                                    files_remaining=len(entries))) from exc
+                                    remaining_names=left, files_remaining=len(left),
+                                    interrupted=None if isinstance(exc, Exception) else exc)) from exc
     outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries)
     _after_commit(scope, outcome)
     return outcome
@@ -768,6 +838,26 @@ def _attempt(scope, **options) -> Outcome:
     except Exception as exc:
         raise NotDestroyed(f'The destruction stopped before its commit ({type(exc).__name__}); the transaction was '
                            'rolled back, and nothing was destroyed.') from exc
+
+
+def _run(scope, record, **options):
+    """One destruction and its DisposalEvent: _attempt(scope, **options), then _record - 'completed' when the Outcome is
+    complete, else 'failed' - with ``record``'s fields: (event, outcome). Unrecorded when the event cannot be written.
+    An interrupt after the commit (outcome.interrupted) is raised again once the run is recorded, carrying the run's
+    certificate as ``disposal_certificate`` - the event's, or Unrecorded's text - for the command to print first."""
+    outcome = _attempt(scope, **options)
+    stage = DisposalEvent.COMPLETED if outcome.complete else DisposalEvent.FAILED
+    try:
+        event = _record(stage, scope, outcome, **record)
+    except Unrecorded as exc:
+        if outcome.interrupted is not None:
+            outcome.interrupted.disposal_certificate = exc.text
+            raise outcome.interrupted
+        raise
+    if outcome.interrupted is not None:
+        outcome.interrupted.disposal_certificate = certificate(event)
+        raise outcome.interrupted
+    return event, outcome
 
 
 def _event_fields(stage, scope, outcome, *, reason, by, approved_by, authorization_ref, notes) -> dict:
@@ -824,10 +914,8 @@ def execute(plan_id, *, by, approved_by, authorization_ref):
                 'digest': event.manifest_digest}
     if scope.kind == WORKSPACE and sorted(str(pk) for pk in scope.encounter_ids) != sorted(event.encounter_ids):
         raise Refused('The plan is stale: the practice\'s documents changed since it was made. Make a new plan.')
-    outcome = _attempt(scope, expected=expected)
-    stage = DisposalEvent.COMPLETED if outcome.complete else DisposalEvent.FAILED
-    return _record(stage, scope, outcome, reason=event.reason, by=runner, approved_by=approver,
-                   authorization_ref=authorization_ref, notes=f'plan={event.pk}'), outcome
+    return _run(scope, dict(reason=event.reason, by=runner, approved_by=approver, authorization_ref=authorization_ref,
+                            notes=f'plan={event.pk}'), expected=expected)
 
 
 # --- the certificate ----------------------------------------------------------------------------------------------------
@@ -971,11 +1059,33 @@ def _insert_entry(entry) -> bool:
 
 
 def replayable(entry) -> bool:
-    """Whether a ledger entry's rows were destroyed, or may have been: every 'completed' one, and a 'failed' one, which is
-    written only once the destruction's commit was attempted (rows_destroyed 'yes' or 'unknown')."""
+    """Whether a ledger entry's rows were destroyed, so a replay carries it out again: every 'completed' one, and a
+    'failed' one whose commit was answered (rows_destroyed 'yes')."""
     if entry['stage'] == DisposalEvent.COMPLETED:
         return True
-    return entry['stage'] == DisposalEvent.FAILED and (entry['counts'] or {}).get('rows_destroyed', YES) in (YES, UNKNOWN)
+    return entry['stage'] == DisposalEvent.FAILED and (entry['counts'] or {}).get('rows_destroyed', YES) == YES
+
+
+def undecided(entry) -> bool:
+    """Whether a ledger entry is a 'failed' run whose commit's answer was lost (rows_destroyed 'unknown'): its rows may
+    never have been destroyed, so no replay carries it out. A person decides; to destroy the scope they plan it again
+    and carry the plan out, and that run's entry is the one a replay carries out (decided_by)."""
+    return entry['stage'] == DisposalEvent.FAILED and (entry['counts'] or {}).get('rows_destroyed') == UNKNOWN
+
+
+def decided_by(entry, entries) -> str:
+    """The id of a later entry of ``entries`` that destroyed the same scope (replayable): the decision a person made
+    about an undecided ``entry`` by planning it again - for a document, a run that covered it; for a practice, a run of
+    the whole practice. '' when there is none."""
+    made = datetime.fromisoformat(entry['created_at'])
+    for other in entries:
+        if (not replayable(other) or other['workspace_id'] != entry['workspace_id']
+                or datetime.fromisoformat(other['created_at']) <= made):
+            continue
+        if other['scope'] == WORKSPACE or (entry['scope'] == DOCUMENT
+                                           and set(entry['encounter_ids']) <= set(other['encounter_ids'])):
+            return other['id']
+    return ''
 
 
 def _replay_scope(entry):
@@ -1016,7 +1126,9 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
     is destroyed again (a practice closed in the same transaction), with a DisposalEvent naming the entry it replays.
     An error on one entry stops the replay there - the entries before it stay done, each with its event - and the
     report says so entry by entry: {'ledger_rows_restored' or 'ledger_rows_missing', 'items', 'stopped'}, each item
-    {entry, scope, remains, status, event, outcome, error, certificate}."""
+    {entry, scope, remains, status, event, outcome, error, certificate, decided_by}. An undecided entry ('unknown') is
+    listed and never carried out: status DECIDE, or DECIDED once a later entry carried out its scope or nothing of it
+    remains. An interrupt stops the replay too, and goes on carrying the report as ``disposal_report``."""
     entries = read_ledger(lines)
     if execute_it:
         runner, approver = two_people(by, approved_by)
@@ -1029,13 +1141,18 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
                           'replaying: after a restore, its queued coding would send documents that were destroyed.')
     items = []
     for entry in entries:
-        if not replayable(entry):
+        if not (replayable(entry) or undecided(entry)):
             continue
         scope = _replay_scope(entry)
         remains = _what_remains(scope) if scope is not None else None
-        items.append({'entry': entry['id'], 'reason': entry['reason'], 'scope': scope, 'remains': remains,
-                      'needed': _needed(remains), 'status': 'nothing to do', 'event': None, 'outcome': None,
-                      'error': '', 'certificate': ''})
+        item = {'entry': entry['id'], 'reason': entry['reason'], 'scope': scope, 'remains': remains,
+                'needed': _needed(remains), 'status': 'nothing to do', 'event': None, 'outcome': None, 'error': '',
+                'certificate': '', 'decided_by': ''}
+        if undecided(entry):  # never carried out by a replay: a person decides (undecided)
+            item['decided_by'] = decided_by(entry, entries)
+            item['status'] = DECIDED if item['decided_by'] or not item['needed'] else DECIDE
+            item['needed'] = False
+        items.append(item)
     missing = sum(not DisposalEvent.objects.filter(pk=entry['id']).exists() for entry in entries)
     if not execute_it:
         return {'ledger_rows_missing': missing, 'items': items, 'stopped': None}
@@ -1044,7 +1161,9 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
         if not item['needed']:
             continue
         try:
-            found = refusals(item['scope'], scope_files(item['scope']), holds_only=True, closed_required=False)
+            names = scope_files(item['scope'])
+            manifest(names)  # a file that cannot be read refuses here, before any entry is destroyed
+            found = refusals(item['scope'], names, holds_only=True, closed_required=False)
         except Refused as exc:
             found = exc.reasons
         reasons += [f'Ledger entry {item["entry"]}: {reason}' for reason in found]
@@ -1057,13 +1176,10 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
         if not item['needed']:
             continue
         try:
-            outcome = _attempt(item['scope'], holds_only=True, close=True)
-            item['outcome'] = outcome
-            stage = DisposalEvent.COMPLETED if outcome.complete else DisposalEvent.FAILED
-            item['event'] = _record(stage, item['scope'], outcome, reason=item['reason'], by=runner,
-                                    approved_by=approver, authorization_ref=authorization_ref,
-                                    notes=f'replay={item["entry"]}')
-            item['status'] = stage
+            item['event'], item['outcome'] = _run(item['scope'], dict(
+                reason=item['reason'], by=runner, approved_by=approver, authorization_ref=authorization_ref,
+                notes=f'replay={item["entry"]}'), holds_only=True, close=True)
+            item['status'] = item['event'].stage
         except Unrecorded as exc:  # it ran: its certificate is the record
             item['status'], item['certificate'] = 'unrecorded', exc.text
             report['stopped'] = item['entry']
@@ -1075,6 +1191,14 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
             item['status'], item['error'] = 'error', f'{type(exc).__name__} (logged)'
             log.exception('a ledger replay stopped on an error')
             report['stopped'] = item['entry']
+        except BaseException as exc:  # noqa: BLE001 - an interrupt: the replay stops, its report goes with it
+            item['status'], item['certificate'] = INTERRUPTED, getattr(exc, 'disposal_certificate', '')
+            report['stopped'] = item['entry']
+            for later in items[index + 1:]:
+                if later['needed']:
+                    later['status'] = 'not attempted'
+            exc.disposal_report = report
+            raise
         if report['stopped']:
             for later in items[index + 1:]:
                 if later['needed']:

@@ -21,7 +21,7 @@ from django.apps import apps
 from django.contrib.sessions.models import Session
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import CommandError, call_command
-from django.db import connection
+from django.db import OperationalError, connection, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -1028,3 +1028,353 @@ class PeopleNameTests(SimpleTestCase):
         runner, approver = disposal.two_people('José  Ruiz​', ' Ann Lee')
         self.assertEqual((runner, approver), ('José Ruiz', 'Ann Lee'))
         self.assertTrue(unicodedata.is_normalized('NFKC', runner))
+
+
+# --- repair round 2 (refute-lane4 repairs) -------------------------------------------------------------------------------
+
+@contextmanager
+def commit_lost(failure):
+    """The lens's simulation (R2): destroy's transaction - the first transaction.atomic - runs as a savepoint that is
+    rolled back at its end, and its "commit" raises ``failure``: the server rolled the transaction back while the answer to
+    COMMIT was lost (an OperationalError), or the interrupt came while the commit was under way."""
+    real, calls = transaction.atomic, {'n': 0}
+
+    @contextmanager
+    def lost():
+        point = transaction.savepoint()
+        try:
+            yield
+        except BaseException:
+            transaction.savepoint_rollback(point)
+            raise
+        transaction.savepoint_rollback(point)
+        raise failure
+
+    def atomic(*args, **kwargs):
+        calls['n'] += 1
+        return lost() if calls['n'] == 1 else real(*args, **kwargs)
+    with mock.patch.object(transaction, 'atomic', side_effect=atomic):
+        yield
+
+
+def live_sessions(user) -> int:
+    return sum(str(session.get_decoded().get('_auth_user_id', '')) == str(user.pk) for session in Session.objects.all())
+
+
+class InterruptCase(RepairCase):
+    def execute_interrupted(self, plan):
+        """(what the command printed, what it wrote to stderr, the interrupt or CommandError that ended it, or None)."""
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with installer_idle():
+                call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH, stdout=out, stderr=err)
+        except (KeyboardInterrupt, CommandError) as exc:
+            return out.getvalue(), err.getvalue(), exc
+        return out.getvalue(), err.getvalue(), None
+
+    def interrupt_on_second_delete(self, calls):
+        real = storage.delete_stored
+
+        def delete(name):
+            calls.append(name)
+            if len(calls) == 2:
+                raise KeyboardInterrupt  # the operator presses Ctrl-C while the files are being removed
+            return real(name)
+        return mock.patch.object(storage, 'delete_stored', side_effect=delete)
+
+
+class InterruptTests(InterruptCase, TestCase):
+    """Round 2, finding 2: an interrupt (Ctrl-C, a stop signal) after the commit is recorded 'failed' and its certificate
+    printed before it goes on as an interrupt; a destroyed document may be planned again while any of its files remains
+    or its last run did not complete, so a run interrupted or unrecorded is finished and recorded, and a replay carries it
+    out again."""
+
+    def test_an_interrupt_in_the_file_phase_is_recorded_printed_and_raised_again(self):
+        # the lens's probe (R4): it escaped with no event, the document could not be planned again, and after a restore
+        # the replay left it alive
+        self.seed()
+        enc = self.a_word  # its original and its converted PDF: two files
+        self.assertEqual(len(disposal.scope_files(disposal.document_scope(enc.pk))), 2)
+        plan, calls = self.plan_document(enc), []
+        with self.interrupt_on_second_delete(calls):
+            output, errors, escaped = self.execute_interrupted(plan)
+        self.assertIsInstance(escaped, KeyboardInterrupt)  # it goes on as an interrupt, once recorded
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual((failed.counts['rows_destroyed'], failed.counts['problems'], failed.files['remaining_names']),
+                         ('yes', ['files: KeyboardInterrupt'], [calls[1]]))
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=enc).exists())
+        self.assertIn(f'Disposal {failed.pk} (failed)', output)  # its certificate, printed first
+        self.assertIn('NOT COMPLETE - the rows were destroyed', output)
+        self.assertIn(f'Files remaining, by storage name: {calls[1]}', output)
+        self.assertIn("Interrupted once the destruction's commit was attempted", errors)
+        for marker in MARKERS:
+            self.assertNotIn(marker, output)
+        ledger = self.ledger_file()
+        self.assertEqual([json.loads(line)['entry']['stage'] for line in ledger.read_text().splitlines()],
+                         ['planned', 'failed'])
+        again = self.plan_document(enc)  # planned again, for the file the interrupt left
+        self.assertEqual(again.files['files'], 1)
+        output, error = self.carry_out(again)
+        self.assertIsNone(error, output)
+        self.assertFalse(storage.stored_path(calls[1]).exists())
+        self.forget_the_ledger()  # a restore from a backup older than the disposal, and the ledger replayed
+        self.restore_document(enc, 'R')
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=enc).exists())
+
+    def test_an_interrupt_after_the_files_is_recorded_too_and_a_new_plan_completes_it(self):
+        self.seed()
+        name = self.a_note.files.get().storage_name
+        with mock.patch.object(disposal, '_vacuum', side_effect=KeyboardInterrupt):
+            output, errors, escaped = self.execute_interrupted(self.plan_document(self.a_note))
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual((failed.counts['problems'], failed.files['deleted'], failed.files['remaining']),
+                         (['vacuum: KeyboardInterrupt'], 1, 0))
+        self.assertFalse(storage.stored_path(name).exists())
+        _, error = self.carry_out(self.plan_document(self.a_note))  # nothing is left, but the run did not complete
+        self.assertIsNone(error)
+        self.assertEqual(Event.objects.filter(stage=Event.COMPLETED).count(), 1)
+
+    def test_an_interrupt_before_the_commit_destroys_nothing_and_records_nothing(self):
+        self.seed()
+        plan = self.plan_document(self.a_note)
+        before = snapshot()
+        with mock.patch.object(disposal, '_delete_rows', side_effect=KeyboardInterrupt):
+            output, errors, escaped = self.execute_interrupted(plan)
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        self.assertEqual(changed_rows(before, snapshot()), set())  # rolled back, and no event
+        self.assertEqual((output, errors), ('', ''))
+        self.assertTrue(storage.stored_path(self.a_note.files.get().storage_name).exists())
+
+    def test_an_interrupt_whose_event_cannot_be_written_leaves_its_files_to_a_new_plan(self):
+        self.seed()
+        enc, calls = self.a_word, []
+        plan = self.plan_document(enc)
+        real = Event.objects.create
+
+        def create(**values):
+            if values.get('stage') == Event.FAILED:
+                raise RuntimeError('synthetic: the event cannot be written')
+            return real(**values)
+        with self.interrupt_on_second_delete(calls), mock.patch.object(Event.objects, 'create', side_effect=create):
+            output, errors, escaped = self.execute_interrupted(plan)
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        self.assertIn('NOT RECORDED', output)  # the certificate is its only record
+        self.assertIn(f'Files remaining, by storage name: {calls[1]}', output)
+        self.assertFalse(Event.objects.exclude(stage=Event.PLANNED).exists())
+        again = self.plan_document(enc)  # its plan named the file the interrupt left, though no row does any more
+        self.assertEqual((again.files['files'], again.files['names']), (1, [calls[1]]))
+        _, error = self.carry_out(again)
+        self.assertIsNone(error)
+        self.assertFalse(storage.stored_path(calls[1]).exists())
+
+    def test_an_unrecorded_run_is_planned_again_to_record_it_and_a_replay_carries_that_out(self):
+        # the lens's probe (R4, unrecorded): a new plan was refused ("nothing of it remains"), so no event and no ledger
+        # line could ever be made, and a replay after a restore left the document alive
+        self.seed()
+        enc = self.a_note
+        real = Event.objects.create
+
+        def create(**values):
+            if values.get('stage') in (Event.COMPLETED, Event.FAILED):
+                raise RuntimeError('synthetic: the event cannot be written')
+            return real(**values)
+        with mock.patch.object(Event.objects, 'create', side_effect=create):
+            _, error = self.carry_out(self.plan_document(enc))
+        self.assertIn('its only record', error)
+        record = self.plan_document(enc)  # nothing of it remains, but its run left no event: planned again
+        self.assertEqual((record.files['files'], sum(record.counts['rows'].values())), (0, 0))
+        output, error = self.carry_out(record)
+        self.assertIsNone(error, output)
+        self.assertIn('CPT Studio destruction certificate', output)
+        with self.assertRaisesMessage(CommandError, 'already destroyed, and nothing of it remains'):
+            self.plan_document(enc)  # recorded now
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(enc, 'R')
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+
+
+class UnknownEntryTests(InterruptCase, TestCase):
+    """Round 2, finding 3: a 'failed' run whose commit's answer was lost ('unknown') may have destroyed nothing, so no
+    replay carries it out: the report lists it as a person's decision, and planning the scope again decides it. A file
+    already missing is not counted as left."""
+
+    def unknown_run(self, failure):
+        self.seed()
+        enc = self.a_word
+        converted = Round.objects.filter(encounter=enc).exclude(view_pdf_storage_name=None).first()
+        storage.stored_path(converted.view_pdf_storage_name).unlink()  # one file of the scope already missing
+        plan = self.plan_document(enc)
+        with commit_lost(failure):
+            result = self.execute_interrupted(plan)
+        return enc, enc.files.get().storage_name, Event.objects.get(stage=Event.FAILED), result
+
+    def test_an_unknown_entry_is_never_carried_out_again_and_asks_for_a_person(self):
+        # the lens's probe (R2): the server rolled the destruction back; a replay of its ledger later destroyed the
+        # document the practice had gone on using
+        enc, original, failed, (output, _, error) = self.unknown_run(OperationalError('synthetic: connection closed'))
+        self.assertIn('did not complete', str(error))
+        self.assertEqual(failed.counts['rows_destroyed'], 'unknown')
+        self.assertEqual((failed.files['missing'], failed.files['remaining'], failed.files['remaining_names']),
+                         (1, 1, [original]))  # the file already missing is not left behind
+        self.assertIn('1 already missing); remaining: 1;', output)
+        self.assertIsNone(models.Encounter.objects.get(pk=enc.pk).destroyed_at)  # it was rolled back
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        output, error = self.replay(ledger)
+        self.assertIn(f"1 ledger entry needs a person's decision ({failed.pk})", error)
+        self.assertIn("whether its rows were destroyed is not known (its commit's answer was lost)", output)
+        self.assertIsNone(models.Encounter.objects.get(pk=enc.pk).destroyed_at)  # never destroyed by the replay
+        self.assertTrue(models.SourceRevision.objects.filter(encounter=enc).exists())
+        self.assertFalse(Event.objects.filter(notes__startswith='replay=').exists())
+        _, error = self.dispose_command('--replay-ledger', str(ledger))  # the dry run lists it the same way
+        self.assertIsNone(error)
+
+    def test_planning_it_again_is_the_decision_and_a_replay_carries_out_that_run(self):
+        enc, _, failed, _ = self.unknown_run(OperationalError('synthetic: connection closed'))
+        _, error = self.carry_out(self.plan_document(enc))  # a person decided to destroy it: planned again
+        self.assertIsNone(error)
+        completed = Event.objects.get(stage=Event.COMPLETED)
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(enc, 'R')
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)  # nothing is left to decide
+        self.assertIn(f'ledger entry {completed.pk}, a later run of the same scope, decided it', output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+        self.assertTrue(Event.objects.filter(notes__startswith=f'replay={completed.pk};').exists())
+        self.assertFalse(Event.objects.filter(notes__startswith=f'replay={failed.pk};').exists())
+
+    def test_an_interrupt_at_the_commit_is_recorded_unknown_and_raised_again(self):
+        enc, _, failed, (output, errors, escaped) = self.unknown_run(KeyboardInterrupt())
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        self.assertEqual((failed.counts['rows_destroyed'], failed.counts['problems']),
+                         ('unknown', ['commit: KeyboardInterrupt']))
+        self.assertIn('whether the rows were destroyed is not known', output)
+        self.assertIn("Interrupted once the destruction's commit was attempted", errors)
+
+
+class ReplayFileAndWordingTests(RepairCase, TestCase):
+    """Round 2, finding 4: a replay's check before it starts reads every entry's files too, and its stop message never
+    counts the entry it stopped at as one carried out before it."""
+
+    def two_destroyed_and_restored(self):
+        self.seed()
+        for enc in (self.a_note, self.a_word):
+            _, error = self.carry_out(self.plan_document(enc))
+            self.assertIsNone(error)
+        entries = [str(pk) for pk in Event.objects.filter(stage=Event.COMPLETED).order_by('created_at')
+                   .values_list('pk', flat=True)]
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(self.a_note, 'note')
+        return ledger, entries, self.restore_document(self.a_word, 'word')
+
+    def test_a_file_a_later_entry_cannot_read_refuses_the_replay_before_anything_is_destroyed(self):
+        # the lens's probe (R3): the refusal came at the second entry's destruction, after the first was destroyed
+        if os.geteuid() == 0:
+            self.skipTest('root reads a file of mode 000')
+        ledger, entries, word = self.two_destroyed_and_restored()
+        path = storage.stored_path(word.source_file.storage_name)
+        before = snapshot()
+        os.chmod(path, 0)  # the restored file store came back with a file the service cannot read
+        try:
+            output, error = self.replay(ledger)
+        finally:
+            os.chmod(path, 0o600)
+        self.assertIn('Refused, nothing was destroyed', error)
+        self.assertIn(f'Ledger entry {entries[1]}: A file in scope cannot be read (PermissionError)', error)
+        self.assertEqual(changed_rows(before, snapshot()), set())
+        self.assertIsNone(models.Encounter.objects.get(pk=self.a_note.pk).destroyed_at)
+
+    def test_an_unrecorded_first_entry_is_not_counted_as_carried_out_before_itself(self):
+        # the lens's probe (R3): "1 ledger entry was carried out again before it" when none came before the first
+        ledger, entries, _ = self.two_destroyed_and_restored()
+        real = Event.objects.create
+
+        def create(**values):
+            if str(values.get('notes', '')).startswith('replay='):
+                raise RuntimeError('synthetic: the event cannot be written')
+            return real(**values)
+        with mock.patch.object(Event.objects, 'create', side_effect=create):
+            output, error = self.replay(ledger)
+        self.assertIn(f'The replay stopped at ledger entry {entries[0]}: it was carried out again, but its '
+                      'DisposalEvent could not be written', error)
+        self.assertIn('no entry was carried out again before it; 1 later entry was not attempted', error)
+        self.assertIn('NOT RECORDED', output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=self.a_note.pk).destroyed_at)
+        self.assertIsNone(models.Encounter.objects.get(pk=self.a_word.pk).destroyed_at)
+
+
+class ClosedElsewhereTests(RepairCase, TestCase):
+    def test_an_account_whose_other_practices_are_all_closed_ends_with_the_disposal(self):
+        # round 2, finding 5 (the lens's probe R5): B destroyed first - A still open, so the reviewer was kept - then A:
+        # B's membership, in a practice closed and destroyed, kept the account alive with its password and a session
+        self.seed()
+        _, error = self.carry_out(self.close_and_plan(self.other_ws))
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertTrue(self.reviewer.is_active)  # A is open: kept
+        _, error = self.carry_out(self.close_and_plan(self.ws))
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertFalse(self.reviewer.is_active or self.reviewer.has_usable_password())
+        self.assertEqual(live_sessions(self.reviewer), 0)
+        self.assertFalse(self.client.login(username=self.reviewer.username, password='synthetic-pass-123!'))
+        last = Event.objects.filter(stage=Event.COMPLETED).latest('created_at')
+        self.assertEqual((last.counts['accounts_kept'], last.counts['accounts_off']), (0, 4))
+
+
+class DotDotNameTests(RepairCase, TestCase):
+    def test_a_name_that_leaves_the_folder_through_dotdot_is_never_destroyed(self):
+        # round 2, finding 1 (the lens's probe R6): '<A>/../<B>/<file>' started with A's folder
+        self.seed()
+        crafted = f'{self.ws.pk}/../{self.b_note.files.get().storage_name}'
+        with connection.cursor() as cursor:  # SourceFile refuses updates through the ORM: a crafted row
+            cursor.execute('UPDATE studio_sourcefile SET storage_name = %s WHERE id = %s',
+                           [crafted, self.a_note.files.get().pk])
+        before = folder_digests(self.other_ws.pk)
+        with self.assertRaisesMessage(CommandError, "outside the practice's own folder"):
+            self.plan_document(self.a_note)
+        self.assertEqual(folder_digests(self.other_ws.pk), before)
+        self.assertFalse(Event.objects.filter(stage=Event.PLANNED).exists())
+
+
+class LookAlikeNameTests(SimpleTestCase):
+    """Round 2, finding 6: apostrophe and dash variants and the Turkish dotted and dotless i are one spelling, and a name
+    mixing Latin with Cyrillic or Greek letters is refused. What is left: a name written wholly in another script's
+    look-alike letters (Cyrillic 'Асе Сох' beside Latin 'Ace Cox'), look-alikes of other scripts and of symbols, and
+    two spellings of one person ('Bob' and 'Robert') still pass as two people."""
+
+    def test_apostrophe_dash_and_dotless_i_variants_are_one_spelling(self):
+        pairs = (("Pat O'Brien", 'Pat O\u2019Brien'), ("Pat O'Brien", 'Pat O\u02bcBrien'),
+                 ("Pat O'Brien", 'Pat O\u00b4Brien'), ("Pat O'Brien", 'Pat O\u2018Brien'),
+                 ('Mary-Jane Lee', 'Mary\u2010Jane Lee'), ('Mary-Jane Lee', 'Mary\u2212Jane Lee'),
+                 ('Mary-Jane Lee', 'Mary\u2013Jane Lee'), ('Mary-Jane Lee', 'Mary\u2011Jane Lee'),
+                 ('I\u015f\u0131k Demir', 'I\u015eIK DEM\u0130R'), ('Ayd\u0131n Kaya', 'AYDIN KAYA'),
+                 ('Ayd\u0131n Kaya', 'Aydin Kaya'))
+        for runner, approver in pairs:
+            with self.subTest(runner=ascii(runner), approver=ascii(approver)):
+                with self.assertRaisesMessage(disposal.Refused, 'two different people'):
+                    disposal.two_people(runner, approver)
+
+    def test_a_name_mixing_latin_with_cyrillic_or_greek_is_refused(self):
+        for name in ('\u0410nn Lee', 'T\u03bfm Cole', 'Ann L\u0435e', '\u0391\u043d\u043d\u0430'):
+            with self.subTest(name=ascii(name)):
+                with self.assertRaisesMessage(disposal.Refused, 'mixes Latin, Cyrillic or Greek'):
+                    disposal.person(name, '--approved-by')
+                with self.assertRaisesMessage(disposal.Refused, 'mixes Latin, Cyrillic or Greek'):
+                    disposal.two_people('Synthetic Operator', name)
+
+    def test_different_people_and_names_in_one_script_still_pass(self):
+        self.assertEqual(disposal.two_people("Pat O'Brien", "Pat O'Bryan"), ("Pat O'Brien", "Pat O'Bryan"))
+        cyrillic = '\u0410\u043d\u043d\u0430 \u041b\u0438'  # one script throughout
+        self.assertEqual(disposal.two_people(cyrillic, 'Ann Lee'), (cyrillic, 'Ann Lee'))
+        self.assertEqual(disposal.two_people('Ayd\u0131n Kaya', 'Aylin Kaya'), ('Ayd\u0131n Kaya', 'Aylin Kaya'))

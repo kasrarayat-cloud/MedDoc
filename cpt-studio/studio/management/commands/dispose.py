@@ -8,14 +8,18 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
     dispose --execute --plan <plan id> --by <name> --approved-by <name> --authorization-ref R
         the plan carried out by two different people, and the destruction certificate printed for the receipt. A run
         that did not complete is recorded 'failed' with what it left, prints a certificate saying so and ends with an
-        error; to finish it, remove what stopped it and plan the same scope again (a destroyed document may be planned
-        again while its last run failed): the new plan takes in what the failed run left.
+        error; one interrupted after its commit (Ctrl-C) is recorded and printed the same way before the interrupt goes
+        on. To finish it, remove what stopped it and plan the same scope again (a destroyed document may be planned
+        again while any of its files remains or its last run did not complete): the new plan takes in what was left.
     dispose --ledger
         every DisposalEvent as a signed ledger line, to keep beside the backups.
     dispose --replay-ledger FILE [--execute --by <name> --approved-by <name> --authorization-ref R]
         after a restore from an older backup: what the ledger's disposals whose rows were destroyed ('completed', and
-        'failed' ones) would destroy again (a dry run), or, with --execute, every entry's refusals checked first, then
-        the ledger's missing rows written back and those disposals carried out again, entry by entry.
+        'failed' with rows destroyed 'yes') would destroy again (a dry run), or, with --execute, every entry's refusals
+        checked first, then the ledger's missing rows written back and those disposals carried out again, entry by
+        entry. A 'failed' entry whose rows destroyed is 'unknown' is never carried out again: it is listed as a
+        person's decision, and the person who decides to destroy it plans the same scope again and carries the plan
+        out - the later entry that run writes is the one a replay carries out, and it marks the first decided.
 
 The reason is read from a file, never argv. Every line printed holds ids, counts, digests, fixed words, storage names
 (random ids) and the names of the people who ran and approved the act; never a title, a file's own name, an answer or
@@ -29,6 +33,12 @@ from django.core.management.base import BaseCommand, CommandError
 from studio import disposal
 
 MODES = ('close', 'plan', 'execute', 'ledger', 'replay_ledger')
+INTERRUPTED_TEXT = ("Interrupted once the destruction's commit was attempted: the certificate above records what it did "
+                    'and what it left. To finish it, plan the same scope again and carry that plan out.')
+DECIDE_TEXT = ("  whether its rows were destroyed is not known (its commit's answer was lost), so it is not carried out "
+               'again: a person decides. To destroy what of it remains, plan it again (dispose --plan) and carry that '
+               'plan out; a later replay carries out that run.')
+CARRIED_OUT = (disposal.DisposalEvent.COMPLETED, disposal.DisposalEvent.FAILED, 'unrecorded')
 
 
 def _reason(path):
@@ -69,6 +79,12 @@ class Command(BaseCommand):
             self.stdout.write(exc.text)
             raise CommandError('The destruction ran, but its DisposalEvent could not be written: the certificate above is '
                                'its only record. Keep it with the receipt.')
+        except BaseException as exc:  # an interrupt after a destruction's commit brings its record: printed, then on
+            certificate = getattr(exc, 'disposal_certificate', '')
+            if certificate and getattr(exc, 'disposal_report', None) is None:
+                self.stdout.write(certificate)
+                self.stderr.write(INTERRUPTED_TEXT)
+            raise
 
     def _mode(self, options):
         plan = options['plan']
@@ -134,8 +150,38 @@ class Command(BaseCommand):
             lines = Path(options['replay_ledger']).read_text(encoding='utf-8').splitlines()
         except (OSError, UnicodeDecodeError) as exc:
             raise CommandError(f'The ledger file cannot be read ({type(exc).__name__}).')
-        report = disposal.replay(lines, execute_it=options['execute'], by=options['by'],
-                                 approved_by=options['approved_by'], authorization_ref=options['authorization_ref'])
+        try:
+            report = disposal.replay(lines, execute_it=options['execute'], by=options['by'],
+                                     approved_by=options['approved_by'], authorization_ref=options['authorization_ref'])
+        except BaseException as exc:  # an interrupt: what the replay did is printed, then the interrupt goes on
+            report = getattr(exc, 'disposal_report', None)
+            if report is None:
+                raise
+            self._report(report, options)
+            self.stderr.write(self._stopped(report))
+            raise
+        self._report(report, options)
+        if not options['execute']:
+            self.stdout.write('Dry run: nothing was changed. Replay with --execute, run and approved by two different '
+                              'people, while the worker is stopped.')
+            return
+        if report['stopped']:
+            raise CommandError(self._stopped(report))
+        problems = []
+        failed = [item['entry'] for item in report['items'] if item['status'] == disposal.DisposalEvent.FAILED]
+        if failed:
+            problems.append(f'{len(failed)} replayed disposal(s) did not complete ({", ".join(failed)}): see their '
+                            'certificates above.')
+        undecided = [item['entry'] for item in report['items'] if item['status'] == disposal.DECIDE]
+        if undecided:
+            problems.append(f'{len(undecided)} ledger entr{"y needs" if len(undecided) == 1 else "ies need"} a person\'s '
+                            f'decision ({", ".join(undecided)}): nothing of {"it" if len(undecided) == 1 else "them"} was '
+                            'carried out again (see above).')
+        if problems:
+            raise CommandError(' '.join(problems))
+
+    def _report(self, report, options):
+        """The replay's report, entry by entry (ids, counts and statuses; certificates)."""
         for name in ('ledger_rows_restored', 'ledger_rows_missing'):
             if name in report:
                 self.stdout.write(f'{name.replace("_", " ").capitalize()}: {report[name]}')
@@ -144,30 +190,44 @@ class Command(BaseCommand):
                 self.stdout.write(f'Ledger entry {item["entry"]}: nothing of its scope exists in this database.')
                 continue
             remains = item['remains']
+            decision = item['status'] in (disposal.DECIDE, disposal.DECIDED)
             self.stdout.write(f'Ledger entry {item["entry"]} ({item["scope"].label()}): rows '
                               f'{sum(remains["rows"].values())}, documents not destroyed {remains["documents_alive"]}, '
                               f'files {"not listable" if remains["files"] is None else remains["files"]}, memberships on '
-                              f'{remains["memberships_on"]}' + (f'; {item["status"]}' if options['execute'] else ''))
+                              f'{remains["memberships_on"]}'
+                              + (f'; {item["status"]}' if options['execute'] or decision else ''))
+            if item['status'] == disposal.DECIDE:
+                self.stdout.write(DECIDE_TEXT)
+            elif item['status'] == disposal.DECIDED:
+                self.stdout.write("  its commit's answer was lost; " + (
+                    f'ledger entry {item["decided_by"]}, a later run of the same scope, decided it'
+                    if item['decided_by'] else 'nothing of its scope remains'))
             if item['error']:
                 self.stdout.write(f'  stopped here: {item["error"]}')
             if item['event'] is not None:
                 self.stdout.write(disposal.certificate(item['event']))
             elif item['certificate']:
                 self.stdout.write(item['certificate'])
-        if not options['execute']:
-            self.stdout.write('Dry run: nothing was changed. Replay with --execute, run and approved by two different '
-                              'people, while the worker is stopped.')
-            return
-        done = [item for item in report['items'] if item['status'] in (disposal.DisposalEvent.COMPLETED,
-                                                                        disposal.DisposalEvent.FAILED, 'unrecorded')]
-        if report['stopped']:
-            before = (f'{len(done)} ledger entr{"y was" if len(done) == 1 else "ies were"} carried out again before it '
-                      '(certificates above)') if done else 'no entry was carried out again before it'
-            later = sum(item['status'] == 'not attempted' for item in report['items'])
-            raise CommandError(f'The replay stopped at ledger entry {report["stopped"]}: {before}; '
-                               f'{later} later entr{"y was" if later == 1 else "ies were"} not attempted. Fix what stopped '
-                               'it and replay the ledger again: entries already carried out are skipped.')
-        failed = [item['entry'] for item in report['items'] if item['status'] == disposal.DisposalEvent.FAILED]
-        if failed:
-            raise CommandError(f'{len(failed)} replayed disposal(s) did not complete ({", ".join(failed)}): see their '
-                               'certificates above.')
+
+    def _stopped(self, report):
+        """Where the replay stopped: what the stopped entry did, how many entries were carried out before it, how many
+        after it were not attempted."""
+        items = report['items']
+        stopped = next(item for item in items if item['entry'] == report['stopped'])
+        done = sum(item is not stopped and item['status'] in CARRIED_OUT for item in items)
+        own = {'unrecorded': 'it was carried out again, but its DisposalEvent could not be written (its certificate '
+                             'above is its only record)',
+               'refused': 'it was refused, and nothing of it was destroyed',
+               'not destroyed': 'it rolled back, and nothing of it was destroyed',
+               'error': 'it stopped on an error (logged), and whether it destroyed anything is not known',
+               disposal.INTERRUPTED: ('it was interrupted after its commit (its certificate above says what it did and '
+                                      'left)') if stopped['certificate'] else 'it was interrupted before its run was recorded',
+               }[stopped['status']]
+        before = (f'{done} ledger entr{"y was" if done == 1 else "ies were"} carried out again before it (certificates '
+                  'above)') if done else 'no entry was carried out again before it'
+        later = sum(item['status'] == 'not attempted' for item in items)
+        return (f'The replay stopped at ledger entry {stopped["entry"]}: {own}; {before}; {later} later '
+                f'entr{"y was" if later == 1 else "ies were"} not attempted. '
+                + ('Replay the ledger again to go on' if stopped['status'] == disposal.INTERRUPTED
+                   else 'Fix what stopped it and replay the ledger again')
+                + ': entries already carried out are skipped.')

@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import itertools
 import os
+import stat
 import tempfile
 import threading
 import time
@@ -103,15 +104,76 @@ class StoreCleanUpTests(OriginalsCase, TestCase):
         own = SimpleNamespace(storage_name=name, sha256=digest)
         self.assertEqual(storage.read_own_original(mine.pk, own), f.PDF_BYTES)
         self.assertEqual(storage.read_own_original(str(mine.pk).upper(), own), f.PDF_BYTES)  # the id, not its spelling
-        with mock.patch.object(storage, 'read_original', wraps=storage.read_original) as read:
+        with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
             for workspace_id, source in ((mine.pk, SimpleNamespace(storage_name=foreign, sha256=foreign_digest)),
                                          (other.pk, own), ('not-an-id', own),
                                          (mine.pk, SimpleNamespace(storage_name=None, sha256=digest))):
                 with self.subTest(workspace=str(workspace_id), name=source.storage_name):
                     with self.assertRaises(storage.OriginalCorrupted):
                         storage.read_own_original(workspace_id, source)
-        self.assertEqual(read.call_count, 0)  # refused before any byte was read
+        self.assertEqual(read.call_count, 0)  # refused before any byte was read (the store's one read)
         self.assertFalse(storage.in_practice_folder(mine.pk, f'{mine.pk}x/{name.split("/")[1]}'))
+
+    def test_no_other_spelling_and_no_link_passes_the_one_test(self):
+        # the lens's probes (refute-lane4 repairs, R6): '<A>/../<B>/<file>' and its spellings started with A's folder, so
+        # the first-segment test passed them and the read resolved them into B's folder; and a link inside A's folder
+        mine, other = f.workspace(), f.workspace('Another practice')
+        foreign, digest, _ = storage.store_original(other.pk, f.PDF_BYTES + b' ZZ-TEXT-MARKER-FAR', 'far.pdf')
+        own, own_digest, _ = storage.store_original(mine.pk, f.PDF_BYTES, 'synthetic.pdf')
+        a, root = str(mine.pk), storage.root_path()
+        to_other, inside = f'{a}/{"0" * 48}.pdf', f'{a}/{"1" * 48}.pdf'  # a stored file's very shape, but links
+        os.symlink(root / foreign, root / to_other)
+        os.symlink(root / own, root / inside)
+        os.symlink(root / foreign, root / a / 'link.pdf')  # the probe's own link
+        third = f.workspace('A third practice')
+        os.symlink(root / str(other.pk), root / str(third.pk))  # a practice's folder that is a link to another's
+        crafted = {'dotdot': f'{a}/../{foreign}', 'dot-dotdot': f'{a}/./../{foreign}',
+                   'double-slash-dotdot': f'{a}//../{foreign}', 'trailing-slash': f'{foreign}/',
+                   'upper-uuid': f'{a.upper()}/../{foreign}', 'backslash': f'{a}\\..\\{foreign}',
+                   'absolute': str(root / foreign), 'prefix': f'{a[:-1]}/../{foreign}', 'dot': f'{a}/./{own.split("/")[1]}',
+                   'link named link.pdf': f'{a}/link.pdf', 'link to the other practice': to_other,
+                   'link inside the folder': inside}
+        with mock.patch.object(storage, '_read_bytes', wraps=storage._read_bytes) as read:
+            for label, name in {**crafted, 'the other practice': foreign}.items():
+                with self.subTest(label):
+                    self.assertFalse(storage.in_practice_folder(mine.pk, name))
+                    with self.assertRaises(storage.StoreRefused):
+                        storage.own_path(mine.pk, name)
+                    with self.assertRaises(storage.OriginalCorrupted):
+                        storage.read_own_original(mine.pk, SimpleNamespace(storage_name=name, sha256=digest))
+            for label, name in crafted.items():  # and read_original, any practice's reader, reads none of them either
+                with self.subTest(f'read_original: {label}'):
+                    with self.assertRaises(storage.OriginalCorrupted):
+                        storage.read_original(SimpleNamespace(storage_name=name, sha256=digest))
+            linked = f'{third.pk}/{foreign.split("/")[1]}'
+            self.assertFalse(storage.in_practice_folder(third.pk, linked))
+            with self.assertRaises(storage.OriginalCorrupted):
+                storage.read_own_original(third.pk, SimpleNamespace(storage_name=linked, sha256=digest))
+        self.assertEqual(read.call_count, 0)  # nothing was read for any of them
+        mine_file = SimpleNamespace(storage_name=own, sha256=own_digest)  # the practice's own file still reads
+        self.assertEqual(storage.read_own_original(mine.pk, mine_file), f.PDF_BYTES)
+        self.assertEqual(storage.read_original(mine_file), f.PDF_BYTES)
+        self.assertTrue(storage.in_practice_folder(mine.pk, own))
+
+    def test_a_link_put_in_place_after_the_link_check_is_still_refused(self):
+        mine, other = f.workspace(), f.workspace('Another practice')
+        foreign, digest, _ = storage.store_original(other.pk, f.PDF_BYTES + b' far', 'far.pdf')
+        storage.store_original(mine.pk, f.PDF_BYTES, 'synthetic.pdf')  # the practice's folder exists
+        root, name = storage.root_path(), f'{mine.pk}/{"2" * 48}.pdf'
+        os.symlink(root / foreign, root / name)
+        real, fooled = os.lstat, []
+
+        def lstat(path, *args, **kwargs):  # the link check's look saw a regular file: the link came a moment later
+            found = real(path, *args, **kwargs)
+            if str(path) == str(root / name) and not fooled:
+                fooled.append(path)
+                return os.stat_result((stat.S_IFREG | 0o600,) + tuple(found)[1:])
+            return found
+        with mock.patch.object(storage.os, 'lstat', side_effect=lstat):
+            self.assertFalse(storage.in_practice_folder(mine.pk, name))  # its resolved path is outside the folder
+        self.assertEqual(len(fooled), 1)  # the link check was made, and missed the link
+        with self.assertRaises(OSError):  # and the read itself never follows a link
+            storage._read_bytes(root / name)
 
     def test_a_good_store_keeps_its_one_file(self):
         ws = f.workspace()
