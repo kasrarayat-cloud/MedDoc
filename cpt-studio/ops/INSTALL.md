@@ -1860,21 +1860,32 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   signs them out; B1 is the guessing control), writes 5 r/s (burst 30), uploads
   60 r/min (burst 60: 20 people each uploading a document every 2 minutes are
   never refused; the application's per-member limit is the fine control),
-  report exports 6 r/min (burst 6); 40 connections, 20 byte downloads and 4
-  requests that carry a body at once per client. A client is an IPv4 address,
+  report exports 6 r/min (burst 6); 40 connections and 20 byte downloads at
+  once per client, of which 4 may carry a body over 64 KiB (an upload or a
+  coding review's answers; 40 such at once in all) and 40 a smaller one. A
+  client is an IPv4 address,
   or an IPv6 /64; this host's own probes are not counted. A practice behind one
   address shares them. A refusal is a plain 429. Upstream read and send time
   out after 60 s (gunicorn's own 120 s is unchanged).
-- Memory at the edge (A3) is bounded: a request body is held in memory and its
-  buffer allocated at the length the client declares (up to 20 MiB), so at most
-  40 requests carrying a body are read at once in all - under 800 MiB however
-  many clients send - and at most 24 downloads (each up to 24 MiB of response
-  buffers) are relayed at once in all - under 576 MiB. A sender that stalls
-  15 s between two reads is cut off; one that trickles a byte every few seconds
-  holds its slot, so ten clients (ten /64s) with four slow senders each can hold
-  every body slot until they stop, and sign-ins and uploads then get 429. A body
-  whose length is not declared (chunked, or an HTTP/2 stream with no
-  content-length) is refused with 411: every browser declares it.
+- Memory at the edge (A3) is bounded. A request body is held in memory, its
+  buffer reserved at the length the client declares, and each route admits
+  the body it needs: the upload 20 MiB, a coding review's answers 1 MiB, every
+  other request 64 KiB (sign-in, account, second factor, the JSON API's posts
+  and the console, whose largest body is under 25 KB). A larger declared length
+  is refused with 413 before any of it is read. So only uploads and answers
+  can declare more than 64 KiB, and at most 40 such bodies are read at once in
+  all - under 800 MiB however many clients send. A body of 64 KiB or less
+  counts per client only, 40 at once: under 2.5 MiB a client, with no global
+  cap. A body whose length is not declared is refused with 411 when it is
+  chunked or a POST, PUT or PATCH (every browser declares it); any other (an
+  HTTP/2 stream by another method) is cut off at 64 KiB read. At most 24
+  downloads (each up to 24 MiB of response buffers) are relayed at once in
+  all - under 576 MiB. A sender that stalls 15 s between two reads is cut off;
+  one that trickles a byte every few seconds holds its slot. So uploads and
+  answers can still be held up by slow trickles from ten or more clients (ten
+  /64s with four slow senders each fill the 40) until they stop, and then get
+  429; sign-ins cannot, nor can any other request: a body of 64 KiB or less
+  never takes one of those 40.
 - The edge log (A2) holds about 250 bytes a request on the shared root disk;
   the host's nginx rotation keeps it (about two weeks: D7). The error log's
   request line can carry a query string; today's query parameters hold no
@@ -1963,13 +1974,13 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   defaults for them, the values installers before the Fable coding build wrote.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
-     after the drain has ended - in practice a large upload it is still
-     reading from a slow client (`client_max_body_size 20m`; nginx connects
-     upstream once the body is read) - reaches the stopped old port and
-     answers 503. The drain waits for no shutting-down nginx worker up to 600 s;
-     an old worker can also be kept alive by a co-tenant's long-lived
-     connection (`nginx.conf` sets no `worker_shutdown_timeout`), and then the
-     drain ends at 600 s with `bounded_out`.
+     after the drain has ended - in practice a large upload it is still reading
+     from a slow client (the upload's `client_max_body_size 20m`; nginx connects
+     upstream once the body is read) - reaches the stopped old port and answers
+     503. The drain waits for no shutting-down nginx worker up to 600 s; an old
+     worker can also be kept alive by a co-tenant's long-lived connection
+     (`nginx.conf` sets no `worker_shutdown_timeout`), and then the drain ends
+     at 600 s with `bounded_out`.
   2. Static files are served by WhiteNoise under hashed names: a page whose
      HTML came from the old web just before the switch may ask for an old-hash
      file the new image lacks (404) and needs a reload.

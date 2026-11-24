@@ -439,7 +439,10 @@ class TemplateRenderingTests(unittest.TestCase):
         directives = {words[0]: words[1:] for words in server}
         self.assertEqual(directives['ssl_certificate'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/fullchain.pem'])
         self.assertEqual(directives['ssl_certificate_key'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/privkey.pem'])
-        self.assertEqual(directives['client_max_body_size'], ['20m'])
+        # release 1 (A3, the edge lens's C-15 follow-up): 64k for every route but the upload, which keeps 20m
+        self.assertEqual(directives['client_max_body_size'], ['64k'])
+        upload = conf[conf.index('location = /api/encounters {'):]
+        self.assertEqual(install.nginx_statements(upload[:upload.index('}') + 1])[1], ['client_max_body_size', '20m'])
         headers = {words[1]: words[2:] for words in server if words[0] == 'add_header'}
         self.assertEqual(headers, {'Strict-Transport-Security': ['max-age=31536000', 'always'],
                                    'X-Content-Type-Options': ['nosniff', 'always'],

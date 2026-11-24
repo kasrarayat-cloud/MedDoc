@@ -28,8 +28,12 @@ ZONES = {'cpt_all': ('$cpt_all_key', '10m', '30r/s', '120'), 'cpt_signin': ('$cp
          'cpt_export': ('$cpt_export_key', '2m', '6r/m', '6')}
 # the connection limits: zone -> (key variable, zone size, at once)
 CONNECTIONS = {'cpt_conn': ('$cpt_conn_key', '5m', '40'), 'cpt_bytes_conn': ('$cpt_bytes_key', '2m', '20'),
-               'cpt_bytes_all': ('$cpt_bytes_all_key', '1m', '24'), 'cpt_body_conn': ('$cpt_body_key', '5m', '4'),
-               'cpt_body_all': ('$cpt_body_all_key', '1m', '40')}
+               'cpt_bytes_all': ('$cpt_bytes_all_key', '1m', '24'),
+               'cpt_large_body': ('$cpt_large_body_key', '2m', '4'),
+               'cpt_large_body_all': ('$cpt_large_body_all_key', '1m', '40'),
+               'cpt_small_body': ('$cpt_small_body_key', '5m', '40')}
+# Each location's body size (refutation, edge lens C-15's follow-up): the upload, a coding review's answers, the rest
+BODY_SIZES = {('=', '/api/encounters'): '20m', ('~', '^/api/encounters/[0-9a-f-]+/answers$'): '1m', ('/',): '64k'}
 REQUEST_KEYS = ('$cpt_all_key', '$cpt_signin_key', '$cpt_write_key', '$cpt_upload_key', '$cpt_export_key',
                 '$cpt_bytes_key')
 CIPHERS = ('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:'
@@ -62,6 +66,27 @@ def https_part(port=install.WEB_PORT):
 def blocks_of(conf, *path):
     """Every directive (word list) whose enclosing blocks are exactly ``path``."""
     return [words for blocks, words in statements(conf) if blocks == path]
+
+
+def locations(conf):
+    """{the location's arguments (a tuple): its directives (word lists)} of the 443 block's locations, read in order -
+    every location here holds plain directives only."""
+    found, current, words = {}, None, []
+    for kind, value in install.nginx_tokens(conf[conf.index('listen 443'):]):
+        if kind == 'punct' and value == '{':
+            if words[:1] == ['location']:
+                current = tuple(words[1:])
+                found[current] = []
+            words = []
+        elif kind == 'punct' and value == '}':
+            current, words = None, []
+        elif kind == 'punct':
+            if current is not None and words:
+                found[current].append(words)
+            words = []
+        else:
+            words.append(value)
+    return found
 
 
 def directive(conf, name, *path):
@@ -102,6 +127,29 @@ def maps(conf):
     return found
 
 
+def chosen_location(found, uri):
+    """The location nginx chooses for ``uri`` among ``found`` (locations()): an exact match, else the first regular
+    expression that matches, in order, else the longest prefix (none here is ^~)."""
+    exact = [where for where in found if where[0] == '=' and where[1] == uri]
+    if exact:
+        return exact[0]
+    for where in found:
+        if where[0] in ('~', '~*') and re.search(where[1], uri, re.I if where[0] == '~*' else 0):
+            return where
+    prefixes = [where for where in found if len(where) == 1 and not where[0].startswith('@') and uri.startswith(where[0])]
+    return max(prefixes, key=lambda where: len(where[0]))
+
+
+def class_constant(path, cls, name):
+    """A class-level literal ``name`` of class ``cls`` in the application file ``path`` (read with ast)."""
+    for node in ast.walk(ast.parse((APP_ROOT / path).read_text(encoding='utf-8'))):
+        if isinstance(node, ast.ClassDef) and node.name == cls:
+            for item in node.body:
+                if isinstance(item, ast.Assign) and any(getattr(t, 'id', None) == name for t in item.targets):
+                    return ast.literal_eval(item.value)
+    raise LookupError(f'{cls}.{name} is not a class-level constant of {path}')
+
+
 def mapped(entry, value):
     """What nginx's map gives for ``value``: an exact key first, then each regular expression in order, else default -
     a regular expression's positional captures ($1 ...) put into its value, as nginx puts them."""
@@ -140,14 +188,20 @@ class FrontDoorLimitTests(unittest.TestCase):
 
     def test_every_limit_is_in_the_one_proxied_location(self):
         conf = rendered()['https']
-        location = blocks_of(conf, 'server', 'location')
+        location = locations(conf)[('@cpt_proxy',)]
         limits = sorted(words[1:] for words in location if words[0] == 'limit_req')
         self.assertEqual(limits, sorted([f'zone={zone}', f'burst={burst}', 'nodelay']
                                         for zone, (_, _, _, burst) in ZONES.items()))
         self.assertEqual(sorted(words[1:] for words in location if words[0] == 'limit_conn'),
                          sorted([zone, at_once] for zone, (_, _, at_once) in CONNECTIONS.items()))
-        self.assertEqual(directive(conf, 'limit_req_status', 'server', 'location'), ['429'])
-        self.assertEqual(directive(conf, 'limit_conn_status', 'server', 'location'), ['429'])
+        self.assertEqual([words[1:] for words in location if words[0] == 'limit_req_status'], [['429']])
+        self.assertEqual([words[1:] for words in location if words[0] == 'limit_conn_status'], [['429']])
+        self.assertEqual([words for words in location if words[0] == 'proxy_pass'],
+                         [['proxy_pass', f'http://127.0.0.1:{install.WEB_PORT}']])
+        # and nowhere else: a path location only gives its body size and hands on to this one
+        everywhere = [words for words in install.nginx_statements(conf) if words[0].startswith('limit_')
+                      and words[0] not in ('limit_req_zone', 'limit_conn_zone')]
+        self.assertEqual(len(everywhere), len([words for words in location if words[0].startswith('limit_')]))
         pages = [words[1:] for words in location if words[0] == 'error_page']
         self.assertIn(['429', '=', '@cpt_too_many'], pages)
         # the 429 sentence comes from a named location, which is not a second upstream
@@ -177,8 +231,9 @@ class FrontDoorLimitTests(unittest.TestCase):
         self.assertEqual(sorted(words for words in geo[1:]),
                          sorted([['default', '0'], ['127.0.0.1', '1'], ['::1', '1'], [install.PUBLIC_IPV4, '1']]))
         found = maps(conf)
-        self.assertEqual(sorted(found), sorted([*REQUEST_KEYS, '$cpt_client', '$cpt_conn_key', '$cpt_body_key',
-                                                '$cpt_body_all_key', '$cpt_bytes_all_key', '$cpt_unsized_body']))
+        self.assertEqual(sorted(found), sorted([*REQUEST_KEYS, '$cpt_client', '$cpt_conn_key', '$cpt_body_size',
+                                                '$cpt_large_body_key', '$cpt_small_body_key', '$cpt_large_body_all_key',
+                                                '$cpt_bytes_all_key', '$cpt_unsized_body']))
         for variable in REQUEST_KEYS:
             entry = found[variable]
             self.assertEqual(entry['source'], '$cpt_exempt:$request_method $uri', variable)
@@ -254,24 +309,54 @@ class FrontDoorLimitTests(unittest.TestCase):
         self.assertEqual({mapped(client, ipaddress.IPv6Address(f'2001:db8:1:2:{n:x}::{n:x}').compressed)
                           for n in range(1, 500)}, {'2001:db8:1:2'})
 
-    def test_a_request_that_declares_a_body_is_bounded_per_client_and_in_all(self):
-        # refutation, edge lens C-15: a body buffer is allocated at the declared length (20 MiB for a slow sender)
+    def test_a_request_that_declares_a_body_is_bounded_per_client_and_large_ones_in_all(self):
+        # refutation, edge lens C-15: a body buffer is reserved at the declared length (20 MiB for a slow sender); and
+        # its follow-up: a body over the small locations' limit - which only the upload and the answers can declare -
+        # takes the global cap, and every other body counts per client alone, so no trickle of uploads stops a sign-in
         conf = rendered()['https']
         found = maps(conf)
-        body, every = found['$cpt_body_key'], found['$cpt_body_all_key']
-        self.assertEqual(body['source'], '$cpt_exempt:$content_length')
-        for value, counted in (('0:20971520', True), ('0:1', True), ('0:0', False), ('0:', False), ('1:20971520', False)):
-            with self.subTest(value=value):
-                self.assertEqual(mapped(body, value), '$cpt_client' if counted else '')
+        body_size, large, small = found['$cpt_body_size'], found['$cpt_large_body_key'], found['$cpt_small_body_key']
+        every = found['$cpt_large_body_all_key']
+        self.assertEqual(body_size['source'], '$content_length')
+        self.assertEqual((large['source'], small['source']), ('$cpt_exempt:$cpt_body_size',) * 2)
+        limit = size(BODY_SIZES[('/',)])  # 64 KiB: the small locations' limit
+
+        def counted(exempt, length):
+            kind = mapped(body_size, length)
+            return mapped(large, f'{exempt}:{kind}'), mapped(small, f'{exempt}:{kind}')
+        import random
+        draw = random.Random(20261124)
+        lengths = sorted({*range(0, 12), *range(limit - 300, limit + 300), *range(65000, 100100, 7),
+                          *range(99990, 100010), *(10 ** n + d for n in range(5, 10) for d in (-1, 0, 1)),
+                          *(draw.randrange(1, 2 ** 31) for _ in range(300)), 20 * 2 ** 20, 2 ** 40})
+        for length in lengths:
+            # a declared length may carry leading zeros - nginx reads past them - so the class does too (follow-up)
+            for written in (str(length), '0' + str(length), '000' + str(length)):
+                want = ('$cpt_client', '') if length > limit else ('', '$cpt_client') if length else ('', '')
+                self.assertEqual(counted('0', written), want, written)
+                self.assertEqual(counted('1', written), ('', ''), written)  # the host itself is exempt
+        self.assertEqual(counted('0', ''), ('', ''))  # no length declared: cut off at 64 KiB, and cpt_conn counts it
         self.assertEqual((mapped(every, '2001:db8:1:2'), mapped(every, '')), ('cpt', ''))
+        self.assertNotIn('$cpt_small_body_all_key', found)  # no global cap on the small bodies
+        location = locations(conf)[('@cpt_proxy',)]
+        limits = {words[1]: int(words[2]) for words in location if words[0] == 'limit_conn'}
+        largest = max(size(body) for body in BODY_SIZES.values())
+        self.assertLessEqual(limits['cpt_large_body_all'] * largest, 800 * 2 ** 20)  # the bound the edge lens asked for
+        self.assertEqual(limits['cpt_large_body'], 4)
+        # a small body: never fewer at once per client than the sign-in burst lets through (C-13), and under 2.5 MiB a
+        # client, with no global cap
+        self.assertGreaterEqual(limits['cpt_small_body'], int(ZONES['cpt_signin'][3]))
+        self.assertLessEqual(limits['cpt_small_body'] * limit, 2.5 * 2 ** 20)
+        self.assertNotIn('cpt_small_body_all', limits)
+        # a body with no declared length is cut off at the proxied location's limit - the server's, as it sets none -
+        # and counts in cpt_conn: under 2.5 MiB a client too
+        self.assertEqual(directive(conf, 'client_max_body_size', 'server'), ['64k'])
+        self.assertNotIn('client_max_body_size', [words[0] for words in location])
+        self.assertLessEqual(limits['cpt_conn'] * size(directive(conf, 'client_max_body_size', 'server')[0]),
+                             2.5 * 2 ** 20)
         bytes_all = found['$cpt_bytes_all_key']
         self.assertEqual((mapped(bytes_all, '203.0.113.9'), mapped(bytes_all, '')), ('cpt', ''))
-        location = blocks_of(conf, 'server', 'location')
-        limits = {words[1]: int(words[2]) for words in location if words[0] == 'limit_conn'}
-        body_size = size(directive(conf, 'client_body_buffer_size', 'server')[0])
-        self.assertLessEqual(limits['cpt_body_all'] * body_size, 800 * 2 ** 20)  # the bound the edge lens asked for
-        self.assertEqual(limits['cpt_body_conn'], 4)
-        buffers = directive(conf, 'proxy_buffers', 'server', 'location')
+        buffers = [words[1:] for words in location if words[0] == 'proxy_buffers'][0]
         response = int(buffers[0]) * size(buffers[1])
         self.assertLessEqual(limits['cpt_bytes_all'] * response, 600 * 2 ** 20)
         self.assertEqual(limits['cpt_bytes_conn'], 20)
@@ -324,8 +409,9 @@ class FrontDoorLimitTests(unittest.TestCase):
             self.assertTrue(name.startswith('cpt_'), name)
         variables = set(re.findall(r'\$(cpt\w*)', conf))
         self.assertEqual(variables, {'cpt_exempt', 'cpt_client', 'cpt_all_key', 'cpt_signin_key', 'cpt_write_key',
-                                     'cpt_upload_key', 'cpt_export_key', 'cpt_bytes_key', 'cpt_conn_key', 'cpt_body_key',
-                                     'cpt_body_all_key', 'cpt_bytes_all_key', 'cpt_unsized_body'})
+                                     'cpt_upload_key', 'cpt_export_key', 'cpt_bytes_key', 'cpt_conn_key',
+                                     'cpt_body_size', 'cpt_large_body_key', 'cpt_small_body_key',
+                                     'cpt_large_body_all_key', 'cpt_bytes_all_key', 'cpt_unsized_body'})
 
 
 class EdgeLogTests(unittest.TestCase):
@@ -386,9 +472,75 @@ class NothingOnDiskTests(unittest.TestCase):
     def test_a_request_body_stays_in_memory_up_to_the_largest_one_accepted(self):
         conf = rendered()['https']
         body = size(directive(conf, 'client_body_buffer_size', 'server')[0])
-        largest = size(directive(conf, 'client_max_body_size', 'server')[0])
+        found = locations(conf)
+        sizes = [size(words[1]) for directives in found.values() for words in directives
+                 if words[0] == 'client_max_body_size']
+        largest = max([*sizes, size(directive(conf, 'client_max_body_size', 'server')[0])])
         self.assertEqual(body, largest)
         self.assertEqual(largest, 20 * 2 ** 20)
+        # the one proxied location, where the body is read, keeps the server's buffer
+        self.assertNotIn('client_body_buffer_size', [words[0] for words in found[('@cpt_proxy',)]])
+
+    def test_each_location_takes_the_body_its_routes_need_and_hands_on_to_the_one_proxied_location(self):
+        # refutation, edge lens C-15's follow-up: a sign-in declaring 20 MiB held a 20 MiB buffer; now every route but
+        # the upload and the answers takes 64k, checked against the declared length as the location is chosen
+        conf = rendered()['https']
+        found = locations(conf)
+        self.assertEqual(sorted(found), sorted([*BODY_SIZES, ('@cpt_proxy',), ('@cpt_unavailable',),
+                                                ('@cpt_too_many',)]))
+        for where, body in BODY_SIZES.items():
+            with self.subTest(location=where):
+                self.assertEqual(found[where], [['client_max_body_size', body], ['error_page', '418', '=', '@cpt_proxy'],
+                                                ['return', '418']])
+        self.assertEqual(directive(conf, 'client_max_body_size', 'server'), ['64k'])
+        self.assertEqual(directive(conf, 'recursive_error_pages', 'server'), ['on'])  # @cpt_proxy's own error pages
+        # the routes each location takes, as nginx chooses among the template's own locations
+        for uri, body in (('/api/encounters', '20m'), (f'/api/encounters/{UUID}/answers', '1m'), ('/login/', '64k'),
+                          ('/login/second-factor', '64k'), ('/login/enrol', '64k'), ('/account/', '64k'),
+                          (f'/api/encounters/{UUID}/decisions', '64k'), (f'/api/members/{UUID}/access', '64k'),
+                          ('/ops/people/add', '64k'), (f'/ops/encounters/{UUID}/reconcile', '64k'),
+                          ('/session/activity', '64k'), ('/api/encounters/', '64k'), ('/API/encounters', '64k'),
+                          (f'/api/encounters/{UUID}/answers/x', '64k'), (f'/api/encounters/{UUID.upper()}/answers', '64k')):
+            with self.subTest(uri=uri):
+                self.assertEqual(found[chosen_location(found, uri)][0], ['client_max_body_size', body])
+        # only the upload and the answers can declare more than the small limit, so only they take the global cap
+        body_size = maps(conf)['$cpt_body_size']
+        for where, body in BODY_SIZES.items():
+            self.assertEqual(mapped(body_size, str(size(body))), 'large' if size(body) > size('64k') else 'small')
+        # the largest bodies the application accepts, as a browser writes them, fit with margin: 6 bytes a character
+        # at most in JSON (a control character as \u00XX), 12 in a form (a 4-byte character percent-encoded)
+        import json
+        from urllib.parse import urlencode
+        answer_chars = class_constant('studio/models.py', 'CodingAnswer', 'MAX_CHARS')
+        answers = json.dumps({'answers': [{'question_id': UUID, 'text': '\x01' * answer_chars}
+                                          for _ in range(python_constant('studio/decisions.py', 'MAX_ANSWERS'))]},
+                             ensure_ascii=False).encode()
+        self.assertLess(len(answers), size('1m'))
+        self.assertLess(len(answers.replace(b'\\u0001', '\U0001f600'.encode())) * 2, size('1m'))  # 4-byte characters
+        note_chars = python_constant('studio/decisions.py', 'MAX_NOTE_CHARS')
+        decision = json.dumps({'round': 99, 'line': 'L12', 'code': '99999', 'action': 'approve',
+                               'acknowledgement': '\x01' * note_chars, 'note': '\x01' * note_chars, 'decision': UUID},
+                              ensure_ascii=False).encode()
+        self.assertLess(len(decision) * 2, size('64k'))
+        for name in ('MAX_NOTE_CHARS', 'MAX_REASON_CHARS'):
+            form = urlencode({'csrfmiddlewaretoken': 'x' * 64, 'run': UUID,
+                              'note': '\U0001f600' * python_constant('studio/operator.py', name)}).encode()
+            self.assertLess(len(form) * 2, size('64k'), name)
+
+    def test_install_md_says_what_still_waits_on_slow_senders_and_that_sign_ins_never_do(self):
+        # the edge lens's C-15 follow-up: the known limit names what remains, and what no longer does
+        text = ' '.join((APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8').split())
+        for sentence in ('the upload 20 MiB, a coding review\'s answers 1 MiB, every other request 64 KiB',
+                         'A larger declared length is refused with 413 before any of it is read.',
+                         'at most 40 such bodies are read at once in all - under 800 MiB however many clients send',
+                         'A body of 64 KiB or less counts per client only, 40 at once: under 2.5 MiB a client, with no '
+                         'global cap.',
+                         'is cut off at 64 KiB read',
+                         'So uploads and answers can still be held up by slow trickles from ten or more clients',
+                         'sign-ins cannot, nor can any other request: a body of 64 KiB or less never takes one of those '
+                         '40.'):
+            self.assertIn(sentence, text)
+        self.assertNotIn('sign-ins and uploads then get 429', text)
 
     def test_a_response_stays_in_memory_and_a_larger_one_is_relayed_without_a_file(self):
         conf = rendered()['https']
