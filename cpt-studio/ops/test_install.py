@@ -32,6 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 
 DEPLOY = Path(__file__).resolve().parents[1] / 'deploy'
+# What install.hardening() gives every service container's HostConfig (release 1, A3: service_problems holds them): a
+# memory limit with memory + swap equal to it - no swap - and core dumps off.
+# The database container's own cgroup as db_args leaves it (release 1, A3): 512 MiB and no swap.
+DB_CGROUP_OK = {'memory.max': str(512 * 2 ** 20), 'memory.swap.max': '0'}
+HARDENED_LIMITS = {'Memory': 768 * 2 ** 20, 'MemorySwap': 768 * 2 ** 20,
+                   'Ulimits': [{'Name': 'core', 'Soft': 0, 'Hard': 0}]}
 REVISION = 'a' * 40
 OTHER = 'b' * 40
 
@@ -42,7 +48,7 @@ OTHER = 'b' * 40
 # the real command (blue/green made replace_services read the vhost and the containers).
 _REAL_SUBPROCESS_RUN = subprocess.run
 _REAL_CREATE_CONNECTION = socket.create_connection
-HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot')
+HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot', 'openssl')
 # The host's live ports, as literals (the guard must not depend on the installer it guards): nginx, the database,
 # both web ports, and the disposable test databases.
 SERVICE_PORTS = frozenset({80, 443, 55451, 9150, 9151, 55452, 55461})
@@ -92,13 +98,40 @@ def _guarded_coupling(quillmd_sha256=None, vhost=None):
     return coupled('before')
 
 
+# Release 1 (A7): whether a revision has the converter service is read from the git tree (install.has_converter), which
+# refuses a revision the checkout cannot read - every test revision here ('a' * 40, ...). Under the guard a test revision
+# has the converter exactly when a test puts it in CONVERTER_REVISIONS (empty: every world before release 1 runs as it
+# always did); the real function is REAL_HAS_CONVERTER, tested on its own.
+REAL_HAS_CONVERTER = install.has_converter
+CONVERTER_REVISIONS = set()
+
+
+def _guarded_has_converter(revision):
+    return revision in CONVERTER_REVISIONS
+
+
+# Release 1 (A13): main() appends the phase's one-shot journal to the host's /var/log/cpt-studio through a root helper
+# at the end of every phase. Under the guard it is kept in JOURNALS_FLUSHED instead (the real flush, REAL_FLUSH_JOURNAL,
+# is tested on its own with its helper stood in for).
+REAL_FLUSH_JOURNAL = install.flush_journal
+JOURNALS_FLUSHED = []
+
+
+def _guarded_flush_journal():
+    lines = list(install.JOURNAL['lines'])
+    install.JOURNAL.update(lines=[], overflow=0)
+    JOURNALS_FLUSHED.append(lines)
+    return {'written': False, 'why': 'the test host guard keeps the journal', 'lines': len(lines)} if lines else None
+
+
 def guard_host():
     # and the door's wall-clock ceiling a phase that stops a worker needs (install.check_door_ceiling), as an operator
     # gives it to the door (RULED_ACT_MAX_SECS); its own tests set it themselves
     patches = [mock.patch.object(subprocess, 'run', _guarded_run),
                mock.patch.object(socket, 'create_connection', _guarded_connect),
                mock.patch.multiple(install, NGINX_AVAILABLE=NO_NGINX / 'sites-available',
-                                   NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling),
+                                   NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling,
+                                   has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
@@ -888,7 +921,9 @@ class DockerArgumentTests(unittest.TestCase):
 
     def test_database_container(self):
         argv = install.db_args()
-        self.assertEqual(argv[-1], install.POSTGRES_IMAGE)
+        # release 1 (A5): the image, then the server flags that keep statement text out of the database's log
+        self.assertEqual(argv[-5:], [install.POSTGRES_IMAGE, '-c', 'log_min_error_statement=panic', '-c',
+                                     'log_error_verbosity=terse'])
         self.assertEqual(self.flags(argv, '--user'), ['70:70'])
         self.assertEqual(self.flags(argv, '--cap-drop'), ['ALL'])
         self.assertEqual(self.flags(argv, '-p'), ['127.0.0.1:55451:5432'])
@@ -1795,7 +1830,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         self.assertNotEqual(install.other_lineages(changed), install.other_lineages(baseline))
 
     def run_verify(self, le_now, *, quillmd_now=install.QUILLMD_VHOST_AFTER, quillmd_baseline=install.QUILLMD_VHOST_AFTER,
-                   acme=None):
+                   acme=None, db_cgroup=None, db_settings=None):
         # Since release 2 of the admin move this revision's stage names admin.quillmd.com, so the quillmd vhost it
         # couples is the after state; the baseline is the preflight the act takes after the ingress, unless given.
         own = f'{install.DOMAIN}.conf'
@@ -1823,6 +1858,9 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'inspect', side_effect=lambda kind, name: running if name in pair or
                                   kind == 'image' else None), \
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
+                mock.patch.object(install, 'db_cgroup', return_value=DB_CGROUP_OK if db_cgroup is None else db_cgroup), \
+                mock.patch.object(install, 'db_settings_shown', return_value=(dict(install.DB_LOG_SETTINGS)
+                                                                             if db_settings is None else db_settings)), \
                 mock.patch.object(install, 'service_problems', return_value=[]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
                 mock.patch.object(install, 'acme_probe', side_effect=acme or (lambda ctx, label, host=install.DOMAIN: {
@@ -1830,6 +1868,22 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify'))
+
+    def test_verify_reports_a_database_that_swaps_or_logs_statement_text(self):
+        # release 1 (A3, A5): the database's own cgroup allows no swap and its log keeps no statement text, read with
+        # docker exec (no one-shot); either drifting is a difference verify reports
+        own = f'{install.DOMAIN}.conf'
+        le = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        details = self.run_verify(le)
+        self.assertEqual(details['database'], {'cgroup': DB_CGROUP_OK, 'settings': dict(install.DB_LOG_SETTINGS)})
+        for label, readings, said in (
+                ('swap', {'db_cgroup': {**DB_CGROUP_OK, 'memory.swap.max': 'max'}}, 'allows swap'),
+                ('memory', {'db_cgroup': {**DB_CGROUP_OK, 'memory.max': 'max'}}, 'cgroup memory limit'),
+                ('statement text', {'db_settings': {'log_min_error_statement': 'error', 'log_error_verbosity': 'terse'}},
+                 'statement logging reads'),
+                ('not read', {'db_settings': {}}, 'statement logging reads nothing')):
+            with self.subTest(label), self.assertRaisesRegex(install.InstallError, said):
+                self.run_verify(le, **readings)
 
     def test_verify_runs_no_one_shot_and_records_no_interpreter_evidence(self):
         # the Fable coding build removed the D22 report's one-shot (DECISIONS D351): verify reads the host alone

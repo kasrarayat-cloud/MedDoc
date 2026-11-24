@@ -88,6 +88,25 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 STOP_SECONDS = {'web': 30, 'worker': 3600}
 # The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
 INCOMING_WEB = SERVICES['web'] + '-next'
+# Release 1 (RELEASE-1-SPEC A7, E3): Word files are converted by a container of their own, cpt-studio-converter, with no
+# network, no secret, no files volume and its own uid (CONVERTER_UID, unused on this host [TO CONFIRM]); the group is
+# the application's, so the socket on CONVERT_VOLUME - the only thing that volume holds - is shared with the worker
+# without sharing any file. It runs outside the blue/green switch (--phase converter, idempotent); a worker of a
+# revision that has the converter (has_converter) mounts the volume and is told the socket and that the converter is
+# required, so it never converts in-process in production; an older revision's worker is started exactly as before.
+CONVERTER = 'cpt-studio-converter'
+CONVERT_VOLUME = 'cpt-studio-convert'
+CONVERT_DIR = '/run/cpt-convert'
+CONVERTER_SOCKET = f'{CONVERT_DIR}/convert.sock'
+CONVERTER_UID = 10151
+CONVERTER_LIMITS = ('1536m', 128, '1g')  # memory and swap, pids, the /tmp tmpfs (owner decision D9)
+CONVERTER_CPUS = '2'  # [TO CONFIRM] (D9)
+CONVERTER_STOP_SECONDS = 70  # a conversion in progress (60 s at most) finishes before the old converter stops
+CONVERTER_FILES = (f'{APP}/studio/converter_server.py',)  # the revisions that have the converter service
+CONVERTER_HEALTH = 'python -m studio.converter_server --ping'
+CONVERTER_SELF_TEST = ('-m', 'studio.converter_server', '--self-test')
+# Environment variable names a converter must never be given (its Config.Env): secrets and credentials files.
+CONVERTER_FORBIDDEN_ENV_RE = re.compile(r'(?i)SECRET|PASSWORD|CREDENTIALS|API_KEY|_KEK\b|TOKEN|AUTHORIZATION')
 # The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
 # (deploy/gunicorn.conf.py), so every request it accepted before the switch has ended; then until DRAIN_QUIET_SECONDS
 # consecutive one-second samples show no connection to its port and no nginx worker still shutting down from the
@@ -828,8 +847,10 @@ def helper_source(body: str, params: dict) -> str:
     return HELPER_PRELUDE + f'P=json.loads(base64.b64decode({payload!r}))\n' + body
 
 
-def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False) -> dict:
-    """Run fixed helper code as root; return its final JSON line. ``sensitive`` drops stderr."""
+def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False, journal_run=True) -> dict:
+    """Run fixed helper code as root; return its final JSON line. ``sensitive`` drops stderr. Release 1 (A13): each run
+    is one line of the one-shot journal (its name and exit code, never a value or its output) - except the journal's own
+    write (``journal_run`` False), which the receipt records instead."""
     token = secrets.token_hex(12)
     name = f'cpt-studio-helper-{token}'
     source = helper_source(body, params).encode()
@@ -840,7 +861,11 @@ def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=Fa
     except subprocess.TimeoutExpired:
         pass
     finally:
-        remove_helper(name, token)
+        try:
+            if journal_run:
+                journal('helper', helper_name(body), 'timeout' if proc is None else proc.returncode)
+        finally:
+            remove_helper(name, token)
     if proc is None:
         raise InstallError(f'A root helper did not finish within {timeout} s; its container was removed.')
     if proc.returncode != 0:
@@ -876,6 +901,292 @@ def remove_helper(name, token):
 
 
 ROOT_MOUNT = 'type=bind,src=/,dst=/host,readonly'
+
+# --- release 1 (A13): the application's logs are kept, ids only --------------------------------------------------------
+# Docker keeps a container's output only while the container exists (json-file, 10 MB x 5), and a deploy removes the
+# parked pair (retire_parked). So before a container this installer removes is removed, its output is copied - ONLY the
+# lines in a format whose variable parts hold ids, numbers, times, addresses and fixed words (KEPT_LOG_FORMATS; every
+# other line, a traceback for one, is counted and dropped: a database DETAIL line or an error's text can carry document
+# text, FLOW-12) - into a root-only file, LOG_DIR/containers/<role>-<revision12>-<UTC>.log (folder 0700, file 0600),
+# written through the root helper. One-shots and helpers run with no log driver; each run is one line of the one-shot
+# journal, LOG_DIR/oneshots-<UTC date>.log (root-only): when, the phase, what ran (a fixed label) and its exit code, the
+# declaration and its commit, and a --by name - never an argument's value and never the output. Copies and journals
+# older than LOG_KEEP_DAYS are deleted at each run (plain deletion: they hold ids only). Never into a receipt: a receipt
+# records a copy's name, sha256 and counts. [TO CONFIRM the folder on this host.] On the new server an off-host store
+# takes over (TEC-11 (5)).
+LOG_DIR = '/var/log/cpt-studio'
+LOG_KEEP_DAYS = 14  # owner decision D7: about two weeks on the current host
+LOG_MOUNT = 'type=bind,src=/var/log,dst=/host-log'
+JOURNAL = {'phase': '', 'declaration': '', 'commit': '', 'lines': [], 'overflow': 0}
+JOURNAL_LIMIT = 2000  # lines one phase keeps for its journal; any more are counted (overflow), never dropped silently
+JOURNAL_LABEL_RE = re.compile(r'[^A-Za-z0-9 _.:/()-]')
+DOCKER_TIMESTAMP_RE = re.compile(r'(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z ')
+_UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+_ADDRESS = r'(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{2,39}(?:\.\d{1,3}){0,3}|-)'
+# The fixed words of the application's routes (cptstudio/urls.py and urls_admin.py: a test holds this list to them) and
+# of its static files: a path is copied only when each of its segments is one of them, an id, or a static file's name
+# as the manifest names it (with its 12-hex content hash: an unhashed name is dropped).
+ROUTE_WORDS = ('access', 'account', 'activity', 'add', 'answers', 'api', 'bundle', 'content', 'decisions', 'download',
+               'encounters', 'enrol', 'everywhere', 'health', 'holds', 'login', 'logout', 'members', 'new', 'ops',
+               'options', 'original', 'password', 'people', 'reads', 'reconcile', 'recovery', 'release', 'reports',
+               'resume', 'retry', 'role', 'second-factor', 'security', 'session', 'sign-ins', 'spending', 'static',
+               'stop', 'studio', 'unlock', 'workspaces', 'fonts', 'lib')
+_SEGMENT = (r'(?:' + '|'.join(re.escape(word) for word in ROUTE_WORDS) + rf'|{_UUID}'
+            r'|[a-z0-9_-]{1,64}\.[0-9a-f]{12}\.(?:css|js|mjs|svg|png|ico|woff2?|ttf|txt|map|json)(?:\.gz|\.br)?)')
+_PATH = rf'/(?:{_SEGMENT}(?:/{_SEGMENT})*/?)?'
+_METHOD = r'(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)'
+# A fixed word of a worker message: a failure kind or a stage kind, never text an exception carries.
+_WORD = r'[a-z][a-z_]{0,39}'
+KEPT_LOG_FORMATS = {
+    'web': tuple(re.compile(pattern) for pattern in (
+        # gunicorn's access line in release 1's format (deploy/gunicorn.conf.py: A2)
+        rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
+        rf'\d{{3}} (?:\d+|-) \d+ms (?:[0-9a-f]{{32}}|-) (?:{_UUID}|-)',
+        # gunicorn's own life cycle
+        r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
+        r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
+        r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
+        r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?|WORKER TIMEOUT \(pid:\d+\)|Autorestarting worker after current request\.)',
+        # django.request's warning and error lines name the path alone (its traceback lines are dropped)
+        rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
+        rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
+    )),
+    # the worker's own messages (studio/jobs.py and run_worker's log calls), each with its ids, numbers and fixed words
+    'worker': tuple(re.compile(pattern) for pattern in (
+        r'CPT Studio worker (?:started|stopped)\.',
+        rf'round {_UUID}: the document was not sent \({_WORD}\)',
+        rf'round {_UUID}: the (?:reader|checker) answer was not readable \({_WORD}\)',
+        rf'round {_UUID}: the stored conversion of round {_UUID} could not be read back; converting again',
+        rf'round {_UUID}: the converted PDF could not be stored for the viewer',
+        rf'round {_UUID}: coding_(?:reader|checker) refused at the ceiling \(spent \d+(?:\.\d+)?, worst case '
+        rf'\d+(?:\.\d+)?\)',
+        rf'round {_UUID}: the coding_(?:reader|checker) request could not be counted; nothing was sent',
+        rf'the coding stage failed unexpectedly for round {_UUID}',
+        rf'the coder raised while sending coding run {_UUID}',
+        rf'the outcome of coding run {_UUID} could not be recorded',
+        r'the token count of a coding request raised; nothing is sent',
+        rf'coding run {_UUID} could not be settled (?:as not sent after its stage failed|after its outcome failed to '
+        rf'record)',
+        r'provider slot \d+ (?:could not be released|was no longer held when its send ended): the database session '
+        r'that held it ended during the send',
+        rf'stage {_WORD} failed for job {_UUID}',
+        r'the worker heartbeat could not be recorded',
+        r'a worker thread met an unexpected error',
+        r'the stale sweep failed',
+    )),
+    # the converter's own messages are Lane 5's and not yet listed: every line is counted and dropped (fail closed)
+    'converter': (),
+}
+
+
+def journal_begin(phase, door=None):
+    """A13: a phase's one-shot journal starts empty, naming the phase and the declaration it runs under."""
+    door = door or {}
+    JOURNAL.update(phase=phase, declaration=str(door.get('declaration') or ''),
+                   commit=str(door.get('declaration_commit') or ''), lines=[], overflow=0)
+
+
+def journal(kind, what, exit_code, by=''):
+    """A13: one journal line for a one-shot or helper run - when, the phase, what ran (a fixed label, characters
+    outside JOURNAL_LABEL_RE's set replaced), its exit code, the declaration and its commit, and a --by name. Never an
+    argument's value, never the output."""
+    entry = {'at': utc_now(), 'phase': JOURNAL['phase'], 'kind': kind,
+             'what': JOURNAL_LABEL_RE.sub('?', str(what))[:120], 'exit': exit_code,
+             'declaration': JOURNAL['declaration'], 'commit': JOURNAL['commit']}
+    if by:
+        entry['by'] = JOURNAL_LABEL_RE.sub('?', str(by))[:80]
+    if len(JOURNAL['lines']) < JOURNAL_LIMIT:
+        JOURNAL['lines'].append(json.dumps(entry, sort_keys=True))
+    else:
+        JOURNAL['overflow'] += 1
+
+
+# The root helper's writers of LOG_DIR (A13), under /var/log mounted at /host-log: each makes LOG_DIR and its
+# containers/ folder root 0700 when they are missing, and refuses either when it is anything else.
+_LOG_DIRS = r'''
+def log_dirs():
+    made = []
+    for d in ('/host-log/' + P['dir'], '/host-log/' + P['dir'] + '/containers'):
+        try:
+            i = os.lstat(d)
+        except FileNotFoundError:
+            os.mkdir(d, 0o700)
+            os.chown(d, 0, 0)
+            os.chmod(d, 0o700)
+            i = os.lstat(d)
+            made.append(d[len('/host-log'):])
+        if not (stat.S_ISDIR(i.st_mode) and i.st_uid == 0 and i.st_gid == 0 and stat.S_IMODE(i.st_mode) == 0o700):
+            return None, made
+    return '/host-log/' + P['dir'], made
+'''
+# One ids-only copy (the RAM-only file the installer mounted at /in/kept), written once - O_EXCL, root 0600, fsynced -
+# and read back by its sha256.
+H_KEEP_LOG = _LOG_DIRS + r'''
+base, made = log_dirs()
+if base is None:
+    R = {'error': P['dir'] + ' or its containers folder is not a root-owned 0700 directory'}
+else:
+    data = read('/in/kept')
+    if hashlib.sha256(data).hexdigest() != P['sha256']:
+        R = {'error': 'the copy to keep is not the one the installer made'}
+    else:
+        path = os.path.join(base, 'containers', P['name'])
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            os.fchown(fd, 0, 0)
+            os.fchmod(fd, 0o600)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        d = os.open(os.path.join(base, 'containers'), os.O_RDONLY | os.O_DIRECTORY)
+        os.fsync(d)
+        os.close(d)
+        R = {'written': P['name'], 'bytes': len(data), 'sha256': hashlib.sha256(read(path)).hexdigest(), 'made': made}
+print(json.dumps(R, sort_keys=True))
+'''
+# The one-shot journal's lines appended, each to its own UTC date's file (root 0600, append only, a regular file this
+# helper made); then every copy and journal whose date is before P['cutoff'] deleted, and counted.
+H_JOURNAL = _LOG_DIRS + r'''
+import re
+base, made = log_dirs()
+if base is None:
+    R = {'error': P['dir'] + ' or its containers folder is not a root-owned 0700 directory'}
+else:
+    files = {}
+    for date, lines in sorted(P['lines'].items()):
+        path = os.path.join(base, 'oneshots-' + date + '.log')
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+        try:
+            i = os.fstat(fd)
+            if not (stat.S_ISREG(i.st_mode) and i.st_uid == 0 and stat.S_IMODE(i.st_mode) == 0o600):
+                os.fchown(fd, 0, 0)
+                os.fchmod(fd, 0o600)
+            os.write(fd, ''.join(line + '\n' for line in lines).encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        files[date] = len(lines)
+    pruned = {'oneshots': 0, 'containers': 0}
+    for folder, kind, pattern in ((base, 'oneshots', r'oneshots-(\d{8})\.log'),
+                                  (os.path.join(base, 'containers'), 'containers',
+                                   r'[a-z]+-[0-9a-z]{1,12}-(\d{8})T\d{6}Z\.log')):
+        for name in sorted(os.listdir(folder)):
+            match = re.fullmatch(pattern, name)
+            if match and match.group(1) < P['cutoff'] and os.path.isfile(os.path.join(folder, name)):
+                os.unlink(os.path.join(folder, name))
+                pruned[kind] += 1
+    R = {'appended': files, 'pruned': pruned, 'made': made}
+print(json.dumps(R, sort_keys=True))
+'''
+
+
+def ids_only_lines(role, *streams) -> tuple:
+    """(kept, dropped) of a container's output (``streams``: `docker logs --timestamps` stdout and stderr): the lines in
+    one of the role's KEPT_LOG_FORMATS, each with its timestamp, in time order; every other line - a traceback, a DETAIL
+    line, a line with no timestamp - counted in ``dropped`` and never copied (A13)."""
+    patterns = KEPT_LOG_FORMATS.get(role, ())
+    kept, dropped = [], 0
+    for stream in streams:
+        for line in (stream or b'').decode('utf-8', 'replace').splitlines():
+            stamp_match = DOCKER_TIMESTAMP_RE.match(line)
+            body = line[stamp_match.end():] if stamp_match else None
+            if body is not None and any(pattern.fullmatch(body) for pattern in patterns):
+                kept.append(((stamp_match.group(1), (stamp_match.group(2) or '').ljust(9, '0')), line))
+            else:
+                dropped += 1
+    return [line for _, line in sorted(kept, key=lambda item: item[0])], dropped
+
+
+def write_root_log(name, data: bytes) -> dict:
+    """``data`` into LOG_DIR/containers/``name`` through the root helper (H_KEEP_LOG), handed over as a RAM-only file
+    under /dev/shm that is wiped whatever happens (the pattern of the operators phase's password files)."""
+    scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-logs-', dir='/dev/shm'))
+    try:
+        kept = write_private(scratch, 'kept', data)
+        return run_helper(H_KEEP_LOG, {'dir': PurePosixPath(LOG_DIR).name, 'name': name, 'sha256': sha256(data)},
+                          mounts=[LOG_MOUNT, f'type=bind,src={kept},dst=/in/kept,readonly'])
+    finally:
+        for path in scratch.iterdir():
+            path.write_bytes(b'\0' * min(path.stat().st_size, 1 << 20))
+            path.unlink()
+        scratch.rmdir()
+
+
+def keep_container_log(container, role, revision=None) -> dict:
+    """A13: the ids-only copy of a container this installer is about to remove - `docker logs --timestamps`, filtered by
+    ids_only_lines, written root-only (write_root_log) as <role>-<revision12>-<UTC>.log. {'file', 'sha256', 'kept',
+    'dropped', 'bytes'}: never a line. Raises when the output cannot be read or the copy cannot be written: the caller
+    then leaves the container in place."""
+    container_id = (container or {}).get('Id')
+    if not container_id:
+        raise InstallError(f'The {role} container to keep the log of has no id; it was left in place.')
+    revision = revision or labels_of(container).get(REVISION_LABEL) or ''
+    label = revision[:12] if SHA_RE.fullmatch(revision) else 'unlabelled'
+    done = docker('logs', '--timestamps', container_id, check=False, timeout=120)
+    if done.returncode:
+        raise InstallError(f'docker logs of the {role} container {container_id[:12]} failed (exit {done.returncode}); '
+                           'its log was not kept, so it was left in place.')
+    kept, dropped = ids_only_lines(role, done.stdout, done.stderr)
+    data = ''.join(line + '\n' for line in kept).encode()
+    name = f'{role}-{label}-{dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")}.log'
+    written = write_root_log(name, data)
+    if written.get('sha256') != sha256(data):
+        raise InstallError(f'The {role} log copy did not read back as written; the container was left in place.')
+    return {'file': f'{LOG_DIR}/containers/{name}', 'sha256': sha256(data), 'kept': len(kept), 'dropped': dropped,
+            'bytes': len(data)}
+
+
+def flush_journal() -> Any:
+    """A13: the phase's one-shot journal appended to LOG_DIR/oneshots-<UTC date>.log and the copies and journals older
+    than LOG_KEEP_DAYS deleted, through one root helper run (the one run the journal does not list: the receipt records
+    it). None when the phase ran no one-shot or helper; never raises - a journal that could not be written is said in
+    the receipt, and the phase's own outcome stands."""
+    lines, overflow = list(JOURNAL['lines']), JOURNAL['overflow']
+    JOURNAL.update(lines=[], overflow=0)
+    if not lines and not overflow:
+        return None
+    by_date = {}
+    for line in lines:
+        by_date.setdefault(json.loads(line)['at'][:10].replace('-', ''), []).append(line)
+    if overflow:
+        by_date.setdefault(dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d'), []).append(json.dumps(
+            {'at': utc_now(), 'phase': JOURNAL['phase'], 'kind': 'overflow', 'what': f'{overflow} more run(s)',
+             'exit': None}, sort_keys=True))
+    cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=LOG_KEEP_DAYS)).strftime('%Y%m%d')
+    try:
+        result = run_helper(H_JOURNAL, {'dir': PurePosixPath(LOG_DIR).name, 'lines': by_date, 'cutoff': cutoff},
+                            mounts=[LOG_MOUNT], journal_run=False)
+    except Exception as error:  # noqa: BLE001 - recorded in the receipt, never a refusal
+        return {'written': False, 'why': str(error) or type(error).__name__, 'lines': len(lines),
+                'overflow': overflow}
+    appended, pruned = (result.get('appended'), result.get('pruned')) if isinstance(result, dict) else (None, None)
+
+    def counts(value, keys=None):
+        return (isinstance(value, dict) and (keys is None or set(value) == set(keys))
+                and all(isinstance(key, str) and type(n) is int and n >= 0 for key, n in value.items()))
+    # an answer that does not say what it wrote is never read as written (D66)
+    if not (counts(appended) and set(appended) == set(by_date)
+            and all(appended[date] == len(entries) for date, entries in by_date.items())
+            and counts(pruned, ('oneshots', 'containers'))):
+        return {'written': False, 'why': 'the journal helper gave no answer it could be judged by', 'lines': len(lines),
+                'overflow': overflow}
+    return {'written': True, 'files': {f'{LOG_DIR}/oneshots-{date}.log': count for date, count in appended.items()},
+            'lines': len(lines), 'overflow': overflow, 'sha256': sha256('\n'.join(lines).encode()),
+            'pruned': pruned, 'kept_days': LOG_KEEP_DAYS}
+
+
+def helper_name(body) -> str:
+    """The name of a root helper's fixed code (its H_* constant, lower case), for the journal."""
+    for name, value in globals().items():
+        if name.startswith('H_') and value is body:
+            return name[2:].lower().replace('_', '-')
+    for name, value in globals().items():
+        if name.startswith('H_') and value == body:
+            return name[2:].lower().replace('_', '-')
+    return 'unnamed'
 
 H_STAT = '''
 R = {}
@@ -1471,6 +1782,16 @@ if P.get('sha256'):
         os.unlink(tmp)
         R = {'copied': True}
 print(json.dumps(R))
+'''
+
+# Release 1 (A7): the convert volume's root, owned by the converter's uid with the application's group, 0750 - the
+# converter makes its socket there (0660, group 10150) and the worker, of that group, can reach it; no other file.
+H_CONVERT_VOLUME = '''
+root = '/convert'
+os.chown(root, P['uid'], P['gid'])
+os.chmod(root, 0o750)
+i = os.lstat(root)
+print(json.dumps({'root': {'uid': i.st_uid, 'gid': i.st_gid, 'mode': oct(stat.S_IMODE(i.st_mode))}}))
 '''
 
 
@@ -2546,7 +2867,13 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
         # and the Fable coder (CODER: only the worker sends).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
-    extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
+    # release 1 (A7): a revision that has the converter mounts its socket's volume (read-only: connecting needs no write)
+    # and is told the socket and that it is required, so it never converts in-process; an older revision's worker - a
+    # switch-back to the pair before release 1 - is started exactly as before
+    extra = (['--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR},readonly',
+              '-e', f'CPT_STUDIO_CONVERTER_SOCKET={CONVERTER_SOCKET}', '-e', 'CPT_STUDIO_CONVERTER_REQUIRED=1']
+             if has_converter(revision) else [])
+    extra += ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
     # the worker alone holds a live participant's key, the live interpreter's (D14) and the live coder's, each file
     # once: the interpreter's and the coder's are the Fable participant's (AMENDMENT-2 1.11; CODER), one bind target
     # whichever of them is live
@@ -2556,25 +2883,46 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
     return [*common, *hardening(*WORKER_LIMITS), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
 
+# The database container's limits (db_args) and what db_container_problems holds an existing one to (RELEASE-1-SPEC A3):
+# memory and memory + swap equal, so the database never swaps to the host's unencrypted swap file, its own cgroup
+# agreeing (memory.swap.max 0); core dumps off; every capability dropped; a 128 MiB /dev/shm.
+DB_MEMORY = '512m'
+DB_MEMORY_BYTES = 512 * 2 ** 20
+DB_SHM_BYTES = 128 * 2 ** 20
+# A3: an existing container whose limits differ is updated in place (docker update: no restart, no connection dropped)
+# only while its memory peak stays below this share of DB_MEMORY_BYTES; otherwise the db phase refuses and prints the
+# numbers, so the owner can choose a larger limit (a database that needs more than 512 MiB without swap would be killed).
+DB_PEAK_SHARE = 0.8
+# The container's own cgroup (v2) files, read inside it (/sys/fs/cgroup is the container's cgroup there).
+DB_CGROUP_FILES = ('memory.max', 'memory.swap.max', 'memory.peak', 'memory.swap.current')
+# A5 (FLOW-13): the database's own log never holds statement text - a failed statement is logged without the statement
+# (log_min_error_statement panic) and without DETAIL, which can quote values (log_error_verbosity terse). Set with ALTER
+# SYSTEM (postgresql.auto.conf on the data volume, applied by a reload: no restart) on an existing cluster, and given as
+# server flags to a new one (db_args). server_side_binding stays off (FLOW-13 (2)).
+DB_LOG_SETTINGS = (('log_min_error_statement', 'panic'), ('log_error_verbosity', 'terse'))
+
+
 def db_args() -> list:
     return ['--name', DB_CONTAINER, '--pull=never', '--restart', 'unless-stopped', '--network', NETWORK,
             '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=db', '-p', f'127.0.0.1:{DB_PORT}:5432',
             '--user', f'{POSTGRES_UID}:{POSTGRES_UID}', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-            '--memory', '512m', '--memory-swap', '512m', '--pids-limit', '256', '--shm-size', '128m',
+            '--memory', DB_MEMORY, '--memory-swap', DB_MEMORY, '--pids-limit', '256', '--shm-size', '128m',
             '--ulimit', 'core=0', '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', '60',
             '--mount', f'type=volume,src={DB_VOLUME},dst=/var/lib/postgresql/data',
             '-e', f'POSTGRES_USER={DB_USER}', '-e', f'POSTGRES_DB={DB_NAME}', '--env-file', '/dev/stdin',
-            POSTGRES_IMAGE]
+            POSTGRES_IMAGE, *[part for name, value in DB_LOG_SETTINGS for part in ('-c', f'{name}={value}')]]
 
 
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
             network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False,
-            coding_file=False):
+            coding_file=False, what=None, by=''):
     """A --rm container of the app image with provider calls disabled - Corti's, every participant's, the
     interpreter's (design/FINAL.md 13) and the Fable coder's - unless ``environment`` gives its -e flags; returns the
     completed process. ``credentials``, ``participant_files`` (participant names), ``interpreter_file`` and
     ``coding_file`` mount those credentials files read-only at the worker's paths, each file once
-    (worker_credential_mounts)."""
+    (worker_credential_mounts). Release 1 (A13): it runs with no log driver, so each run is one line of the one-shot
+    journal - ``what`` (a fixed label: app_script's, the manage phase's command name; else the command's own words
+    without a value, oneshot_label), its exit code and ``by`` (a --by name) - never an argument's value or the output."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
@@ -2586,12 +2934,22 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
             *[part for mount in mounts for part in ('--mount', mount)], image_id, *command]
+    result = None
     try:
-        return run(argv, input=env_bytes, timeout=timeout, check=False)
+        result = run(argv, input=env_bytes, timeout=timeout, check=False)
+        return result
     finally:
+        journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
         leftover = inspect('container', name)
         if leftover is not None and owned(leftover, 'oneshot'):
             docker('rm', '--force', leftover['Id'], check=False)
+
+
+def oneshot_label(command) -> str:
+    """A one-shot's journal label from its command, never an argument's value: the role, and for 'manage' the
+    management command's name ('manage provision', 'manage migrate')."""
+    words = [str(word) for word in command[:2]]
+    return ' '.join(words) if words[:1] == ['manage'] else (words[0] if words else '')
 
 
 # The credentials checks run in the image whose worker will read the file (check_credential_parsing). Corti's, a
@@ -3118,7 +3476,7 @@ def app_script(image_id, env_bytes, body, params, *, what, timeout=180, mounts=(
     extra = {'mounts': list(mounts)} if mounts else {}
     if user:
         extra['user'] = user
-    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout, **extra)
+    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout, what=what, **extra)
     answers = [line for line in result.stdout.decode('utf-8', 'replace').splitlines()
                if line.startswith(APP_SCRIPT_ANSWER)]
     if result.returncode or len(answers) != 1:
@@ -3146,7 +3504,39 @@ def wait_db_ready(attempts=60):
     raise InstallError('The CPT Studio database did not become ready.')
 
 
-def db_container_problems(container, postgres_image_id) -> list:
+def no_core_dumps(host) -> bool:
+    """Whether a container's HostConfig sets core dumps off (--ulimit core=0: soft and hard 0)."""
+    return any(isinstance(item, dict) and item.get('Name') == 'core' and item.get('Soft') == 0 and item.get('Hard') == 0
+               for item in host.get('Ulimits') or [])
+
+
+def db_memory_problems(container, cgroup=None) -> list:
+    """A3: what makes the database's memory limits other than db_args' - memory and memory + swap equal at
+    DB_MEMORY_BYTES (swap off) - in its HostConfig and, when ``cgroup`` (db_cgroup's reading) is given, in its own
+    cgroup: memory.swap.max 'max' is a database that swaps whatever its HostConfig says."""
+    host = container.get('HostConfig') or {}
+    problems = []
+    if host.get('Memory') != DB_MEMORY_BYTES or host.get('MemorySwap') != DB_MEMORY_BYTES:
+        problems.append(f'its memory and swap limits are {host.get("Memory")!r}/{host.get("MemorySwap")!r}, not '
+                        f'{DB_MEMORY}/{DB_MEMORY} (no swap)')
+    return problems + (db_cgroup_problems(cgroup) if cgroup is not None else [])
+
+
+def db_cgroup_problems(cgroup) -> list:
+    """A3: what makes the database's own cgroup (db_cgroup's reading) allow swap or another memory limit."""
+    problems = []
+    if cgroup.get('memory.swap.max') != '0':
+        problems.append(f'its cgroup allows swap (memory.swap.max {cgroup.get("memory.swap.max")!r}, not 0)')
+    if cgroup.get('memory.max') != str(DB_MEMORY_BYTES):
+        problems.append(f'its cgroup memory limit is {cgroup.get("memory.max")!r}, not {DB_MEMORY_BYTES}')
+    return problems
+
+
+def db_container_problems(container, postgres_image_id, cgroup=None, *, memory=True) -> list:
+    """What makes ``container`` not the CPT Studio database db_args starts. Release 1 (A3) adds its hardening -
+    every capability dropped, core dumps off, a 128 MiB /dev/shm - and, unless ``memory`` is False (the db phase's
+    read before it updates them in place), its memory limits (db_memory_problems, with ``cgroup``), so drift fails a
+    later install."""
     host = container.get('HostConfig') or {}
     problems = []
     if not owned(container, 'db'):
@@ -3159,12 +3549,104 @@ def db_container_problems(container, postgres_image_id) -> list:
         problems.append('has another restart policy')
     if NETWORK not in ((container.get('NetworkSettings') or {}).get('Networks') or {}):
         problems.append(f'is not on {NETWORK}')
+    if host.get('CapDrop') != ['ALL']:
+        problems.append('does not drop every capability')
+    if not no_core_dumps(host):
+        problems.append('does not set core dumps off (core=0)')
+    if host.get('ShmSize') != DB_SHM_BYTES:
+        problems.append(f'its /dev/shm is {host.get("ShmSize")!r} bytes, not 128 MiB')
+    if memory:
+        problems += db_memory_problems(container, cgroup)
     return problems
+
+
+def db_cgroup() -> dict:
+    """The database container's own cgroup files (DB_CGROUP_FILES), read inside it with its own cat - {name: the
+    file's text}; a file that cannot be read is left out, so it reads as not as installed (A3)."""
+    script = ('for f in ' + ' '.join(DB_CGROUP_FILES) + '; do v=$(cat /sys/fs/cgroup/$f 2>/dev/null) && '
+              'printf "%s=%s\\n" "$f" "$v"; done; true')
+    done = docker('exec', DB_CONTAINER, 'sh', '-c', script, check=False, timeout=30)
+    found = {}
+    for line in done.stdout.decode('utf-8', 'replace').splitlines():
+        name, sep, value = line.partition('=')
+        if sep and name in DB_CGROUP_FILES and name not in found:
+            found[name] = value.strip()
+    return found
+
+
+def cgroup_bytes(cgroup, name):
+    """A cgroup file's value as a whole number of bytes, or None ('max', unread, malformed)."""
+    value = (cgroup or {}).get(name, '')
+    return int(value) if value.isascii() and value.isdigit() else None
+
+
+def db_memory(container) -> dict:
+    """A3, on an existing database container: as installed, or - when its HostConfig or its cgroup differ from
+    db_args' 512m/512m (swap off) - updated in place with `docker update --memory 512m --memory-swap 512m` (applied to
+    the running container: no restart, no connection dropped), but only while its memory.peak stays below
+    DB_PEAK_SHARE of 512 MiB; otherwise refused with the numbers, nothing changed. {'state', 'before', 'after'}."""
+    def reading(found, cgroup):
+        host = found.get('HostConfig') or {}
+        return {'memory': host.get('Memory'), 'memory_swap': host.get('MemorySwap'), 'cgroup': cgroup}
+    cgroup = db_cgroup()
+    before = reading(container, cgroup)
+    if not db_memory_problems(container, cgroup):
+        return {'state': 'as installed', 'before': before}
+    peak, swapped = cgroup_bytes(cgroup, 'memory.peak'), cgroup_bytes(cgroup, 'memory.swap.current')
+    if peak is None or swapped is None:
+        raise InstallError(f'{DB_CONTAINER}\'s memory limits are not {DB_MEMORY}/{DB_MEMORY} (no swap), and its cgroup\'s '
+                           'memory.peak and memory.swap.current cannot be read, so it cannot be told whether turning swap '
+                           'off in place is safe; nothing was changed.', details={'before': before})
+    limit = int(DB_PEAK_SHARE * DB_MEMORY_BYTES)
+    if peak >= limit:
+        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB; {swapped} bytes in '
+                           f'swap now), not below {DB_PEAK_SHARE:.0%} of {DB_MEMORY} ({limit} bytes): turning swap off at '
+                           f'{DB_MEMORY} could get it killed, so nothing was changed. The owner decides on a larger '
+                           'limit (RELEASE-1-SPEC A3).', details={'before': before, 'peak': peak, 'swap': swapped})
+    docker('update', '--memory', DB_MEMORY, '--memory-swap', DB_MEMORY, DB_CONTAINER, timeout=60)
+    updated = inspect('container', DB_CONTAINER) or {}
+    after = reading(updated, db_cgroup())
+    return {'state': 'updated', 'before': before, 'after': after, 'peak': peak, 'swap_before': swapped}
+
+
+def db_settings_shown() -> dict:
+    """A5: SHOW of each of DB_LOG_SETTINGS on a fresh connection (psql as the bootstrap user over the database
+    container's own socket) - {name: value}, a value that is not read left out."""
+    done = docker('exec', DB_CONTAINER, 'psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', DB_USER, '-d',
+                  DB_NAME, *[part for name, _ in DB_LOG_SETTINGS for part in ('-c', f'SHOW {name}')], check=False,
+                  timeout=30)
+    values = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines() if line.strip()]
+    if done.returncode or len(values) != len(DB_LOG_SETTINGS):
+        return {}
+    return {name: value for (name, _), value in zip(DB_LOG_SETTINGS, values)}
+
+
+def db_statement_logging(attempts=10, interval=0.5) -> dict:
+    """A5: ALTER SYSTEM SET each of DB_LOG_SETTINGS, pg_reload_conf() (no restart), then SHOW them on fresh connections
+    until they read as set (a reload is asynchronous) - refused unless they do. The statements are fixed text; psql
+    runs as the bootstrap user over the container's own socket, as wait_db_ready probes it. {'shown', 'reads'}."""
+    statements = [f"ALTER SYSTEM SET {name} = '{value}'" for name, value in DB_LOG_SETTINGS] + ['SELECT pg_reload_conf()']
+    done = docker('exec', DB_CONTAINER, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', DB_USER, '-d', DB_NAME,
+                  *[part for statement in statements for part in ('-c', statement)], check=False, timeout=60)
+    if done.returncode:
+        raise InstallError(f'Setting the database\'s statement logging (ALTER SYSTEM) failed (exit {done.returncode}); '
+                           'nothing else was changed.', output=(done.stdout + done.stderr)[-2048:])
+    expected = dict(DB_LOG_SETTINGS)
+    shown = {}
+    for read in range(1, attempts + 1):
+        shown = db_settings_shown()
+        if shown == expected:
+            return {'shown': shown, 'reads': read}
+        time.sleep(interval)
+    raise InstallError(f'The database\'s statement logging does not read as set after its reload ({shown or "not read"}, '
+                       f'not {expected}): a failed statement could still be logged with its values (FLOW-13).',
+                       details={'shown': shown})
 
 
 def service_problems(container, role, image_id, port=None) -> list:
     """What makes ``container`` not the hardened ``role`` of ``image_id``; a web must publish exactly 127.0.0.1:
-    ``port`` (any one of WEB_PORTS when ``port`` is None)."""
+    ``port`` (any one of WEB_PORTS when ``port`` is None). Release 1 (A7) adds the role 'converter' (converter_problems:
+    no network, no file, no secret, its own uid, init on)."""
     host = container.get('HostConfig') or {}
     problems = []
     if not owned(container, role) or container.get('Image') != image_id:
@@ -3173,8 +3655,16 @@ def service_problems(container, role, image_id, port=None) -> list:
         problems.append('root filesystem is writable')
     if host.get('CapDrop') != ['ALL'] or 'no-new-privileges' not in (host.get('SecurityOpt') or []):
         problems.append('capabilities or privilege escalation not locked down')
-    if (container.get('Config') or {}).get('User') != f'{APP_UID}:{APP_UID}':
-        problems.append('not running as the application user')
+    user = f'{CONVERTER_UID}:{APP_UID}' if role == 'converter' else f'{APP_UID}:{APP_UID}'
+    if (container.get('Config') or {}).get('User') != user:
+        problems.append('not running as the application user' if role != 'converter'
+                        else f'not running as the converter\'s own user ({user})')
+    # release 1 (A3): hardening() sets both; the check keeps them set - no swap (memory + swap equal to the memory
+    # limit, which is set), and no core dump, which would write process memory to disk
+    if not host.get('Memory') or host.get('MemorySwap') != host.get('Memory'):
+        problems.append('its memory limit allows swap (memory and memory + swap are not equal)')
+    if not no_core_dumps(host):
+        problems.append('core dumps are not off (core=0)')
     bindings = host.get('PortBindings') or {}
     ports = (port,) if port is not None else WEB_PORTS
     expected = ([{'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(each)}]} for each in ports] if role == 'web'
@@ -3194,7 +3684,74 @@ def service_problems(container, role, image_id, port=None) -> list:
     if role == 'worker' and any((source, destination) not in allowed or writable is not False
                                 for source, destination, writable in binds):
         problems.append('a bind mount other than a read-only credentials file')
+    if role == 'converter':
+        problems += converter_problems(container)
     return problems
+
+
+def converter_problems(container) -> list:
+    """A7: what makes ``container`` other than the sealed converter: its network 'none', no bind mount, the convert
+    volume alone mounted (no files volume, no credentials), no secret or credentials variable in its environment, and
+    init on (leftover LibreOffice processes are reaped). service_problems holds the rest (read-only root, every
+    capability dropped, its own user, no swap, no core dump, no published port)."""
+    host, config = container.get('HostConfig') or {}, container.get('Config') or {}
+    problems = []
+    if host.get('NetworkMode') != 'none':
+        problems.append(f'its network is {host.get("NetworkMode")!r}, not none')
+    mounts = container.get('Mounts') or []
+    if [mount for mount in mounts if mount.get('Type') == 'bind']:
+        problems.append('it holds a bind-mounted path')
+    volumes = [(mount.get('Type'), mount.get('Name'), mount.get('Destination')) for mount in mounts
+               if mount.get('Type') != 'bind']
+    if volumes != [('volume', CONVERT_VOLUME, CONVERT_DIR)]:
+        problems.append(f'it mounts {volumes or "nothing"}, not the convert volume alone at {CONVERT_DIR}')
+    named = sorted({str(item).partition('=')[0] for item in config.get('Env') or []
+                    if CONVERTER_FORBIDDEN_ENV_RE.search(str(item).partition('=')[0])})
+    if named:
+        problems.append(f'its environment names {", ".join(named)} (a secret or a credentials file)')
+    if host.get('Init') is not True:
+        problems.append('init is off (leftover LibreOffice processes would not be reaped)')
+    return problems
+
+
+def converter_args(image_id, revision) -> list:
+    """docker run arguments of cpt-studio-converter (A7): no network, no env-file, no files volume, no credential;
+    its own uid with the application's group (the socket is shared, no file); the worker's limits of memory and /tmp,
+    two CPUs, init, a restart policy, the CPT and role labels and the revision; the convert volume at CONVERT_DIR; the
+    entrypoint role 'converter'; a health check that pings the socket."""
+    return ['--name', CONVERTER, '--pull=never', '--restart', 'unless-stopped', '--network', 'none',
+            '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=converter', '--label', f'{REVISION_LABEL}={revision}',
+            '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(CONVERTER_STOP_SECONDS),
+            *hardening(*CONVERTER_LIMITS, user=f'{CONVERTER_UID}:{APP_UID}'), '--cpus', CONVERTER_CPUS, '--init',
+            '--mount', f'type=volume,src={CONVERT_VOLUME},dst={CONVERT_DIR}',
+            '--health-cmd', CONVERTER_HEALTH, '--health-interval', '10s', '--health-timeout', '5s',
+            '--health-retries', '3', '--health-start-period', '20s', image_id, 'converter']
+
+
+def converter_state(container) -> dict:
+    """What a converter container is, for a receipt and the checks: its id, image, revision, running and health."""
+    state = (container or {}).get('State') or {}
+    return {'id': (container or {}).get('Id'), 'image': (container or {}).get('Image'),
+            'revision': labels_of(container or {}).get(REVISION_LABEL), 'running': bool(state.get('Running')),
+            'health': (state.get('Health') or {}).get('Status')}
+
+
+def converter_problem(image_id, revision=None) -> str:
+    """Why the converter cannot serve a worker of ``image_id`` (A7: running, healthy, from that image and revision -
+    or, when ``revision`` is None, from any CPT Studio image: a switch-back's older worker uses the one that runs), or
+    ''."""
+    container = inspect('container', CONVERTER)
+    if container is None:
+        return f'{CONVERTER} is not there'
+    found = converter_state(container)
+    if not owned(container, 'converter'):
+        return f'{CONVERTER} is not a CPT Studio converter container'
+    if not found['running'] or found['health'] != 'healthy':
+        return f'{CONVERTER} is not running and healthy (running {found["running"]}, health {found["health"]})'
+    if revision is not None and (found['image'] != image_id or found['revision'] != revision):
+        return (f'{CONVERTER} runs image {str(found["image"])[:19]} of revision {str(found["revision"])[:12]}, not this '
+                'revision\'s')
+    return ''
 
 
 def wait_service(role, revision, image_id, *, name=None, port=WEB_PORT) -> dict:
@@ -4110,12 +4667,24 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
 
 
-def retire_parked(parked):
+def retire_parked(parked) -> dict:
     """Remove the parked old pair (replace_services' 'replaced') - once the new pair runs and the stored list states are
-    recomputed (phase_app)."""
+    recomputed (phase_app), or the previous pair serves again (switch-back's B9). Release 1 (A13): each container's log
+    is first kept, ids only (keep_container_log); every copy is made before anything is removed, and a copy that fails
+    removes nothing - the parked pair stays, the new pair already serves, and the error says so. {role: the copy}."""
+    kept = {}
+    for role, previous in (parked or {}).items():
+        if previous:
+            try:
+                kept[role] = keep_container_log({'Id': previous['id']}, role, previous.get('revision'))
+            except InstallError as error:
+                raise InstallError(f'the parked {role}\'s log could not be kept ({error}), so the parked pair was left in '
+                                   'place: keep its log, then remove it (ops/INSTALL.md, Recovery notes)',
+                                   details={'kept': kept}) from error
     for role, previous in (parked or {}).items():
         if previous:
             docker('rm', '--force', previous['id'], timeout=60)
+    return kept
 
 
 # --- blue/green: the switch that never stops the serving web (ops/INSTALL.md, app) --------------------------------------
@@ -4291,6 +4860,21 @@ def serves_admin_host(revision) -> bool:
                            'revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
     return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
                    quiet=True).returncode == 0 for path in ADMIN_HOST_FILES)
+
+
+def has_converter(revision) -> bool:
+    """Whether ``revision`` has the converter service (A7): its tree holds CONVERTER_FILES, read as serves_admin_host
+    reads the admin host's. A worker of such a revision mounts the converter's socket and requires it; an older one is
+    started exactly as before. A revision this checkout cannot read is refused, never taken for an older one: that
+    answer would start a release-1 worker converting in-process (fail closed)."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} has the converter service: it is not a '
+                           '40-character revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} has the converter service: this checkout cannot read '
+                           'that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in CONVERTER_FILES)
 
 
 def admin_answers(fetch) -> tuple:
@@ -5342,6 +5926,13 @@ def phase_preflight(ctx) -> dict:
     details['foreign_app_uid_tasks'] = foreign_uid_tasks(APP_UID, own_service_ids())
     if details['foreign_app_uid_tasks']:
         problems.append(f'uid {APP_UID} already runs {details["foreign_app_uid_tasks"]} task(s) outside CPT Studio')
+    # release 1 (A7): the converter's own uid must be CPT Studio's alone too
+    converter = inspect('container', CONVERTER)
+    details['foreign_converter_uid_tasks'] = foreign_uid_tasks(
+        CONVERTER_UID, [converter['Id']] if converter is not None and owned(converter, 'converter') else [])
+    if details['foreign_converter_uid_tasks']:
+        problems.append(f'uid {CONVERTER_UID}, the converter\'s, already runs {details["foreign_converter_uid_tasks"]} '
+                        'task(s) outside CPT Studio')
     details['dns'] = {}
     for host in (DOMAIN, ADMIN_HOST):
         try:
@@ -5683,6 +6274,7 @@ def image_soffice(smoke, image_id) -> str:
     """The image's `soffice --version` line (image checks above); refuses unless it ran and names LibreOffice."""
     done = docker(*smoke, '-e', 'HOME=/tmp', '--entrypoint', 'soffice', image_id, '--version', check=False,
                   timeout=120)
+    journal('oneshot', 'image soffice version', done.returncode)  # A13
     named = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines()
              if line.strip().startswith('LibreOffice ')]
     if done.returncode or not named:
@@ -5694,6 +6286,7 @@ def image_soffice(smoke, image_id) -> str:
 def image_anthropic(smoke, image_id) -> str:
     """The anthropic SDK release the image imports (image checks above); refuses unless it is ANTHROPIC_SDK_VERSION."""
     done = docker(*smoke, '--entrypoint', 'python', image_id, '-c', ANTHROPIC_SDK_SCRIPT, check=False, timeout=120)
+    journal('oneshot', 'image anthropic version', done.returncode)  # A13
     lines = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines() if line.strip()]
     found = lines[-1] if lines else ''
     if done.returncode or found != ANTHROPIC_SDK_VERSION:
@@ -5762,6 +6355,7 @@ def image_conversion(image_id) -> dict:
     done = docker('run', '--rm', '--pull=never', '--network', 'none', '--no-healthcheck', *hardening(*WORKER_LIMITS),
                   '-e', 'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', image_id, 'manage', 'shell', '-c', source,
                   check=False, timeout=180)
+    journal('oneshot', 'image conversion gate', done.returncode)  # A13
     answers = [line[len(CONVERSION_ANSWER):] for line in done.stdout.decode('utf-8', 'replace').splitlines()
                if line.startswith(CONVERSION_ANSWER)]
     try:
@@ -5776,6 +6370,21 @@ def image_conversion(image_id) -> dict:
                            'network), so every Word upload would fail its conversion.',
                            output=(done.stdout + done.stderr)[-8192:])
     return {'head': found['head'], 'bytes': found['bytes'], 'sha256': found['sha256']}
+
+
+def image_converter_self_test(image_id) -> dict:
+    """The converter's own self-test in the built image (A7: it converts a Word file it builds in memory and checks
+    the PDF header), as the converter runs - its user, its limits, a read-only root - with no network. Refuses unless it
+    exits 0. {'exit', 'said'}: its last line, at most 200 characters (synthetic text only)."""
+    done = docker('run', '--rm', '--pull=never', '--network', 'none', '--no-healthcheck',
+                  *hardening(*CONVERTER_LIMITS, user=f'{CONVERTER_UID}:{APP_UID}'), '--entrypoint', 'python', image_id,
+                  *CONVERTER_SELF_TEST, check=False, timeout=180)
+    journal('oneshot', 'image converter self-test', done.returncode)  # A13
+    lines = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines() if line.strip()]
+    if done.returncode:
+        raise InstallError(f'The image\'s converter fails its self-test (exit {done.returncode}) with no network, so '
+                           'every Word round would fail.', output=(done.stdout + done.stderr)[-8192:])
+    return {'exit': done.returncode, 'said': (lines[-1] if lines else '')[:200]}
 
 
 def phase_image(ctx) -> dict:
@@ -5818,17 +6427,70 @@ def phase_image(ctx) -> dict:
     # file: as the image's own user on a read-only root, exactly as the web role.
     wsgi = docker(*smoke, '-e', 'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', '--entrypoint', 'python',
                   image['Id'], '-c', 'import cptstudio.wsgi', check=False, timeout=120)
+    journal('oneshot', 'image manage check', check.returncode)  # A13
+    journal('oneshot', 'image wsgi load', wsgi.returncode)
     if check.returncode or wsgi.returncode:
         raise InstallError('The image fails Django system checks, or cannot load the web application as its own '
                            'user.', output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
     office = image_soffice(smoke, image['Id'])
     sdk = image_anthropic(smoke, image['Id'])
     conversion = image_conversion(image['Id'])
+    converter = image_converter_self_test(image['Id']) if has_converter(ctx.revision) else None  # A7
     return {'image_id': image['Id'], 'tag': tag, 'base': base, 'size_bytes': image.get('Size'),
             'source_archive_sha256': sha256(archive), 'build_log': build_log, 'soffice': office, 'anthropic': sdk,
-            'conversion': conversion,
+            'conversion': conversion, 'converter_self_test': converter,
             'migrations': {'baseline': f'{ROLLING_BASELINE:04d}', 'after_baseline': migrations},
             'summary': f'built {tag} = {image["Id"][:19]}'}
+
+
+def wait_converter(image_id, revision, *, attempts=60, interval=2.0) -> dict:
+    """Readiness of the converter just started (A7): running and healthy (its health check pings the socket), then
+    service_problems' role 'converter' holds, with no restart. Refused otherwise; the receipt says what was seen."""
+    def check():
+        found = converter_state(inspect('container', CONVERTER))
+        return found['running'] and found['health'] == 'healthy', {'running': found['running'], 'health': found['health']}
+    passed, observations = poll(check, attempts=attempts, interval=interval)
+    container = inspect('container', CONVERTER) or {}
+    problems = service_problems(container, 'converter', image_id) if container else ['container vanished']
+    if labels_of(container).get(REVISION_LABEL) != revision:
+        problems.append('it does not carry this revision\'s label')
+    if not passed or problems or container.get('RestartCount'):
+        raise InstallError(f'{CONVERTER} did not become ready: {problems or "health not observed"}. Every Word round '
+                           'fails as busy until it is (ops/INSTALL.md, converter).',
+                           details={'observations': observations[-5:]})
+    return {'id': container['Id'], 'observations': len(observations)}
+
+
+def phase_converter(ctx) -> dict:
+    """Release 1 (A7, E3): cpt-studio-converter from this revision's image, outside the blue/green switch and
+    idempotent: the convert volume (the socket alone) is ensured and owned as the converter needs it; a converter of
+    this revision that runs healthy and sealed is kept; any other is stopped with CONVERTER_STOP_SECONDS - a conversion
+    in progress finishes - and replaced (a conversion asked for in the few seconds between fails as busy, and can be
+    retried). The worker of an older revision never uses it; the app phase refuses until it runs (converter_problem)."""
+    image_id = installed_image(ctx)
+    if not has_converter(ctx.revision):
+        raise InstallError(f'Revision {ctx.revision[:12]} has no converter service ({", ".join(CONVERTER_FILES)}): '
+                           'there is nothing to start.')
+    details = {'volume': ensure_volume(CONVERT_VOLUME, 'convert')}
+    details['volume_root'] = run_helper(H_CONVERT_VOLUME, {'uid': CONVERTER_UID, 'gid': APP_UID},
+                                        mounts=[f'type=volume,src={CONVERT_VOLUME},dst=/convert'])['root']
+    current = inspect('container', CONVERTER)
+    if current is not None:
+        if not owned(current, 'converter'):
+            raise InstallError(f'{CONVERTER} exists but is not a CPT Studio converter container; nothing was changed.')
+        found = converter_state(current)
+        if (found['image'] == image_id and found['revision'] == ctx.revision and found['running']
+                and found['health'] == 'healthy' and not service_problems(current, 'converter', image_id)):
+            return {**details, 'state': 'present', 'converter': found,
+                    'summary': f'{CONVERTER} already runs {image_id[:19]}, sealed and healthy'}
+        details['replaced'] = found
+        details['replaced_log'] = keep_container_log(current, 'converter')  # A13: ids only, before it is removed
+        docker('stop', '--time', str(CONVERTER_STOP_SECONDS), CONVERTER, timeout=CONVERTER_STOP_SECONDS + 60)
+        docker('rm', '--force', current['Id'], timeout=60)
+    docker('run', '-d', *converter_args(image_id, ctx.revision), quiet=True)
+    details['started'] = wait_converter(image_id, ctx.revision)
+    details['state'] = 'replaced' if 'replaced' in details else 'started'
+    return {**details, 'summary': f'{CONVERTER} running {image_id[:19]} with no network ({details["state"]})'}
 
 
 def phase_db(ctx) -> dict:
@@ -5846,19 +6508,27 @@ def phase_db(ctx) -> dict:
         docker('run', '-d', *db_args(), input=read_protected_env(DB_ENV, DB_ENV_KEYS), quiet=True)
         details['container'] = 'created'
     else:
-        problems = db_container_problems(container, postgres['Id'])
+        # its memory limits are read below, where an existing container's are updated in place (A3); everything else
+        # that differs refuses before anything changes - it cannot be updated without recreating the container
+        problems = db_container_problems(container, postgres['Id'], memory=False)
         if problems:
-            raise InstallError(f'{DB_CONTAINER} exists but ' + '; '.join(problems) + '.')
+            raise InstallError(f'{DB_CONTAINER} exists but ' + '; '.join(problems) + '. Nothing was changed: recreating '
+                               'it would interrupt the site, which is the owner\'s call (ops/INSTALL.md, db).')
         if not container['State'].get('Running'):
             docker('start', DB_CONTAINER)
         details['container'] = 'present'
     wait_db_ready()
+    details['memory'] = db_memory(inspect('container', DB_CONTAINER) or {})  # A3
     container = inspect('container', DB_CONTAINER)
-    problems = db_container_problems(container, postgres['Id'])
+    cgroup = db_cgroup()
+    problems = db_container_problems(container, postgres['Id'], cgroup)
     if problems:
-        raise InstallError(f'{DB_CONTAINER} ' + '; '.join(problems) + '.')
-    details.update(container_id=container['Id'], image_id=postgres['Id'],
-                   summary=f'{DB_CONTAINER} ready on 127.0.0.1:{DB_PORT} ({details["container"]})')
+        raise InstallError(f'{DB_CONTAINER} ' + '; '.join(problems) + '.', details={**details, 'cgroup': cgroup})
+    details['statement_logging'] = db_statement_logging()  # A5
+    details.update(container_id=container['Id'], image_id=postgres['Id'], cgroup=cgroup,
+                   summary=f'{DB_CONTAINER} ready on 127.0.0.1:{DB_PORT} ({details["container"]}); memory '
+                           f'{DB_MEMORY} with no swap ({details["memory"]["state"]}); statement text kept out of its '
+                           'log')
     return details
 
 
@@ -5987,6 +6657,12 @@ def phase_app(ctx) -> dict:
     if problem:
         raise InstallError(f'{problem}; nothing was started.')
     image_id = installed_image(ctx)
+    # release 1 (A7): a revision that has the converter starts a worker that requires it, so it must already run,
+    # healthy, from this revision's image - before anything changes
+    if has_converter(ctx.revision):
+        problem = converter_problem(image_id, ctx.revision)
+        if problem:
+            raise InstallError(f'{problem}: run --phase converter first. Nothing was started.')
     require_db()
     check_credential_files('disabled', [], coding=mode)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
@@ -6047,7 +6723,7 @@ def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnab
         services['steps']['S6'] = utc_now_ms()  # blue/green: the recompute and the removal of the parked pair
     try:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
-        retire_parked(parked)
+        services['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
         raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
                            details={**services, 'states_recomputed': states, 'coding': coding}) from error
@@ -6103,6 +6779,13 @@ def phase_switch_back(ctx) -> dict:
         raise InstallError(f'The previous image {prev_image[:19]} is not present with revision {prev_revision[:12]} and '
                            'the CPT Studio label; nothing was changed.')
     image_id = installed_image(ctx)
+    # release 1 (A7): a previous revision that has the converter gets a worker that requires it (any CPT Studio
+    # converter that runs healthy: the protocol is the converter's own); an older one converts in-process as before
+    if has_converter(prev_revision):
+        problem = converter_problem(prev_image)
+        if problem:
+            raise InstallError(f'{problem}: the previous revision\'s worker requires it; run --phase converter first. '
+                               'Nothing was started or stopped.')
     require_db()
     plan = replacement_plan(ctx)
     if plan['mode'] != 'blue-green' or plan['web']['revision'] != ctx.revision or plan['web']['image'] != image_id:
@@ -6379,7 +7062,7 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                           **({'coding': coding} if coding else {})), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', prev_revision, prev_image)
         step('B9')
-        retire_parked(parked)
+        record['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
         step('done')
         record['availability'] = recorder.stop()
     except BaseException as failure:
@@ -7799,9 +8482,16 @@ def phase_verify(ctx) -> dict:
     if other_lineages(le_state()) != other_lineages(preflight['letsencrypt']):
         problems.append('another Let\'s Encrypt lineage changed')
     postgres = inspect('image', POSTGRES_IMAGE) or {}
-    db = inspect('container', DB_CONTAINER)
+    db, db_evidence = inspect('container', DB_CONTAINER), None
     if db is None or db_container_problems(db, postgres.get('Id')) or not db['State'].get('Running'):
         problems.append(f'{DB_CONTAINER} is not the running, labelled, loopback-only database')
+    else:
+        # release 1 (A3, A5): its own cgroup allows no swap, and its log keeps no statement text
+        db_evidence = {'cgroup': db_cgroup(), 'settings': db_settings_shown()}
+        problems += [f'{DB_CONTAINER}: {problem}' for problem in db_cgroup_problems(db_evidence['cgroup'])]
+        if db_evidence['settings'] != dict(DB_LOG_SETTINGS):
+            problems.append(f'{DB_CONTAINER}: its statement logging reads {db_evidence["settings"] or "nothing"}, not '
+                            f'{dict(DB_LOG_SETTINGS)} (run --phase db)')
     pair = {}
     for role, name in SERVICES.items():
         container = pair[role] = inspect('container', name)
@@ -7810,6 +8500,15 @@ def phase_verify(ctx) -> dict:
         else:
             problems += [f'{name}: {problem}' for problem in service_problems(
                 container, role, image_id, port=port if role == 'web' else None)]
+    # release 1 (A7): the converter of this revision runs sealed - no network, no secret, no files volume - and healthy
+    converter = None
+    if has_converter(ctx.revision):
+        found = inspect('container', CONVERTER)
+        converter = converter_state(found)
+        problem = converter_problem(image_id, ctx.revision)
+        problems += [problem] if problem else []
+        if found is not None:
+            problems += [f'{CONVERTER}: {each}' for each in service_problems(found, 'converter', image_id)]
     # What an app phase parks or starts beside the pair is gone once it succeeded.
     for name in (INCOMING_WEB, SERVICES['web'] + '-previous', SERVICES['worker'] + '-previous'):
         if inspect('container', name) is not None:
@@ -7821,9 +8520,9 @@ def phase_verify(ctx) -> dict:
     foreign = foreign_uid_tasks(APP_UID, own_service_ids())
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
-    appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
+    appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, CONVERTER, *SERVICES.values()})
     details = {'evidence': evidence, 'acme': acme, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
-               'web_port': port}
+               'web_port': port, 'database': db_evidence, 'converter': converter}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
@@ -8338,7 +9037,7 @@ def phase_rollback_vhost(ctx) -> dict:
 
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
-    'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
+    'converter': phase_converter, 'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
     'provision': phase_provision, 'operators': phase_operators,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost, 'ingress': phase_ingress,
     'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
@@ -8365,8 +9064,10 @@ def main(argv=None) -> int:
     record = {'phase': args.phase, 'revision': args.revision, 'started_at': utc_now(),
               'installer_sha256': sha256(SELF.read_bytes())}
     code = 1
+    journal_begin(args.phase)
     try:
         record['door'] = check_door(os.environ, args.revision)
+        journal_begin(args.phase, record['door'])
         record['door']['ceiling'] = check_door_ceiling(os.environ, args.phase)
         record['tree'] = check_tree(args.revision, record['door']['declaration_commit'])
         details = PHASES[args.phase](ctx)
@@ -8381,6 +9082,7 @@ def main(argv=None) -> int:
         record['failure_log'] = ctx.log('failure', traceback.format_exc().encode())
     finally:
         record.setdefault('ok', False)
+        record['oneshot_log'] = flush_journal()  # A13: one line per one-shot and helper run, root-only
         record['finished_at'] = utc_now()
         path = write_receipt(receipts, args.phase, record)
         summary = (record.get('details') or {}).get('summary') if record['ok'] else record.get('error')

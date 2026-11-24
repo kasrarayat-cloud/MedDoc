@@ -35,6 +35,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+from test_install import HARDENED_LIMITS  # noqa: E402
 from test_install import (TemporaryDirectoryTest, earlier_files, earlier_literal, earlier_text,  # noqa: E402
                           guard_host, release_host, run_body)
 from test_install_harness import ANTHROPIC_FILE, ANTHROPIC_VALUE, GEMINI_FILE, IMAGE, REVISION, RULING, flags  # noqa: E402
@@ -280,6 +281,7 @@ class InterpreterServiceMountTests(unittest.TestCase):
         return {'Image': IMAGE, 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
                                            'Labels': {install.LABEL: '1', install.ROLE_LABEL: role}},
                 'HostConfig': {'ReadonlyRootfs': True, 'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'],
+                               **HARDENED_LIMITS,
                                'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '9150'}]}
                                                 if role == 'web' else {})},
                 'Mounts': mounts}

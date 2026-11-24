@@ -27,6 +27,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+from test_install import HARDENED_LIMITS  # noqa: E402
 from test_install import (FakeOwnership, TemporaryDirectoryTest, earlier_text, guard_host,  # noqa: E402
                           pre_switch_answer, release_host, run_body)
 
@@ -308,6 +309,7 @@ class ServiceMountTests(unittest.TestCase):
         return {'Image': IMAGE, 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
                                            'Labels': {install.LABEL: '1', install.ROLE_LABEL: role}},
                 'HostConfig': {'ReadonlyRootfs': True, 'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'],
+                               **HARDENED_LIMITS,
                                'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(port)}]}
                                                 if role == 'web' else {})},
                 'Mounts': mounts}
@@ -691,7 +693,7 @@ class AppWorld:
                 mock.patch.object(install, 'oneshot', self.oneshot),
                 mock.patch.object(install, 'app_script', self.app_script),
                 mock.patch.object(install, 'replace_services', self.replace),
-                mock.patch.object(install, 'retire_parked'),
+                mock.patch.object(install, 'retire_parked', return_value={}),  # release 1 (A13): the copies
                 mock.patch.object(install, 'run_helper', self.helper)]
 
 

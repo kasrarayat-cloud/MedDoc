@@ -35,6 +35,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+from test_install import DB_CGROUP_OK  # noqa: E402
 from test_install import (TemporaryDirectoryTest, guard_host, release_host, rendered,  # noqa: E402
                           HOST_GUARD_ATTEMPTS, pre_switch_answer, pre_admin, coupled)
 
@@ -396,6 +397,14 @@ class BlueGreenWorld:
     def rendered_vhosts(self, revision, port=install.WEB_PORT):
         return self.confs[port]
 
+    def keep_container_log(self, container, role, revision=None):
+        # release 1 (A13): the ids-only copy of a container this installer removes, made before its removal
+        name = self.by_id(container['Id']) or container['Id']
+        self.act('keep-log', name, role)
+        assert name in self.containers, f'the log of {name} was kept after it was removed'
+        return self.done({'file': f'/var/log/cpt-studio/containers/{role}-x.log', 'sha256': '0' * 64, 'kept': 0,
+                          'dropped': 0, 'bytes': 0})
+
     def recorder(self, world=None):
         world = self
 
@@ -426,6 +435,7 @@ class BlueGreenWorld:
             host_listening_ports=self.host_listening_ports, close_undone_stages=self.close,
             put_back_states=self.put_back, stage_kinds_of=self.stage_kinds_of, undo_hazards=self.undo_hazards,
             app_script=self.app_script, oneshot=self.oneshot, rendered_vhosts=self.rendered_vhosts,
+            keep_container_log=self.keep_container_log,
             AvailabilityRecorder=self.recorder, installed_image=mock.Mock(return_value=IMAGE),
             require_db=mock.Mock(), helper_stat=mock.Mock(return_value={}),
             read_protected_env=mock.Mock(return_value=b'CPT_STUDIO_SECRET_KEY=synthetic\n'),
@@ -1253,6 +1263,8 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'inspect', side_effect=lambda kind, name: running.get(name) or (
                     {} if kind == 'image' else None)), \
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
+                mock.patch.object(install, 'db_cgroup', return_value=DB_CGROUP_OK), \
+                mock.patch.object(install, 'db_settings_shown', return_value=dict(install.DB_LOG_SETTINGS)), \
                 mock.patch.object(install, 'service_problems', side_effect=lambda c, role, image, port=None:
                                   (problems.setdefault(role, port), [])[1]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \

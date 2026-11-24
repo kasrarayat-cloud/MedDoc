@@ -24,6 +24,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+from test_install import HARDENED_LIMITS  # noqa: E402
 from test_install import guard_host, release_host  # noqa: E402
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -206,6 +207,7 @@ class CodingEnvironmentTests(unittest.TestCase):
             return {'Image': IMAGE, 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
                                                'Labels': {install.LABEL: '1', install.ROLE_LABEL: role}},
                     'HostConfig': {'ReadonlyRootfs': True, 'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'],
+                                   **HARDENED_LIMITS,
                                    'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '9150'}]}
                                                     if role == 'web' else {})},
                     'Mounts': [{'Type': 'bind', 'Source': CODER['target'], 'Destination': CODER['mounted'],
