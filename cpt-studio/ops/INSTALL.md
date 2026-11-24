@@ -13,16 +13,20 @@ run the next. Nothing here was executed by the session that wrote it.
 | object | value |
 |---|---|
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
-| database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
+| database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg`; release 1 (A3, A5): 512m of memory and no swap (memory and memory + swap equal, its own cgroup's `memory.swap.max` 0), core dumps off, and a log that never holds statement text (`log_min_error_statement` panic, `log_error_verbosity` terse) |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
 | worker | container `cpt-studio-worker`, read-only root, stop timeout 3,600 s (the Fable coding build: one coding stage prepares the document - a Word file converted in a bounded child of at most 60 s - then streams the reader's send and the checker's, each up to 96,000 output tokens at effort max, about 1,000 s each at the slowest rate measured, so a round can pass 2,000 s; the bound is `studio.jobs.CODE_STALE_SECONDS`, the age at which the stale sweep takes a running coding job for a dead worker's; a deploy may wait up to 60 minutes for it; round r3's question stage had 1,800 s before it), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
-| secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**). The Fable coding build (DECISIONS D351-D353) neither reads Corti's source nor writes Corti's copy: a `corti-credentials.env` an earlier install wrote is left as it is, and only a `switch-back` to an earlier pair given `--provider-mode live` mounts it |
+| secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `initial-credentials.json` (root 0600), `operator-enrolment.json` (root 0600, the platform operator's single-use setup code, valid 30 minutes: **operators** and **manage**; release 1, A6). No operator password is written to a file: an `operator-credentials.json` an earlier install wrote is left untouched, and deleting it is the owner's decision (D12). The Fable coding build (DECISIONS D351-D353) neither reads Corti's source nor writes Corti's copy: a `corti-credentials.env` an earlier install wrote is left as it is, and only a `switch-back` to an earlier pair given `--provider-mode live` mounts it |
 | coding credential | the Fable coder's (Claude Fable 5.2; CPT Studio's existing Anthropic credential): `/etc/cpt-studio/anthropic-credentials.env`, 10150:10150 0400, copied from `/etc/cpt-studio-provider-sources/anthropic.env` (root 0600 in a root 0700 directory, `ANTHROPIC_API_KEY` and an optional `ANTHROPIC_WORKSPACE_ID`) when the owner placed it; never part of the two-file set above. The only credentials file an `app` requires (`--coding-mode live`) or mounts: read-only into the WORKER alone at `/run/cpt-studio/anthropic-credentials.env` (the web is given the mode and the path, never the file); no access check. Astra's `openai.env` is no longer read or copied; an `openai-credentials.env` an earlier install wrote is left as it is, for a `switch-back` to an earlier pair that runs Astra. An earlier `/etc/cpt-studio/gemini.env` is no longer copied or mounted: it is left untouched and reported (`preflight`, `secrets`), deleting it being the owner's decision |
 | passages | the CMS passage files the revision commits under `studio/reference/data/`, imported into `PassageSource`/`ReferencePassage` |
-| agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) |
-| operator accounts | `ops-agent` (automated agent) and `platform-operator` (human): no workspace membership, an operator grant (`manage grant_operator`); the agent's login `/home/claude/.cpt-studio/ops-agent-credentials.json` (0600, top-level `username` and `password`) |
+| agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) - only when `provision` is given `--agent-username` (release 1, A6: a review agent is opt-in) |
+| operator accounts | `platform-operator` (human) alone (release 1, A6): no workspace membership, an operator grant (`manage grant_operator` with `--by`, `--review-by` and the declaration as `--authorization-ref`), an unusable password until its holder sets one with the setup code on admin.quillmd.com. No automated account is an operator: `ops-agent` (an earlier install's) is revoked by a ruled act, and its login file is left untouched - deleting it is the owner's decision (D11) |
+| converter | container `cpt-studio-converter` (release 1, A7, E3): this revision's image, network `none`, no environment file, no files volume, uid 10151 with the application's group 10150, read-only root, all capabilities dropped, 1536m without swap, two CPUs, init, a health check that pings its socket; volume `cpt-studio-convert` (the socket alone, 10151:10150 0750). A worker of a revision that has it mounts the volume read-only and is told the converter is required; an older revision's worker converts in-process as before |
+| edge logs | `/var/log/nginx/cpt-studio-access.log` (format `cpt_studio`: the path without its query string, the request id, the session reference) and `cpt-studio-error.log` (warn), kept by the host's nginx log rotation (release 1, A2) |
+| application logs | `/var/log/cpt-studio/` root 0700: `containers/<role>-<revision12>-<UTC>.log` (root 0600), the ids-only copy of each container a deploy removes, and `oneshots-<UTC date>.log` (root 0600), one line per one-shot and helper run; both deleted after 14 days (D7; release 1, A13) |
+| exports | `/var/lib/cpt-studio-exports/` root 0700: one new folder per practice export (**manage** `export-workspace`), root-only once written (release 1, D2) |
 | ingress | NEW `/etc/nginx/sites-available/quillmd-cpt` + `sites-enabled` symlink: one HTTPS server block for cpt.quillmd.com and admin.quillmd.com (D396). The `quillmd` vhost (QuillMD's) changes in one line alone - its :443 `server_name`, line 26, loses `admin.quillmd.com` in `ingress` and gets it back in `ingress-rollback` - under the coupling invariant (**The admin host and the coupling invariant**) |
 | certificate | lineage `cpt-studio` for cpt.quillmd.com and admin.quillmd.com, webroot `/var/www/certbot` for both, existing ACME account; the earlier lineage `cpt.quillmd.com` stays and keeps renewing: no stage of this revision loads it, but the stage `ingress-rollback` gives back does |
 
@@ -75,18 +79,20 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 1 | `preflight` | — | nothing (one ACME probe file written and removed) |
 | 2 | `secrets` | — | creates `/etc/cpt-studio/` and its two files, once; copies the coder's Anthropic credentials source when the owner placed it, once; an earlier `gemini.env` is reported, never touched |
 | 3 | `image` | — | builds `cpt-studio:<sha12>` |
-| 4 | `db` | — | network, two volumes, database container |
+| 4 | `db` | — | network, two volumes, database container; release 1: an existing container's memory and swap set to 512m/512m in place (`docker update`, no restart) when its peak allows, and its statement logging set (`ALTER SYSTEM`, a reload, no restart) |
+| 4a | `converter` | — | `cpt-studio-converter` and its volume from this revision's image (release 1, A7): started, kept, or replaced; before `app` |
 | 5 | `app` | `--coding-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--coding-mode disabled`): the Fable coder's mode, always explicit (`CPT_STUDIO_CODING_MODE`; live needs `--authorization-ref` and `/etc/cpt-studio/anthropic-credentials.env`, mounted read-only into the worker alone); Corti, the participants and the interpreter are started disabled, and their arguments are a `switch-back`'s alone | migrations; web and worker containers - on a served site blue/green: the incoming web on the idle port, the worker handed over, the vhost's upstream switched (`nginx -t`, a graceful reload: the two `sudo -n` commands), the old web drained and stopped, an availability record of the public `/health/` in the receipt |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
-| 9 | `provision` | `--owner-username <name>` (optional `--specialty`, `--agent-username`, display names, `--reset-passwords`) | a specialty's workspace (Gastroenterology unless `--specialty` names neurosurgery or orthopedic-surgery), owner and agent accounts; credentials files |
-| 9a | `operators` | optional `--reset-passwords` | the two platform-operator accounts (no membership), their grants and credentials files |
+| 9 | `provision` | `--owner-username <name> --by <person>` (optional `--specialty`, `--agent-username`, display names, `--reset-passwords`) | a specialty's workspace (Gastroenterology unless `--specialty` names neurosurgery or orthopedic-surgery), its owner (who chooses a new password at the first sign-in) and - only when `--agent-username` names one - a review agent; credentials files |
+| 9a | `operators` | optional `--reset-passwords`; `--by <person> --review-by <YYYY-MM-DD>` when it grants; `--regrant <name>` for a revoked account the declaration names | the human platform-operator account (no membership, an unusable password), its grant, and a setup code kept root-only |
 | 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload (a fresh host; refused while `quillmd-cpt` claims admin's :443) |
 | 11 | `cert` | — | lineage `cpt-studio` for both hosts (on a fresh host after `http-vhost`, or on a served site) |
 | 12 | `ingress` | — | admin.quillmd.com's :443 moved onto `quillmd-cpt`: this revision's HTTPS stage and the `quillmd` vhost's line 26, one root-helper write, one nginx reload |
 | 12a | `https-vhost` | — | a later `deploy/nginx/` change republished: `quillmd-cpt` replaced in place by this revision's HTTPS stage (both stages name admin); nginx reload |
 | 13 | `verify` | — | nothing |
+| 14 | `manage` | `--command <act>` and that act's arguments (**manage**, below) | one allow-listed ruled act of the application, run once this revision's migrations are applied |
 
 `switch-back` returns to the pair this revision's last successful `app` replaced
 (its receipt's `replaced`; images are never removed; after a same-revision
@@ -249,7 +255,51 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `conversion` records the PDF's size and sha256, never pinned (LibreOffice
   stamps a creation time in it).
 - **db** is idempotent; an existing container must be ours, on the pinned
-  image, loopback-only, `unless-stopped`.
+  image, loopback-only, `unless-stopped`, with every capability dropped, core
+  dumps off and a 128 MiB `/dev/shm` - anything else refuses before anything
+  changes (recreating the container would interrupt the site: the owner's
+  call). Release 1 (A3): its memory and memory + swap must be 512m each and its
+  own cgroup (read inside it) must allow no swap. When they differ, the
+  cgroup's `memory.peak` and `memory.swap.current` are read first, and their
+  sum - what sits in swap is memory the database used - must stay below 80% of
+  512 MiB; the limits are then set on the running container (`docker update
+  --memory 512m --memory-swap 512m`: no restart, no connection dropped) and the
+  receipt records them before and after; otherwise it refuses and prints the
+  numbers, so the owner can choose a larger limit. `memory.peak` counts only
+  since the container last started, so the change is made only once it has run
+  7 days (a week of the practices' use); a younger one is skipped - its limits
+  left as they are, the receipt saying why - and `verify` reports the swap
+  until a later `db` makes the change. A stopped database is never started
+  here: the phase refuses, starting and changing nothing. Then (A5) `ALTER SYSTEM` sets
+  `log_min_error_statement` to `panic` and `log_error_verbosity` to `terse`
+  (they persist in `postgresql.auto.conf` on the data volume), `pg_reload_conf()`
+  applies them without a restart, and `SHOW` on fresh connections must read
+  them, or it refuses: a failed statement is then logged without its text or
+  values. psql runs inside the database container as the bootstrap user over
+  its own socket, as the readiness probe does. A new cluster gets the same two
+  settings as server flags (`db_args`).
+- **converter** (release 1, A7; after `image`, before `app`) needs this
+  revision's image and a revision that has the converter service
+  (`studio/converter_server.py`). It makes the volume `cpt-studio-convert` and
+  gives its root to the converter's uid (10151:10150 0750, through the root
+  helper), and reads it back before anything starts: the image does not make
+  `/run/cpt-convert`, so a fresh volume's root would be root's and the converter
+  could not make its socket there. Every mount of that volume says
+  `volume-nocopy`, so Docker never copies an image's mount point over this
+  preparation. It keeps a converter of this revision that runs healthy and sealed; and
+  otherwise stops the one there (its log kept, ids only), with a grace that lets
+  a conversion in progress finish (80 s: LibreOffice's own 55 s inside the
+  converter's 70 s; the figure is Lane 5's to confirm), removes it and starts
+  the new one - network
+  `none`, no environment file, no files volume, no credential, its own uid,
+  init on - then waits for its health check. A Word conversion asked for in the
+  few seconds between fails as busy and can be retried. The image gate runs the
+  converter's self-test as the converter runs (its user, limits, read-only root,
+  `noexec` `/tmp`, no network) and passes only on exit 0 with its success line
+  (`cpt-studio converter self-test: ok, a PDF of ...`). `app` refuses to start
+  anything until a healthy converter of this revision runs (`run --phase
+  converter first`), and a `switch-back` to a revision that has the converter
+  refuses until one runs; an older revision's pair never uses it.
 - **app** (live mode) first checks the Fable coder's credentials
   (`--coding-mode live`) before anything changes: its copy in `/etc/cpt-studio/` must be
   the 10150:10150 0400 file the secrets phase writes (a missing source leaves
@@ -292,7 +342,15 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   revision's HTTPS stage that this revision does not render for its port
   (`deploy/nginx/` changed) is refused for blue/green: the switch would change
   more than its upstream (see **Reinstalling a new revision**).
-  It migrates with a one-shot container first, then reads (and records as
+  It migrates with a one-shot container first. Since release 1 (spec 6.2) that
+  one-shot waits at most 5 s for a table's lock (`PGOPTIONS=-c
+  lock_timeout=5s`: the migration files the image gate reads are untouched), so
+  an `ALTER TABLE` never queues behind a long transaction with every later
+  reader of that table queued behind it; Django applies each migration in a
+  transaction of its own, so a timed-out attempt leaves that migration
+  unapplied, and the one-shot is run again after 10 s, up to three more times
+  (the receipt's `migrate_attempts`; every attempt's output is in the migrate
+  log). Any other failure is not retried. It then reads (and records as
   `unrunnable_stages`, never refusing on them) the stages of a kind this
   revision's worker does not run - every kind of the pipeline before the Fable
   coding build - that are queued, running, or cancelled as their encounter's
@@ -382,8 +440,20 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   stops the phase once the new pair runs - the recompute fails, the parked pair
   cannot be removed, the installer is interrupted (Ctrl-C) - the pair keeps
   running and the receipt says whether the states were recomputed: if not,
-  remove the parked pair (`*-previous`) by hand if it is left, then rerun `app`,
-  which recomputes them; if they were, only the parked pair is left to remove.
+  remove the parked pair (`*-previous`) by hand if it is left - keeping its log
+  first (**Recovery notes**, a parked container's log) - then rerun `app`,
+  which recomputes them; if they were, only the parked pair is left to keep and
+  remove. Release 1 (A13): before any container is removed - the parked pair, an
+  undo's incoming web or new worker (S1, S3, S4), a switch-back's, rollback-app's
+  pair - its log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
+  `logs_kept`: a file name, its sha256 and the lines kept and dropped, never a
+  line); a copy that fails removes nothing, and the receipt says so. A static
+  file's name in a kept path is written `static-file` (its content hash and
+  extension kept): its name part could carry free text. The failure note an
+  undo writes into the receipts folder (`*-incoming-web-failed.log`,
+  `*-worker-failed.log`) holds the container's last 200 lines ids only, with
+  how many were dropped - never a raw line, so a traceback's document text never
+  reaches it.
   An installer killed outright writes no receipt: rerun `app` (see **Recovery
   notes**).
   **A blue/green step that fails, or is interrupted (Ctrl-C), never stops the
@@ -601,15 +671,25 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   so: rerun it freely. Until it has run, an assessment the new pair makes still
   carries the old note: to have none, run it right after `app` (with
   `passages`), or let the queue drain first.
-- **provision** writes both credentials files only after the accounts exist
+- **provision** writes its credentials files only after the accounts exist
   with the generated passwords; an account that already existed (password
   unchanged) aborts and discards them unless `--reset-passwords` was given.
   Passwords travel as RAM-only files under `/dev/shm`, never argv or output.
+  Release 1 (A6, B4, C3): a review agent is created only when `--agent-username`
+  names one (no default; no agent file otherwise); the owner's password is one
+  staff set, so `provision` is given `--require-password-change` (the owner
+  chooses a new password at the first sign-in, within 72 hours, after which an
+  unchanged one stops working); and `--by` names the person who ran it. An
+  operator account is never a practice's owner or agent: `platform-operator`
+  and `ops-agent` are refused as either name, and the accounts named are read
+  first - one that holds or ever held an operator grant is refused before any
+  password is set or any file staged, so an operator's password never reaches a
+  credentials file.
   `--specialty neurosurgery` or `--specialty orthopedic-surgery` (owner direction
   2026-11-22, D390) provisions that specialty's own workspace (named after it
-  unless `--workspace-name` says otherwise) with its own review agent
-  (`review-agent-neuro`, `review-agent-ortho` unless `--agent-username` says
-  otherwise) and its own pair of files, `/etc/cpt-studio/initial-credentials-<specialty>.json`
+  unless `--workspace-name` says otherwise), with a review agent when
+  `--agent-username` names one (earlier installs named them `review-agent-neuro`
+  and `review-agent-ortho`), and its own pair of files, `/etc/cpt-studio/initial-credentials-<specialty>.json`
   and `~/.cpt-studio/agent-credentials-<specialty>.json`; Gastroenterology keeps
   `initial-credentials.json` and `agent-credentials.json`, so provisioning one
   specialty never touches another's. One login serves one workspace until a
@@ -624,31 +704,66 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   specialty is a label the page and the PDF show; the coding path does not
   read it (D358).
 - **operators** (after `app`; it needs the revision's operator grant, owner
-  directive 2026-11-03 section 2, and refuses - creating no account and no file -
-  unless `manage migrate --check` passes with this revision's image) creates the
-  two platform-operator accounts
-  as `provision` creates its own: passwords generated by the installer,
-  travelling only as RAM-only files under `/dev/shm` into one-shots of this
-  revision's image (never argv, output or receipts), the human's login staged
-  and committed through the root helper. `ops-agent` (an automated agent: the
-  verification tools' operator session) and `platform-operator` (a human) get
-  NO workspace membership - an operator's access is its grant, never a role -
-  and an account of either name that exists with another actor kind or holds
-  any membership is refused, changing nothing. Once both accounts hold their
-  passwords, `/home/claude/.cpt-studio/ops-agent-credentials.json` (0600,
-  top-level `username` and `password`) and the root-only 0600
-  `/etc/cpt-studio/operator-credentials.json` are committed; each account is
-  then granted by the application's own command, `manage grant_operator
-  --username <name> --reason-file <file> --by <who>` (the reason names the
-  directive, the revision and the declaration; `--by` names this installer and
-  the host login that ran it, given explicitly because the one-shot runs as this
-  user's uid, which the image has no passwd entry for - the command's own
-  default reads the login from the environment, else names the uid, and never
-  looks it up), and read back: an active operator
-  (`studio.operator.is_operator`) with no membership. Files already there
-  refuse unless `--reset-passwords`, which rotates both. A grant that fails
-  leaves the accounts and their files in place: rerun with `--reset-passwords`
-  once it is fixed.
+  directive 2026-11-03 section 2, and refuses - creating no account - unless
+  `manage migrate --check` passes with this revision's image) keeps the human
+  platform operator alone (release 1, A6; TEC-4, TEC-16 (2)). `platform-operator`
+  is created with NO workspace membership and an unusable password - or kept
+  as it is, password included; `--reset-passwords` makes its password unusable -
+  and an account of that name that exists with another actor kind or holds any
+  membership is refused, changing nothing. When it is not an operator already,
+  it is granted by the application's own command, `manage grant_operator
+  --username platform-operator --reason-file <RAM-only file> --by <person>
+  --authorization-ref <declaration>@<commit> --review-by <date>` (C3): `--by`
+  and `--review-by` are then required, `--by` names a person, never a role. An
+  account any of whose grants was ever revoked is never granted again unless the
+  run passes `--regrant <name>` and the declaration names `--regrant <name>`
+  (ADM-10 3(i)). It is read back: an active human operator with no membership.
+  An account created or reset then gets a single-use setup code: generated by
+  the installer, handed to `manage issue_enrolment` as a RAM-only `--code-file`
+  (only its sha256 reaches the database), committed root-only to
+  `/etc/cpt-studio/operator-enrolment.json` (root 0600) through the root helper,
+  never printed, logged or put in a receipt. The operator opens
+  admin.quillmd.com within 30 minutes and sets a password and the first security
+  key with it (B2, B4). No operator password is written to a file; today's
+  `operator-credentials.json` and `ops-agent`'s login file are left untouched
+  and reported (deleting either is the owner's decision, D11, D12). On the
+  current host the existing operator keeps its password until its first
+  sign-in after release 1, where it must change it; its key is enrolled with a
+  setup code from `manage issue-enrolment`.
+- **manage** (release 1, A6) runs one allow-listed ruled act in a one-shot of
+  the installed image, through the door, once `manage migrate --check` passes:
+  `revoke-operator` and `clear-signin-failures` (`--username --reason-file
+  --by`), `grant-operator` (also `--review-by`; the declaration is passed as
+  `--authorization-ref <declaration>@<commit>`; the account is read first, and
+  one any of whose grants was ever revoked is refused unless the run passes
+  `--regrant <name>` and the declaration names `--regrant <name>` - as in
+  **operators** - and the command is then told `--regrant`), `issue-enrolment` and
+  `reset-second-factor` (`--username --reason-file --by`; each issues a new
+  setup code, kept as **operators** keeps one), `require-password-change`
+  (`--username` or `--all-human-accounts`, which the command is given as its
+  `--all`, D22; never an automated account),
+  `dispose` and `export-workspace` (below: **Disposal, returns and the
+  ledger**). The reason file must be a short UTF-8 text file; it reaches the
+  command as a RAM-only file under `/dev/shm` - 0600, in a 0700 folder with an
+  unguessable name; a disposal or an export runs as the application's uid, so
+  the root helper hands that folder to it for the act and wipes it afterwards -
+  and the receipt keeps its sha256 and size, never its text. It is read through
+  one descriptor that never follows a link, at most 4,096 bytes counted as read,
+  and a file whose contents differ from the size it reports (`/proc`, `/sys`) is
+  refused. Every output is checked first: the setup code, the application's own
+  secret values and the reason's text (whole, or any line of 12 characters or
+  more) must not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
+  command's stdout (ids and counts) and its log. Nothing that is not on the list
+  runs. An act holds the receipts' lock for its whole run, as every phase does,
+  so no install, `switch-back` or `rollback-app` can start while it runs (and
+  none of them can be running when it starts). An act's own time ends 300 s
+  before the door's ceiling
+  (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the
+  receipt their time. A SIGTERM - the door's kill at its ceiling - or a SIGHUP
+  stops any phase where it is: its RAM files are wiped, its one-shot removed,
+  its undo run, and its receipt says `interrupted` (exit 143, or 129). Every
+  phase's receipt is written before its journal (A13), so an interrupt while the
+  journal is written never costs a finished phase its receipt.
 - **http-vhost / https-vhost / ingress / ingress-rollback / rollback-vhost**
   validate with `sudo -n /usr/sbin/nginx -t`, refuse any new nginx warning,
   reload with `sudo -n /usr/bin/systemctl reload nginx`, then probe with bounded
@@ -664,7 +779,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   in the before state alone. `https-vhost` renders the HTTPS stage for the port
   the running `cpt-studio-web` publishes, and refuses an HTTPS stage for the
   other port, the HTTP stage and an earlier stage that names no admin host
-  (both `ingress`'s).
+  (both `ingress`'s). Release 1's stage (A1-A4, B6) is published this way before
+  `app`, and works with the previous revision's web behind it. Its `verify`
+  also probes the TLS policy (A4): the host's `openssl s_client` against
+  127.0.0.1:443 with each name as the server name must negotiate an AES-GCM
+  suite by default, and every other family it offers alone (TLS 1.3 ChaCha20;
+  TLS 1.2 ChaCha20, ARIA-GCM, Camellia and AES-CBC; TLS 1.0 and 1.1) must end in
+  the server's alert - a client that could not offer it is never counted as
+  refused. The result is recorded; a finding never undoes the publish (D27).
 - **cert** requires exactly one existing ACME account and passes it with
   `--account`; certbot gets no `--agree-tos` or e-mail, so it cannot register
   one, and no `--expand`. One order for cpt.quillmd.com and admin.quillmd.com
@@ -688,7 +810,21 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   `*-previous`) may be left beside the pair. The containers'
   check (also run as each starts in `app`) includes their bind mounts: the web
   holds none, and the worker only the credentials files, read-only, at their
-  worker paths.
+  worker paths; and, since release 1, no swap and no core dump for any of them.
+  Release 1 also reads: the database's own cgroup (no swap) and its two log
+  settings (`SHOW`, through `docker exec`: verify starts no one-shot); the
+  converter of this revision, sealed and healthy; and the TLS policy (A4) -
+  recorded as findings, never a failure (D27). `/health/` is judged by the
+  revision it expects (B7): through nginx a revision whose health view answers
+  the digest - read from its tree, as the converter is - must answer
+  `release_digest` alone (an answer with its release means B7 is not in force,
+  and is refused), and an older revision - the pair before release 1, after a
+  switch-back - its release; the web's own port answers the release either way.
+  After a switch-back to that pair, `verify --revision <its revision>` passes,
+  and so do the walk (`--release <its revision>`: it reads B7 from that tree)
+  and `verify_login.py` and `scan_customer.py`, which read the cookie names the
+  server sets - the plain ones before release 1, the `__Host-` ones from it -
+  never the scheme's.
 
 ## The admin host and the coupling invariant (D396, release 2)
 
@@ -1025,7 +1161,13 @@ here carries it too), the states are put back again, and the previous worker is
 held while the close names a record (an unknown outcome, or a stage it cannot
 run still open: `app` again comes back to this revision); **B8** the previous
 worker starts; **B9** this
-revision's parked pair is removed (its image is kept). Before B5 any failure
+revision's parked pair is removed (its image is kept), each log first kept ids
+only (A13). The previous pair serves by then, so a copy (or a removal) that fails
+at B9 is a recorded finding, never a failed switch-back: the receipt's
+`parked_left` names the pair left parked and why, its summary says FINDING, and
+the next `app` keeps their logs, then removes them, before it plans its switch
+(only the containers that receipt names; any other `*-previous` still refuses).
+Before B5 any failure
 resumes this revision's pair (its worker started again, its list states
 recomputed with its own derivation, the previous web drained when it took
 traffic and removed); from B5 on the previous web serves and the receipt says
@@ -1140,8 +1282,9 @@ encounter created here as `processing`, with nothing claimable and no Resume
 offered (it never processes them: (d)); its own stage read first counted the
 stopped coding job as a stage it cannot run - which is why the close now fails
 it - and, once the close did, found none. Synthetic rows only; the database was
-dropped. A rehearsal on a restored copy of live, before an install, is the
-operator's (it needs the earlier image and the live rows' shapes).
+dropped. A rehearsal before an install runs the whole sequence on the test
+instance with synthetic data only (RELEASE-1-SPEC 6.4): live is never restored
+or copied for it (P08, TEC-8 (5)).
 
 **What still refuses.** `undo_hazards` (`UNDO_HAZARDS_READ`) names one reason:
 **unknown** - a coding run whose outcome is still unknown and not reconciled.
@@ -1538,10 +1681,21 @@ recomputes every state.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` (for
   another specialty `.initial-credentials-<specialty>.json.new` /
   `.agent-credentials-<specialty>.json.new`; the refusal names them) from an
-  interrupted `provision`, or `.operator-credentials.json.new` /
-  `.ops-agent-credentials.json.new` from an interrupted `operators`: delete them
-  (no account uses their passwords unless the receipt says the accounts were
-  created) and rerun.
+  interrupted `provision`, or `.operator-enrolment.json.new` from an
+  interrupted `operators` or `manage` (a setup code no command may have
+  stored: delete it, then issue a new one with `manage issue-enrolment`): delete
+  them (no account uses their passwords unless the receipt says the accounts
+  were created) and rerun.
+- A parked container's log (release 1, A13): when `app` or a `switch-back` could
+  not keep a parked container's log, the container is left in place and the
+  receipt says why (a `switch-back`'s `parked_left` is retried by the next `app`
+  first). Fix that cause first (a full `/var/log`, a `docker logs`
+  that fails), then keep the log before removing the container: as root, write
+  `docker logs --timestamps <container>` into `/var/log/cpt-studio/containers/`
+  (root 0600, named `<role>-<revision12>-<UTC>-by-hand.log`). A copy made by
+  hand keeps every line - the installer's keeps ids only - so it is the
+  incident's record: read it, keep what the incident needs, delete it. Then
+  remove the container (`docker rm`).
 - Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`,
   with `--specialty neurosurgery` or `--specialty orthopedic-surgery` (and that
   specialty's owner and agent) for those workspaces, and `--workspace-name` for
@@ -1556,6 +1710,80 @@ recomputes every state.
 - A staged `.anthropic-credentials.env.new` in `/etc/cpt-studio/` from an
   interrupted `secrets`: delete it by hand and rerun; `secrets` refuses while one
   exists.
+
+## Emergency access (release 1, B8)
+
+Practices never need the operator to read their own documents: members
+download originals and reports themselves, and a complete per-document bundle
+(`api/encounters/<id>/bundle`). Each locked state below is cleared by one
+recorded act - a ruled act through `--phase manage` runs under a committed
+declaration, with `--reason-file <file>` (RAM-only for the command) and
+`--by <person>` (a person, never a role):
+
+| the state | what clears it |
+|---|---|
+| a sign-in delay on a username, or the refusal of one username from one address (B1) | wait: it ends within 15 minutes at most; or `--command clear-signin-failures --username <name>` |
+| the forced password change (B4: a password staff set, at its first sign-in) | the account page, `/account/`: its owner chooses a new password |
+| a member's staff-set password not replaced within 72 hours (B4, D31) | a reset in the console (People, the person's password): a new password and a new 72 hours; the clock is never extended |
+| the operator's staff-set password not replaced within 72 hours, or a setup code that expired (30 minutes) | `--command issue-enrolment --username <name>`: a new single-use setup code, kept root-only in `/etc/cpt-studio/operator-enrolment.json` and never printed, then the setup on admin.quillmd.com |
+| lost security keys | one of the recovery codes, at `/login/recovery` on admin.quillmd.com (printed once at enrolment; held sealed by the security officer, D20); otherwise `--command reset-second-factor --username <name>`, which marks the keys removed, voids the recovery codes, ends the account's sessions and issues a new setup code, kept as `issue-enrolment` keeps one, for enrolling again within 30 minutes |
+
+Losing both keys and every recovery code locks the console until that reset
+from the server, by design. When the site itself is down, the existing
+`switch-back` returns the previous pair (**Switching back**); on the new
+server, a restore from backup.
+
+## Disposal, returns and the ledger (release 1, D1, D2)
+
+`dispose` and `export-workspace` are the application's commands (Lane 4 of
+release 1), run only through `--phase manage`, never over HTTP:
+
+- `--command dispose --dispose-step close --workspace-id <id> --reason-file
+  <file> --by <person>` closes a practice (uploads and coding stop; reading
+  stays on until the practice confirms it received its data);
+- `--dispose-step plan` (`--workspace-id`, or `--encounter-id` for one
+  document) is a dry run that records what would be destroyed;
+- `--dispose-step execute --plan-id <id> --by <person> --approved-by <another
+  person> --reason-file <file>` carries out a plan under a day old: two
+  different named people run and approve it (D14);
+- `--dispose-step ledger` prints the ledger - the MAC-signed list of every
+  disposal - into the receipt; keep it with the receipts;
+- `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
+  on its own, a dry run that changes nothing (the receipt's `mode` says `dry
+  run`, and its summary never says done); with `--execute --approved-by
+  <another person>` it re-applies the ledger after a database restore, so
+  destroyed data stays destroyed - two different named people, as for a
+  disposal (D14). A replay with `--execute` that ends with an entry needing a
+  person's decision - one whose commit's outcome was unknown, while nothing
+  else failed: the command exits 3 - is recorded so: the receipt's `mode` says
+  `needs a person's decision`, with the command's ids-only output, never done
+  and never undone. Any other non-zero exit is a failure, its ids-only output
+  in the receipt too. The decision is made by
+  planning that scope again (`--dispose-step plan` for its workspace or
+  encounter) and executing that plan with two people. The ledger holds ids,
+  counts and storage names (random ids), never a document's text or title.
+
+Every disposal step refuses while an install or switch-back is in progress (a
+`cpt-studio-web-next` or a `*-previous` container); only after that reading is
+the command told so (`CPT_STUDIO_SWITCH_STATE=idle`, which it requires). It runs
+as the application's user with the files volume, the declaration passed as
+`--authorization-ref <declaration>@<commit>`. `--command export-workspace
+--workspace-id <id> --reason-file <file> --by <person>` writes one practice's
+documents and manifests into a new folder of its own: the installer makes
+`/var/lib/cpt-studio-exports/<id>-<UTC>/` for the application's user, mounts it
+at `/run/cpt-export`, and the command makes `--out /run/cpt-export/<id>-<UTC>`
+inside it (Lane 4's command refuses a folder that exists; the files volume is
+read-only). Everything in it is then made root-only (folders 0700, files 0600);
+the receipt counts its files and bytes and never names one.
+Delivery to the practice is the termination runbook's step.
+
+**Restoring the database.** After any restore from a backup older than a
+disposal, replay the ledger before the site serves again
+(`--dispose-step replay-ledger --execute --approved-by <another person>`,
+after a dry run without `--execute`). The ledger's MAC is keyed by the
+application's `CPT_STUDIO_SECRET_KEY` (`/etc/cpt-studio/app.env`), so a restore
+must keep the same secret key: with another key the ledger cannot be verified,
+and destroyed data could come back.
 
 ## Local build and tests (no host change)
 
@@ -1616,10 +1844,82 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   despite `CPT_INSTALLER_SKIP_HOSTS` is refused by `preflight`; the installer
   reads a judged row as one naming the host with two three-digit codes, so the
   script must print a skipped host without them.
-- Data at rest is on the unencrypted root disk (docker volumes, nginx request
-  buffering for uploads over 16 KiB). Acceptable only because the service is
+- Data at rest is on the unencrypted root disk (docker volumes). Since release
+  1 (A3) nginx writes neither an upload nor a response to its temporary
+  directories (request bodies are held in memory up to 20m, responses in 24 MiB
+  of memory buffers, and a larger one is relayed without a file), and the
+  database runs without swap; nginx's own memory can still be paged to the
+  host's unencrypted swap file under pressure (no swap, or encrypted swap, is
+  the new server's). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
+- Release 1's front door (A1) starts with the spec's numbers (D5), sized on a
+  copy before the live publish, the sign-in and the upload raised for an office
+  behind one address: every request 30 r/s with a burst of 120 per client, the
+  sign-in 60 r/min (burst 40: everyone signs in again at once after the switch
+  signs them out; B1 is the guessing control), writes 5 r/s (burst 30), uploads
+  60 r/min (burst 60: 20 people each uploading a document every 2 minutes are
+  never refused; the application's per-member limit is the fine control),
+  report exports 6 r/min (burst 6); 40 connections and 20 byte downloads at
+  once per client, of which 4 may carry a body over 64 KiB (an upload or a
+  coding review's answers; 40 such at once in all) and 40 a smaller one. A
+  client is an IPv4 address,
+  or an IPv6 /64; this host's own probes are not counted. A practice behind one
+  address shares them. A refusal is a plain 429. Upstream read and send time
+  out after 60 s (gunicorn's own 120 s is unchanged).
+- Memory at the edge (A3) is bounded. A request body is held in memory, its
+  buffer reserved at the length the client declares, and each route admits
+  the body it needs: the upload 20 MiB, a coding review's answers 1 MiB, every
+  other request 64 KiB (sign-in, account, second factor, the JSON API's posts
+  and the console, whose largest body is under 25 KB). A larger declared length
+  is refused with 413 before any of it is read. So only uploads and answers
+  can declare more than 64 KiB, and at most 40 such bodies are read at once in
+  all - under 800 MiB however many clients send. A body of 64 KiB or less
+  counts per client only, 40 at once: under 2.5 MiB a client, with no global
+  cap. A body whose length is not declared is refused with 411 when it is
+  chunked or a POST, PUT or PATCH (every browser declares it); any other (an
+  HTTP/2 stream by another method) is cut off at 64 KiB read. At most 24
+  downloads (each up to 24 MiB of response buffers) are relayed at once in
+  all - under 576 MiB. A sender that stalls 15 s between two reads is cut off;
+  one that trickles a byte every few seconds holds its slot. So uploads and
+  answers can still be held up by slow trickles from ten or more clients (ten
+  /64s with four slow senders each fill the 40) until they stop, and then get
+  429; sign-ins cannot, nor can any other request: a body of 64 KiB or less
+  never takes one of those 40.
+- The edge log (A2) holds about 250 bytes a request on the shared root disk;
+  the host's nginx rotation keeps it (about two weeks: D7). The error log's
+  request line can carry a query string; today's query parameters hold no
+  patient detail (`view`, `next`, `workspace`, `kind`, `result`, `before`).
+- The TLS policy (A4) is CPT's 443 block's, and CPT is not this shared
+  listener's default server: once SNI has chosen CPT's block, `ssl_protocols`,
+  the TLS 1.3 `Ciphersuites` and `ssl_prefer_server_ciphers` stay the default
+  server's, so TLS 1.3 ChaCha20 is accepted (measured by the edge refutation on
+  nginx 1.24 with this host's libssl 3). `https-vhost` and `verify` probe what
+  negotiates (`openssl s_client` against 127.0.0.1:443) and record it - a suite
+  outside the policy is a finding, never an undo (D27); the fix is CPT's own
+  nginx on the new server.
+- The application's logs (A13) are kept ids only and on this host; between
+  deploys Docker's own rotation still drops a running container's oldest lines,
+  so the edge log is the longer record of requests until the new server ships
+  logs off the host (TEC-11 (5)).
+- The converter (A7) converts one Word file at a time; a converter that is down
+  fails every Word round as busy (it never falls back to converting inside the
+  worker), and a replacement leaves a few seconds in which a conversion fails as
+  busy and can be retried.
+- No switch-back starts an earlier pair with a live legacy provider (A8): Corti,
+  Astra, the earlier Fable participant and the earlier interpreter have no BAA,
+  so `--provider-mode`, `--astra-mode`, `--fable-mode` and `--interpreter-mode
+  live` are refused (D21, an accepted capability loss); their key copies stay
+  untouched until the owner deletes them.
+- Everyone is signed out once at the release-1 switch (the session cookie gets
+  its `__Host-` name, B6) and again after any switch-back; the vhost sets the
+  flags of both names, so either revision's web serves behind it.
+- Release 1b, not in this release: least-privilege database roles (A10; the app
+  connects as the bootstrap superuser), the weekly dependency scan (A12), the
+  malware scan's phase (D5) and stored-file encryption's installer side (F1:
+  gunicorn runs no Django system checks, so F1's key check, `studio.E101`,
+  would not stop the web container - the installer must check the key itself
+  when F1 is switched on).
 - The worker has no Docker health check; `app` and `verify` check that it is
   running and not restarting.
 - The application uid is 10150, not 10001: 10001 already runs a co-tenant's
@@ -1674,13 +1974,13 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   defaults for them, the values installers before the Fable coding build wrote.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
-     after the drain has ended - in practice a large upload it is still
-     reading from a slow client (`client_max_body_size 20m`; nginx connects
-     upstream once the body is read) - reaches the stopped old port and
-     answers 503. The drain waits for no shutting-down nginx worker up to 600 s;
-     an old worker can also be kept alive by a co-tenant's long-lived
-     connection (`nginx.conf` sets no `worker_shutdown_timeout`), and then the
-     drain ends at 600 s with `bounded_out`.
+     after the drain has ended - in practice a large upload it is still reading
+     from a slow client (the upload's `client_max_body_size 20m`; nginx connects
+     upstream once the body is read) - reaches the stopped old port and answers
+     503. The drain waits for no shutting-down nginx worker up to 600 s; an old
+     worker can also be kept alive by a co-tenant's long-lived connection
+     (`nginx.conf` sets no `worker_shutdown_timeout`), and then the drain ends
+     at 600 s with `bounded_out`.
   2. Static files are served by WhiteNoise under hashed names: a page whose
      HTML came from the old web just before the switch may ask for an old-hash
      file the new image lacks (404) and needs a reload.

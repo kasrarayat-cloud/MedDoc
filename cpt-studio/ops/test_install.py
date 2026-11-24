@@ -32,6 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 
 DEPLOY = Path(__file__).resolve().parents[1] / 'deploy'
+# What install.hardening() gives every service container's HostConfig (release 1, A3: service_problems holds them): a
+# memory limit with memory + swap equal to it - no swap - and core dumps off.
+# The database container's own cgroup as db_args leaves it (release 1, A3): 512 MiB and no swap.
+DB_CGROUP_OK = {'memory.max': str(512 * 2 ** 20), 'memory.swap.max': '0'}
+HARDENED_LIMITS = {'Memory': 768 * 2 ** 20, 'MemorySwap': 768 * 2 ** 20,
+                   'Ulimits': [{'Name': 'core', 'Soft': 0, 'Hard': 0}]}
 REVISION = 'a' * 40
 OTHER = 'b' * 40
 
@@ -42,7 +48,7 @@ OTHER = 'b' * 40
 # the real command (blue/green made replace_services read the vhost and the containers).
 _REAL_SUBPROCESS_RUN = subprocess.run
 _REAL_CREATE_CONNECTION = socket.create_connection
-HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot')
+HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot', 'openssl')
 # The host's live ports, as literals (the guard must not depend on the installer it guards): nginx, the database,
 # both web ports, and the disposable test databases.
 SERVICE_PORTS = frozenset({80, 443, 55451, 9150, 9151, 55452, 55461})
@@ -92,13 +98,63 @@ def _guarded_coupling(quillmd_sha256=None, vhost=None):
     return coupled('before')
 
 
+# Release 1 (A7): whether a revision has the converter service is read from the git tree (install.has_converter), which
+# refuses a revision the checkout cannot read - every test revision here ('a' * 40, ...). Under the guard a test revision
+# has the converter exactly when a test puts it in CONVERTER_REVISIONS (empty: every world before release 1 runs as it
+# always did); the real function is REAL_HAS_CONVERTER, tested on its own.
+REAL_HAS_CONVERTER = install.has_converter
+CONVERTER_REVISIONS = set()
+
+
+def _guarded_has_converter(revision):
+    return revision in CONVERTER_REVISIONS
+
+
+# Release 1 (B7; refutation, rollback lens B-8): whether a revision answers /health/ through nginx with the digest is
+# read from its git tree (install.has_health_digest). Under the guard a test revision has B7 exactly when a test puts it
+# in DIGEST_REVISIONS (empty: every world answers its release, as every revision before B7 does); the real function is
+# REAL_HAS_HEALTH_DIGEST, tested on its own.
+REAL_HAS_HEALTH_DIGEST = install.has_health_digest
+DIGEST_REVISIONS = set()
+
+
+def _guarded_has_health_digest(revision):
+    return revision in DIGEST_REVISIONS
+
+
+# Release 1 (A13): main() appends the phase's one-shot journal to the host's /var/log/cpt-studio through a root helper
+# at the end of every phase. Under the guard it is kept in JOURNALS_FLUSHED instead (the real flush, REAL_FLUSH_JOURNAL,
+# is tested on its own with its helper stood in for).
+REAL_FLUSH_JOURNAL = install.flush_journal
+JOURNALS_FLUSHED = []
+
+
+# Release 1 (A4): https-vhost and verify probe the host's TLS listener with openssl (which the guard refuses). Under the
+# guard they record this stand-in; the real report, REAL_TLS_POLICY_REPORT, is tested on its own with its probe stood in.
+REAL_TLS_POLICY_REPORT = install.tls_policy_report
+
+
+def _guarded_tls_policy_report():
+    return {'findings': [], 'probes': {}, 'stood_in': 'the test host guard runs no openssl'}
+
+
+def _guarded_flush_journal():
+    lines = list(install.JOURNAL['lines'])
+    install.JOURNAL.update(lines=[], overflow=0)
+    JOURNALS_FLUSHED.append(lines)
+    return {'written': False, 'why': 'the test host guard keeps the journal', 'lines': len(lines)} if lines else None
+
+
 def guard_host():
     # and the door's wall-clock ceiling a phase that stops a worker needs (install.check_door_ceiling), as an operator
     # gives it to the door (RULED_ACT_MAX_SECS); its own tests set it themselves
     patches = [mock.patch.object(subprocess, 'run', _guarded_run),
                mock.patch.object(socket, 'create_connection', _guarded_connect),
                mock.patch.multiple(install, NGINX_AVAILABLE=NO_NGINX / 'sites-available',
-                                   NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling),
+                                   NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling,
+                                   has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal,
+                                   tls_policy_report=_guarded_tls_policy_report,
+                                   has_health_digest=_guarded_has_health_digest),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
@@ -383,7 +439,10 @@ class TemplateRenderingTests(unittest.TestCase):
         directives = {words[0]: words[1:] for words in server}
         self.assertEqual(directives['ssl_certificate'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/fullchain.pem'])
         self.assertEqual(directives['ssl_certificate_key'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/privkey.pem'])
-        self.assertEqual(directives['client_max_body_size'], ['20m'])
+        # release 1 (A3, the edge lens's C-15 follow-up): 64k for every route but the upload, which keeps 20m
+        self.assertEqual(directives['client_max_body_size'], ['64k'])
+        upload = conf[conf.index('location = /api/encounters {'):]
+        self.assertEqual(install.nginx_statements(upload[:upload.index('}') + 1])[1], ['client_max_body_size', '20m'])
         headers = {words[1]: words[2:] for words in server if words[0] == 'add_header'}
         self.assertEqual(headers, {'Strict-Transport-Security': ['max-age=31536000', 'always'],
                                    'X-Content-Type-Options': ['nosniff', 'always'],
@@ -396,18 +455,23 @@ class TemplateRenderingTests(unittest.TestCase):
         self.assertEqual(set_headers['Authorization'], [''])
         self.assertEqual(set_headers['Host'], ['$host'])
         self.assertEqual(len([words for words in proxy if words[0] == 'proxy_pass']), 1)  # one upstream for both hosts
+        # release 1 (A1): a minute, down from three - the slowest request measured takes under 300 ms - while gunicorn's
+        # own 120 s request timeout, which the drain after a switch is sized against, is unchanged
         for name in ('proxy_read_timeout', 'proxy_send_timeout'):
             value = next(words[1] for words in proxy if words[0] == name)
-            self.assertGreaterEqual(int(value.rstrip('s')), 150, name)
+            self.assertEqual(value, '60s', name)
         hidden = {words[1] for words in proxy if words[0] == 'proxy_hide_header'}
-        self.assertEqual(hidden, set(headers))
+        self.assertEqual(hidden, set(headers) | {'X-CPT-Actor'})  # A2: the session reference is logged, never shown
 
     def test_csrf_cookie_stays_readable_by_the_page_script(self):
         cookie_flags = [words[1:] for blocks, words in statements(rendered()['https'])
                         if words[0] == 'proxy_cookie_flags']
+        # release 1 (B6): the session cookie under both names - the previous revision's web serves behind this file
+        # until the switch - then the catch-all, last, since nginx applies the first match
         self.assertEqual(cookie_flags[0], ['cptstudio_session', 'secure', 'httponly', 'samesite=strict'])
-        self.assertEqual(cookie_flags[1], ['~', 'secure', 'samesite=strict'])  # catch-all: no httponly
-        self.assertEqual(len(cookie_flags), 2)
+        self.assertEqual(cookie_flags[1], ['__Host-cptstudio_session', 'secure', 'httponly', 'samesite=strict'])
+        self.assertEqual(cookie_flags[2], ['~', 'secure', 'samesite=strict'])  # catch-all: no httponly
+        self.assertEqual(len(cookie_flags), 3)
 
     def test_http_stage_never_proxies_the_application(self):
         conf = rendered()['http']
@@ -596,11 +660,13 @@ class ArgumentTests(unittest.TestCase):
                           'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         self.assertEqual((args.coding_mode, args.provider_mode), ('live', None))
         self.assertEqual(self.parse('--phase', 'app', '--coding-mode', 'disabled').coding_mode, 'disabled')
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--authorization-ref',
-                          'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-        self.assertEqual((args.provider_mode, args.coding_mode), ('live', None))  # the previous pair's Corti
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner')
-        self.assertEqual((args.agent_username, args.workspace_name), ('review-agent', 'Gastroenterology'))
+        # release 1 (A8): the previous pair's Corti is started disabled (live is refused: no BAA), its coder as given
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--coding-mode', 'live',
+                          '--authorization-ref', 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+        self.assertEqual((args.provider_mode, args.coding_mode), ('disabled', 'live'))
+        # release 1 (A6): a review agent is opt-in (none unless named), and provisioning names who ran it (C3)
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner', '--by', 'Ada Lovelace')
+        self.assertEqual((args.agent_username, args.workspace_name, args.by), (None, 'Gastroenterology', 'Ada Lovelace'))
         self.assertEqual(self.parse('--phase', 'reference', '--pfs-zip', '/x/a.zip', '--mue-zip', '/x/b.zip',
                                     '--pfs-retrieved-at', '2026-10-23T20:59:00Z',
                                     '--mue-retrieved-at', '2026-10-23T21:01:44+00:00').phase, 'reference')
@@ -882,7 +948,9 @@ class DockerArgumentTests(unittest.TestCase):
 
     def test_database_container(self):
         argv = install.db_args()
-        self.assertEqual(argv[-1], install.POSTGRES_IMAGE)
+        # release 1 (A5): the image, then the server flags that keep statement text out of the database's log
+        self.assertEqual(argv[-5:], [install.POSTGRES_IMAGE, '-c', 'log_min_error_statement=panic', '-c',
+                                     'log_error_verbosity=terse'])
         self.assertEqual(self.flags(argv, '--user'), ['70:70'])
         self.assertEqual(self.flags(argv, '--cap-drop'), ['ALL'])
         self.assertEqual(self.flags(argv, '-p'), ['127.0.0.1:55451:5432'])
@@ -1789,7 +1857,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         self.assertNotEqual(install.other_lineages(changed), install.other_lineages(baseline))
 
     def run_verify(self, le_now, *, quillmd_now=install.QUILLMD_VHOST_AFTER, quillmd_baseline=install.QUILLMD_VHOST_AFTER,
-                   acme=None):
+                   acme=None, db_cgroup=None, db_settings=None):
         # Since release 2 of the admin move this revision's stage names admin.quillmd.com, so the quillmd vhost it
         # couples is the after state; the baseline is the preflight the act takes after the ingress, unless given.
         own = f'{install.DOMAIN}.conf'
@@ -1817,6 +1885,9 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'inspect', side_effect=lambda kind, name: running if name in pair or
                                   kind == 'image' else None), \
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
+                mock.patch.object(install, 'db_cgroup', return_value=DB_CGROUP_OK if db_cgroup is None else db_cgroup), \
+                mock.patch.object(install, 'db_settings_shown', return_value=(dict(install.DB_LOG_SETTINGS)
+                                                                             if db_settings is None else db_settings)), \
                 mock.patch.object(install, 'service_problems', return_value=[]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
                 mock.patch.object(install, 'acme_probe', side_effect=acme or (lambda ctx, label, host=install.DOMAIN: {
@@ -1824,6 +1895,22 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify'))
+
+    def test_verify_reports_a_database_that_swaps_or_logs_statement_text(self):
+        # release 1 (A3, A5): the database's own cgroup allows no swap and its log keeps no statement text, read with
+        # docker exec (no one-shot); either drifting is a difference verify reports
+        own = f'{install.DOMAIN}.conf'
+        le = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        details = self.run_verify(le)
+        self.assertEqual(details['database'], {'cgroup': DB_CGROUP_OK, 'settings': dict(install.DB_LOG_SETTINGS)})
+        for label, readings, said in (
+                ('swap', {'db_cgroup': {**DB_CGROUP_OK, 'memory.swap.max': 'max'}}, 'allows swap'),
+                ('memory', {'db_cgroup': {**DB_CGROUP_OK, 'memory.max': 'max'}}, 'cgroup memory limit'),
+                ('statement text', {'db_settings': {'log_min_error_statement': 'error', 'log_error_verbosity': 'terse'}},
+                 'statement logging reads'),
+                ('not read', {'db_settings': {}}, 'statement logging reads nothing')):
+            with self.subTest(label), self.assertRaisesRegex(install.InstallError, said):
+                self.run_verify(le, **readings)
 
     def test_verify_runs_no_one_shot_and_records_no_interpreter_evidence(self):
         # the Fable coding build removed the D22 report's one-shot (DECISIONS D351): verify reads the host alone
@@ -1992,7 +2079,8 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'wait_service', fake_wait), \
                 mock.patch.object(install, 'close_undone_stages',
                                   return_value={'closed': 0, 'hazards': {}, 'relabel': []}), \
-                self.assertRaises(install.InstallError):
+                mock.patch.object(install, 'keep_container_log', return_value={'kept': 0}), \
+                self.assertRaises(install.InstallError):  # release 1 (A13): each removal keeps its log first
             install.replace_services(ctx, 'new', b'', 'disabled', '')
         self.assertEqual({name: container['Id'] for name, container in live.items()},
                          {'cpt-studio-web': 'old-web', 'cpt-studio-worker': 'old-worker'})
@@ -2060,6 +2148,12 @@ class MainTests(TemporaryDirectoryTest):
 
 
 
+def no_grants(image_id, env, body, params, **kwargs):
+    """PROVISION_CHECK as the application answers it for accounts that hold no operator grant."""
+    assert body is install.PROVISION_CHECK, body[:60]
+    return {'accounts': {name: {'exists': False, 'grants': 0} for name in params['usernames']}}
+
+
 class SpecialtyProvisionTests(TemporaryDirectoryTest):
     """Owner direction 2026-11-22 (D390): a Neurosurgery or Orthopedic Surgery workspace is provisioned the GI way, with
     its own credentials files and review agent, so provisioning one specialty never touches another's; Gastroenterology
@@ -2075,15 +2169,20 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
             install.parse_args([*self.BASE, *extra])
         self.assertEqual(caught.exception.code, 2)
 
-    def test_the_specialty_sets_the_workspace_and_agent_defaults(self):
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty', 'neurosurgery')
-        self.assertEqual((args.specialty, args.workspace_name, args.agent_username),
-                         ('neurosurgery', 'Neurosurgery', 'review-agent-neuro'))
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner-ortho', '--specialty', 'orthopedic-surgery')
-        self.assertEqual((args.workspace_name, args.agent_username), ('Orthopedic Surgery', 'review-agent-ortho'))
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner')
+    def test_the_specialty_sets_the_workspace_default_and_no_agent(self):
+        # release 1 (A6; TEC-4 (5), ORG-20 (5)): no review agent unless --agent-username names one
+        by = ('--by', 'Ada Lovelace')
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty', 'neurosurgery', *by)
+        self.assertEqual((args.specialty, args.workspace_name, args.agent_username), ('neurosurgery', 'Neurosurgery', None))
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner-ortho', '--specialty', 'orthopedic-surgery',
+                          *by)
+        self.assertEqual((args.workspace_name, args.agent_username), ('Orthopedic Surgery', None))
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner', '--agent-username', 'review-agent', *by)
         self.assertEqual((args.specialty, args.workspace_name, args.agent_username),
                          ('gastroenterology', 'Gastroenterology', 'review-agent'))
+        # provisioning names the person who ran it (C3), never a role
+        self.refused('--phase', 'provision', '--owner-username', 'owner')
+        self.refused('--phase', 'provision', '--owner-username', 'owner', '--by', 'operator')
 
     def test_the_specialty_is_refused_outside_provision_and_when_unknown(self):
         self.refused('--phase', 'preflight', '--specialty', 'neurosurgery')
@@ -2091,16 +2190,18 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
 
     def test_the_installer_passes_the_workspace_name_as_typed(self):
         # refutation N4-1-2, N4-1-3: an existing workspace is found exactly as typed and the credentials file names it
+        by = ('--by', 'Ada Lovelace')
         for name in ('Spine Center', 'GI  Demo', ' Spine Center'):
             with self.subTest(name=name):
-                args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
+                args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name,
+                                  *by)
                 self.assertEqual(args.workspace_name, name)
         # absent: the specialty's name; explicitly empty (an unset shell variable): refused (refutation N6-1-4)
         self.assertEqual(self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty',
-                                    'neurosurgery').workspace_name, 'Neurosurgery')
+                                    'neurosurgery', *by).workspace_name, 'Neurosurgery')
         for name in ('', '  '):
             with self.subTest(name=name):
-                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
+                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name, *by)
 
     def test_each_specialty_has_its_own_credentials_files(self):
         self.assertEqual(install.credentials_files('gastroenterology'),
@@ -2130,7 +2231,7 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
                                owner_username='owner-neuro', agent_username='review-agent-neuro',
                                owner_display_name='', agent_display_name='CPT Studio review agent',
-                               workspace_name='Neurosurgery', specialty='neurosurgery')
+                               workspace_name='Neurosurgery', specialty='neurosurgery', by='Ada Lovelace')
         ctx = install.Context(args, self.tmp)
         finals, commands = [], []
 
@@ -2147,7 +2248,8 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
                 mock.patch.object(install, 'root_file', fake_root_file), \
-                mock.patch.object(install, 'oneshot', fake_oneshot):
+                mock.patch.object(install, 'oneshot', fake_oneshot), \
+                mock.patch.object(install, 'app_script', side_effect=no_grants):
             outcome = install.phase_provision(ctx)
         self.assertEqual({final for _, final in finals}, {'initial-credentials-neurosurgery.json'})
         self.assertEqual([op for op, _ in finals], ['state', 'stage', 'commit'])
@@ -2161,6 +2263,77 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.assertFalse((home / 'agent-credentials.json').exists())  # Gastroenterology's file is never touched
         self.assertEqual(outcome['specialty'], 'neurosurgery')
         self.assertTrue(outcome['root_credentials'].endswith('/initial-credentials-neurosurgery.json'))
+        # release 1: the owner's password is one staff set, replaced at the first sign-in (B4), and the run names who
+        # ran it (C3)
+        self.assertIn('--require-password-change', commands[0])
+        self.assertIn('--by=Ada Lovelace', commands[0])
+
+    def test_an_operator_account_is_never_a_practices_owner_or_agent_and_its_password_never_written(self):
+        # refutation, installer lens A-4: platform-operator was accepted as --owner-username, and its new password
+        # written to initial-credentials-*.json
+        by = ('--by', 'Ada Lovelace')
+        for name in sorted(install.OPERATOR_NAMES):
+            with self.subTest(name=name):
+                self.refused('--phase', 'provision', '--owner-username', name, *by)
+                self.refused('--phase', 'provision', '--owner-username', 'owner', '--agent-username', name, *by)
+        self.assertEqual(install.OPERATOR_NAMES, {'platform-operator', 'ops-agent'})
+        # an account that holds or held a grant under another name: refused before any password is set or file staged
+        home = self.tmp / 'home'
+        home.mkdir(mode=0o700)
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=True,
+                               owner_username='second-operator', agent_username=None, owner_display_name='',
+                               agent_display_name='', workspace_name='Neurosurgery', specialty='neurosurgery',
+                               by='Ada Lovelace')
+        for answer in ({'accounts': {'second-operator': {'exists': True, 'grants': 1}}},
+                       {'accounts': {'second-operator': {'exists': True}}}, {'accounts': {}}, None):
+            with self.subTest(answer=answer):
+                ops, commands = [], []
+                with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                        mock.patch.object(install, 'require_db'), \
+                        mock.patch.object(install, 'read_protected_env', return_value=b''), \
+                        mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
+                        mock.patch.object(install, 'root_file', lambda op, **kw: ops.append(op) or {
+                            'final_exists': True, 'staged_exists': False}), \
+                        mock.patch.object(install, 'oneshot', lambda *a, **k: commands.append(a)), \
+                        mock.patch.object(install, 'app_script', return_value=answer), \
+                        self.assertRaisesRegex(install.InstallError, 'operator grant|did not read back'):
+                    install.phase_provision(install.Context(args, self.tmp))
+                self.assertEqual((ops, commands), (['state'], []))  # nothing staged, no password set
+
+    def test_without_an_agent_username_no_agent_account_or_file_is_made(self):
+        # release 1 (A6; TEC-4 (5), ORG-20 (5)): the review agent is opt-in
+        home = self.tmp / 'home'
+        home.mkdir(mode=0o700)
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
+                               owner_username='owner', agent_username=None, owner_display_name='',
+                               agent_display_name='CPT Studio review agent', workspace_name='Gastroenterology',
+                               specialty='gastroenterology', by='Ada Lovelace')
+        staged, commands = {}, []
+
+        def fake_root_file(op, **params):
+            if op == 'stage':
+                staged['content'] = json.loads(base64.b64decode(params['content']))
+            return {'final_exists': False, 'staged_exists': False} if op == 'state' else {}
+
+        def fake_oneshot(image_id, command, env, **kwargs):
+            commands.append((command, kwargs))
+            return SimpleNamespace(returncode=0, stdout=b'created human account owner (owner)\n', stderr=b'')
+        with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                mock.patch.object(install, 'require_db'), \
+                mock.patch.object(install, 'read_protected_env', return_value=b''), \
+                mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
+                mock.patch.object(install, 'root_file', fake_root_file), \
+                mock.patch.object(install, 'oneshot', fake_oneshot), \
+                mock.patch.object(install, 'app_script', side_effect=no_grants):
+            outcome = install.phase_provision(install.Context(args, self.tmp))
+        (command, kwargs), = commands
+        self.assertFalse([part for part in command if part.startswith('--agent')])
+        self.assertEqual(len(kwargs['mounts']), 1)  # the owner's password file alone
+        self.assertIn('--require-password-change', command)
+        self.assertEqual(list(home.iterdir()), [])  # no agent file
+        self.assertEqual([account['username'] for account in staged['content']['accounts']], ['owner'])
+        self.assertEqual((outcome['accounts'], outcome['agent_credentials']), ({'owner': 'created'}, None))
+        self.assertIn('no review agent', outcome['summary'])
 
 
 

@@ -28,6 +28,7 @@
  */
 const assert = require('node:assert/strict');
 const childProcess = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -38,8 +39,8 @@ const walk = require('./walk.cjs');
 
 const BASE = 'https://cpt.example.test';
 const PASSWORD = 'Synthetic-walk pass&+%<>"\'é/=?-2026';
-const REQUIRED = ['--base-url', BASE, '--credentials', 'c.json', '--operator-credentials', 'o.json', '--docs', 'docs',
-  '--out', 'out'];
+const REQUIRED = ['--base-url', BASE, '--credentials', 'c.json', '--docs', 'docs', '--out', 'out'];
+const ADMIN = 'https://admin.example.test';
 const DENYLIST = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification', 'customer-denylist.json'), 'utf8'));
 const CONTRACT = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification', 'customer-contract.json'), 'utf8'));
 // LINE IDENTITY: whether the contract on disk lists each code row's `line` (lane F1a adds it, FIX-SPEC section 1)
@@ -145,6 +146,8 @@ test('parseArgs reads the options, with their defaults', () => {
   assert.equal(opts.allowLiveProvider, false);
   assert.equal(opts.insurance, 'commercial');
   assert.equal(opts.serviceDate, null);
+  assert.equal(opts.adminUrl, ADMIN);  // the base URL's host with its 'cpt.' read as 'admin.' (A11)
+  assert.equal(opts.release, null);
   const given = walk.parseArgs([...REQUIRED, '--deadline-seconds=600', '--allow-live-provider', '--service-date', '2026-10-14',
     '--insurance', 'medicare', '--base-url', 'https://cpt.example.test/some/path?x=1']);
   assert.equal(given.deadlineSeconds, 600);
@@ -152,8 +155,44 @@ test('parseArgs reads the options, with their defaults', () => {
   assert.equal(given.serviceDate, '2026-10-14');
   assert.equal(given.insurance, 'medicare');
   assert.equal(given.baseUrl, BASE);  // the origin alone
-  assert.equal(walk.parseArgs([...REQUIRED, '--base-url', 'http://127.0.0.1:8000']).baseUrl, 'http://127.0.0.1:8000');
-  assert.equal(walk.parseArgs([...REQUIRED, '--base-url', 'http://localhost:8000']).baseUrl, 'http://localhost:8000');
+  // a loopback base URL names its admin origin (another loopback server, or a host that resolves to one)
+  const local = walk.parseArgs([...REQUIRED, '--base-url', 'http://127.0.0.1:8000', '--admin-url', 'http://127.0.0.1:8001/ops/']);
+  assert.deepEqual([local.baseUrl, local.adminUrl], ['http://127.0.0.1:8000', 'http://127.0.0.1:8001']);
+  assert.equal(walk.parseArgs([...REQUIRED, '--base-url', 'http://localhost:8000', '--admin-url', 'http://[::1]:8000']).baseUrl,
+    'http://localhost:8000');
+  assert.equal(walk.parseArgs([...REQUIRED, '--admin-url', 'https://admin.other.test']).adminUrl, 'https://admin.other.test');
+  assert.equal(walk.parseArgs([...REQUIRED, '--release', 'a'.repeat(40)]).release, 'a'.repeat(40));
+});
+
+test('the walk takes no operator credentials, and reads the admin origin it needs (release 1, A11)', () => {
+  const cases = [
+    [[...REQUIRED, '--operator-credentials', 'o.json'], /unknown option --operator-credentials/],
+    [['--base-url', 'http://127.0.0.1:8000', '--credentials', 'c.json', '--docs', 'd', '--out', 'o'], /--admin-url is needed/],
+    [[...REQUIRED, '--admin-url', BASE], /--admin-url must name the admin host, not --base-url's/],
+    [[...REQUIRED, '--admin-url', 'http://admin.example.test'], /--admin-url may be plain http only on the loopback/],
+    [[...REQUIRED, '--admin-url', 'https://u:p@admin.example.test'], /--admin-url must not carry a user name or password/],
+    [[...REQUIRED, '--admin-url', 'ftp://admin.example.test'], /--admin-url must be http\(s\)/],
+    [[...REQUIRED, '--release', 'A'.repeat(40)], /--release must be a revision/],
+    [[...REQUIRED, '--release', 'a'.repeat(12)], /--release must be a revision/],
+  ];
+  for (const [argv, said] of cases) {
+    assert.throws(() => walk.parseArgs(argv), error => error instanceof walk.UsageError && said.test(error.message), argv.join(' '));
+  }
+  assert.equal(walk.adminOriginOf('https://cpt.quillmd.com'), 'https://admin.quillmd.com');
+  assert.equal(walk.adminOriginOf('https://cpt.example.test:8443'), 'https://admin.example.test:8443');
+  for (const base of ['http://127.0.0.1:8000', 'https://cptx.example.test', 'https://www.cpt.example.test']) {
+    assert.equal(walk.adminOriginOf(base), null, base);
+  }
+  const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
+  for (const gone of ['operatorCredentials', 'operator_credentials', 'ops.operator_view', 'ops.operator_control']) {
+    assert.ok(!source.includes(gone), gone);
+  }
+});
+
+test('the cookie names are the __Host- ones over https and the plain ones on a loopback http server (B6)', () => {
+  assert.deepEqual(walk.cookieNames('https://cpt.quillmd.com'),
+    { session: '__Host-cptstudio_session', csrf: '__Host-cptstudio_csrf' });
+  assert.deepEqual(walk.cookieNames('http://127.0.0.1:8000'), { session: 'cptstudio_session', csrf: 'cptstudio_csrf' });
 });
 
 test('parseArgs refuses what it cannot carry out, before anything is read', () => {
@@ -1902,19 +1941,135 @@ test('the readers that run in the page are self-contained functions', () => {
 
 // --- the operator gate and the exports -----------------------------------------------------------------------------------
 
-test('every /ops/ path is 404 to the customer and never 200 to nobody, and the operator reads the encounter', () => {
+test('every /ops/ path is 404 to the customer and never 200 to nobody, its POSTs with the session\'s CSRF token', () => {
   const probes = [{ method: 'GET', path: '/ops/', customer: 404, anonymous: 302 }, { method: 'POST', path: '/ops/x', customer: 404 }];
   const ownIds = { session: 200, probed: 4 };
-  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, operator: { status: 200, names: true } })), []);
-  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], customer: 200 }], ownIds, operator: { status: 200, names: true } })),
-    ['ops.customer_404']);
-  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], anonymous: 200 }], ownIds, operator: { status: 200, names: true } })),
-    ['ops.anonymous_not_200']);
-  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, operator: { status: 404, names: false } })), ['ops.operator_view']);
+  const csrf = { cookie: '__Host-cptstudio_csrf', found: true };
+  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, csrf })), []);
+  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], customer: 200 }], ownIds, csrf })), ['ops.customer_404']);
+  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], anonymous: 200 }], ownIds, csrf })), ['ops.anonymous_not_200']);
+  // no operator reads the encounter any more (A11; owner decision D10)
+  assert.ok(!walk.opsChecks({ probes, ownIds, csrf }).some(item => item.id === 'ops.operator_view'));
+  // a POST that carried no CSRF token proves nothing about the gate: its 404 could have been anything's
+  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, csrf: { ...csrf, found: false } })), ['ops.csrf_token']);
   // the probes by the member's own ids must have run: a failed session read fails the check (refutation r3, r3-10)
   for (const broken of [{ session: 409, probed: 0 }, { session: 200, probed: 1 }, { session: 500, probed: 4 }, undefined]) {
-    assert.deepEqual(failed(walk.opsChecks({ probes, ownIds: broken, operator: { status: 200, names: true } })), ['ops.own_ids_probed']);
+    assert.deepEqual(failed(walk.opsChecks({ probes, ownIds: broken, csrf })), ['ops.own_ids_probed']);
   }
+});
+
+// The operator gate's positive control as probeControl records it (A11): nobody signed in sent from the admin host's
+// /ops/ to its sign-in, 404 from the doctors' host's /ops/, and the member refused at the admin door with no session.
+function controlFound(overrides = {}) {
+  const member = { form: 200, token: true, status: 400, sentence: true, session: false,
+    after: { status: 302, location: '/login/?next=%2Fops%2F' }, ...(overrides.member || {}) };
+  return { admin_anonymous: { status: 302, location: '/login/?next=%2Fops%2F' }, cpt_anonymous: { status: 404, location: null },
+    ...overrides, member_at_admin: member };
+}
+
+test('the operator gate\'s control needs no operator: the admin gate, the doctors\' 404, the member refused (A11)', () => {
+  assert.deepEqual(failed(walk.controlChecks(controlFound(), ADMIN)), []);
+  assert.deepEqual(walk.controlChecks(controlFound(), ADMIN).map(item => item.id),
+    ['control.admin_gate', 'control.cpt_console_404', 'control.member_refused_at_admin']);
+  // an absolute redirect to the admin host's own sign-in is the same answer
+  assert.deepEqual(failed(walk.controlChecks(controlFound({ admin_anonymous: { status: 302,
+    location: `${ADMIN}/login/?next=%2Fops%2F` } }), ADMIN)), []);
+  // the doctors' host's /ops/ must answer 404 to nobody signed in: a 200 (or any other answer) fails the control
+  for (const status of [200, 302, 403, 500]) {
+    assert.deepEqual(failed(walk.controlChecks(controlFound({ cpt_anonymous: { status, location: null } }), ADMIN)),
+      ['control.cpt_console_404'], String(status));
+  }
+  // the admin gate: a 200, a 404, a sign-in with no next, another origin's sign-in, a 301
+  for (const answer of [{ status: 200, location: null }, { status: 404, location: null }, { status: 302, location: '/login/' },
+    { status: 302, location: 'https://evil.example/login/?next=%2Fops%2F' }, { status: 301, location: '/login/?next=%2Fops%2F' },
+    { status: 302, location: '/login/?next=%2Fops%2Fx' }, undefined]) {
+    assert.deepEqual(failed(walk.controlChecks(controlFound({ admin_anonymous: answer }), ADMIN)), ['control.admin_gate'],
+      JSON.stringify(answer));
+  }
+  // the member at the admin door: let in (a redirect or a session), refused without the sentence (a delay, a throttle),
+  // or the console reachable afterwards - each fails; so does a door that could not be read
+  for (const member of [{ status: 302 }, { session: true }, { sentence: false }, { after: { status: 200, location: null } },
+    { after: { status: 302, location: '/login/' } }, { form: 404 }, { token: false }, { status: null }]) {
+    assert.deepEqual(failed(walk.controlChecks(controlFound({ member }), ADMIN)), ['control.member_refused_at_admin'],
+      JSON.stringify(member));
+  }
+  // the refusal sentence both doors share (studio/views.py), and the form's token as Django renders it
+  assert.ok(walk.REFUSED_SENTENCE.test('The username or password is not correct, or the account is not a platform operator.'));
+  assert.ok(!walk.REFUSED_SENTENCE.test('Too many failed attempts. Wait 15 minutes and try again.'));
+  assert.equal(walk.CSRF_FIELD.exec('<input type="hidden" name="csrfmiddlewaretoken" value="t0k3n">')[1], 't0k3n');
+});
+
+test('a wait answers the page\'s idle dialog with #idleStay, and nothing else (B5)', async () => {
+  const clicked = [];
+  const pageWith = visible => ({ locator: selector => ({
+    isVisible: async () => selector === '#idleDialog' && visible,
+    click: async () => { clicked.push(selector); },
+  }) });
+  const ctx = { idleStays: 0 };
+  assert.equal(await walk.stayIfAsked(pageWith(false), ctx), false);
+  assert.deepEqual([clicked, ctx.idleStays], [[], 0]);
+  assert.equal(await walk.stayIfAsked(pageWith(true), ctx), true);
+  assert.equal(await walk.stayIfAsked(pageWith(true), ctx), true);
+  assert.deepEqual([clicked, ctx.idleStays], [['#idleStay', '#idleStay'], 2]);
+  // a page whose dialog cannot be read is simply not answered: the wait goes on
+  const broken = { locator: () => ({ isVisible: async () => { throw new Error('page closed'); }, click: async () => {} }) };
+  assert.equal(await walk.stayIfAsked(broken, ctx), false);
+  // every poll of a round's wait looks for it, and the evidence counts the answers
+  const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
+  const wait = source.slice(source.indexOf('async function waitForRound'), source.indexOf('// The encounter view, once'));
+  assert.ok(wait.includes('await stayIfAsked(page, ctx);'));
+  assert.ok(source.includes('evidence.idle_stays = ctx.idleStays;'));
+});
+
+test('the public /health/ answers the release digest through nginx and never the release (B7)', () => {
+  const release = 'c'.repeat(40);
+  const digest = walk.healthDigest(release);
+  assert.equal(digest, crypto.createHash('sha256').update(`cpt-studio-release:${release}`).digest('hex').slice(0, 16));
+  const health = json => ({ status: 200, json: { status: 'ok', service: 'cpt-studio', database: 'ok', ...json } });
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: digest }), BASE)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: digest }), BASE, release)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: 'd'.repeat(16) }), BASE, release)), ['health.release_matches']);
+  for (const json of [{ release }, { release_digest: digest, release }, { release_digest: digest.slice(0, 15) }, {}]) {
+    assert.deepEqual(failed(walk.healthChecks(health(json), BASE)), ['health.release_hidden'], JSON.stringify(json));
+  }
+  assert.deepEqual(failed(walk.healthChecks({ status: 503, json: { release_digest: digest } }, BASE)), ['health.release_hidden']);
+  // a loopback base URL may be the web's own port, which answers the release
+  assert.deepEqual(failed(walk.healthChecks(health({ release }), 'http://127.0.0.1:8000', release)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: digest }), 'http://127.0.0.1:8000', release)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release: 'e'.repeat(40) }), 'http://127.0.0.1:8000', release)),
+    ['health.release_matches']);
+  assert.deepEqual(walk.healthRecord(health({ release_digest: digest })),
+    { status: 200, shape: 'release_digest', value: digest, also_release: false });
+});
+
+test('after a switch-back the walk reads the revision served: R0 answers its release through nginx (B7, B-9)', () => {
+  const r0 = 'b'.repeat(40);
+  const r1 = 'a'.repeat(40);
+  const health = json => ({ status: 200, json: { status: 'ok', service: 'cpt-studio', database: 'ok', ...json } });
+  // --release R0, a revision before B7 (main reads that from its tree): its release, through nginx
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r0 }), BASE, r0, false)), []);
+  // (an answer out of its shape fails both checks: it cannot name the revision either)
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: walk.healthDigest(r0) }), BASE, r0, false)),
+    ['health.release_hidden', 'health.release_matches']);
+  // --release R1, which has B7: the digest alone - its release through nginx means B7 is not in force
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: walk.healthDigest(r1) }), BASE, r1, true)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r1 }), BASE, r1, true)),
+    ['health.release_hidden', 'health.release_matches']);
+  // and the answer must name --release whichever shape it takes
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r1 }), BASE, r0, false)), ['health.release_matches']);
+  // the tree decides: this checkout's HEAD reads, a revision it cannot read is a usage error
+  const head = childProcess.execFileSync('git', ['-C', __dirname, 'rev-parse', 'HEAD']).toString().trim();
+  assert.equal(typeof walk.releaseAnswersDigest(head), 'boolean');
+  assert.throws(() => walk.releaseAnswersDigest('e'.repeat(40)), error => error instanceof walk.UsageError
+    && /cannot tell whether --release eeeeeeeeeeee answers the health digest/.test(error.message));
+});
+
+test('the CSRF cookie is read by the name the server set: __Host- over https, or R0\'s plain one (B6, B-9)', () => {
+  const jar = (...names) => names.map(name => ({ name, value: 'x' }));
+  assert.equal(walk.servedCsrfName(jar('__Host-cptstudio_csrf'), BASE), '__Host-cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar('cptstudio_csrf', 'other'), BASE), 'cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar(), BASE), '__Host-cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar(), 'http://127.0.0.1:8000'), 'cptstudio_csrf');
 });
 
 // The physician PDF report - the only report CPT Studio makes (owner direction 2026-11-21) - as exportPdf reads it
@@ -2069,8 +2224,7 @@ test('with --workspace the walk stops on a session in another workspace (owner d
     /signed in to the workspace "Neurosurgery", not "Orthopedic Surgery"/);
   assert.match(walk.sessionProblems({ ...session, workspace: undefined }, { allowLiveProvider: true, workspace: 'Neurosurgery' }).join(),
     /signed in to the workspace null/);
-  const REQUIRED_ARGS = ['--base-url', 'https://cpt.quillmd.com', '--credentials', 'a.json', '--operator-credentials', 'o.json',
-    '--docs', 'd', '--out', 'o'];
+  const REQUIRED_ARGS = ['--base-url', 'https://cpt.quillmd.com', '--credentials', 'a.json', '--docs', 'd', '--out', 'o'];
   assert.equal(walk.parseArgs([...REQUIRED_ARGS, '--workspace', 'Orthopedic Surgery']).workspace, 'Orthopedic Surgery');
   assert.equal(walk.parseArgs(REQUIRED_ARGS).workspace, null);
 });

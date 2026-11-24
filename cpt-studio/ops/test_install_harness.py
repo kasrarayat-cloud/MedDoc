@@ -27,6 +27,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+from test_install import HARDENED_LIMITS  # noqa: E402
 from test_install import (FakeOwnership, TemporaryDirectoryTest, earlier_text, guard_host,  # noqa: E402
                           pre_switch_answer, release_host, run_body)
 
@@ -98,23 +99,23 @@ class ParticipantArgumentTests(unittest.TestCase):
         # the Fable coding build has no participant (DECISIONS D351): only a switch-back names one, for the previous pair
         args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled')
         self.assertEqual((args.astra_mode, args.fable_mode), ('disabled', 'disabled'))
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live',
-                          '--authorization-ref', RULING)
-        self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'disabled'))
-        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--astra-mode', 'live', '--fable-mode',
-                          'live', '--authorization-ref', RULING)
-        self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'live'))
+        # release 1 (A8): a participant is never started live again (no BAA); disabled is the only mode left
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
+                          '--fable-mode', 'disabled')
+        self.assertEqual((args.astra_mode, args.fable_mode), ('disabled', 'disabled'))
         self.assertEqual(self.parse('--phase', 'passages').phase, 'passages')
         # an app phase names none: its pair runs them disabled
         args = self.parse('--phase', 'app', '--coding-mode', 'disabled')
         self.assertEqual((args.astra_mode, args.fable_mode, args.provider_mode), ('disabled', 'disabled', None))
 
     def test_refusals(self):
-        # live needs the recorded authority, as Corti's live mode does
-        self.assertIn('--astra-mode live needs --authorization-ref',
-                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live'))
-        self.assertIn('--fable-mode live needs --authorization-ref',
-                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--fable-mode', 'live'))
+        # release 1 (A8): live is refused whatever authority is given - no participant has a BAA
+        for flag in ('--astra-mode', '--fable-mode'):
+            for authority in ((), ('--authorization-ref', RULING)):
+                with self.subTest(flag=flag, authority=authority):
+                    said = self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', flag, 'live', *authority)
+                    self.assertIn(f'{flag} live is refused', said)
+                    self.assertIn('business associate agreement', said)
         # replay is for tests and development only (HARNESS.md 8): the installer offers disabled and live
         self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'replay')
         self.assertIn('only applies to',
@@ -294,7 +295,8 @@ class StopTimeoutTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         worker = {'Id': 'w', 'Image': 'old', 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'worker'}}}
         with mock.patch.object(install, 'docker', fake_docker), \
-                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker, worker]):
+                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker, worker]), \
+                mock.patch.object(install, 'keep_container_log', return_value={'kept': 0}):  # A13, before its rm
             install.park('worker')
             install.remove_service_container(install.SERVICES['worker'], 'worker')
             install.stop_service_container(install.SERVICES['worker'], 'worker')
@@ -308,6 +310,7 @@ class ServiceMountTests(unittest.TestCase):
         return {'Image': IMAGE, 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
                                            'Labels': {install.LABEL: '1', install.ROLE_LABEL: role}},
                 'HostConfig': {'ReadonlyRootfs': True, 'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'],
+                               **HARDENED_LIMITS,
                                'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(port)}]}
                                                 if role == 'web' else {})},
                 'Mounts': mounts}
@@ -691,7 +694,7 @@ class AppWorld:
                 mock.patch.object(install, 'oneshot', self.oneshot),
                 mock.patch.object(install, 'app_script', self.app_script),
                 mock.patch.object(install, 'replace_services', self.replace),
-                mock.patch.object(install, 'retire_parked'),
+                mock.patch.object(install, 'retire_parked', return_value={}),  # release 1 (A13): the copies
                 mock.patch.object(install, 'run_helper', self.helper)]
 
 
@@ -1131,6 +1134,11 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 live.pop('web' if 'web' in args[2] else 'worker', None)
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
+        def keep(container, role, revision=None):  # A13: the ids-only copy, made before its removal
+            calls.append(('keep-log', container['Id']))
+            assert role in live, f'the {role} log was kept after its removal'
+            return {'kept': 0, 'dropped': 0}
+
         def close(image_id, env_bytes, since, revision, reason, kinds):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
@@ -1147,9 +1155,13 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'undo_hazards', return_value={}), \
                 mock.patch.object(install, 'close_undone_stages', close), \
                 mock.patch.object(install, 'app_script', counted), \
+                mock.patch.object(install, 'keep_container_log', keep), \
                 mock.patch.object(install, 'put_back_states', return_value={'encounters': 0, 'changed': {}}):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
+        # refutation, installer lens A-2: rollback-app removes the pair that served the site - each log kept first
+        removals = [call for call in calls if call[0] in ('keep-log', 'rm')]
+        self.assertEqual([call[0] for call in removals], ['keep-log', 'rm', 'keep-log', 'rm'])
         self.assertEqual(details['not_carried_back']['note'],
                          'this revision coded no encounter: there is nothing of its own to carry back, and the earlier '
                          f'revision shows its own records only; {install.FOUR_TABLES_KEPT}')

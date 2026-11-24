@@ -769,31 +769,32 @@ class MigrationGateTests(unittest.TestCase):
 
 class OperatorsR2Tests(TemporaryDirectoryTest):
     def test_the_phase_refuses_before_creating_anything_while_migrations_are_pending(self):
-        etc, home = self.tmp / 'etc', self.tmp / 'home'
+        etc = self.tmp / 'etc'
         etc.mkdir(mode=0o700)
-        home.mkdir(mode=0o700)
-        os.chmod(home, 0o700)
         root, commands = FakeRootFile(etc), []
 
         def oneshot(image_id, command, env, **kwargs):
             commands.append(command)
             return SimpleNamespace(returncode=1, stdout=b'', stderr=b'')
         ctx = install.Context(SimpleNamespace(phase='operators', revision=REVISION, receipts=str(self.tmp),
-                                              reset_passwords=None), self.tmp)
+                                              reset_passwords=None, by='Ada Lovelace', review_by=None, regrant=None),
+                              self.tmp)
         with mock.patch.multiple(install, installed_image=mock.Mock(return_value=IMAGE), require_db=mock.Mock(),
                                  read_protected_env=mock.Mock(return_value=b''), root_file=root,
                                  app_script=mock.Mock(side_effect=AssertionError('an account was created')),
-                                 oneshot=oneshot, OPS_AGENT_CREDENTIALS=home / 'ops-agent-credentials.json'), \
-                self.assertRaisesRegex(install.InstallError, 'run --phase app first. No account or file was created'):
+                                 oneshot=oneshot), \
+                self.assertRaisesRegex(install.InstallError, 'run --phase app first. No account was created'):
             install.phase_operators(ctx)
         self.assertEqual(commands, [['manage', 'migrate', '--check']])
-        self.assertEqual((root.calls, list(etc.iterdir()), list(home.iterdir())), ([], [], []))
+        self.assertEqual((root.calls, list(etc.iterdir())), ([], []))
 
-    def test_who_grants_is_named_even_where_the_login_cannot_be_looked_up(self):
-        self.assertTrue(install.operator_granted_by().startswith('ops/install.py --phase operators ('))
-        with mock.patch.object(install.getpass, 'getuser', side_effect=KeyError('getpwuid(): uid not found: 1000')):
-            self.assertEqual(install.operator_granted_by(), f'ops/install.py --phase operators (uid {os.getuid()})')
-        self.assertLessEqual(len(install.operator_granted_by()), 120)
+    def test_who_grants_is_a_person_given_explicitly_never_a_role_or_a_lookup(self):
+        # release 1 (C3, A6): --by names the person who runs the act; the one-shot's uid is never looked up for it
+        self.assertEqual(install.person_problem('Ada Lovelace', '--by'), '')
+        for value in ('', '  ', 'operator', 'Root', 'platform-operator', 'installer', 'x' * 81, 'Ada; rm -rf /'):
+            with self.subTest(value=value):
+                self.assertTrue(install.person_problem(value, '--by'))
+        self.assertFalse(hasattr(install, 'operator_granted_by'))
 
 
 # --- what INSTALL.md says about the repairs ---------------------------------------------------------------------------
