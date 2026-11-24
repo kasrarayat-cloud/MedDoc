@@ -228,11 +228,16 @@ def db_container(*, memory=512 * MIB, swap=512 * MIB, cap_drop=('ALL',), core=Tr
 class DbWorld:
     """The database container and its cgroup, as phase_db reads and changes them; every docker call recorded."""
 
-    def __init__(self, container, *, peak=200 * MIB, swapped=30 * MIB, swap_max='max', shown=None, cgroup_readable=True):
+    def __init__(self, container, *, peak=200 * MIB, swapped=30 * MIB, swap_max='max', shown=None, cgroup_readable=True,
+                 swap_peak=None):
         self.container, self.calls = container, []
+        # memory.swap.peak (refutation round 1, installer-2): the swap's high-water mark - by default what is in swap
+        # now, never below it; '' leaves it out, as a kernel without the file does
         self.cgroup = {'memory.max': str(container['HostConfig']['Memory']) if container['HostConfig']['Memory']
                        else 'max', 'memory.swap.max': swap_max, 'memory.peak': str(peak),
                        'memory.swap.current': str(swapped)}
+        if swap_peak != '':
+            self.cgroup['memory.swap.peak'] = str(swapped if swap_peak is None else swap_peak)
         self.cgroup_readable = cgroup_readable
         self.settings = {'log_min_error_statement': 'error', 'log_error_verbosity': 'default'}
         self.shown = shown  # what SHOW answers whatever was set (None: what was set)
@@ -482,14 +487,14 @@ class ManageArgumentTests(unittest.TestCase):
             ('--command', 'clear-signin-failures', '--username', 'owner', *reason, *by),
             ('--command', 'require-password-change', '--all-human-accounts', *reason, *by),
             ('--command', 'require-password-change', '--username', 'owner', *reason, *by),
+            # refutation round 1 (builder D's point): a reason exactly where the command reads one - close and plan
             ('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', WORKSPACE, *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, *by),
+            ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, *reason, *by),
             ('--command', 'dispose', '--dispose-step', 'plan', '--encounter-id', PLAN, *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by, '--approved-by', 'Grace Hopper',
-             *reason),
+            ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by, '--approved-by', 'Grace Hopper'),
             ('--command', 'dispose', '--dispose-step', 'ledger', *by),
-            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by,
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *by),
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *by,
              '--execute', '--approved-by', 'Grace Hopper'),
             ('--command', 'export-workspace', '--workspace-id', WORKSPACE, *reason, *by),
         ]
@@ -511,30 +516,41 @@ class ManageArgumentTests(unittest.TestCase):
                                        '--all-human-accounts', *reason, *by), 'not both'),
             'neither kind of require': (('--command', 'require-password-change', *reason, *by), 'needs --username'),
             'one person runs and approves': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
-                                              *by, '--approved-by', 'ada lovelace', *reason), 'differ'),
+                                              *by, '--approved-by', 'ada lovelace'), 'differ'),
             'an execute without a plan': (('--command', 'dispose', '--dispose-step', 'execute', *by, '--approved-by',
-                                           'Grace Hopper', *reason), '--plan-id'),
-            'an execute without a reason': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by,
-                                             '--approved-by', 'Grace Hopper'), 'needs --reason-file'),
+                                           'Grace Hopper'), '--plan-id'),
+            # refutation round 1 (builder D's point): the command reads a reason at close and plan, and no other step
+            'a plan without a reason': (('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE,
+                                         *by), 'needs --reason-file'),
+            'a close without a reason': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
+                                          WORKSPACE, *by), 'needs --reason-file'),
+            'an execute with a reason': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by,
+                                          '--approved-by', 'Grace Hopper', *reason),
+                                         '--reason-file is not used by --dispose-step execute'),
+            'a ledger with a reason': (('--command', 'dispose', '--dispose-step', 'ledger', *by, *reason),
+                                       '--reason-file is not used by --dispose-step ledger'),
+            'a replay with a reason': (('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
+                                        '/srv/ledger.json', *by, *reason),
+                                       '--reason-file is not used by --dispose-step replay-ledger'),
             'an approver outside execute': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
                                              WORKSPACE, *reason, *by, '--approved-by', 'Grace Hopper'),
                                             'belong to --dispose-step execute'),
             # refutation, installer lens A-5b: a replay that destroys data again is carried out by two named people
             'a replay carried out by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
-                                                    '--ledger-file', '/srv/ledger.json', *reason, *by, '--execute'),
+                                                    '--ledger-file', '/srv/ledger.json', *by, '--execute'),
                                                    'replay-ledger --execute needs --approved-by'),
             'a replay run and approved by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
-                                                         '--ledger-file', '/srv/ledger.json', *reason, *by,
+                                                         '--ledger-file', '/srv/ledger.json', *by,
                                                          '--execute', '--approved-by', 'ADA LOVELACE'), 'differ'),
             'an approver of a dry run': (('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
-                                          '/srv/ledger.json', *reason, *by, '--approved-by', 'Grace Hopper'),
+                                          '/srv/ledger.json', *by, '--approved-by', 'Grace Hopper'),
                                          'replay-ledger --execute'),
             '--execute outside a replay': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
-                                            *by, '--approved-by', 'Grace Hopper', *reason, '--execute'),
+                                            *by, '--approved-by', 'Grace Hopper', '--execute'),
                                            '--execute belongs to --dispose-step replay-ledger'),
             '--execute on another act': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason, *by,
                                           '--execute'), 'not used by --command revoke-operator'),
-            'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *reason, *by),
+            'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *by),
                                             '--ledger-file'),
             'a ledger file elsewhere': (('--command', 'dispose', '--dispose-step', 'ledger', '--ledger-file',
                                          '/srv/ledger.json', *by), '--ledger-file'),
@@ -751,23 +767,34 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertNotIn(code, json.dumps(details))
         for path in self.tmp.glob('*.log'):
             self.assertNotIn(code, path.read_text())
-        # a command that printed the code: nothing is kept, the staged code discarded
+        # a command that printed the code: no code is kept, the staged code discarded - and the act ran, so its record
+        # is kept with the code redacted (refutation round 1, phileak-1's class)
         again = self.tmp / 'again'
         again.mkdir()
         world = ManageWorld(again)
         world.output = lambda command: f'your code: {world.mounted["code"][0]}'.encode()
-        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
+        with self.assertRaisesRegex(install.InstallError, 'printed the setup code') as caught:
             world.run('--command', 'reset-second-factor', '--username', 'platform-operator', '--reason-file', 'REASON',
                       '--by', 'Ada Lovelace')
         self.assertEqual(list(world.etc.iterdir()), [])  # neither the code nor its staged copy
-        self.assertFalse([path for path in again.glob('*.log')])
+        printed = world.mounted['code'][0]
+        (log,) = again.glob('*.log')
+        self.assertNotIn(printed, log.read_text())
+        self.assertIn('[redacted by the installer]', log.read_text())
+        self.assertEqual(caught.exception.details['redacted'], {'secret': 1, 'reason': 0})
+        self.assertNotIn(printed, json.dumps(caught.exception.details))
 
-    def test_an_application_secret_printed_by_an_act_is_never_kept(self):
+    def test_an_application_secret_printed_by_an_act_is_never_kept_and_the_act_is_recorded(self):
+        # refutation round 1, phileak-1's class: the act ran, so its record is kept with the secret redacted, counted
         world = ManageWorld(self.tmp, output=f'settings: {SECRET_VALUE}'.encode())
-        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
-            world.run('--command', 'clear-signin-failures', '--username', 'owner', '--reason-file', 'REASON', '--by',
-                      'Ada Lovelace')
-        for path in self.tmp.glob('*.log'):
+        details = world.run('--command', 'clear-signin-failures', '--username', 'owner', '--reason-file', 'REASON',
+                            '--by', 'Ada Lovelace')
+        self.assertEqual(details['redacted'], {'secret': 1, 'reason': 0})
+        self.assertIn('FINDING: the command printed one', details['summary'])
+        self.assertNotIn(SECRET_VALUE, json.dumps(details))
+        logs = list(self.tmp.glob('*.log'))
+        self.assertEqual(len(logs), 1)
+        for path in logs:
             self.assertNotIn(SECRET_VALUE, path.read_text())
 
     def test_a_disposal_is_refused_while_an_install_or_switch_back_is_in_progress(self):
@@ -781,18 +808,25 @@ class ManagePhaseTests(TemporaryDirectoryTest):
 
     def test_a_disposal_is_told_the_switch_is_idle_only_after_the_check_and_runs_with_the_files_volume(self):
         world = ManageWorld(self.tmp, output=f'disposal {PLAN}: 12 rows, 3 files\n'.encode())
+        # refutation round 1 (builder D's point): execute reads no reason (the plan's own is used): none is given
         details = world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by',
-                            'Ada Lovelace', '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+                            'Ada Lovelace', '--approved-by', 'Grace Hopper')
         command, kwargs = world.oneshots[-1]
         self.assertEqual(command, ['manage', 'dispose', '--execute', '--plan', PLAN, '--by', 'Ada Lovelace',
-                                   '--approved-by', 'Grace Hopper', '--reason-file', '/run/cpt-manage/reason',
+                                   '--approved-by', 'Grace Hopper',
                                    '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
         self.assertIn('CPT_STUDIO_SWITCH_STATE=idle', kwargs['environment'])
         self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', kwargs['environment'])
         self.assertNotIn('user', kwargs)  # the application's own uid: the files are its own
         self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR}', kwargs['mounts'])  # read-write
+        self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
+        self.assertEqual(details['step'], 'execute')
         # refutation, installer lens A-3c: 0600 in 0700, handed to that uid by the root helper - never readable by
-        # another local user - and wiped by it afterwards
+        # another local user - and wiped by it afterwards: a disposal step that reads a reason (plan; close alike)
+        world.helpers.clear()
+        world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, '--reason-file',
+                  'REASON', '--by', 'Ada Lovelace')
+        command, kwargs = world.oneshots[-1]
         text, mode, folder = world.mounted['reason']
         self.assertEqual((mode, folder), (0o600, 0o700))
         source = next(mount for mount in kwargs['mounts'] if 'dst=/run/cpt-manage/reason,' in mount)
@@ -803,8 +837,6 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertEqual([body for body in world.helpers if body in (install.H_RAM_GIVE, install.H_RAM_WIPE)],
                          [install.H_RAM_GIVE, install.H_RAM_WIPE])
         self.assertFalse(Path(path).parent.exists())
-        self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
-        self.assertEqual(details['step'], 'execute')
         # no other act is ever told the switch is idle
         world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
                   'Ada Lovelace')
@@ -817,16 +849,19 @@ class ManagePhaseTests(TemporaryDirectoryTest):
             ('close', '--workspace-id', WORKSPACE, '--reason-file', 'REASON'):
                 ['--close', '--workspace', WORKSPACE, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
                  *authority],
-            ('plan', '--workspace-id', WORKSPACE): ['--plan', '--workspace', WORKSPACE, '--by', 'Ada Lovelace', *authority],
-            ('plan', '--encounter-id', PLAN): ['--plan', '--encounter', PLAN, '--by', 'Ada Lovelace', *authority],
+            # refutation round 1 (builder D's point): the reason reaches the command exactly where it reads one
+            ('plan', '--workspace-id', WORKSPACE, '--reason-file', 'REASON'):
+                ['--plan', '--workspace', WORKSPACE, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                 *authority],
+            ('plan', '--encounter-id', PLAN, '--reason-file', 'REASON'):
+                ['--plan', '--encounter', PLAN, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                 *authority],
             ('ledger',): ['--ledger', '--by', 'Ada Lovelace', *authority],
-            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON'):
-                ['--replay-ledger', '/run/cpt-manage/ledger', '--reason-file', '/run/cpt-manage/reason', '--by',
-                 'Ada Lovelace', *authority],
-            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON', '--execute', '--approved-by',
-             'Grace Hopper'):
+            ('replay-ledger', '--ledger-file', 'LEDGER'):
+                ['--replay-ledger', '/run/cpt-manage/ledger', '--by', 'Ada Lovelace', *authority],
+            ('replay-ledger', '--ledger-file', 'LEDGER', '--execute', '--approved-by', 'Grace Hopper'):
                 ['--replay-ledger', '/run/cpt-manage/ledger', '--execute', '--approved-by', 'Grace Hopper',
-                 '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace', *authority],
+                 '--by', 'Ada Lovelace', *authority],
         }
         modes = {'close': 'executed', 'plan': 'dry run', 'ledger': 'read'}
         for (step, *extra), expected in steps.items():
@@ -842,7 +877,11 @@ class ManagePhaseTests(TemporaryDirectoryTest):
                     self.assertIn('dry run, nothing was changed', details['summary'])
                     self.assertNotRegex(details['summary'], r': done|executed')
                 else:
-                    self.assertTrue(details['summary'].endswith(f'{step}: {mode}'), details['summary'])
+                    # the ledger step's summary goes on with where the ledger is kept whole (refutation round 1,
+                    # dataloss-1)
+                    self.assertIn(f'{step}: {mode}' + ('; the ledger (' if step == 'ledger' else ''), details['summary'])
+                    if step != 'ledger':
+                        self.assertTrue(details['summary'].endswith(f'{step}: {mode}'), details['summary'])
         # the replayed ledger travelled as a RAM-only file, its digest in the receipt, never its text
         self.assertEqual(world.mounted['ledger'][0], '{"ledger": []}\n')
         self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})
@@ -851,8 +890,8 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         # Lane 4's contract: --replay-ledger --execute exits 3 when an entry's commit outcome was unknown and nothing
         # else failed; every other non-zero exit is a failure
         said = b'replayed 7 of 8 entries; entry 3f2a0c1e-0000-4000-8000-000000000003 needs a decision\n'
-        replay = ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--reason-file',
-                  'REASON', '--by', 'Ada Lovelace')
+        replay = ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--by',
+                  'Ada Lovelace')
         world = ManageWorld(self.tmp, output=said, exit_code=3)
         details = world.run(*replay, '--execute', '--approved-by', 'Grace Hopper')
         self.assertEqual(install.DISPOSE_DECISION_EXIT, 3)
@@ -877,7 +916,7 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         world = ManageWorld(self.tmp, exit_code=3)
         with self.assertRaisesRegex(install.InstallError, 'failed'):
             world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by', 'Ada Lovelace',
-                      '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+                      '--approved-by', 'Grace Hopper')
 
     def test_an_export_is_written_into_a_new_folder_that_is_then_root_only(self):
         world = ManageWorld(self.tmp, output=f'exported {WORKSPACE}: 2 documents\n'.encode())
@@ -1374,15 +1413,18 @@ class ReceiptBeforeJournalTests(TemporaryDirectoryTest):
 class MinorRepairTests(TemporaryDirectoryTest):
     """Refutation, installer lens A-7: the five smaller findings."""
 
-    def test_a_command_that_echoes_its_reason_is_refused_and_nothing_kept(self):
+    def test_a_command_that_echoes_its_reason_is_kept_with_the_reason_redacted(self):
+        # refutation round 1, phileak-1: the act ran, so it is recorded - the reason never reaches its log or receipt
         reason = b'Ticket 4521.\nDr Smith asked to end access after the Jones complaint.\n'
         # the whole reason, or one of its lines (12 characters or more), echoed back
         for echoed in (b'revoked; reason: ' + reason, b'note: Dr Smith asked to end access after the Jones complaint.\n'):
             with self.subTest(echoed=echoed):
                 world = ManageWorld(self.tmp, output=lambda command, said=echoed: said)
-                with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
-                    world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
-                              '--by', 'Ada Lovelace', reason=reason)
+                details = world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file',
+                                    'REASON', '--by', 'Ada Lovelace', reason=reason)
+                self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+                self.assertNotIn('Jones', json.dumps(details))
+                self.assertTrue(Path(details['log']).exists())
                 self.assertFalse([path for path in self.tmp.glob('*.log') if b'Jones' in path.read_bytes()])
         self.assertEqual(install.reason_values(b'Short.\nA longer second line here\n'),
                          ['Short.\nA longer second line here', 'A longer second line here'])

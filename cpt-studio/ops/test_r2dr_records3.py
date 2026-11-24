@@ -138,7 +138,8 @@ class R2DRStopBoundEveryRoleTests(unittest.TestCase):
                 with self.subTest(path=path.name, other=other):
                     self.assertFalse(any(start < at + len(other) and at < end
                                          for _, (start, end), _, _ in F4.stop_statements(text)))
-        self.assertEqual(sum(F4.prose(path).count(other) for path in (INSTALL_PY, INSTALL_MD) for other in OTHERS), 3)
+        # 4 since refutation round 1 (rollback-0): END_EVERY_SESSION's lock_timeout '30s' beside LICENSE_NOTE_FIX's
+        self.assertEqual(sum(F4.prose(path).count(other) for path in (INSTALL_PY, INSTALL_MD) for other in OTHERS), 4)
         result = guard(STATEMENT_TEST, web=45)
         self.assertTrue(all(item.get('form') == WEB_FORM for item in failing(result)))
         for name in completeness_methods():

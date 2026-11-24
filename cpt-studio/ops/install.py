@@ -407,6 +407,91 @@ def assert_no_secret(outputs, values):
                 raise InstallError('A generated secret appeared in command output; nothing was recorded.')
 
 
+# Once an act has run, its record is never discarded for what its output holds (refutation round 1, phileak-1 and
+# dataloss-3: a disposal's certificate repeated the plan's reason, assert_no_secret refused the output after the
+# destruction had run, and no log or receipt kept the certificate). Each secret value - and each value of the reason
+# (reason_values) - is replaced by REDACTED_MARK before the log and the receipt are written, and the receipt counts how
+# many were (redact_output; never a value). A secret is replaced wherever it occurs (a long random value cannot occur by
+# chance); a value of the reason as written and as JSON writes it inside a string (a ledger line's), and one shorter than
+# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it, so an id or a digest that happens to contain a short
+# reason is never altered.
+REDACTED_MARK = b'[redacted by the installer]'
+REDACT_BOUNDED_BELOW = 12
+_ALNUM = b'0-9A-Za-z'
+
+
+def redaction_forms(value) -> list:
+    """``value`` as written and as JSON writes it inside a string (escaped, ASCII or not), as UTF-8 bytes."""
+    forms = [value.encode('utf-8')]
+    for ascii_only in (True, False):
+        forms.append(json.dumps(value, ensure_ascii=ascii_only)[1:-1].encode('utf-8'))
+    return list(dict.fromkeys(form for form in forms if form))
+
+
+def redact_output(output: bytes, secrets=(), reasons=()) -> tuple:
+    """(``output`` with every secret and every value of the reason replaced by REDACTED_MARK, {'secret': how many
+    secret occurrences, 'reason': how many of the reason}) - in one pass, the longest value first, so no replacement is
+    read again."""
+    kinds = {}
+    for kind, values in (('reason', reasons), ('secret', secrets)):  # a secret's kind wins a value both name
+        for value in values:
+            if value:
+                for form in redaction_forms(value) if kind == 'reason' else [value.encode('utf-8')]:
+                    kinds[form] = kind
+    counts = {'secret': 0, 'reason': 0}
+    if not kinds or not output:
+        return output, counts
+    patterns = []
+    for form in sorted(kinds, key=len, reverse=True):
+        pattern = re.escape(form)
+        if kinds[form] == 'reason' and len(form) < REDACT_BOUNDED_BELOW:
+            if re.match(rb'[0-9A-Za-z]', form[:1]):
+                pattern = rb'(?<![' + _ALNUM + rb'])' + pattern
+            if re.match(rb'[0-9A-Za-z]', form[-1:]):
+                pattern += rb'(?![' + _ALNUM + rb'])'
+        patterns.append(pattern)
+
+    def replace(match):
+        counts[kinds.get(match.group(0), 'reason')] += 1
+        return REDACTED_MARK
+    return re.sub(b'|'.join(patterns), replace, output), counts
+
+
+def redaction_summary(redacted) -> str:
+    """The summary's clause for a receipt's 'redacted' ('' when nothing was): a secret printed is a FINDING."""
+    if not isinstance(redacted, dict) or not any(redacted.values()):
+        return ''
+    said = []
+    if redacted.get('reason'):
+        said.append(f'{redacted["reason"]} occurrence(s) of the reason')
+    if redacted.get('secret'):
+        said.append(f'{redacted["secret"]} of a secret (FINDING: the command printed one)')
+    return '; its output was kept with ' + ' and '.join(said) + ' redacted'
+
+
+def raise_after_act(error, record, what):
+    """An act ran (``record`` holds its exit, its log and its output), and what follows it - its RAM folder's wipe, an
+    export's seal - failed or was interrupted: the record is never lost to that (refutation round 1, phileak-1's class,
+    builder D's point: once the act ran, nothing may make its record vanish). A failure is raised as an InstallError
+    carrying the record; a signal or a Ctrl-C is raised as itself, the record in its ``details``, which main writes into
+    the receipt beside the interrupt."""
+    if isinstance(error, Exception):
+        said = str(error) or type(error).__name__
+        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: {record.get("log")}), '
+                           f'but what follows the act did not finish: {said}. If it was the RAM folder\'s wipe, a '
+                           f'/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, never read it.',
+                           details={**record, 'after_act': said}) from error
+    error.details = record
+    raise error
+
+
+def redaction_record(*counted) -> dict:
+    """The receipt's 'redacted' of one act: the occurrences replaced, by kind, summed over ``counted``
+    (redact_output's counts) - {} when there were none, so a receipt without the key had nothing redacted."""
+    total = {'secret': sum(c.get('secret', 0) for c in counted), 'reason': sum(c.get('reason', 0) for c in counted)}
+    return {'redacted': total} if any(total.values()) else {}
+
+
 # --- door, tree, arguments, receipts ---------------------------------------------
 
 def check_door(environ, revision) -> dict:
@@ -544,6 +629,8 @@ PHASE_ARGUMENTS = {
     'command': {'manage'}, 'username': {'manage'}, 'reason_file': {'manage'}, 'approved_by': {'manage'},
     'workspace_id': {'manage'}, 'encounter_id': {'manage'}, 'dispose_step': {'manage'}, 'plan_id': {'manage'},
     'all_human_accounts': {'manage'}, 'ledger_file': {'manage'}, 'execute': {'manage'},
+    # refutation round 1, installer-1's class: --address (clear-signin-failures') was refused by no other phase
+    'address': {'manage'},
 }
 
 
@@ -1011,6 +1098,11 @@ KEPT_LOG_FORMATS = {
         # gunicorn's access line in release 1's format (deploy/gunicorn.conf.py: A2)
         rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
         rf'\d{{3}} (?:\d+|-) \d+ms (?:[0-9a-f]{{32}}|-) (?:{_UUID}|-)',
+        # and in the format before it (36e550ab's deploy/gunicorn.conf.py: no request id, no actor), which the retired
+        # web of the release-1 install and of any switch-back to such a revision wrote (refutation round 1,
+        # installer-6): its address, path, status, size and time, nothing more
+        rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
+        rf'\d{{3}} (?:\d+|-) \d+ms',
         # gunicorn's own life cycle
         r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
         r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
@@ -2994,8 +3086,9 @@ DB_SHM_BYTES = 128 * 2 ** 20
 # only while its memory peak stays below this share of DB_MEMORY_BYTES; otherwise the db phase refuses and prints the
 # numbers, so the owner can choose a larger limit (a database that needs more than 512 MiB without swap would be killed).
 DB_PEAK_SHARE = 0.8
-# The container's own cgroup (v2) files, read inside it (/sys/fs/cgroup is the container's cgroup there).
-DB_CGROUP_FILES = ('memory.max', 'memory.swap.max', 'memory.peak', 'memory.swap.current')
+# The container's own cgroup (v2) files, read inside it (/sys/fs/cgroup is the container's cgroup there). memory.swap.peak
+# is the swap's high-water mark (refutation round 1, installer-2: swap used earlier and since paged back counts too).
+DB_CGROUP_FILES = ('memory.max', 'memory.swap.max', 'memory.peak', 'memory.swap.current', 'memory.swap.peak')
 # A5 (FLOW-13): the database's own log never holds statement text - a failed statement is logged without the statement
 # (log_min_error_statement panic) and without DETAIL, which can quote values (log_error_verbosity terse). Set with ALTER
 # SYSTEM (postgresql.auto.conf on the data volume, applied by a reload: no restart) on an existing cluster, and given as
@@ -3125,6 +3218,9 @@ READING_STAGE_KINDS = ('interpret', APPRAISE_KIND, QUESTION_KIND)
 #             reconcile there, and its reconcile allows "one new attempt" by its own rules - a paid Corti predict for an
 #             encounter of its own with a context - for a request it never made. It is reconciled on this revision's
 #             operator console (studio.jobs.reconcile) before the rows are handed back.
+# Release 1's disposal rows are read by an earlier revision too, and shown wrongly (a closed practice takes uploads, a
+# destroyed document's tombstone is listed): they are no undo hazard - they are never undone - but refuse every way back
+# to a revision without disposal (disposal_refusal; refutation round 1, rollback-1 and rollback-2).
 # Nothing else this revision writes is read by an earlier revision: it never writes an assessment, a proposal, a
 # clarification, a decision, a member's answer, a context or an event inventory, so none of the earlier pipeline's own
 # reasons (a second review, a participant, a member's answer, a modifier, a reinstatement, a request it would send
@@ -3705,8 +3801,10 @@ def db_memory(container) -> dict:
     """A3, on an existing database container: as installed, or - when its HostConfig or its cgroup differ from
     db_args' 512m/512m (swap off) - updated in place with `docker update --memory 512m --memory-swap 512m` (applied to
     the running container: no restart, no connection dropped), but only once it has run DB_PEAK_MIN_UPTIME_DAYS (a
-    younger memory.peak is skipped, and said) and while its memory.peak plus what it has in swap now stays below
-    DB_PEAK_SHARE of 512 MiB; otherwise refused with the numbers, its limits left as they are.
+    younger memory.peak is skipped, and said) and while its memory.peak plus its swap's high-water mark
+    (memory.swap.peak, never below what it has in swap now) stays below DB_PEAK_SHARE of 512 MiB; otherwise refused
+    with the numbers, its limits left as they are. A cgroup whose memory.swap.peak cannot be read skips the change, and
+    says so: the swap it used earlier could not be counted (refutation round 1, installer-2).
     {'state', 'before', 'after'}."""
     def reading(found, cgroup):
         host = found.get('HostConfig') or {}
@@ -3728,19 +3826,29 @@ def db_memory(container) -> dict:
         raise InstallError(f'{DB_CONTAINER}\'s memory limits are not {DB_MEMORY}/{DB_MEMORY} (no swap), and its cgroup\'s '
                            'memory.peak and memory.swap.current cannot be read, so it cannot be told whether turning swap '
                            'off in place is safe; its limits were left as they are.', details={'before': before})
+    swap_peak = cgroup_bytes(cgroup, 'memory.swap.peak')
+    if swap_peak is None:  # refutation round 1, installer-2: never judged on what sits in swap now alone
+        return {'state': 'skipped', 'before': before, 'uptime_seconds': uptime,
+                'why': f'{DB_CONTAINER}\'s cgroup has no readable memory.swap.peak, so the swap it used earlier and has '
+                       'since paged back cannot be counted, and turning swap off at '
+                       f'{DB_MEMORY} would be a guess. Its limits were left as they are (verify reports the swap).'}
     limit = int(DB_PEAK_SHARE * DB_MEMORY_BYTES)
-    # what sits in swap now is memory the database used and could need back once swap is off (refutation A-6)
-    used = peak + swapped
+    # the swap it used at its high-water mark is memory it needed and could need again once swap is off (refutation
+    # A-6: what sits in swap now; refutation round 1, installer-2: what sat there earlier and has since paged back)
+    swap_used = max(swap_peak, swapped)
+    used = peak + swap_used
     if used >= limit:
-        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB) and holds {swapped} '
-                           f'bytes ({swapped / 2 ** 20:.1f} MiB) in swap now, {used / 2 ** 20:.1f} MiB together, not below '
-                           f'{DB_PEAK_SHARE:.0%} of {DB_MEMORY} ({limit} bytes): turning swap off at {DB_MEMORY} could get '
-                           'it killed, so its limits were left as they are. The owner decides on a larger limit '
-                           '(RELEASE-1-SPEC A3).', details={'before': before, 'peak': peak, 'swap': swapped})
+        raise InstallError(f'{DB_CONTAINER} has used up to {peak} bytes ({peak / 2 ** 20:.1f} MiB) and up to {swap_used} '
+                           f'bytes ({swap_used / 2 ** 20:.1f} MiB) of swap (memory.swap.peak; {swapped} bytes in swap '
+                           f'now), {used / 2 ** 20:.1f} MiB together, not below {DB_PEAK_SHARE:.0%} of {DB_MEMORY} '
+                           f'({limit} bytes): turning swap off at {DB_MEMORY} could get it killed, so its limits were '
+                           'left as they are. The owner decides on a larger limit (RELEASE-1-SPEC A3).',
+                           details={'before': before, 'peak': peak, 'swap': swapped, 'swap_peak': swap_peak})
     docker('update', '--memory', DB_MEMORY, '--memory-swap', DB_MEMORY, DB_CONTAINER, timeout=60)
     updated = inspect('container', DB_CONTAINER) or {}
     after = reading(updated, db_cgroup())
-    return {'state': 'updated', 'before': before, 'after': after, 'peak': peak, 'swap_before': swapped}
+    return {'state': 'updated', 'before': before, 'after': after, 'peak': peak, 'swap_before': swapped,
+            'swap_peak': swap_peak}
 
 
 def db_settings_shown() -> dict:
@@ -4699,12 +4807,26 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     names it for a SHOWN_HAZARDS reason, and the old pair is not this same revision) is never restored over them: the
     new pair is left stopped and the old one parked, for rollback-app. On success the old pair is left parked: phase_app
     removes it (retire_parked) once the stored list states are recomputed. 'worker_started_at' is when the new worker
-    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4)."""
-    parked, launched, started = {}, [], {}
+    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4). When the
+    pair it replaces and this revision do not share release 1's session policy (sessions_end_needed, read before
+    anything is stopped), every session is ended once both old containers are stopped, before the new web starts
+    (end_every_session; refutation round 1, rollback-0 and rollback-3); a failure there restores the old pair."""
+    parked, launched, started, sessions = {}, [], {}, {}
     swapped_at = worker_started_at = None
+    # the revisions of the pair it replaces (one park() refuses as not ours is left to park's own refusal)
+    replaced = [labels_of(container).get(REVISION_LABEL)
+                for role, container in ((role, inspect('container', SERVICES[role])) for role in ('web', 'worker'))
+                if container is not None and owned(container, role)]
+    try:
+        ends_sessions = [revision for revision in dict.fromkeys(replaced)
+                         if sessions_end_needed(revision, ctx.revision)]
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was started or stopped.') from error
     try:
         for role in ('worker', 'web'):  # the worker first, so no stage runs across the switch
             parked[role] = park(role)
+        if ends_sessions:  # both old containers are stopped: none of their sessions can be made any more
+            end_every_session(image_id, env_bytes, ends_sessions[0], ctx.revision, sessions)
         swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
@@ -4733,8 +4855,10 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
                                    '--phase rollback-app, then rename the parked pair back. The close was started and '
-                                   f'gave no answer: it {possibly_set_back(close_started)}.',
-                                   details={'close_started_at': close_started}) from error
+                                   f'gave no answer: it {possibly_set_back(close_started)}.'
+                                   + sessions_ended_said(sessions),
+                                   details={'close_started_at': close_started,
+                                            **sessions_ended_of(sessions)}) from error
             hazards = closed.get('hazards')
             shown, acting = hazards_by_kind(hazards)
             # Refutation p2, the skeptic of the install2:1 repair: a state the restored web would show wrongly whatever
@@ -4760,7 +4884,8 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
                     'parked pair back. While admin.quillmd.com is moved that way back is not open (rollback-app never '
                     'removes the pair quillmd-cpt proxies to): keep this revision as above, then --phase switch-back '
-                    'returns the previous pair.' + said, details=left) from failure
+                    'returns the previous pair.' + said + sessions_ended_said(sessions),
+                    details={**left, **sessions_ended_of(sessions)}) from failure
             # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
             # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
             try:
@@ -4771,7 +4896,8 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 raise InstallError(f'{failure}; the list states the previous revision labels otherwise could not then '
                                    f'be put back ({error}), so the new pair was left stopped and the previous pair '
                                    'parked (*-previous): run --phase rollback-app, then rename the parked pair '
-                                   'back.' + set_back_clause([closed]), details={'stages_closed': closed}) from error
+                                   'back.' + set_back_clause([closed]) + sessions_ended_said(sessions),
+                                   details={'stages_closed': closed, **sessions_ended_of(sessions)}) from error
             ctx.log('undo', json.dumps({**closed, 'states_put_back': put_back}).encode())
             # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
             # revision would act on under its own rules (a send without a date, an identical re-send of a request that
@@ -4796,15 +4922,19 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
                 f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
                 'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
-                'reads them under its own rules.' + set_back, details={'hazards': hazards, 'stages_closed': closed,
-                                                                       'states_put_back': put_back}) from failure
-        if set_back:
-            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back,
+                'reads them under its own rules.' + set_back + sessions_ended_said(sessions),
+                details={'hazards': hazards, 'stages_closed': closed, 'states_put_back': put_back,
+                         **sessions_ended_of(sessions)}) from failure
+        if set_back or sessions.get('started_at'):  # refutation round 1, rollback-0: the end may have committed
+            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back
+                               + sessions_ended_said(sessions),
                                details={**(failure.details if isinstance(getattr(failure, 'details', None), dict)
                                            else {}),
-                                        'stages_closed': closed, 'states_put_back': put_back}) from failure
+                                        **({'stages_closed': closed, 'states_put_back': put_back} if set_back else {}),
+                                        **sessions_ended_of(sessions)}) from failure
         raise
-    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
+    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at,
+            **sessions_ended_of(sessions)}
 
 
 def retire_parked(parked) -> dict:
@@ -5015,6 +5145,163 @@ def has_converter(revision) -> bool:
                            'that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
     return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
                    quiet=True).returncode == 0 for path in CONVERTER_FILES)
+
+
+# Release 1's session policy (B5, B6; studio/sessions.py) and a switch between a revision before it and one with it
+# (refutation round 1, rollback-0 and rollback-3). Release 1 names its session and CSRF cookies __Host-... under HTTPS,
+# so across such a switch a browser holds two independent sessions: neither web ever reads the other's cookie, release 1
+# only tells a browser that calls it to delete the old cookie, and nothing ended either revision's rows. So a release-1
+# session outlived a switch-back (an explicit sign-out on the older web ends only that web's session) and came back for
+# whoever used that browser next at the second switch forward; and an older session left in a browser nobody used during
+# release 1 was valid again after a switch-back. Whenever the site moves between such revisions, every session is ended
+# in this revision's image, in one transaction with one SecurityEvent (SESSIONS_ENDED_EVENT: a count and the two
+# revisions, the installer as the actor label) - none of them can be used across the switch anyway (the cookie rename):
+#   - an app's blue/green switch (switch_services) from a serving web of a revision before the policy: after S2 (the old
+#     worker parked) and before S3 (the upstream switch); a failure there is undone as at S2;
+#   - an app's swap (swap_services) of such a pair: once both old containers are stopped, before the new web starts;
+#   - a switch-back (switch_back_services) to such a revision: at B4, before B5, while this revision's web still serves
+#     (the older web reads none of its cookies once it serves).
+# Never when both revisions have the policy: a later release over release 1 signs no one out. Whether a revision has it
+# is read from its tree (SESSION_POLICY_FILES), as has_converter reads the converter; one this checkout cannot read is
+# refused, nothing started or stopped (fail closed).
+SESSION_POLICY_FILES = (f'{APP}/studio/sessions.py',)
+SESSIONS_ENDED_EVENT = 'sessions.ended_at_install'
+SESSIONS_ENDED_ACTOR = 'installer'
+# (the lock timeout: a session row a web is saving holds the delete back at most that long, as LICENSE_NOTE_FIX's)
+END_EVERY_SESSION = '''
+from django.contrib.sessions.models import Session
+from django.db import connection, transaction
+from studio import security_events
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute("SET LOCAL lock_timeout = '30s'")
+    ended = Session.objects.all().delete()[0]
+    event = security_events.record(P['event'], actor_label=P['actor_label'], count=ended,
+                                   from_revision=P['from_revision'], to_revision=P['to_revision'])
+print(ANSWER + json.dumps({'ended': ended, 'event': str(event.pk)}))
+'''
+
+
+def has_session_policy(revision) -> bool:
+    """Whether ``revision`` has release 1's session policy (B5, B6): its tree holds SESSION_POLICY_FILES, read as
+    has_converter reads the converter. A revision this checkout cannot read is refused, never taken for one with or
+    without it (fail closed): either answer could leave a session to come back across a switch, or sign everyone out of
+    a later release for nothing."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} has release 1\'s session policy: it is not a '
+                           '40-character revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} has release 1\'s session policy: this checkout cannot '
+                           'read that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in SESSION_POLICY_FILES)
+
+
+def sessions_end_needed(from_revision, to_revision) -> bool:
+    """Whether a move of the site from ``from_revision`` to ``to_revision`` ends every session: exactly one of the two
+    has release 1's session policy. Raises (has_session_policy) when either cannot be read."""
+    return has_session_policy(from_revision) != has_session_policy(to_revision)
+
+
+def end_every_session(image_id, env_bytes, from_revision, to_revision, sessions) -> dict:
+    """END_EVERY_SESSION in ``image_id`` (this revision's): every django_session row deleted and SESSIONS_ENDED_EVENT
+    recorded, in one transaction. ``sessions`` is the caller's record, written into as it goes - 'started_at' before
+    the script runs (it may commit whatever its call then answers), then 'ended' and 'event' - so a receipt after a
+    failure or an interrupt says what may have happened. An answer it cannot judge raises, never read as none."""
+    sessions.update(from_revision=from_revision, to_revision=to_revision, started_at=utc_now_ms())
+    answer = app_script(image_id, env_bytes, END_EVERY_SESSION,
+                        {'event': SESSIONS_ENDED_EVENT, 'actor_label': SESSIONS_ENDED_ACTOR,
+                         'from_revision': from_revision, 'to_revision': to_revision}, what='Ending every session')
+    ended, event = (answer.get('ended'), answer.get('event')) if isinstance(answer, dict) else (None, None)
+    if isinstance(ended, bool) or not isinstance(ended, int) or ended < 0 or not UUID_RE.fullmatch(str(event)):
+        raise InstallError('The end of every session gave no answer it could be judged by.', details={'answer': answer})
+    sessions.update(ended=ended, event=event)
+    return sessions
+
+
+def sessions_ended_said(sessions) -> str:
+    """The sentence a receipt's message adds once the end of every session was started ('' when it was not)."""
+    if not isinstance(sessions, dict) or not sessions.get('started_at'):
+        return ''
+    if isinstance(sessions.get('ended'), int) and not isinstance(sessions.get('ended'), bool):
+        return (f' Every session was ended ({sessions["ended"]}; SecurityEvent {SESSIONS_ENDED_EVENT}): everyone '
+                'signs in again.')
+    return (' The end of every session was started and gave no answer: it may have ended every session (and recorded '
+            f'{SESSIONS_ENDED_EVENT}), so everyone may have to sign in again.')
+
+
+# Release 1's disposal (D1) and a way back to a revision before it (refutation round 1, rollback-1 and rollback-2): a
+# closed practice (Workspace.closed_at) and a destroyed document's tombstone (Encounter.destroyed_at: title '', no
+# revision, its PHI-free decision trail kept) are rows only release 1's own code reads. A revision without disposal lists
+# and counts each tombstone again (its kept activity on its page and its console), and takes uploads into a closed
+# practice and sends them for coding. So every way back to one - a switch-back to a revision whose tree has no
+# DISPOSAL_FILES, rollback-app returning an older web (the keep layout), and rollback-app's removal when the pair that
+# runs next is such a revision or is not known (no parked pair: an older revision installed afterwards) - refuses,
+# starting and stopping nothing, while any practice is closed or any document destroyed, read in this revision's image
+# (DISPOSAL_COUNTS: counts only). Neither is ever undone, so the way on is a fix forward (ops/INSTALL.md, switch-back).
+DISPOSAL_FILES = (f'{APP}/studio/disposal.py',)
+DISPOSAL_COUNTS = '''
+from studio import models
+print(ANSWER + json.dumps({'closed': models.Workspace._base_manager.filter(closed_at__isnull=False).count(),
+                           'destroyed': models.Encounter._base_manager.filter(destroyed_at__isnull=False).count()}))
+'''
+
+
+def has_disposal(revision) -> bool:
+    """Whether ``revision`` has release 1's disposal (D1): its tree holds DISPOSAL_FILES, read as has_converter reads
+    the converter. A revision this checkout cannot read is refused, never taken for one with it (fail closed)."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} has release 1\'s disposal: it is not a '
+                           '40-character revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} has release 1\'s disposal: this checkout cannot read '
+                           'that revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in DISPOSAL_FILES)
+
+
+def disposal_counts(image_id, env_bytes) -> dict:
+    """DISPOSAL_COUNTS in ``image_id`` (this revision's): {'closed': practices, 'destroyed': documents}. An answer it
+    cannot judge raises, never read as none."""
+    answer = app_script(image_id, env_bytes, DISPOSAL_COUNTS, {},
+                        what='Reading the closed practices and destroyed documents')
+    counts = {name: answer.get(name) if isinstance(answer, dict) else None for name in ('closed', 'destroyed')}
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in counts.values()):
+        raise InstallError('The read of the closed practices and destroyed documents gave no answer it could be judged '
+                           'by.', details={'answer': answer})
+    return counts
+
+
+def disposal_refusal(image_id, env_bytes, target_revision) -> tuple:
+    """(the refusal, the counts) of a way back to ``target_revision`` - the revision that serves next, None when it is
+    not known - while a practice is closed or a document destroyed and that revision has no disposal: ('', None) when
+    it has disposal, ('', counts) when there is nothing to refuse on."""
+    if target_revision is not None and has_disposal(target_revision):
+        return '', None
+    counts = disposal_counts(image_id, env_bytes)
+    if not counts['closed'] and not counts['destroyed']:
+        return '', counts
+    which = (f'revision {target_revision[:12]} has no disposal (its tree has no {DISPOSAL_FILES[0]})'
+             if target_revision is not None else
+             'the revision that runs next is not known (no parked pair names one) and one before release 1 has no '
+             'disposal')
+    return (f'{counts["closed"]} practice(s) are closed and {counts["destroyed"]} document(s) destroyed (release 1, '
+            f'D1), and {which}: it would list and count each destroyed document again, its kept decision trail on its '
+            'page and its console, and take uploads into a closed practice and send them for coding. Neither is ever '
+            'undone, so fix forward instead: a revision with disposal (ops/INSTALL.md, switch-back)'), counts
+
+
+def sessions_ended_of(sessions) -> dict:
+    """{'sessions_ended': the record} once the end of every session was started, else {} (a receipt's details)."""
+    return {'sessions_ended': sessions} if isinstance(sessions, dict) and sessions.get('started_at') else {}
+
+
+def sessions_summary(sessions) -> str:
+    """'; every session ended (12): ...' for a receipt's summary ('' when none was ended)."""
+    if not isinstance(sessions, dict) or not isinstance(sessions.get('ended'), int):
+        return ''
+    return (f'; every session ended ({sessions["ended"]}: {str(sessions.get("from_revision"))[:12]} and '
+            f'{str(sessions.get("to_revision"))[:12]} do not share release 1\'s session policy)')
 
 
 def admin_answers(fetch) -> tuple:
@@ -5451,6 +5738,9 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
       S4  start the new worker - processing resumes under the new rules
       S5  drain the old web (drain_web), stop it, park it as cpt-studio-web-previous and rename the incoming web to
           cpt-studio-web
+    When the serving web's revision and this one do not share release 1's session policy (sessions_end_needed), every
+    session is ended at S2, once the old worker is parked and before S3 (end_every_session; refutation round 1,
+    rollback-0 and rollback-3): none can be used across the switch (the cookie rename), and the receipt says how many.
     An AvailabilityRecorder probes the public /health/ from before S1 to the end (an undo included). Any failure is
     undone by undo_switch without interrupting the site; the InstallError it raises says what is left. phase_app then
     recomputes the stored list states and removes the parked pair (S6)."""
@@ -5463,7 +5753,12 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'),
                            details={'plan': plan, 'baseline': drifted})
-    steps, parked, started, progress = {}, {}, {}, {}
+    try:  # refutation round 1, rollback-0 and rollback-3: decided before anything starts, from both revisions' trees
+        ends_sessions = sessions_end_needed(plan['web']['revision'], ctx.revision)
+    except InstallError as error:
+        raise InstallError(f'The blue/green switch cannot start, so nothing was started or stopped: {error}',
+                           details={'plan': plan}) from error
+    steps, parked, started, progress, sessions = {}, {}, {}, {}, {}
     record = {'mode': 'blue-green', 'ports': {'from': live, 'to': idle}, 'steps': steps}
     reached = [None]
 
@@ -5481,6 +5776,9 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
         record['smoke'] = smoke_web(idle, admin=serves_admin_host(ctx.revision))
         step('S2')
         parked['worker'] = park('worker')
+        if ends_sessions:  # S2, once the old worker is parked and before S3: undone as at S2
+            record['sessions_ended'] = sessions
+            end_every_session(image_id, env_bytes, plan['web']['revision'], ctx.revision, sessions)
         step('S3')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=ctx.revision, progress=progress,
                                            from_revision=plan['web']['revision'])
@@ -5498,14 +5796,16 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
         details = {}  # written into as the undo goes, so a receipt after a second interrupt still says what it did
         try:
             message, details = undo_switch(ctx, failure, reached[0], image_id=image_id, env_bytes=env_bytes, plan=plan,
-                                           preflight=preflight, parked=parked, progress=progress, details=details)
+                                           preflight=preflight, parked=parked, progress=progress, details=details,
+                                           sessions=sessions)
         except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
             message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
                        f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
                        'Recovery notes')
-        raise InstallError(message, details={**record, **details, 'failed_at': reached[0], 'started': started,
-                                             'replaced': parked, 'availability': stop_recorder(recorder),
-                                             'left': left_summary()}) from failure
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, **details, 'failed_at': reached[0], 'started': started,
+                                    'replaced': parked, 'availability': stop_recorder(recorder),
+                                    'left': left_summary()}) from failure
     return {'started': started, 'replaced': parked, **record}
 
 
@@ -5525,7 +5825,7 @@ def left_summary() -> dict:
 
 
 def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, parked, progress,
-                details=None) -> tuple:
+                details=None, sessions=None) -> tuple:
     """(message, details) after a blue/green step failed, with the site kept served (the failure matrix, ops/INSTALL.md
     app). S1, S2: the incoming web is removed and the old worker runs again - nothing reached the new pair. S3: the vhost
     is already back (publish_vhost); when nginx may have run the switched file it is proven to run the restored one
@@ -5556,8 +5856,11 @@ def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, 
     if reached == 'S2':
         state = worker_after_failed_park()
         removed = remove_incoming_web()
-        return (f'{cause}; the old worker is {state}, the incoming web ({INCOMING_WEB}) {removed}, and nothing else '
-                f'changed: {web} kept serving on {live}. Migrations already applied are not reversed.', details)
+        # refutation round 1, rollback-0: the end of every session (S2) may have committed - said by the caller
+        changed = ('nothing else changed but the sessions (below)' if (sessions or {}).get('started_at')
+                   else 'nothing else changed')
+        return (f'{cause}; the old worker is {state}, the incoming web ({INCOMING_WEB}) {removed}, and {changed}: '
+                f'{web} kept serving on {live}. Migrations already applied are not reversed.', details)
     if reached == 'done':
         return (f'{cause}; the switch had finished - the incoming pair serves on {idle} and the old pair is parked - '
                 'but its availability record could not be read and the stored list states were not recomputed: '
@@ -6852,9 +7155,12 @@ def phase_app(ctx) -> dict:
         raise InstallError(f'{problem}; nothing was started.')
     image_id = installed_image(ctx)
     # release 1 (A7): a revision that has the converter starts a worker that requires it, so it must already run,
-    # healthy, from this revision's image - before anything changes
+    # healthy, from this revision's image, and sealed as phase_converter starts it (refutation round 1, installer-5) -
+    # before anything changes
     if has_converter(ctx.revision):
-        problem = converter_problem(image_id, ctx.revision)
+        problem = converter_problem(image_id, ctx.revision) or '; '.join(
+            f'{CONVERTER}: {each}' for each in service_problems(inspect('container', CONVERTER) or {}, 'converter',
+                                                                image_id))
         if problem:
             raise InstallError(f'{problem}: run --phase converter first. Nothing was started.')
     require_db()
@@ -6927,13 +7233,15 @@ def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnab
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         services['logs_kept'] = retire_parked(parked)  # A13: ids-only copies, then the removal
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked)
+                           + sessions_ended_said(services.get('sessions_ended')),
                            details={**services, 'states_recomputed': states, 'coding': coding}) from error
     return {'image_id': image_id, 'coding': coding, 'authorization_ref': reference, 'migrate_log': migrate_log,
             'unrunnable_stages': unrunnable, 'states_recomputed': states, **services, 'v1_rows': v1,
             'install_counts': counts,
             'summary': f'web and worker running {image_id[:19]} ({coding_summary(mode)})'
-                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)}
+                       + switched_summary(services) + sessions_summary(services.get('sessions_ended'))
+                       + '; no design v1 row' + counts_summary(counts)}
 
 
 def retire_left_parked(ctx):
@@ -7037,6 +7345,12 @@ def phase_switch_back(ctx) -> dict:
                            'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
                            details={'hazards': hazards, 'touched_since': since.isoformat()})
+    # refutation round 1, rollback-1 and rollback-2: no way back to a revision without release 1's disposal while a
+    # practice is closed or a document destroyed (read again at B4, before anything is closed)
+    refusal, disposed = disposal_refusal(image_id, env, prev_revision)
+    if refusal:
+        raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was started or stopped.',
+                           details={'disposal': disposed})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
                                     preflight=preflight, plan=plan, interpreter=interpreter, reads=reads,
                                     touched_since=since, **({'coding': coding} if coding != 'disabled' else {}))
@@ -7054,7 +7368,7 @@ def phase_switch_back(ctx) -> dict:
             'summary': f'switched back to {prev_revision[:12]} ({named}) on '
                        f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')
-                       + (f'; {admin}' if admin else '')
+                       + sessions_summary(services.get('sessions_ended')) + (f'; {admin}' if admin else '')
                        + ('; FINDING: this revision\'s parked pair was left in place (its log could not be kept): '
                           'the next app keeps it, then removes it' if services.get('parked_left') else '')}
 
@@ -7190,10 +7504,12 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
           record
       B8  start the previous worker
       B9  remove this revision's parked pair (its image is kept)
-    The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
-    the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
-    (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83, when not given) - the closes
-    keep their own, this pair's creation and B4's close."""
+    When the previous revision and this one do not share release 1's session policy (sessions_end_needed, read before
+    anything starts), every session is ended at B4, after its close and before B5 (end_every_session; refutation round
+    1, rollback-0 and rollback-3). The baseline is read before anything starts too. Before B5 every failure resumes
+    this revision's pair; from B5 on the previous web serves and the receipt says what is left. ``touched_since``: the
+    since of every touched filter (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83,
+    when not given) - the closes keep their own, this pair's creation and B4's close."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
@@ -7208,7 +7524,11 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     drifted = ingress_checks(ctx, preflight)
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
-    steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
+    try:  # refutation round 1, rollback-0 and rollback-3: decided before anything starts, from both revisions' trees
+        ends_sessions = sessions_end_needed(ctx.revision, prev_revision)
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was started or stopped.') from error
+    steps, parked, started, progress, closes, put_back, sessions = {}, {}, {}, {}, {}, [], {}
     counted = {}  # design v2 (refutation 6b-r1 P2): B4's note as counted, before the update's clauses were added
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
               'states_put_back': put_back, 'since': since.isoformat(), 'touched_since': touched_since.isoformat()}
@@ -7259,6 +7579,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         if hazards:
             raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
                                'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
+        refusal, disposed = disposal_refusal(image_id, env_bytes, prev_revision)  # refutation round 1, rollback-1
+        if refusal:
+            raise InstallError(f'before anything was closed, {refusal}', details={'disposal': disposed})
         first = dt.datetime.now(dt.timezone.utc)
         # refutation r3, D-5: the close may take effect whatever its call then answers (CLOSE_STAGES commits, then reads
         # every encounter), so the undo is told it started
@@ -7270,6 +7593,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         # of what this revision coded that is not carried back (coding_note)
         counted['b4'] = coding_note(image_id, env_bytes, ctx.revision)
         record['not_carried_back'] = with_update_note(counted['b4'], [closes['first']])
+        if ends_sessions:  # B4, before B5: the previous web reads none of this revision's cookies once it serves
+            record['sessions_ended'] = sessions
+            end_every_session(image_id, env_bytes, ctx.revision, prev_revision, sessions)
         step('B5')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
                                            from_revision=ctx.revision)
@@ -7322,9 +7648,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
             # instructions for the previous web's members are not left standing in the receipt; refutation 6b-r2 F5: one
             # that nginx may have routed to until the settle is said to have served in that window
             record['not_carried_back'] = undone_note(counted['b4'], served=closes.get('served'))
-        raise InstallError(message, details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
-                                             'availability': stop_recorder(recorder),
-                                             'left': left_summary()}) from failure
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
+                                    'availability': stop_recorder(recorder), 'left': left_summary()}) from failure
     return {'started': started, 'replaced': parked, **record}
 
 
@@ -7662,6 +7988,7 @@ def phase_provision(ctx) -> dict:
             raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
     # Password files live in RAM only (/dev/shm: RamFiles) and are wiped whatever happens.
     ram = RamFiles('cpt-studio-provision-')
+    completed, after_act = False, None
     try:
         root_file('stage', content=base64.b64encode(root_bytes).decode(), **names)
         if agent is not None:
@@ -7681,11 +8008,25 @@ def phase_provision(ctx) -> dict:
         if reset:
             command.append('--reset-passwords')
         result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', by=args.by)
-        assert_no_secret([result.stdout, result.stderr], [*passwords.values(), *env_values(env)])
-        log = ctx.log('provision', result.stdout + result.stderr)
+        # refutation round 1, phileak-1's class: the act ran, so its output is kept, every password and the
+        # application's secrets redacted; a password it printed is never handed over (the staged files are discarded)
+        hidden = [*passwords.values(), *env_values(env)]
+        stdout, stdout_counts = redact_output(result.stdout, hidden)
+        stderr, stderr_counts = redact_output(result.stderr, hidden)
+        log = ctx.log('provision', stdout + stderr)
+        redacted = redaction_record(stdout_counts, stderr_counts)
+        printed = [user for user in expected
+                   if passwords[user].encode() in result.stdout or passwords[user].encode() in result.stderr]
+        if printed:
+            raise InstallError(f'provision printed the password of {len(printed)} account(s) (exit '
+                               f'{result.returncode}), so no password was handed over: the credentials files were '
+                               f'discarded, and its output is kept in {log} with them redacted. Rerun with '
+                               '--reset-passwords for new ones.', details={'log': log, **redacted,
+                                                                           'exit': result.returncode})
         if result.returncode:
-            raise InstallError(f'provision failed (exit {result.returncode}); see {log}.')
-        outcome = provision_outcome(result.stdout.decode('utf-8', 'replace'), expected)
+            raise InstallError(f'provision failed (exit {result.returncode}); see {log}.',
+                               details={'log': log, **redacted})
+        outcome = provision_outcome(stdout.decode('utf-8', 'replace'), expected)
         if not reset and set(outcome.values()) != {'created'}:
             raise InstallError('An account already existed, so its password was not set; nothing was saved. '
                                'Rerun with --reset-passwords to rotate.')
@@ -7696,17 +8037,27 @@ def phase_provision(ctx) -> dict:
             else:
                 os.link(agent_staged, agent_credentials)
                 agent_staged.unlink()
+        completed = True
     except BaseException:
         root_file('discard', sha256=sha256(root_bytes), **names)
         agent_staged.unlink(missing_ok=True)
         raise
     finally:
-        ram.__exit__(None, None, None)
-    return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
-            'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log,
-            'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
-            'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
-                       + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')}
+        try:
+            ram.__exit__(None, None, None)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran and
+            if not completed:  # its files were handed over, a wipe that failed or was interrupted keeps its record
+                raise
+            after_act = error
+    record = {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
+              'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log, **redacted,
+              'exit': result.returncode, 'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
+              'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
+                         + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')
+                         + redaction_summary(redacted.get('redacted'))}
+    if after_act is not None:
+        raise_after_act(after_act, record, 'provision')
+    return record
 
 
 # The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
@@ -7804,6 +8155,11 @@ def operator_reason(ctx, username, kind) -> str:
             f'({door_of(ctx)["declaration_commit"]}).\n')
 
 
+# The lines a declaration names an act with (declaration_names; ops/INSTALL.md, operators): the words alone, or in
+# backticks, on a line of their own.
+DECLARED_LINE_FORMS = ('{words}', '`{words}`')
+
+
 def door_of(ctx) -> dict:
     """The declaration this run is bound to - main's check_door record, else (a phase called directly) the door's two
     variables."""
@@ -7824,11 +8180,16 @@ def authorization_of(ctx) -> str:
 
 
 def declaration_names(ctx, words) -> bool:
-    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there)."""
+    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there): one of
+    its lines, split at line feeds and whitespace-trimmed, is exactly ``words`` or exactly ``words`` in backticks
+    (DECLARED_LINE_FORMS) - a line of its own, never a part of one (refutation round 1, installer-0: a substring test
+    read '--regrant alice' as naming '--regrant ali', and so did a sentence such as 'do not --regrant ali')."""
     try:
-        return words in (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
+        text = (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError, ValueError):
         return False
+    forms = {form.format(words=words) for form in DECLARED_LINE_FORMS}
+    return any(line.strip() in forms for line in text.split('\n'))
 
 
 def person_problem(value, flag) -> str:
@@ -7855,8 +8216,8 @@ def review_by_problem(value) -> str:
 
 
 def env_values(env: bytes) -> list:
-    """The values of a protected environment file's lines (validate_env_text's form), for assert_no_secret: the
-    application's secret key and database password must never appear in what a one-shot printed."""
+    """The values of a protected environment file's lines (validate_env_text's form), for redact_output: the
+    application's secret key and database password never reach a log or a receipt from what a one-shot printed."""
     values = []
     for line in env.decode('utf-8', 'replace').splitlines():
         name, sep, value = line.partition('=')
@@ -7997,13 +8358,16 @@ class RamFiles:
         return self
 
     def __exit__(self, *exc):
-        if self.given:
-            run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
-            return False
-        for path in self.path.iterdir():
-            path.write_bytes(b'\0' * max(64, path.stat().st_size))
-            path.unlink()
-        self.path.rmdir()
+        # refutation round 1, installer-3: a SIGTERM, SIGHUP or Ctrl-C that lands while the folder is wiped is acted on
+        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm
+        with signals_deferred():
+            if self.given:
+                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
+                return False
+            for path in self.path.iterdir():
+                path.write_bytes(b'\0' * max(64, path.stat().st_size))
+                path.unlink()
+            self.path.rmdir()
         return False
 
 
@@ -8012,7 +8376,9 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
     (issue_enrolment, or reset_second_factor, which issues a new one) as a RAM-only --code-file so that only its sha256
     reaches the database; committed root-only to /etc/cpt-studio/OPERATOR_ENROLMENT through the root helper (staged
     first, discarded if the command fails). The code never appears in an argument, the output kept, a log or a
-    receipt (assert_no_secret). {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
+    receipt: the output is kept with it, the application's secrets and the reason redacted (redact_output; refutation
+    round 1, phileak-1's class: the act ran, so its record is kept), and a command that printed the code fails with
+    that record and no code kept. {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
     code = new_setup_code()
     document = json.dumps({'service': 'cpt-studio', 'url': f'https://{ADMIN_HOST}/login/enrol', 'username': username,
                            'code': code, 'issued_at': utc_now(), 'valid_seconds': ENROLMENT_CODE_SECONDS,
@@ -8021,26 +8387,42 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
     if root_file('state', **names)['staged_exists']:
         raise InstallError(f'A staged {OPERATOR_ENROLMENT} from an interrupted run exists; resolve it by hand first.')
     root_file('stage', content=base64.b64encode(document).decode(), **names)
-    committed = False
+    committed, result, after_act = False, None, None
     try:
-        with RamFiles('cpt-studio-manage-') as ram:
-            mounts = [ram.add('code', code.encode(), f'{MANAGE_MOUNT}/code'),
-                      ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')]
-            argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code', '--reason-file',
-                    f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
-            result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
-                             timeout=act_timeout(600), what=f'manage {command}', by=by)
-        assert_no_secret([result.stdout, result.stderr], [code, *env_values(env), *reason_values(reason)])
-        log = ctx.log(command.replace('_', '-'), result.stdout + result.stderr)
+        try:
+            with RamFiles('cpt-studio-manage-') as ram:
+                mounts = [ram.add('code', code.encode(), f'{MANAGE_MOUNT}/code'),
+                          ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')]
+                argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code',
+                        '--reason-file', f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
+                result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
+                                 timeout=act_timeout(600), what=f'manage {command}', by=by)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran, a
+            if result is None:  # wipe that failed or was interrupted keeps its record; the code is never kept
+                raise
+            after_act = error
+        hidden = [code, *env_values(env)]
+        stdout, stdout_counts = redact_output(result.stdout, hidden, reason_values(reason))
+        stderr, stderr_counts = redact_output(result.stderr, hidden, reason_values(reason))
+        printed_code = code.encode() in result.stdout or code.encode() in result.stderr
+        log = ctx.log(command.replace('_', '-'), stdout + stderr)
+        record = {'command': command, 'exit': result.returncode, 'log': log,
+                  **redaction_record(stdout_counts, stderr_counts), **kept_stdout(stdout)}
+        if after_act is not None:  # its RAM folder (which holds the code) was not wiped: the code is not kept
+            raise_after_act(after_act, {**record, 'setup_code_kept': False}, f'manage {command}')
+        if printed_code:
+            raise InstallError(f'manage {command} printed the setup code (exit {result.returncode}), so no setup code '
+                               f'was kept: the act ran, and its output is kept in {log} with the code redacted. Run '
+                               'it again for a new code.', details=record)
         if result.returncode:
-            raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was kept.')
+            raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was '
+                               'kept.', details=record)
         root_file('commit', replace=True, **names)
         committed = True
     finally:
         if not committed:
             root_file('discard', sha256=sha256(document), **names)
-    return {'command': command, 'exit': result.returncode, 'log': log, 'file': f'{ETC_DIR}/{OPERATOR_ENROLMENT}',
-            'valid_seconds': ENROLMENT_CODE_SECONDS, 'stdout': result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:]}
+    return {**record, 'file': f'{ETC_DIR}/{OPERATOR_ENROLMENT}', 'valid_seconds': ENROLMENT_CODE_SECONDS}
 
 
 def legacy_operator_files() -> dict:
@@ -8109,18 +8491,31 @@ def phase_operators(ctx) -> dict:
         if problem:
             raise InstallError(f'Granting {username} needs --by (the person running it) and --review-by (C3): '
                                f'{problem} Nothing was granted.', details={'accounts': outcome})
-        with RamFiles('cpt-studio-operators-') as ram:
-            mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
-                            f'{MANAGE_MOUNT}/{username}.reason')
-            # a re-grant the run and its declaration approved (above) is said to the command, which refuses a
-            # revoked account without it (Lane 3's grant)
-            again = ['--regrant'] if before[username].get('revoked') is not False else []
-            result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
-                                        f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
-                                        authorization_of(ctx), '--review-by', review_by, *again], env,
-                             user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator', by=by)
-        assert_no_secret([result.stdout, result.stderr], env_values(env))
-        grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', result.stdout + result.stderr)}
+        result, after_act = None, None
+        try:
+            with RamFiles('cpt-studio-operators-') as ram:
+                mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
+                                f'{MANAGE_MOUNT}/{username}.reason')
+                # a re-grant the run and its declaration approved (above) is said to the command, which refuses a
+                # revoked account without it (Lane 3's grant)
+                again = ['--regrant'] if before[username].get('revoked') is not False else []
+                result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
+                                            f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
+                                            authorization_of(ctx), '--review-by', review_by, *again], env,
+                                 user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator',
+                                 by=by)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the grant ran, a
+            if result is None:  # wipe that failed or was interrupted keeps its record
+                raise
+            after_act = error
+        # refutation round 1, phileak-1's class: the grant ran, so its record is kept, the application's secrets redacted
+        stdout, stdout_counts = redact_output(result.stdout, env_values(env))
+        stderr, stderr_counts = redact_output(result.stderr, env_values(env))
+        grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', stdout + stderr),
+                            **redaction_record(stdout_counts, stderr_counts)}
+        if after_act is not None:
+            raise_after_act(after_act, {'accounts': outcome, 'grants': grants, 'exit': result.returncode,
+                                        'log': grants[username]['log']}, f'manage grant_operator for {username}')
         if result.returncode:
             raise InstallError(f'manage grant_operator failed for {username} (see the log); the account is in place: '
                                'rerun --phase operators once it is fixed.', details={'accounts': outcome,
@@ -8175,7 +8570,22 @@ MANAGE_ARGUMENTS = ('command', 'username', 'reason_file', 'by', 'review_by', 'ap
 # approved by another), print the ledger (the MAC-signed list of disposals, keyed by the application's SECRET_KEY), and
 # replay a ledger after a database restore, so destroyed data stays destroyed
 DISPOSE_STEPS = ('close', 'plan', 'execute', 'ledger', 'replay-ledger')
-DISPOSE_REASON_REQUIRED = ('close', 'execute', 'replay-ledger')
+# The steps whose command reads a reason (studio/management/commands/dispose.py reads --reason-file at --close and
+# --plan, and refuses either without one; --execute carries out the plan with the plan's own reason, and --ledger and
+# --replay-ledger read none): each requires --reason-file, and every other step refuses it (refutation round 1, builder
+# D's point on installer-1's rule: execute and replay-ledger required a file their command never read).
+DISPOSE_REASON_REQUIRED = ('close', 'plan')
+# What each dispose step passes to the command (manage_argv) beyond --command, --dispose-step and --by - and so the only
+# arguments it takes: any other is refused before anything runs, so what was typed is what ran (refutation round 1,
+# installer-1: execute took --workspace-id and --encounter-id, then dropped them from the command line).
+DISPOSE_STEP_ARGUMENTS = {
+    'close': ('workspace_id', 'reason_file'),
+    'plan': ('workspace_id', 'encounter_id', 'reason_file'),
+    'execute': ('plan_id', 'approved_by'),
+    'ledger': (),
+    'replay-ledger': ('ledger_file', 'execute', 'approved_by'),
+}
+DISPOSE_ARGUMENTS = ('workspace_id', 'encounter_id', 'plan_id', 'approved_by', 'reason_file', 'ledger_file', 'execute')
 LEDGER_LIMIT = 1024 * 1024
 # D2: a practice's export is written into a NEW folder of its own under EXPORTS_DIR on the host (root 0700), which the
 # one-shot writes as the application's user; afterwards the root helper makes everything in it root-only. [TO CONFIRM
@@ -8183,6 +8593,13 @@ LEDGER_LIMIT = 1024 * 1024
 EXPORTS_DIR = '/var/lib/cpt-studio-exports'
 EXPORT_MOUNT = '/run/cpt-export'
 STDOUT_KEPT = 16000  # characters of an act's stdout a receipt keeps (ids and counts only; the log keeps all of it)
+
+
+def kept_stdout(stdout: bytes) -> dict:
+    """What a receipt keeps of an act's stdout: its last STDOUT_KEPT characters, how many it had, and whether it was cut
+    (refutation round 1, dataloss-1: a cut copy carried no mark of the cut)."""
+    text = stdout.decode('utf-8', 'replace')
+    return {'stdout': text[-STDOUT_KEPT:], 'stdout_chars': len(text), 'stdout_cut': len(text) > STDOUT_KEPT}
 
 
 def manage_problem(args) -> str:
@@ -8235,6 +8652,9 @@ def manage_problem(args) -> str:
             return f'--dispose-step {step} needs --workspace-id' + (' or --encounter-id.' if step == 'plan' else '.')
         if step == 'close' and args.encounter_id:
             return '--dispose-step close closes a whole practice: --encounter-id is not used.'
+        if step == 'plan' and args.workspace_id and args.encounter_id:  # the command refuses both, so does this
+            return ('--dispose-step plan takes --workspace-id (a whole practice) or --encounter-id (one document), not '
+                    'both.')
         if args.execute and step != 'replay-ledger':
             return ('--execute belongs to --dispose-step replay-ledger (a replay is a dry run without it); '
                     '--dispose-step execute carries out a plan.')
@@ -8255,6 +8675,12 @@ def manage_problem(args) -> str:
             return '--ledger-file is the ledger --dispose-step replay-ledger replays, and only it takes one.'
         if step in ('ledger', 'replay-ledger') and (args.workspace_id or args.encounter_id):
             return f'--dispose-step {step} reads the whole ledger: no --workspace-id or --encounter-id.'
+        unused = [name for name in DISPOSE_ARGUMENTS
+                  if getattr(args, name, None) not in (None, '') and name not in DISPOSE_STEP_ARGUMENTS[step]]
+        if unused:
+            return (f'--{unused[0].replace("_", "-")} is not used by --dispose-step {step}, which takes '
+                    + ', '.join(f'--{name.replace("_", "-")}' for name in ('by', *DISPOSE_STEP_ARGUMENTS[step]))
+                    + ': nothing was run.')
     return ''
 
 
@@ -8359,14 +8785,15 @@ def manage_argv(ctx, args, entry) -> list:
             scope = (['--workspace', args.workspace_id] if args.workspace_id else []) + (
                 ['--encounter', args.encounter_id] if args.encounter_id else [])
             return [*command, '--plan', *scope, *given, '--by', args.by, *authority]
+        # execute, ledger and replay-ledger read no reason (DISPOSE_REASON_REQUIRED), so none is passed to them
         if step == 'execute':
             return [*command, '--execute', '--plan', args.plan_id, '--by', args.by, '--approved-by', args.approved_by,
-                    *given, *authority]
+                    *authority]
         if step == 'ledger':
-            return [*command, '--ledger', *given, '--by', args.by, *authority]
+            return [*command, '--ledger', '--by', args.by, *authority]
         # without --execute Lane 4's replay is a dry run; with it, two named people carry it out
         execute = ['--execute', '--approved-by', args.approved_by] if args.execute else []
-        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *execute, *given, '--by', args.by, *authority]
+        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *execute, '--by', args.by, *authority]
     raise InstallError(f'--command {args.command} has no command line here.')
 
 
@@ -8458,7 +8885,8 @@ def phase_manage(ctx) -> dict:
     """One allow-listed ruled act (MANAGE_COMMANDS; release 1, A6) in a one-shot of the installed image, once this
     revision's migrations are applied. The reason (and a setup code) travel as RAM-only files; a disposal is refused
     while an install or switch-back is in progress; the receipt names the act, the reason's sha256 and size, who ran it
-    and the command's exit code and log - every output first passed by assert_no_secret, never a code."""
+    and the command's exit code and log - every output kept with the application's secrets and the reason redacted
+    (redact_output, counted in 'redacted'), never a code."""
     args = ctx.args
     entry = MANAGE_COMMANDS[args.command]
     image_id = installed_image(ctx)
@@ -8501,6 +8929,9 @@ def phase_manage(ctx) -> dict:
         run_helper(H_EXPORT_DIR, {'dir': PurePosixPath(EXPORTS_DIR).name, 'name': export, 'uid': APP_UID},
                    mounts=[EXPORTS_MOUNT])
         record['export'] = {'folder': f'{EXPORTS_DIR}/{export}', 'out': f'{EXPORTS_DIR}/{export}/{export}'}
+    # refutation round 1 (builder D's point): once the act ran, what follows it - the RAM folder's wipe, the export's
+    # seal - never takes its record with it; the record is written below, then that failure or interrupt is raised
+    result, after_act = None, None
     try:
         with RamFiles('cpt-studio-manage-', owner=(APP_UID, APP_UID) if files else None) as ram:
             mounts = [ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')] if reason is not None else []
@@ -8519,15 +8950,40 @@ def phase_manage(ctx) -> dict:
             else:
                 result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                                  timeout=act_timeout(600), what=f'manage {entry["command"]}', by=args.by)
+    except BaseException as error:  # noqa: BLE001 — raised again below, with the act's record when it ran
+        if result is None:  # the act gave no answer, or never ran: there is no record of it to keep
+            raise
+        after_act = error
     finally:
         if export:  # done or not, everything in it is made root-only
-            record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
-                                                               'name': export}, mounts=[EXPORTS_MOUNT]))
-    output = result.stdout + result.stderr
-    # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7)
-    assert_no_secret([output], [*env_values(env), *reason_values(reason)])
-    record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
-                  stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
+            try:
+                record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
+                                                                   'name': export}, mounts=[EXPORTS_MOUNT]))
+            except BaseException as error:  # noqa: BLE001 — as the wipe's, once the act ran
+                if result is None:
+                    raise
+                after_act = after_act or error
+    # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7); and the act
+    # has run, so its record is never discarded for them either (refutation round 1, phileak-1 and dataloss-3): each is
+    # redacted before the log and the receipt are written, and the receipt counts them
+    hidden, reasons = env_values(env), reason_values(reason)
+    stdout, stdout_counts = redact_output(result.stdout, hidden, reasons)
+    stderr, stderr_counts = redact_output(result.stderr, hidden, reasons)
+    record.update(redaction_record(stdout_counts, stderr_counts))
+    if args.command == 'dispose' and args.dispose_step == 'ledger':
+        # refutation round 1, dataloss-1: the ledger is the act's whole stdout, kept whole in a log of its own - the
+        # receipt's copy is cut to STDOUT_KEPT - and recorded by sha256, size and line count, to check the kept copy by
+        log = ctx.log('dispose-ledger', stdout)
+        record['ledger_printed'] = {'log': log, 'sha256': sha256(stdout), 'bytes': len(stdout),
+                                    'lines': sum(1 for line in stdout.splitlines() if line.strip()),
+                                    'redacted': bool(sum(stdout_counts.values()))}
+        if stderr:
+            record['stderr_log'] = ctx.log('dispose-ledger-stderr', stderr)
+    else:
+        log = ctx.log(args.command, stdout + stderr)
+    record.update(exit=result.returncode, log=log, argv=argv, **kept_stdout(stdout))  # ids and counts only
+    if after_act is not None:
+        raise_after_act(after_act, record, f'manage {entry["command"]}')
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
@@ -8537,19 +8993,29 @@ def phase_manage(ctx) -> dict:
         record['mode'] = DECISION_NEEDED
         return {**record, 'summary': f'dispose replay-ledger: {DECISION_NEEDED} (exit {result.returncode}): an entry '
                                      'whose outcome was unknown is left to a person - plan that scope again and '
-                                     'execute it with two people (ops/INSTALL.md, Disposal, returns and the ledger)'}
+                                     'execute it with two people (ops/INSTALL.md, Disposal, returns and the ledger)'
+                                     + redaction_summary(record.get('redacted'))}
     if result.returncode:
         raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
                            details=record)
     done = 'done'
-    if args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
+    if record.get('ledger_printed'):
+        printed = record['ledger_printed']
+        done = (f'read; the ledger ({printed["lines"]} line(s), sha256 {printed["sha256"][:12]}) is kept whole in '
+                f'{printed["log"]}' + ('; FINDING: a secret it printed was redacted, so the line holding it no longer '
+                                       'verifies - print the ledger again once that is fixed (the database\'s own '
+                                       'is unchanged)' if printed['redacted'] else ''))
+    elif args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
         done = ('dry run, nothing was changed' + ('; to replay it, run again with --execute and --approved-by'
                                                    if args.dispose_step == 'replay-ledger' else ''))
     elif args.command == 'dispose':
         done = record['mode']
+    if record.get('stdout_cut'):
+        done += f'; the receipt keeps the last {STDOUT_KEPT} of its {record["stdout_chars"]} characters of output'
     return {**record, 'summary': f'{args.command}' + (f' {args.dispose_step}' if args.command == 'dispose' else '')
                                  + (f' {args.username}' if args.username else '') + f': {done}'
-                                 + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')}
+                                 + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')
+                                 + redaction_summary(record.get('redacted'))}
 
 
 def acme_probe(ctx, label, host=DOMAIN) -> dict:
@@ -9690,6 +10156,10 @@ def rollback_from_keep(ctx, keep) -> dict:
                            'under its own rules; nothing was stopped or removed. Clear them on this revision\'s web, '
                            f'which serves ({INCOMING_WEB}; ops/INSTALL.md, Reinstalling an older revision), then rerun '
                            '--phase rollback-app.', details={'hazards': found})
+    refusal, disposed = disposal_refusal(image_id, env, old_revision)  # refutation round 1, rollback-1 and rollback-2
+    if refusal:
+        raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
+                           details={'disposal': disposed})
     baseline = own_baseline()
     parked_worker = keep['parked_worker']
     previous = {'image': (parked_worker or keep['web'])['Image'], 'revision': old_revision}
@@ -9903,6 +10373,16 @@ def phase_rollback_app(ctx) -> dict:
                                'under its own rules; nothing was stopped or removed. Clear them on this revision\'s '
                                'web (ops/INSTALL.md, Reinstalling an older revision), then rerun --phase rollback-app.',
                                details={'hazards': found})
+        # refutation round 1, rollback-1 and rollback-2: the pair that runs next is the parked one when one is parked,
+        # else not known (an older revision installed afterwards) - neither may be handed closed practices or destroyed
+        # documents without disposal
+        parked_next = next((labels_of(container).get(REVISION_LABEL) for container in
+                            (inspect('container', SERVICES[role] + '-previous') for role in ('worker', 'web'))
+                            if container is not None), None)
+        refusal, disposed = disposal_refusal(first['Image'], env, parked_next)
+        if refusal:
+            raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
+                               details={'disposal': disposed})
     for role in pair:
         stop_service_container(SERVICES[role], role)
     if pair:
@@ -10099,7 +10579,50 @@ def interrupt(signum, frame):
     # later ones are ignored while the cleanup runs (the door's SIGKILL follows 15 s after its SIGTERM)
     for each in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(each, signal.SIG_IGN)
+    if SIGNALS_HELD['depth']:  # inside signals_deferred: acted on once its body has finished
+        SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'] or signal.Signals(signum).name
+        return
     raise Interrupted(signal.Signals(signum).name)
+
+
+# What signals_deferred holds: how deep its bodies run, and the first signal that landed in one (its name).
+SIGNALS_HELD = {'depth': 0, 'pending': None}
+
+
+class signals_deferred:  # noqa: N801 - used as a context manager, as contextlib's are
+    """A body no signal stops half way (refutation round 1, installer-3: a RAM folder's wipe): a SIGTERM or SIGHUP that
+    lands in it (interrupt, main's handler) is raised as Interrupted once the outermost such body has finished, and a
+    Ctrl-C as KeyboardInterrupt (when Python's own handler was the one in place) - the first that landed, chained to
+    whatever the body raised, which it replaces. The door's SIGKILL, 15 s after its SIGTERM, cannot be held."""
+
+    def __enter__(self):
+        self.outermost, self.handler = SIGNALS_HELD['depth'] == 0, None
+        SIGNALS_HELD['depth'] += 1
+        if self.outermost:
+            try:  # the main thread alone can set a handler; anywhere else a Ctrl-C is not held
+                if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+                    self.handler = signal.signal(signal.SIGINT, held_ctrl_c)
+            except ValueError:
+                self.handler = None
+        return self
+
+    def __exit__(self, kind, error, trace):
+        SIGNALS_HELD['depth'] -= 1
+        if not self.outermost:
+            return False
+        if self.handler is not None:
+            signal.signal(signal.SIGINT, self.handler)
+        pending, SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'], None
+        if pending == 'SIGINT':
+            raise KeyboardInterrupt() from error
+        if pending:
+            raise Interrupted(pending) from error
+        return False
+
+
+def held_ctrl_c(signum, frame):
+    """A Ctrl-C inside signals_deferred: held, as interrupt holds a SIGTERM there."""
+    SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'] or 'SIGINT'
 
 
 def rewrite_receipt(path: Path, record: dict) -> Path:
@@ -10148,10 +10671,12 @@ def main(argv=None) -> int:
         record.update(ok=False, error=f'unexpected {type(error).__name__}; see failure log')
         record['failure_log'] = ctx.log('failure', traceback.format_exc().encode())
     except Interrupted as error:  # the phase's cleanup has run; the receipt says what stopped it
-        record.update(ok=False, interrupted=str(error), error=f'interrupted by {error} before the phase finished')
+        record.update(ok=False, interrupted=str(error), error=f'interrupted by {error} before the phase finished',
+                      **({'details': error.details} if getattr(error, 'details', None) is not None else {}))
         code = 128 + getattr(signal, str(error), signal.SIGTERM)
-    except KeyboardInterrupt:
-        record.update(ok=False, interrupted='SIGINT', error='interrupted (Ctrl-C) before the phase finished')
+    except KeyboardInterrupt as error:  # an act that ran keeps its record (raise_after_act) beside the interrupt
+        record.update(ok=False, interrupted='SIGINT', error='interrupted (Ctrl-C) before the phase finished',
+                      **({'details': error.details} if getattr(error, 'details', None) is not None else {}))
         raise
     finally:
         record.setdefault('ok', False)

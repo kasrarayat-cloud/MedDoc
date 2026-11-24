@@ -260,9 +260,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   changes (recreating the container would interrupt the site: the owner's
   call). Release 1 (A3): its memory and memory + swap must be 512m each and its
   own cgroup (read inside it) must allow no swap. When they differ, the
-  cgroup's `memory.peak` and `memory.swap.current` are read first, and their
-  sum - what sits in swap is memory the database used - must stay below 80% of
-  512 MiB; the limits are then set on the running container (`docker update
+  cgroup's `memory.peak`, `memory.swap.current` and `memory.swap.peak` are read
+  first, and `memory.peak` plus the swap's high-water mark (`memory.swap.peak`,
+  never less than what sits in swap now) - swap the database used, even if it
+  has since paged it back, is memory it needed (refutation round 1,
+  installer-2) - must stay below 80% of 512 MiB; a cgroup whose
+  `memory.swap.peak` cannot be read skips the change (its limits left as they
+  are, the receipt saying why). The limits are then set on the running
+  container (`docker update
   --memory 512m --memory-swap 512m`: no restart, no connection dropped) and the
   receipt records them before and after; otherwise it refuses and prints the
   numbers, so the owner can choose a larger limit. `memory.peak` counts only
@@ -391,7 +396,20 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   sign-in page and every static file that page names (read-only GETs) - the
   old web still serves everything; **S2** the old worker is parked (`docker
   stop --time 3600`: its current stage finishes, nothing new is claimed) - the
-  old web still serves, and what members start waits in the queue; **S3** the
+  old web still serves, and what members start waits in the queue - and, when
+  the old web's revision and this one do not share release 1's session policy
+  (one of the two trees has `studio/sessions.py`: the first install of release 1
+  over a revision before it, or `app` again after a `switch-back` to one; read
+  from each revision's tree before anything starts, and a revision this
+  checkout cannot read refuses, nothing started or stopped), every session is
+  ended in this revision's image: every `django_session` row deleted and one
+  SecurityEvent `sessions.ended_at_install` (the count and the two revisions,
+  the actor label `installer`) written, in one transaction. None of them could
+  be used once the new web serves (release 1's cookies have their `__Host-`
+  names, B6), and ending them all keeps a session from coming back for whoever
+  uses that browser next across a later switch (refutation round 1,
+  rollback-0 and rollback-3). The receipt's `sessions_ended` says how many and
+  the summary says so; a later release over release 1 ends none; **S3** the
   vhost's upstream is switched to the idle port: the live file must be this
   revision's HTTPS stage for the old port, and is replaced atomically by the
   rendering for the new one (the two differ in their `proxy_pass` line alone),
@@ -425,7 +443,10 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   the HTTPS observations), the `drain`, and the `smoke` of the incoming web.
   **Swap** (a host where nothing is served through the vhost): the current
   web/worker are parked (`*-previous`), the new pair starts and the phase waits
-  for `/health/` as above and a worker that stays up. Once the new
+  for `/health/` as above and a worker that stays up. Every session is ended
+  as at S2 once both old containers are stopped, before the new web starts,
+  when the pair replaced and this revision do not share release 1's session
+  policy; a failure there restores the parked pair. Once the new
   pair runs - and before the parked pair is removed - every encounter's stored
   list state is recomputed with this revision's derivation (only a changed one
   is written; nothing is sent; the receipt names each that changed): the
@@ -447,7 +468,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   undo's incoming web or new worker (S1, S3, S4), a switch-back's, rollback-app's
   pair - its log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
   `logs_kept`: a file name, its sha256 and the lines kept and dropped, never a
-  line); a copy that fails removes nothing, and the receipt says so. A static
+  line); a copy that fails removes nothing, and the receipt says so. A web's
+  access lines are kept in release 1's format and in the one before it (no
+  request id or actor: the web this install retires, and one a `switch-back`
+  to such a revision started), each its address, path, status, size and time
+  only (refutation round 1, installer-6). A static
   file's name in a kept path is written `static-file` (its content hash and
   extension kept): its name part could carry free text. The failure note an
   undo writes into the receipts folder (`*-incoming-web-failed.log`,
@@ -462,8 +487,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   - S1 (the incoming web is not healthy, or does not serve its pages): it is
     stopped and removed; nothing else changed and nothing is closed - no
     customer request reached it.
-  - S2 (the old worker could not be parked): it runs again (park starts it
-    when its rename fails); the incoming web is removed.
+  - S2 (the old worker could not be parked, or the end of every session
+    failed): it runs again (park starts it when its rename fails); the
+    incoming web is removed. An end that was started and gave no answer may
+    have ended every session: the receipt says so (everyone may have to sign
+    in again on the old revision), never that nothing else changed.
   - S3 (`nginx -t`, a new warning, the reload or the verification): the exact
     previous vhost bytes are put back, and nginx is reloaded with them whenever
     a reload of the switched file was asked for, so the old web serves. Whenever
@@ -717,7 +745,12 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   and `--review-by` are then required, `--by` names a person, never a role. An
   account any of whose grants was ever revoked is never granted again unless the
   run passes `--regrant <name>` and the declaration names `--regrant <name>`
-  (ADM-10 3(i)). It is read back: an active human operator with no membership.
+  (ADM-10 3(i)): a line of the committed declaration that is exactly
+  `--regrant <name>`, or exactly that in backticks, with nothing else on it but
+  spaces (refutation round 1, installer-0). The words inside a sentence ("do
+  not --regrant ali"), a list item (`- --regrant ali`) or another name that
+  starts with it (`--regrant alice` for `ali`) name nothing. It is read back: an
+  active human operator with no membership.
   An account created or reset then gets a single-use setup code: generated by
   the installer, handed to `manage issue_enrolment` as a RAM-only `--code-file`
   (only its sha256 reaches the database), committed root-only to
@@ -750,9 +783,23 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   and the receipt keeps its sha256 and size, never its text. It is read through
   one descriptor that never follows a link, at most 4,096 bytes counted as read,
   and a file whose contents differ from the size it reports (`/proc`, `/sys`) is
-  refused. Every output is checked first: the setup code, the application's own
-  secret values and the reason's text (whole, or any line of 12 characters or
-  more) must not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
+  refused. Once the act has run, its record is always kept (refutation round 1,
+  phileak-1 and dataloss-3: a destruction's certificate that repeated the plan's
+  reason was discarded with its log): every occurrence of the setup code, the
+  application's own secret values and the reason's text (whole, or any line of
+  12 characters or more, as written or as JSON writes it inside a string; a
+  shorter reason only where no letter or digit adjoins it, so no id or digest
+  is altered) is replaced by `[redacted by the installer]` before the log and
+  the receipt are written, and the receipt's `redacted` counts them by kind
+  (`secret`, `reason`), never a value; the summary says so, and a secret the
+  command printed is a FINDING. A setup code it printed is never kept (the
+  act's receipt fails, and the act runs again for a new code), and `provision`
+  never hands over a password it printed (the credentials files are
+  discarded; `--reset-passwords` sets new ones). Nor does what follows the act
+  ever take its record away: when its RAM folder's wipe or an export's seal
+  fails, the receipt fails with the act's record (its exit, its log, its
+  output) and says what did not finish, and a signal or a Ctrl-C there is
+  recorded beside it (a setup code is then not kept). The receipt keeps the
   command's stdout (ids and counts) and its log. Nothing that is not on the list
   runs. An act holds the receipts' lock for its whole run, as every phase does,
   so no install, `switch-back` or `rollback-app` can start while it runs (and
@@ -761,7 +808,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the
   receipt their time. A SIGTERM - the door's kill at its ceiling - or a SIGHUP
   stops any phase where it is: its RAM files are wiped, its one-shot removed,
-  its undo run, and its receipt says `interrupted` (exit 143, or 129). Every
+  its undo run, and its receipt says `interrupted` (exit 143, or 129). One that
+  lands while the RAM files are being wiped - or a Ctrl-C there - is acted on
+  once the wipe has finished (refutation round 1, installer-3: it had stopped
+  the wipe and left the reason in `/dev/shm`); only the door's SIGKILL, 15 s
+  after its SIGTERM, or a `kill -9` can still leave a
+  `/dev/shm/cpt-studio-<word>-<32 hex>` folder, which holds the act's RAM-only
+  files (the reason, a code): overwrite and remove it as root (the root-via-
+  docker path), never read it. Every
   phase's receipt is written before its journal (A13), so an interrupt while the
   journal is written never costs a finished phase its receipt.
 - **http-vhost / https-vhost / ingress / ingress-rollback / rollback-vhost**
@@ -1063,6 +1117,24 @@ switch is verified against that receipt's baseline - co-tenant routing and
 co-tenant - and `switch-back` refuses, starting and stopping nothing, while they
 no longer answer as it recorded.
 
+**No way back to a revision without release 1's disposal while anything was
+disposed** (refutation round 1, rollback-1 and rollback-2). Release 1's closed
+practices (`dispose --close`) and destroyed documents (a tombstone: the row
+kept, title emptied, its PHI-free decision trail kept) are rows only its own
+code reads. A revision whose tree has no `studio/disposal.py` - every revision
+before release 1 - would list and count each tombstone again, with its kept
+activity on its page and its console, and take uploads into a closed practice
+and send them for coding. So `switch-back` to such a revision refuses, starting
+and stopping nothing, while any practice is closed or any document destroyed
+(read in this revision's image, counts only; read again at B4 before anything
+is closed), and says how many of each. `rollback-app` refuses the same way
+before it returns such an older web (the S4 keep layout), and before it removes
+this revision's pair when the parked pair it leaves is such a revision or no
+parked pair says which revision runs next. Neither a closure nor a destruction
+is ever undone, so once the first one has run the way back is gone for good:
+the owner's path is a fix forward (a revision with disposal, by its `app`). A
+`switch-back` to a revision that has disposal is not affected.
+
 `--phase switch-back --provider-mode <mode> [--astra-mode …] [--fable-mode …]
 [--interpreter-mode …] [--coding-mode …] [--authorization-ref …]` runs under this
 revision's declaration and installer
@@ -1144,7 +1216,11 @@ and before that close, the baseline and this revision's records are read
 again, so nothing is closed for a switch that cannot pass or would refuse on
 what that read finds (a request the close itself finds in flight is recorded
 unknown, and that record still refuses the switch-back after the close; the
-receipt then says what the close closed, each way above);
+receipt then says what the close closed, each way above) - and, when the
+previous revision is before release 1's session policy, every session is ended
+as at `app`'s S2 (`sessions.ended_at_install`; the receipt's `sessions_ended`):
+the previous web reads none of this revision's cookies, and a session of its
+own left in a browser nobody used meanwhile would be valid again;
 **B5** the upstream is switched to the idle port (`/health/` = the previous
 revision; a reload of the switched file that was asked for and then failed is
 treated as applied, as in `app`: nginx is reloaded with this revision's vhost
@@ -1744,13 +1820,34 @@ release 1), run only through `--phase manage`, never over HTTP:
   <file> --by <person>` closes a practice (uploads and coding stop; reading
   stays on until the practice confirms it received its data);
 - `--dispose-step plan` (`--workspace-id`, or `--encounter-id` for one
-  document) is a dry run that records what would be destroyed;
+  document, never both) `--reason-file <file> --by <person>` is a dry run
+  that records what would be destroyed;
 - `--dispose-step execute --plan-id <id> --by <person> --approved-by <another
-  person> --reason-file <file>` carries out a plan under a day old: two
-  different named people run and approve it (D14);
+  person>` carries out a plan under a day old: two different named people run
+  and approve it (D14), under the plan's own reason. It takes nothing else: a
+  `--workspace-id` or `--encounter-id` is refused before anything runs, since
+  the plan's own scope is what is destroyed (refutation round 1, installer-1).
+  Every step takes exactly what it passes to the command - `close`
+  `--workspace-id --reason-file`, `plan` `--workspace-id` or `--encounter-id`
+  and `--reason-file`, `execute` `--plan-id --approved-by`, `ledger` nothing
+  more, `replay-ledger` `--ledger-file` (and `--execute --approved-by`), each
+  with `--by` - and refuses any other, so what was typed is what ran. A
+  reason is required exactly where the command reads one, `close` and `plan`,
+  and refused everywhere else (refutation round 1: `execute` and
+  `replay-ledger` had required one their command never read);
 - `--dispose-step ledger` prints the ledger - the MAC-signed list of every
-  disposal - into the receipt; keep it with the receipts;
-- `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
+  disposal - into a log file of its own in the receipts folder
+  (`manage-<UTC>-NN-dispose-ledger.log`; the receipt's `ledger_printed` names
+  it with its sha256, size and line count). **Keep that log file whole** with
+  the backups, and before a replay check its sha256 against the receipt's: the
+  receipt's own `stdout` keeps only the last 16,000 characters of any act's
+  output (its `stdout_cut` and `stdout_chars` say whether it was cut and how
+  long it was), so it is never the copy to keep (refutation round 1,
+  dataloss-1: a cut copy was refused, or replayed without the oldest
+  disposals). A secret the command printed in it is redacted there, and that
+  line no longer verifies: the summary says so (a FINDING), and the ledger is
+  printed again once that is fixed;
+- `--dispose-step replay-ledger --ledger-file <file>` is,
   on its own, a dry run that changes nothing (the receipt's `mode` says `dry
   run`, and its summary never says done); with `--execute --approved-by
   <another person>` it re-applies the ledger after a database restore, so
@@ -1769,6 +1866,11 @@ release 1), run only through `--phase manage`, never over HTTP:
   of that practice, including anything a member added to the restored copy, and
   the replay's report counts such documents. A replay stopped by a signal
   prints its record and exits 143 (SIGTERM) or 129 (SIGHUP).
+
+The first closure or destruction ends the way back to every revision before
+release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
+revision without disposal (**Switching back**, above); the way on is a fix
+forward.
 
 Every disposal step refuses while an install or switch-back is in progress (a
 `cpt-studio-web-next` or a `*-previous` container); only after that reading is
@@ -1920,7 +2022,18 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   untouched until the owner deletes them.
 - Everyone is signed out once at the release-1 switch (the session cookie gets
   its `__Host-` name, B6) and again after any switch-back; the vhost sets the
-  flags of both names, so either revision's web serves behind it.
+  flags of both names, so either revision's web serves behind it. The
+  installer ends the sessions themselves, not only the browsers' cookies: at
+  `app`'s S2 (or its swap) from a revision before release 1's session policy,
+  and at a `switch-back`'s B4 to one, every `django_session` row is deleted
+  with one SecurityEvent `sessions.ended_at_install` (a count and the two
+  revisions). An `app` or `switch-back` between two revisions that both have
+  the policy ends none. Left (refutation round 1, rollback-3's window): a
+  sign-in on the older web in the seconds between S2's end and the end of S5's
+  drain keeps its row; it signs nobody in on release 1 (its cookie's name is
+  not read), and the next `switch-back` ends it at B4. `rollback-app` ends no
+  session: after one that returns an older web, a sign-in made on that web in
+  those seconds is valid there again until its own 8-hour limit.
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:
