@@ -43,7 +43,7 @@ from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
-from django.db.models import Exists, Max, OuterRef
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from . import decisions, jobs, models, state
@@ -223,8 +223,7 @@ def member_json(row, last_sign_in) -> dict:
 def last_sign_ins(usernames) -> dict:
     """{username: the time of its latest successful sign-in} (a LoginAttempt that signed in: B1's signed_in, and the
     rows an older release wrote with succeeded true)."""
-    return dict(models.LoginAttempt.objects.filter(succeeded=True, username__in=list(usernames)).values('username')
-                .annotate(last=Max('created_at')).values_list('username', 'last'))
+    return models.LoginAttempt.objects.latest_sign_ins(usernames)  # each name's newest row (refutation round 1, avail-5)
 
 
 def members_json(membership) -> list:

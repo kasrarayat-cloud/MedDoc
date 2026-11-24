@@ -451,6 +451,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # that bind a context and an assessment to the inventory they were made from, read safe
         # release 1 (RELEASE-1-SPEC 3.1): 0017 adds eight tables, twelve nullable columns and an index, read safe (its
         # reasons: ops/test_install.py ReleaseOneMigrationTests)
+        # refutation round 1 of release 1: 0018 adds two tables, seven non-unique indexes and a constraint on a table it
+        # creates, read safe (its reasons: tests/test_r1_repair_s.py StoreContractTests)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
@@ -458,7 +460,7 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                                 '0013_completion_answer_binding',
                                                                 '0014_event_inventory',
                                                                 '0015_inventory_appraisal', '0016_fable_coding',
-                                                                '0017_r1_security'])
+                                                                '0017_r1_security', '0018_r1_availability'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',

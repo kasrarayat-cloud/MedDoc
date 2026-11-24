@@ -297,8 +297,9 @@ class Door:
         KNOWN_DEVICE_DAYS (check e): any LoginAttempt of the name that succeeded, an older release's rows included (they
         carry succeeded alone), its client read as a client key (key_of_address)."""
         since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
-        addresses = (LoginAttempt.objects.filter(username=self.username, succeeded=True, created_at__gte=since)
-                     .values_list('client', flat=True).distinct())
+        # the name's newest successful sign-ins only, at most SIGNED_IN_CLIENTS_READ rows (refutation round 1, avail-5;
+        # B1 item 6: a read stops at its limit), however many times the name signed in
+        addresses = LoginAttempt.objects.signed_in_clients(self.username, since)
         return any(key_of_address(address) == self.client_key for address in addresses)
 
     def refusal(self) -> str:

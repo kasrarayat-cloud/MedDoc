@@ -825,7 +825,10 @@ def _older_than(queryset, request, *, integer_pk=False):
         key = int(match.group(2)) if integer_pk else uuid.UUID(match.group(2))
     except (ValueError, TypeError):
         return None, ''
-    return queryset.filter(Q(created_at__lt=moment) | Q(created_at=moment, pk__lt=key)), raw
+    # the bound on created_at alone lets an index start the scan at the cursor (refutation round 1, avail-3 and avail-5):
+    # the same rows, read from the cursor rather than from the newest row down
+    return (queryset.filter(created_at__lte=moment).filter(Q(created_at__lt=moment) | Q(created_at=moment, pk__lt=key)),
+            raw)
 
 
 def describe(event) -> dict:
@@ -993,6 +996,9 @@ def reads(request):
     read_audit.record(request, view=read_audit.OPS_READS, workspace_id=workspace.pk if workspace else None,
                       count=len(shown), filters=filters)
     people = {person.pk: person for person in User.objects.filter(pk__in={row.actor_id for row in shown})}
+    # a member's list read again by the same session is counted on its record (refutation round 1, avail-3)
+    repeats = {item.record_id: item for item in models.AccessRecordRepeat.objects.filter(
+        record_id__in=[row.pk for row in shown if row.view == read_audit.MEMBER_LIST])}
     practices = dict(Workspace.objects.filter(pk__in={row.workspace_id for row in shown if row.workspace_id})
                      .values_list('pk', 'name'))
     query = '&'.join(f'{name}={value}' for name, value in (
@@ -1002,6 +1008,7 @@ def reads(request):
         'activity', tab='reads', unreadable=rows is None, earlier=bool(before),
         older=cursor_of(shown[-1]) if len(window) > PAGE_SIZE else '', query=query,
         rows=[{'row': row, 'person': people.get(row.actor_id), 'practice': practices.get(row.workspace_id),
+               'repeat': repeats.get(row.pk),
                'kind': READ_KINDS.get(row.view, row.view),
                'documents': [(str(item), str(item)[:8]) for item in row.encounter_ids[:DOCUMENTS_SHOWN]],
                'more': max(0, len(row.encounter_ids) - DOCUMENTS_SHOWN)} for row in shown],
