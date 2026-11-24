@@ -28,7 +28,7 @@ from unittest import mock
 from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
-from django.db import DatabaseError, IntegrityError, connection, connections
+from django.db import DatabaseError, IntegrityError, OperationalError, connection, connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -160,6 +160,35 @@ class UploadCommitTests(OriginalsCase, TransactionTestCase):
                 self.upload()
         self.assertEqual(stored_files(self.root), [])
         self.assertFalse(models.Encounter.objects.exists())
+
+    def test_a_commit_the_server_applied_whose_answer_was_lost_keeps_the_original(self):
+        # the refutation lens's probe (refute-lane4, coding P1): the server applies the commit, then the connection fails
+        # before its answer arrives - Django raises, though the rows are committed and name the file
+        real_commit = connection._commit
+
+        def commit_then_lose_the_answer():
+            real_commit()
+            raise OperationalError('synthetic: server closed the connection unexpectedly')
+        with mock.patch.object(connection, '_commit', side_effect=commit_then_lose_the_answer), \
+                self.assertLogs('studio.intake', level='ERROR') as logs:
+            with self.assertRaises(OperationalError):
+                self.upload(client_key=uuid.uuid4())
+        source = models.Encounter.objects.get().files.get()  # the rows were committed
+        self.assertEqual(stored_files(self.root), [source.storage_name])  # and the file they name is still there
+        self.assertEqual(storage.read_original(source), f.PDF_BYTES)
+        self.assertTrue(any('OperationalError' in line and 'kept' in line for line in logs.output))
+
+    def test_a_commit_that_failed_unapplied_leaves_its_file_to_the_orphan_sweep(self):
+        def fail_unapplied():
+            raise OperationalError('synthetic: the commit never reached the server')
+        with mock.patch.object(connection, '_commit', side_effect=fail_unapplied):
+            with self.assertRaises(OperationalError):
+                self.upload()
+        self.assertFalse(models.Encounter.objects.exists())  # rolled back: no row names the file
+        (orphan,) = stored_files(self.root)
+        age(storage.stored_path(orphan))
+        self.assertEqual(maintenance.sweep_orphan_files(delete=True)['deleted'], 1)
+        self.assertEqual(stored_files(self.root), [])
 
     def race(self, *, first_fails):
         """Two threads post one upload attempt (one client key) at the same moment; with ``first_fails``, the first of
