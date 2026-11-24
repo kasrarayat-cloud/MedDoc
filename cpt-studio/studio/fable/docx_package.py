@@ -14,22 +14,27 @@ before it waits on it, so the parent's finally kills that group as well as the c
 - Only a Word package is converted (an OpenDocument file or any other zip named .docx is refused, since LibreOffice
   opens what it finds, whatever the name).
 - Its size is checked from the zip directory before any part is read (E1): at most MAX_PART_BYTES a part and
-  MAX_PACKAGE_BYTES in all once inflated, and no XML part (.xml or .rels, or any part read as XML later) over
-  INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION times its stored size - a picture is held to the size
-  limits only, since a clinical image (an ECG strip kept as a metafile) can deflate 133-fold; each part is then read
-  through a bounded reader that inflates at most its declared size plus one byte, so a size header that lies is
-  refused, never believed. Running out of PACKAGE_SECONDS is not a refusal of the file: the conversion is busy, and a
-  member may retry (ConversionBusy).
+  MAX_PACKAGE_BYTES in all once inflated; each part is then read through a bounded reader that inflates at most its
+  declared size plus one byte, so a size header that lies is refused, never believed. No part is held to a ratio of
+  its inflated to its stored size, an XML part no more than a picture: report generators write uniform table XML that
+  deflates 127 to 158 times (a vital-signs flowsheet, a medication grid) and a clinical image can deflate 133 times (an
+  ECG strip kept as a metafile), and the code before release 1 converts both. What a part may cost is bounded by these
+  absolute limits, not by how well it compressed - a crafted part with varied bytes reaches them at a ratio of 2 - and
+  by the bounded child's limits (CONVERT_MEMORY_BYTES of address space, CONVERT_SECONDS) and its container's.
+  Running out of PACKAGE_SECONDS is not a refusal of the file: the conversion is busy, and a member may retry
+  (ConversionBusy).
 - Every relationship with TargetMode External is dropped - a linked picture, template, frame or object LibreOffice would
   fetch from a URL or a local path while it converts, into the PDF that is sent and shown - with any part only they
-  referenced.
+  referenced. The content types keep their bytes then, as before release 1: an Override left for a part that is not
+  there is one a reader passes over (repair round 1, C4).
 - Field instructions and embedded content LibreOffice could act on are removed (E2), in every part that holds them: the
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
-  spell), keeping the result the reader sees; w:object (its preview picture kept), w:control and w:altChunk, with the
-  parts only they named, and their Overrides in the content types. Each part is edited by byte ranges of its own
-  bytes, never written out again, and a part with nothing to remove passes through byte for byte: a Word file with none
-  of these features gives exactly the package it gave before release 1. A formula ('=' first) is never removed. What
-  was removed is reported as counts only.
+  spell), keeping the result the reader sees - a field's type read from its live instruction text, text a tracked
+  change deleted counting only when nothing live names a type (_Field); w:object (its preview picture kept), w:control
+  and w:altChunk, with the parts only they named, and their Overrides in the content types. Each part is edited by byte
+  ranges of its own bytes, never written out again, and a part with nothing to remove passes through byte for byte: a
+  Word file with none of these features gives exactly the package it gave before release 1. A formula ('=' first) is
+  never removed. What was removed is reported as counts only.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -98,9 +103,7 @@ WORD_MAIN_TYPES = ('application/vnd.openxmlformats-officedocument.wordprocessing
 OPENDOCUMENT_PARTS = ('mimetype', 'meta-inf/manifest.xml')
 MAX_PACKAGE_PARTS = 10_000
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024  # what the parts may hold once inflated, in all (E1; it was 512 MiB)
-MAX_PART_BYTES = 32 * 1024 * 1024  # and one part
-MAX_INFLATION = 100  # a part may inflate to at most this many times its stored size...
-INFLATION_CHECKED_FROM = 1024 * 1024  # ...once it inflates past this: a smaller part costs nothing whatever its ratio
+MAX_PART_BYTES = 32 * 1024 * 1024  # and one part (no ratio of inflated to stored size: the module's docstring)
 URI_SCHEME = re.compile(r'[A-Za-z][A-Za-z0-9+.-]*:')
 
 # --- what E2 removes --------------------------------------------------------------------------------------------------
@@ -139,12 +142,19 @@ class ConversionFailed(Exception):
     in fixed words."""
 
 
-def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bytes:
+class ConversionAbandoned(Exception):
+    """convert_in_child: whoever asked for the conversion left before it finished (``watch``), so it was stopped - the
+    child and LibreOffice killed as at a timeout (repair round 1, C2)."""
+
+
+def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES,
+                     watch=None) -> bytes:
     """``data`` (a Word file) as PDF bytes, converted in a bounded child: ``runner(package, work)`` runs there on the
     package safe_package made of ``data`` and the work folder made here (default soffice_convert). The folder is removed
     after every run - a success, a failure or a timeout - once the child and every process group it reported are gone.
     ConversionRefused when safe_package refused the file, ConversionBusy when its checks ran out of time,
-    ConversionFailed when no PDF came of it."""
+    ConversionFailed when no PDF came of it, ConversionAbandoned when ``watch`` (the client's connection, for the
+    converter service) became readable first: its client left."""
     try:
         work = Path(tempfile.mkdtemp(prefix=WORK_PREFIX))
     except OSError as exc:
@@ -152,7 +162,9 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
     try:
         try:
             answer = bounded.run_bounded(_convert_package, runner or soffice_convert, data, str(work), seconds=seconds,
-                                         memory_bytes=memory_bytes)
+                                         memory_bytes=memory_bytes, watch=watch)
+        except bounded.Abandoned:
+            raise ConversionAbandoned('its client left before it finished') from None
         except bounded.Overrun as exc:
             raise ConversionFailed(f'the conversion passed its {exc.reason} limit') from None
         except Exception as exc:  # noqa: BLE001 - the child's failure is logged by run_bounded
@@ -256,9 +268,11 @@ def _safe_package(data: bytes):
         folder, _, leaf = orphan.rpartition('/')
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
+    external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
     removed, held = _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline)
-    if orphans:  # a dropped part's Override goes with it
-        types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in orphans})
+    released = orphans - external_orphans  # what E2 dropped, with the content it removed
+    if released:  # a part E2 dropped takes its Override with it
+        types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in released})
         if types is not parts[CONTENT_TYPES_PART]:
             rewritten[CONTENT_TYPES_PART] = types
     for name, refusal in held.items():  # a part that could not be checked is refused only if it is still sent
@@ -285,26 +299,14 @@ def _check_time(deadline):
 
 
 def _check_sizes(infos):
-    """E1, from the zip directory alone, before any part is read: no part over MAX_PART_BYTES once inflated, no more
-    than MAX_PACKAGE_BYTES in all, and no XML part past INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION
-    times its stored size."""
+    """E1, from the zip directory alone, before any part is read: no part over MAX_PART_BYTES once inflated, and no
+    more than MAX_PACKAGE_BYTES in all. A part's ratio of inflated to stored size is not held against it (the module's
+    docstring says why)."""
     for info in infos:
         if info.file_size > MAX_PART_BYTES:
             raise PackageRefused('a part is too large once inflated')
-        if _xml_named(info.filename) and _inflates_too_much(info):
-            raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
     if sum(info.file_size for info in infos) > MAX_PACKAGE_BYTES:
         raise PackageRefused('its parts are too large once inflated')
-
-
-def _xml_named(name) -> bool:
-    """Whether the part ``name`` is read as XML by its name (an .xml or .rels part)."""
-    return name.casefold().endswith(('.xml', '.rels'))
-
-
-def _inflates_too_much(info) -> bool:
-    """Whether a part past INFLATION_CHECKED_FROM inflates more than MAX_INFLATION times its stored size."""
-    return info.file_size > INFLATION_CHECKED_FROM and info.file_size > MAX_INFLATION * info.compress_size
 
 
 def _read_part(archive, info) -> bytes:
@@ -425,12 +427,15 @@ def _names(*local_names):
 
 # The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
 # with one dictionary lookup.
-_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE = range(9)
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION = range(10)
 _ROLES = {name: role for role, local_names in (
     (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
     (_ALTCHUNK, ('altChunk',)), (_POINTER, ('objectEmbed', 'objectLink')),
-    (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')))
+    (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')),
+    (_DELETION, ('del', 'moveFrom')))
     for name in _names(*local_names)}
+# Text a tracked change deleted: these elements inside a w:del or w:moveFrom (repair round 1, C5: see _Field).
+_DELETED_TEXT = _names('delInstrText', 'delText')
 # What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
 _ROLES['urn:schemas-microsoft-com:office:office OLEObject'] = _POINTER
 _CONTAINERS = (_OBJECT, _CONTROL, _ALTCHUNK, _POINTER)  # removed whole (an object but for its preview)
@@ -438,8 +443,9 @@ _OBJECTS, _DRAWINGS, _FLDDATAS = _names('object'), _names('drawing'), _names('fl
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
 # type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
-# wider than this one's. A field Word wrote reads the same in all four.
-_READINGS = ((_names('instrText', 'delInstrText', 't', 'delText'), True), (_names('instrText', 'delInstrText'), False),
+# wider than this one's. A field Word wrote reads the same in all four. In each, text a tracked change deleted counts
+# only when the live text names no type (_Field).
+_READINGS =((_names('instrText', 'delInstrText', 't', 'delText'), True), (_names('instrText', 'delInstrText'), False),
              (_names('instrText', 't'), True), (_names('instrText'), False))
 # the attributes as WordprocessingML qualifies them, and unqualified: a reader lenient about the prefix must not see a
 # field here missed
@@ -529,28 +535,51 @@ def _symbol_character(attrs) -> str:
 
 class _Field:
     """A complex field (w:fldChar begin ... separate ... end) while it is read: its marks with the open elements around
-    each, and its type in each of the _READINGS as far as its own instruction has named it."""
+    each, and its type in each of the _READINGS as far as its own instruction has named it.
+
+    A field's type is read from its live instruction text (repair round 1, C5: the L-CODING lens's coding-4, a PAGE
+    field whose instruction holds a tracked deletion of 'LINK' was neutralised). Text a tracked change deleted - a
+    w:delInstrText or w:delText inside a w:del or w:moveFrom - is read apart, and counts only when the live text names
+    no type: a field deleted whole, or whose whole instruction is a deletion. That is how LibreOffice reads it, measured
+    on a real LibreOffice (24.2): it renders the base's 'deleted LINK, inserted PAGE' as a live page number, a deleted
+    'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
+    left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
     __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
-        self.readings = [_Reading() for _ in _READINGS]
+        self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
 
-    def feed(self, text, name=None):
-        """Text of the instruction: in a text element ``name``, or (None) a symbol's character, a tab or a break."""
-        for (kinds, run_content), reading in zip(_READINGS, self.readings):
-            if not reading.done and (name in kinds if name is not None else run_content):
-                reading.feed(text)
-        self.decided = all(reading.done for reading in self.readings)
+    def feed(self, text, name=None, deleted=False):
+        """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
+        symbol's character, a tab or a break."""
+        for (kinds, run_content), pair in zip(_READINGS, self.readings):
+            live = pair[0]
+            if name is None:
+                if run_content and not live.done:
+                    live.feed(text)
+            elif name in kinds:
+                if not deleted:
+                    if not live.done:
+                        live.feed(text)
+                elif live.state == _Reading.BEFORE:  # deleted text counts only while nothing live names a type
+                    if pair[1] is None:
+                        pair[1] = _Reading()
+                    if not pair[1].done:
+                        pair[1].feed(text)
+        self.decided = all(pair[0].done for pair in self.readings)
 
     def nested(self):
-        for reading in self.readings:
-            reading.nested()
-        self.decided = all(reading.done for reading in self.readings)
+        for live, deleted in self.readings:
+            live.nested()
+            if deleted is not None:
+                deleted.nested()
+        self.decided = all(pair[0].done for pair in self.readings)
 
     def removed(self) -> bool:
-        return any(reading.removed() for reading in self.readings)
+        return any((live if live.state != _Reading.BEFORE or deleted is None else deleted).removed()
+                   for live, deleted in self.readings)
 
 
 class _PartReader:
@@ -563,9 +592,9 @@ class _PartReader:
         self.raw, self.deadline, self.editable = raw, deadline, editable
         self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
-        self.elements = self.instructions = self.containers = 0
+        self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
         self.text_field = self.text_name = self.parser = None
-        self.nested_removal = False
+        self.nested_removal = self.text_deleted = False
 
     def read(self):
         parser = self.parser = expat.ParserCreate(namespace_separator=' ')
@@ -644,7 +673,10 @@ class _PartReader:
         elif role == _TEXT:
             if open_type:
                 self.text_field, self.text_name = field, element[_NAME]
+                self.text_deleted = bool(self.deletions) and element[_NAME] in _DELETED_TEXT
                 self.parser.CharacterDataHandler = self._text
+        elif role == _DELETION:
+            self.deletions += 1
         elif open_type:  # a symbol stands for its character, a tab or a break for white space
             field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
 
@@ -663,6 +695,8 @@ class _PartReader:
             if self.text_field is not None:
                 self.text_field = None
                 self.parser.CharacterDataHandler = None
+        elif role == _DELETION:
+            self.deletions -= 1
         elif role == _FLDCHAR:
             field = self.fields[-1] if self.fields else None
             if field is not None and field.end is not None and field.end[0] is element:
@@ -692,7 +726,7 @@ class _PartReader:
     def _text(self, data):
         field = self.text_field
         if field is not None and not field.decided:
-            field.feed(data, self.text_name)
+            field.feed(data, self.text_name, self.text_deleted)
 
     # the removals
     def _edit(self, start, end, replacement=b''):
@@ -972,9 +1006,10 @@ def _refuse_any_dtd(raw):
 def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
-    SVG picture's excepted. A part read as XML here is held to E1's inflation ratio like an .xml part. The relationships
-    only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only they named added
-    to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is still sent})."""
+    SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
+    relationships only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only
+    they named added to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is
+    still sent})."""
     removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:
@@ -985,9 +1020,6 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
         view = raw.replace(b'\x00', b'') if _wide(raw) else raw
         try:
             triggered = _TRIGGER.search(view) is not None
-            if triggered or (_DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE):
-                if not _xml_named(name) and _inflates_too_much(info) and _begins_as_xml(raw):
-                    raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
             if triggered:
                 outcome = _edited_part(raw, deadline)
                 if outcome is not None:
