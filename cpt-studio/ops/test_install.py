@@ -396,18 +396,23 @@ class TemplateRenderingTests(unittest.TestCase):
         self.assertEqual(set_headers['Authorization'], [''])
         self.assertEqual(set_headers['Host'], ['$host'])
         self.assertEqual(len([words for words in proxy if words[0] == 'proxy_pass']), 1)  # one upstream for both hosts
+        # release 1 (A1): a minute, down from three - the slowest request measured takes under 300 ms - while gunicorn's
+        # own 120 s request timeout, which the drain after a switch is sized against, is unchanged
         for name in ('proxy_read_timeout', 'proxy_send_timeout'):
             value = next(words[1] for words in proxy if words[0] == name)
-            self.assertGreaterEqual(int(value.rstrip('s')), 150, name)
+            self.assertEqual(value, '60s', name)
         hidden = {words[1] for words in proxy if words[0] == 'proxy_hide_header'}
-        self.assertEqual(hidden, set(headers))
+        self.assertEqual(hidden, set(headers) | {'X-CPT-Actor'})  # A2: the session reference is logged, never shown
 
     def test_csrf_cookie_stays_readable_by_the_page_script(self):
         cookie_flags = [words[1:] for blocks, words in statements(rendered()['https'])
                         if words[0] == 'proxy_cookie_flags']
+        # release 1 (B6): the session cookie under both names - the previous revision's web serves behind this file
+        # until the switch - then the catch-all, last, since nginx applies the first match
         self.assertEqual(cookie_flags[0], ['cptstudio_session', 'secure', 'httponly', 'samesite=strict'])
-        self.assertEqual(cookie_flags[1], ['~', 'secure', 'samesite=strict'])  # catch-all: no httponly
-        self.assertEqual(len(cookie_flags), 2)
+        self.assertEqual(cookie_flags[1], ['__Host-cptstudio_session', 'secure', 'httponly', 'samesite=strict'])
+        self.assertEqual(cookie_flags[2], ['~', 'secure', 'samesite=strict'])  # catch-all: no httponly
+        self.assertEqual(len(cookie_flags), 3)
 
     def test_http_stage_never_proxies_the_application(self):
         conf = rendered()['http']
