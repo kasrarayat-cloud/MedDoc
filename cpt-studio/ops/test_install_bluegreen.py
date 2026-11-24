@@ -2862,8 +2862,10 @@ class D110SinceCountsEveryAppReceiptTests(TemporaryDirectoryTest):
                 # what the receipt records: the undo's close, and no 'replaced' (D95 counted only one that has one);
                 # design v2 (step 6b): and the install counts read before the switch (amendment 1, 9.5: printed into
                 # the transcript whatever the phase's outcome)
-                self.assertEqual(sorted(first['details']), ['hazards', 'install_counts', 'stages_closed',
-                                                            'states_put_back'])
+                # release 1 (6.2; refutation A-7): and how many times the migration ran, on a failure too
+                self.assertEqual(sorted(first['details']), ['hazards', 'install_counts', 'migrate_attempts',
+                                                            'stages_closed', 'states_put_back'])
+                self.assertEqual(first['details']['migrate_attempts'], 1)
                 self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, False)})
                 world.unhealthy.discard(WORKER)
                 world.checking = True

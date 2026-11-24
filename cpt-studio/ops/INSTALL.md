@@ -444,7 +444,9 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   remove. Release 1 (A13): before the parked pair is removed, each container's
   log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
   `logs_kept`: a file name, its sha256 and the lines kept and dropped, never a
-  line); a copy that fails removes nothing, and the receipt says so.
+  line); a copy that fails removes nothing, and the receipt says so. A static
+  file's name in a kept path is written `static-file` (its content hash and
+  extension kept): its name part could carry free text.
   An installer killed outright writes no receipt: rerun `app` (see **Recovery
   notes**).
   **A blue/green step that fails, or is interrupted (Ctrl-C), never stops the
@@ -738,9 +740,12 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   command as a RAM-only file under `/dev/shm` - 0600, in a 0700 folder with an
   unguessable name; a disposal or an export runs as the application's uid, so
   the root helper hands that folder to it for the act and wipes it afterwards -
-  and the receipt keeps its sha256 and size, never its text. Every output is
-  checked first: the setup code and the application's own secret values must
-  not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
+  and the receipt keeps its sha256 and size, never its text. It is read through
+  one descriptor that never follows a link, at most 4,096 bytes counted as read,
+  and a file whose contents differ from the size it reports (`/proc`, `/sys`) is
+  refused. Every output is checked first: the setup code, the application's own
+  secret values and the reason's text (whole, or any line of 12 characters or
+  more) must not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
   command's stdout (ids and counts) and its log. Nothing that is not on the list
   runs. An act's own time ends 300 s before the door's ceiling
   (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the

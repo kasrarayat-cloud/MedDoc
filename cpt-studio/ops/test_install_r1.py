@@ -1247,5 +1247,64 @@ class ReceiptBeforeJournalTests(TemporaryDirectoryTest):
         self.assertEqual((record['ok'], record['interrupted']), (False, 'SIGINT'))
 
 
+
+class MinorRepairTests(TemporaryDirectoryTest):
+    """Refutation, installer lens A-7: the five smaller findings."""
+
+    def test_a_command_that_echoes_its_reason_is_refused_and_nothing_kept(self):
+        reason = b'Ticket 4521.\nDr Smith asked to end access after the Jones complaint.\n'
+        # the whole reason, or one of its lines (12 characters or more), echoed back
+        for echoed in (b'revoked; reason: ' + reason, b'note: Dr Smith asked to end access after the Jones complaint.\n'):
+            with self.subTest(echoed=echoed):
+                world = ManageWorld(self.tmp, output=lambda command, said=echoed: said)
+                with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
+                    world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
+                              '--by', 'Ada Lovelace', reason=reason)
+                self.assertFalse([path for path in self.tmp.glob('*.log') if b'Jones' in path.read_bytes()])
+        self.assertEqual(install.reason_values(b'Short.\nA longer second line here\n'),
+                         ['Short.\nA longer second line here', 'A longer second line here'])
+
+    def test_a_reason_is_limited_by_what_is_read_and_a_proc_file_is_refused(self):
+        for path in ('/proc/cpuinfo', '/proc/self/status'):
+            with self.subTest(path=path), self.assertRaisesRegex(install.InstallError, 'not an ordinary file|regular'):
+                install.read_reason_file(path)
+        big = self.tmp / 'big.txt'
+        big.write_bytes(b'x' * (install.REASON_LIMIT + 1))
+        with self.assertRaisesRegex(install.InstallError, 'at most'):
+            install.read_reason_file(str(big))
+        exact = self.tmp / 'exact.txt'
+        exact.write_bytes(b'y' * install.REASON_LIMIT)
+        self.assertEqual(len(install.read_reason_file(str(exact))), install.REASON_LIMIT)
+        link = self.tmp / 'link.txt'
+        link.symlink_to(exact)
+        with self.assertRaisesRegex(install.InstallError, 'cannot be read'):
+            install.read_reason_file(str(link))
+        with self.assertRaisesRegex(install.InstallError, 'not an ordinary file|regular'):
+            install.read_ledger_file('/proc/cpuinfo')
+
+    def test_a_kept_lines_static_file_name_is_a_fixed_token(self):
+        line = ('2026-11-24T10:00:01.000000000Z [24/Nov/2026:10:00:01 +0000] 203.0.113.9 "GET /static/'
+                'jane-doe-dob-1961-colon-cancer-stage-iii.0123456789ab.css HTTP/1.1" 404 9 1ms - -')
+        kept, dropped = install.ids_only_lines('web', line.encode())
+        self.assertEqual(dropped, 0)
+        self.assertEqual(kept, [line.replace('jane-doe-dob-1961-colon-cancer-stage-iii', 'static-file')])
+        self.assertNotIn('jane', kept[0])
+        # the content hash and the extension stay; a route word or an id is untouched
+        plain = ('2026-11-24T10:00:02.000000000Z [24/Nov/2026:10:00:02 +0000] 203.0.113.9 "GET /api/encounters/'
+                 '0f8fad5b-d9cb-469f-a165-70867728950e HTTP/1.1" 200 9 1ms - -')
+        self.assertEqual(install.ids_only_lines('web', plain.encode())[0], [plain])
+
+    def test_a_foreign_converter_is_refused_before_the_volume_is_touched(self):
+        import test_install_converter as tc
+        foreign = tc.converter_container(**{'Config.Labels': {}})
+        test = tc.ConverterPhaseTests('test_a_fresh_converter_is_started_sealed_on_its_owned_volume')
+        test.tmp = self.tmp
+        volumes = []
+        with mock.patch.object(install, 'ensure_volume', side_effect=lambda *a: volumes.append(a) or 'created'):
+            details, error, calls, helper, kept = test.run_phase(foreign)
+        self.assertIn('not a CPT Studio converter container', str(error))
+        helper.assert_not_called()  # the volume root was not re-owned
+
+
 if __name__ == '__main__':
     unittest.main()

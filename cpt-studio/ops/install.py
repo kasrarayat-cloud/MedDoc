@@ -1146,6 +1146,13 @@ print(json.dumps(R, sort_keys=True))
 '''
 
 
+# A static file's name in a kept path (refutation, installer lens A-7): its name part is up to 64 characters of free text,
+# so a kept line carries a fixed token in its place - the 12-hex content hash and the extension stay.
+STATIC_NAME_RE = re.compile(r'(?<=/)[a-z0-9_-]{1,64}(?=\.[0-9a-f]{12}\.(?:css|js|mjs|svg|png|ico|woff2?|ttf|txt|map|json)'
+                            r'(?:\.gz|\.br)?(?:[/ "]|$))')
+STATIC_TOKEN = 'static-file'
+
+
 def ids_only_lines(role, *streams) -> tuple:
     """(kept, dropped) of a container's output (``streams``: `docker logs --timestamps` stdout and stderr): the lines in
     one of the role's KEPT_LOG_FORMATS, each with its timestamp, in time order; every other line - a traceback, a DETAIL
@@ -1157,7 +1164,8 @@ def ids_only_lines(role, *streams) -> tuple:
             stamp_match = DOCKER_TIMESTAMP_RE.match(line)
             body = line[stamp_match.end():] if stamp_match else None
             if body is not None and any(pattern.fullmatch(body) for pattern in patterns):
-                kept.append(((stamp_match.group(1), (stamp_match.group(2) or '').ljust(9, '0')), line))
+                kept.append(((stamp_match.group(1), (stamp_match.group(2) or '').ljust(9, '0')),
+                             STATIC_NAME_RE.sub(STATIC_TOKEN, line)))
             else:
                 dropped += 1
     return [line for _, line in sorted(kept, key=lambda item: item[0])], dropped
@@ -6574,6 +6582,9 @@ def phase_converter(ctx) -> dict:
     if not has_converter(ctx.revision):
         raise InstallError(f'Revision {ctx.revision[:12]} has no converter service ({", ".join(CONVERTER_FILES)}): '
                            'there is nothing to start.')
+    current = inspect('container', CONVERTER)
+    if current is not None and not owned(current, 'converter'):  # before the volume is touched (refutation A-7)
+        raise InstallError(f'{CONVERTER} exists but is not a CPT Studio converter container; nothing was changed.')
     details = {'volume': ensure_volume(CONVERT_VOLUME, 'convert')}
     root = details['volume_root'] = run_helper(
         H_CONVERT_VOLUME, {'uid': CONVERTER_UID, 'gid': APP_UID, 'mode': CONVERT_ROOT_MODE},
@@ -6840,7 +6851,7 @@ def phase_app(ctx) -> dict:
         result = _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts)
     except InstallError as error:  # the receipt of a failure after the read carries the counts too
         if error.details is None or isinstance(error.details, dict):
-            error.details = {**(error.details or {}), 'install_counts': counts}
+            error.details = {**(error.details or {}), 'install_counts': counts, 'migrate_attempts': attempts}
         raise
     return {**result, 'migrate_attempts': attempts}  # each attempt's output is in migrate_log
 
@@ -7774,19 +7785,52 @@ def env_values(env: bytes) -> list:
     return values
 
 
+def read_bounded_file(given: Path, limit, flag) -> bytes:
+    """A regular file's bytes, read through one descriptor that never follows a link, at most ``limit`` bytes counted
+    as read - never by the size a file reports - and refused when what it holds differs from that size, as /proc's and
+    /sys's files do (refutation, installer lens A-7: /proc/cpuinfo passed, reporting 0 bytes)."""
+    try:
+        fd = os.open(given, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        raise InstallError(f'{flag} cannot be read (a link, or no such file).') from None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise InstallError(f'{flag} must be a regular file of at most {limit} bytes.')
+        chunks, size = [], 0
+        while size <= limit:
+            chunk = os.read(fd, limit + 1 - size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+    finally:
+        os.close(fd)
+    data = b''.join(chunks)
+    if len(data) > limit:
+        raise InstallError(f'{flag} must be a regular file of at most {limit} bytes.')
+    if len(data) != info.st_size:
+        raise InstallError(f'{flag} holds {len(data)} bytes but says {info.st_size}: not an ordinary file (/proc, /sys); '
+                           'nothing was run.')
+    return data
+
+
+def reason_values(reason) -> list:
+    """What of a reason no command output may echo (refutation, installer lens A-7): its whole text and each of its lines
+    of 12 characters or more (a shorter line could match ordinary output by chance)."""
+    if not reason:
+        return []
+    text = reason.decode('utf-8', 'replace').strip()
+    return [text, *[line.strip() for line in text.splitlines() if len(line.strip()) >= 12]]
+
+
 def read_reason_file(path) -> bytes:
     """A ruled act's reason (A6): a regular file, never a link, of UTF-8 text, not empty, at most REASON_LIMIT bytes. Its
     bytes go to the command as a RAM-only file; the receipt keeps its sha256 and size, never its text."""
     given = Path(path or '')
     if not given.is_absolute():
         raise InstallError('--reason-file must be an absolute path.')
-    try:
-        info = os.lstat(given)
-    except OSError:
-        raise InstallError('--reason-file cannot be read.') from None
-    if not stat.S_ISREG(info.st_mode) or info.st_size > REASON_LIMIT:
-        raise InstallError(f'--reason-file must be a regular file of at most {REASON_LIMIT} bytes.')
-    data = given.read_bytes()
+    data = read_bounded_file(given, REASON_LIMIT, '--reason-file')
     try:
         text = data.decode('utf-8')
     except UnicodeDecodeError:
@@ -7906,7 +7950,7 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
                     f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
             result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                              timeout=act_timeout(600), what=f'manage {command}', by=by)
-        assert_no_secret([result.stdout, result.stderr], [code, *env_values(env)])
+        assert_no_secret([result.stdout, result.stderr], [code, *env_values(env), *reason_values(reason)])
         log = ctx.log(command.replace('_', '-'), result.stdout + result.stderr)
         if result.returncode:
             raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was kept.')
@@ -8269,13 +8313,9 @@ def read_ledger_file(path) -> bytes:
     """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8. Its MAC is
     the command's to check (keyed by the application's SECRET_KEY, so a restore keeps the same key)."""
     given = Path(path or '')
-    try:
-        info = os.lstat(given)
-    except OSError:
-        raise InstallError('--ledger-file cannot be read.') from None
-    if not given.is_absolute() or not stat.S_ISREG(info.st_mode) or info.st_size > LEDGER_LIMIT:
+    if not given.is_absolute():
         raise InstallError(f'--ledger-file must be an absolute path to a regular file of at most {LEDGER_LIMIT} bytes.')
-    data = given.read_bytes()
+    data = read_bounded_file(given, LEDGER_LIMIT, '--ledger-file')
     try:
         data.decode('utf-8')
     except UnicodeDecodeError:
@@ -8373,7 +8413,8 @@ def phase_manage(ctx) -> dict:
             record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
                                                                'name': export}, mounts=[EXPORTS_MOUNT]))
     output = result.stdout + result.stderr
-    assert_no_secret([output], env_values(env))  # the application's own secrets never reach a log or a receipt
+    # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7)
+    assert_no_secret([output], [*env_values(env), *reason_values(reason)])
     record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
                   stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
     if result.returncode:
