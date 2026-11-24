@@ -91,7 +91,8 @@ def second_factor(request):
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # the pending sign-in was dropped
             else:
                 if purpose == factor.SIGN_IN:
-                    factor.complete_sign_in(request, user, state)
+                    if not factor.complete_sign_in(request, user, state):
+                        return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
                 else:
                     factor.refresh(request)
                 return redirect(next_url)
@@ -99,7 +100,7 @@ def second_factor(request):
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'key', 'next': next_url, 'step_up': purpose == factor.STEP_UP, 'has_keys': keys,
         'no_keys': '' if keys else NO_KEYS, 'codes_left': factor.recovery_codes_left(user),
-        'attempts_left': factor.attempts_left(user)}, error)
+        'attempts_left': factor.attempts_left(user, state)}, error)
 
 
 def second_factor_options(request):
@@ -134,7 +135,8 @@ def recovery(request):
                 security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
                                        stage=purpose, codes_left=left)
                 if purpose == factor.SIGN_IN:
-                    factor.complete_sign_in(request, user, state)
+                    if not factor.complete_sign_in(request, user, state):
+                        return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
                 else:
                     factor.refresh(request)
                 return redirect(next_url)
@@ -143,7 +145,7 @@ def recovery(request):
                 return redirect(f'{SIGN_IN_PAGE}?reason=key')
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'recovery', 'next': next_url, 'codes_left': factor.recovery_codes_left(user),
-        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user)}, error)
+        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user, state)}, error)
 
 
 # --- setup with a code issued on the server ---------------------------------------------------------------------------

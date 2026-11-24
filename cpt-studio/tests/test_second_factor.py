@@ -620,6 +620,109 @@ class ChallengeRaceTests(TransactionTestCase):
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
+class PendingFailureTests(TestCase):
+    """A pending sign-in's failures are counted per its reference in the database, so no copy of its session outlives
+    them, and its attempt is settled once (refutation r2, finding 2; l2fa/test_race_failures.py)."""
+
+    def setUp(self):
+        self.operator, self.key = enrolled_operator()
+
+    def test_a_copy_of_the_session_cannot_keep_a_sign_in_whose_failures_reached_the_limit(self):
+        with Clock(MOMENT + timedelta(seconds=250)) as clock:  # 250 s into a 300-second window of the account's count
+            client = admin_client()
+            password_step(client, self.operator)
+            twin = twin_of(client)  # the copy another request saved last, with no failure in it
+            for _ in range(settings.SECOND_FACTOR_ATTEMPTS):
+                answer = key_step(client, self.key, origin='https://x.example')
+            self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?reason=key'))
+            clock.advance(60)  # the account's next window; the pending sign-in is 60 s old
+            page = twin.get('/login/second-factor')
+            self.assertEqual(page.status_code, 302, 'the copy still waits for a key')
+            self.assertEqual(page['Location'], '/login/')
+            self.assertNotIn(second_factor.PENDING, twin.session)
+            self.assertEqual(twin.post('/login/second-factor/options').status_code, 403)
+            self.assertIsNone(signed_in_as(twin))
+            self.assertEqual(models.LoginAttempt.objects.get().outcome, 'second_factor_failed')
+
+    def test_a_sign_in_whose_attempt_was_settled_meanwhile_never_completes(self):
+        client = admin_client()
+        password_step(client, self.operator)
+        ref = client.session[second_factor.PENDING]['ref']
+        # what another copy of the session did with the failure that reached the limit
+        self.assertEqual(throttle.settle_second_factor(RequestFactory().post('/'), ref, signed_in=False), 1)
+        answer = key_step(client, self.key)
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?reason=key'))
+        self.assertIsNone(signed_in_as(client))
+        self.assertNotIn(second_factor.PENDING, client.session)
+        self.assertEqual(models.LoginAttempt.objects.get().outcome, 'second_factor_failed')
+        # a recovery code cannot complete it either
+        codes = second_factor.new_recovery_codes(self.operator)
+        again = admin_client()
+        password_step(again, self.operator)
+        ref = again.session[second_factor.PENDING]['ref']
+        throttle.settle_second_factor(RequestFactory().post('/'), ref, signed_in=False)
+        used = again.post('/login/recovery', {'code': codes[0]})
+        self.assertEqual((used.status_code, used['Location']), (302, '/login/?reason=key'))
+        self.assertIsNone(signed_in_as(again))
+
+    def test_the_page_says_the_attempts_this_sign_in_has_left(self):
+        client = admin_client()
+        password_step(client, self.operator)
+        for _ in range(2):
+            key_step(client, self.key, origin='https://x.example')
+        models.RateWindow.objects.filter(scope=second_factor.FAILED_SCOPE).delete()  # the account's window has passed
+        state = client.session[second_factor.PENDING]
+        self.assertEqual(second_factor.attempts_left(self.operator), settings.SECOND_FACTOR_ATTEMPTS)
+        self.assertEqual(second_factor.attempts_left(self.operator, state), settings.SECOND_FACTOR_ATTEMPTS - 2)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class PendingFailureRaceTests(TransactionTestCase):
+    """Eight wrong answers sent at once from one pending session, over eight connections: every one is counted, the
+    sign-in ends in every copy of the session, and one SecurityEvent says so (refutation r2, finding 2)."""
+
+    def test_failures_sent_at_once_end_the_sign_in_in_every_copy_of_the_session(self):
+        operator, key = enrolled_operator()
+        first = admin_client()
+        password_step(first, operator)
+        wrong = json.dumps(key.assertion(options_of(first), origin='https://x.example'))
+        cookie = first.cookies[settings.SESSION_COOKIE_NAME].value
+        clients = [first] + [Client(HTTP_HOST=ADMIN) for _ in range(7)]
+        for client in clients[1:]:
+            client.cookies[settings.SESSION_COOKIE_NAME] = cookie
+        barrier = threading.Barrier(len(clients), timeout=30)
+        original = second_factor._take_challenge
+
+        def take_once_all_have_loaded(*args):
+            barrier.wait()
+            return original(*args)
+
+        statuses = []
+
+        def post(client):
+            try:
+                statuses.append(client.post('/login/second-factor', {'credential': wrong}).status_code)
+            finally:
+                connection.close()
+
+        with mock.patch.object(second_factor, '_take_challenge', side_effect=take_once_all_have_loaded):
+            threads = [threading.Thread(target=post, args=(client,)) for client in clients]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(60)
+        self.assertEqual(len(statuses), len(clients))
+        counted = models.RateWindow.objects.filter(scope=second_factor.PENDING_FAILED_SCOPE).values_list('count', flat=True)
+        self.assertEqual(sum(counted), len(clients))
+        page = first.get('/login/second-factor')
+        self.assertEqual(page.status_code, 302, 'a copy of the session still waits for a key')
+        self.assertEqual(page['Location'], '/login/')
+        self.assertEqual(first.post('/login/second-factor/options').status_code, 403)
+        self.assertEqual(models.LoginAttempt.objects.get().outcome, 'second_factor_failed')
+        self.assertEqual(models.SecurityEvent.objects.filter(event='second_factor.failed').count(), 1)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
 class EnrolmentTests(TestCase):
     """Setup with a code issued on the server (B2, item 3): the code, a new password, then the first key."""
 

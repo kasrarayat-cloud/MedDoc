@@ -24,15 +24,19 @@ every credential row records its relying-party id)
         PENDING = {the account, when, the sign-in's reference, where to go} for SECOND_FACTOR_PENDING_SECONDS. login()
         is not called: a password alone opens nothing.
     authentication_options / verify_key  a signed challenge for the account's own keys: the challenge lives in the
-        session (CHALLENGE) and is used once - taken out before anything is checked, so a replayed response meets no
-        challenge; verify_authentication_response checks the challenge, the relying-party id, the origin, the stored
-        public key and the signature counter, and a response made inside another origin's frame (crossOrigin) is
+        session (CHALLENGE) and is used once - taken out of the session and used up in the database (a OneTimeToken of
+        CHALLENGE_PURPOSE, bound to the account, the purpose and the flow, used with one conditional UPDATE) before
+        anything is checked, so a replayed response, or the same response sent from two copies of the session at once,
+        meets no challenge; verify_authentication_response checks the challenge, the relying-party id, the origin, the
+        stored public key and the signature counter, and a response made inside another origin's frame (crossOrigin) is
         refused.
-    complete_sign_in(request, user, state)  only then login() runs (a new session key; studio.sessions writes the admin
-        door, the times and the reference) and the session gets SESSION_SECOND_FACTOR_AT; the attempt becomes signed_in.
+    complete_sign_in(request, user, state)  only then, and only when its attempt is still second_factor_pending and
+        becomes signed_in in one UPDATE, login() runs (a new session key; studio.sessions writes the admin door, the
+        times and the reference) and the session gets SESSION_SECOND_FACTOR_AT.
     note_failure  a wrong key or recovery code counts per account in RateWindow (SECOND_FACTOR_ATTEMPTS per
-        SECOND_FACTOR_PENDING_SECONDS); at the limit a pending sign-in is dropped, recorded as second_factor_failed, with a
-        SecurityEvent.
+        SECOND_FACTOR_PENDING_SECONDS) and per pending sign-in (its reference, from its start); at either limit a pending
+        sign-in is dropped - in every copy of the session, since pending() reads its count - and recorded as
+        second_factor_failed, with one SecurityEvent.
     use_recovery_code  a recovery code stands in for a key once: stored as Django's make_password hash.
     issue_setup_code / setup_token  setup needs a single-use code issued on the server (OneTimeToken OPERATOR_SETUP, valid
         ENROLMENT_CODE_SECONDS, stored as its sha256 only; issuing one revokes the account's earlier unused ones).
@@ -51,7 +55,7 @@ import json
 import math
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from urllib.parse import urlencode, urlsplit
 
 from django.conf import settings
@@ -168,6 +172,7 @@ CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 CODE_GROUP = 5
 SETUP_CODE_GROUPS, RECOVERY_CODE_GROUPS = 5, 3  # about 124 and 74 bits
 FAILED_SCOPE = 'second_factor.failed'  # wrong keys and recovery codes, per account
+PENDING_FAILED_SCOPE = 'second_factor.failed_sign_in'  # the same, per pending sign-in (its reference)
 SETUP_CODE_SCOPE = 'second_factor.setup_code'  # wrong setup codes, per address
 LABEL_CHARS = 60  # SecondFactorCredential.label
 TRANSPORTS = frozenset(item.value for item in AuthenticatorTransport)
@@ -511,19 +516,28 @@ def begin(request, user, sign_in_ref, next_url):
     """A checked password at the admin door: the anonymous session waits for ``user``'s key (see the module)."""
     request.session.pop(CHALLENGE, None)
     request.session[PENDING] = {'user': str(user.pk), 'at': request_meta.epoch_seconds(), 'ref': str(sign_in_ref),
-                                'next': safe_next(next_url), 'failures': 0}
+                                'next': safe_next(next_url)}
     request.session[request_meta.SESSION_SIGN_IN_REF] = str(sign_in_ref)  # the second step's records carry it
 
 
 def pending(request):
     """(the account, the state) of the session's checked password waiting for its key, or (None, None): none, one older
-    than SECOND_FACTOR_PENDING_SECONDS, or one whose account is no longer an active human operator."""
+    than SECOND_FACTOR_PENDING_SECONDS, one whose own failures reached SECOND_FACTOR_ATTEMPTS (counted in the database,
+    so every copy of the session sees them: refutation r2, finding 2), or one whose account is no longer an active human
+    operator."""
     state = request.session.get(PENDING)
-    if not isinstance(state, dict):
+    if not isinstance(state, dict) or not isinstance(state.get('ref'), str):
         return None, None
     at = state.get('at')
     age = request_meta.epoch_seconds() - at if isinstance(at, int) and not isinstance(at, bool) else -1
     if not 0 <= age <= settings.SECOND_FACTOR_PENDING_SECONDS:
+        drop_pending(request)
+        return None, None
+    try:
+        dead = pending_failures(state) >= settings.SECOND_FACTOR_ATTEMPTS
+    except ValueError:  # a reference that is no id: not a pending sign-in of this release
+        dead = True
+    if dead:
         drop_pending(request)
         return None, None
     try:
@@ -542,8 +556,20 @@ def drop_pending(request):
     request.session.pop(CHALLENGE, None)
 
 
-def attempts_left(user) -> int:
+def pending_failures(state) -> int:
+    """The failures of one pending sign-in, from its start: per its reference, in RateWindow (PENDING_FAILED_SCOPE), so
+    two requests at the same moment are both counted and every copy of the session reads the same number."""
+    window = settings.SECOND_FACTOR_PENDING_SECONDS
+    started = datetime.fromtimestamp(state['at'], tz=dt_timezone.utc)
+    return rate.count(PENDING_FAILED_SCOPE, state['ref'], since=rate.window_start(window, started))
+
+
+def attempts_left(user, state=None) -> int:
+    """The second-factor attempts ``user`` has left: per account in this window, and for a pending sign-in (``state``)
+    its own too, whichever is fewer."""
     used = rate.count(FAILED_SCOPE, user.pk, since=rate.window_start(settings.SECOND_FACTOR_PENDING_SECONDS))
+    if state is not None:
+        used = max(used, pending_failures(state))
     return max(0, settings.SECOND_FACTOR_ATTEMPTS - used)
 
 
@@ -557,17 +583,19 @@ def too_many(user) -> str:
 
 
 def note_failure(request, user, state=None, *, kind='key') -> bool:
-    """A wrong key or recovery code of ``user`` (``state``: a pending sign-in's, else a step-up's): counted; at the limit a
-    pending sign-in is dropped and recorded as second_factor_failed, with one SecurityEvent. Whether it was dropped."""
+    """A wrong key or recovery code of ``user`` (``state``: a pending sign-in's, else a step-up's): counted per account,
+    and for a pending sign-in per its reference too - each an atomic hit, the limit read after it. At the limit a pending
+    sign-in is dropped and its attempt becomes second_factor_failed, with one SecurityEvent (written by the one request
+    whose update settled it). Whether it was dropped."""
     count = rate.hit(FAILED_SCOPE, user.pk, window_seconds=settings.SECOND_FACTOR_PENDING_SECONDS)
     if state is not None:
-        state['failures'] = int(state.get('failures', 0)) + 1
-        request.session[PENDING] = state
-        if state['failures'] >= settings.SECOND_FACTOR_ATTEMPTS or count >= settings.SECOND_FACTOR_ATTEMPTS:
+        rate.hit(PENDING_FAILED_SCOPE, state['ref'], window_seconds=settings.SECOND_FACTOR_PENDING_SECONDS)
+        failures = pending_failures(state)
+        if failures >= settings.SECOND_FACTOR_ATTEMPTS or count >= settings.SECOND_FACTOR_ATTEMPTS:
             drop_pending(request)
-            throttle.settle_second_factor(request, state.get('ref'), signed_in=False)
-            security_events.record('second_factor.failed', subject=user, request=request, stage=SIGN_IN, kind=kind,
-                                   failures=state['failures'], attempt_ref=state.get('ref'))
+            if throttle.settle_second_factor(request, state['ref'], signed_in=False):
+                security_events.record('second_factor.failed', subject=user, request=request, stage=SIGN_IN, kind=kind,
+                                       failures=failures, attempt_ref=state['ref'])
             return True
         return False
     if count == settings.SECOND_FACTOR_ATTEMPTS:
@@ -576,15 +604,20 @@ def note_failure(request, user, state=None, *, kind='key') -> bool:
     return False
 
 
-def complete_sign_in(request, user, state):
-    """The admin door's sign-in, after a verified key or recovery code: login() (a new session key; studio.sessions
-    writes the admin door, the times and the reference), then the second factor's time; the attempt becomes
-    signed_in."""
+def complete_sign_in(request, user, state) -> bool:
+    """The admin door's sign-in, after a verified key or recovery code. Its attempt becomes signed_in first, in one
+    UPDATE that needs it still second_factor_pending: an attempt another request already settled - its failures
+    reached the limit in another copy of the session - never signs in, and the sign-in is dropped (refutation r2,
+    finding 2). Then login() (a new session key; studio.sessions writes the admin door, the times and the reference)
+    and the second factor's time. Whether it signed in."""
+    if not throttle.settle_second_factor(request, state['ref'], signed_in=True):
+        drop_pending(request)
+        return False
     sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=state['ref'])
     drop_pending(request)
     login(request, user)
     request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
-    throttle.settle_second_factor(request, state['ref'], signed_in=True)
+    return True
 
 
 def refresh(request):
