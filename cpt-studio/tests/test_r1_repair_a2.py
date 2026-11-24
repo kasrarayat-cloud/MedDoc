@@ -8,6 +8,11 @@ phi-0         GET /api/members ran one LoginAttempt query per membership (about 
               are now one statement, one index lookup a name, whatever the membership count and the rows a name holds.
 phi-1         the admin door's key step read and settled its LoginAttempt by sign_in_ref, which no index covered: a
               sequential scan of the whole table. A partial index over the pending rows now serves both statements.
+regression-1  a known address (throttle check e) was read from the name's newest 1,000 successful sign-ins only, so an
+              office older than those was no longer known and others' failures delayed the doctor there. Each row now
+              carries its client's key, so any sign-in of the name from that IPv4 address or IPv6 /64 within
+              KNOWN_DEVICE_DAYS is found by one index lookup; an older revision's rows, which carry none, are read by
+              their address.
 
 Synthetic accounts, practices, titles and rows only."""
 from __future__ import annotations
@@ -22,11 +27,11 @@ from unittest import mock
 from django.conf import settings
 from django.db import connection
 from django.db.models import Max
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import customer, models, read_audit, second_factor
+from studio import customer, models, read_audit, request_meta, second_factor, throttle
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -268,3 +273,198 @@ class PendingSettleIndexTests(TestCase):
                          models.LoginAttempt.SECOND_FACTOR_FAILED)
         self.assertEqual([sql.split()[0] for sql in statements], ['SELECT', 'UPDATE'])
         self.assert_on_the_pending_index(statements)
+
+
+# --- regression-1: a known address is any sign-in of the name from that client key, however many the name made ------------
+
+PASSWORD = 'synthetic-pass-123!'  # tests.support.coding.user's
+OFFICE, HOME, THIEF, NEVER_USED = '203.0.113.21', '198.51.100.22', '192.0.2.23', '203.0.113.200'
+CPT_HOST = 'cpt.quillmd.com'
+
+
+def keyed_attempt(username, client, **fields):
+    """A successful sign-in row as release 1 writes it (LoginAttempt.save writes its client's key; bulk rows name it)."""
+    return models.LoginAttempt(username=username, client=client, client_key=models.LoginAttempt.key_of(client),
+                               succeeded=True, door='cpt', outcome=models.LoginAttempt.SIGNED_IN, **fields)
+
+
+def older_attempt(username, client):
+    """A successful sign-in row as the revision before release 1 wrote it: succeeded alone, no key, no door."""
+    return models.LoginAttempt(username=username, client=client, succeeded=True)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class KnownAddressTests(TestCase):
+    """The finding's input: the doctor signed in from the office 89 (or 30) days ago - inside KNOWN_DEVICE_DAYS - and
+    1,000 times since from home; someone elsewhere arms the username delay with five wrong passwords; the doctor, back at
+    the office in a browser without the device cookie, types the right password."""
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.doctor = f.member(self.ws, role=models.Membership.REVIEWER)
+        self.name = self.doctor.username
+
+    def seed(self, office, office_days, home_count, *, made=keyed_attempt, home=HOME):
+        """One sign-in from ``office`` ``office_days`` ago, then ``home_count`` from ``home``, spread evenly from an hour
+        after it to an hour ago (each newer than the office's), every row made by ``made``."""
+        models.LoginAttempt.objects.all().delete()
+        models.RateWindow.objects.all().delete()
+        now = timezone.now()
+        office_at = now - timedelta(days=office_days)
+        (row,) = models.LoginAttempt.objects.bulk_create([made(self.name, office)])
+        models.LoginAttempt.objects.filter(pk=row.pk).update(created_at=office_at)
+        models.LoginAttempt.objects.bulk_create([made(self.name, home) for _ in range(home_count)], batch_size=2000)
+        first, last = office_at + timedelta(hours=1), now - timedelta(hours=1)
+        step = (last - first) / max(1, home_count - 1)
+        with connection.cursor() as cursor:
+            cursor.execute('UPDATE studio_loginattempt AS t SET created_at = %s + (r.n - 1) * %s FROM '
+                           '(SELECT id, row_number() OVER (ORDER BY id) AS n FROM studio_loginattempt WHERE id <> %s) '
+                           'AS r WHERE t.id = r.id', [first, step, row.pk])
+        newer = models.LoginAttempt.objects.filter(username=self.name, succeeded=True, created_at__gt=office_at)
+        self.assertEqual(newer.count(), home_count)  # every home sign-in is newer than the office's
+
+    def attempt(self, address, password=PASSWORD):
+        return Client(HTTP_HOST=CPT_HOST).post('/login/', {'username': self.name, 'password': password},
+                                               REMOTE_ADDR=address)
+
+    def arm(self):
+        for _ in range(settings.SIGNIN_USER_DELAY_AFTER):
+            self.assertEqual(self.attempt(THIEF, 'not the password at all').status_code, 400)
+
+    def assert_signs_in(self, address):
+        answer = self.attempt(address)
+        self.assertEqual((answer.status_code, answer.get('Location')), (302, '/'), answer.content[:200])
+
+    def assert_delayed(self, address):
+        answer = self.attempt(address)
+        self.assertEqual(answer.status_code, 400)
+        self.assertIn('Too many attempts. Wait', answer.content.decode())
+
+    def test_an_office_older_than_the_names_newest_thousand_sign_ins_is_known(self):
+        for made in (keyed_attempt, older_attempt):
+            for office_days, home_count in ((89, 1000), (30, 1000), (30, 1500)):
+                with self.subTest(made=made.__name__, office_days=office_days, home_count=home_count):
+                    self.seed(OFFICE, office_days, home_count, made=made)
+                    self.arm()
+                    self.assert_signs_in(OFFICE)
+                    self.assert_delayed(NEVER_USED)  # the control: the delay really is armed
+
+    def test_another_address_of_the_offices_ipv6_slash_64_is_known_and_another_slash_64_is_not(self):
+        office, sibling = '2001:db8:1:2::5', '2001:db8:1:2:abcd:ef01:2345:6789'  # one /64, two addresses
+        for made, home_count in ((keyed_attempt, 1500), (older_attempt, 999)):
+            with self.subTest(made=made.__name__, home_count=home_count):
+                self.seed(office, 30, home_count, made=made, home='2001:db8:77:1::9')
+                self.arm()
+                self.assert_signs_in(sibling)
+                self.assert_delayed('2001:db8:1:3::5')  # the next /64
+                self.assert_delayed('2001:db8:1::5')  # 2001:db8:1:0::/64, whose text shares the office's start
+        # the limit kept for rows written before release 1 (no key): another address of an IPv6 /64 is found among the
+        # name's newest OLDER_SIGN_INS_READ of them, as on the revision before this repair; the same address always
+        self.seed(office, 30, models.LoginAttempt.OLDER_SIGN_INS_READ, made=older_attempt, home='2001:db8:77:1::9')
+        self.arm()
+        self.assert_delayed(sibling)
+        self.assert_signs_in(office)
+
+    def test_an_ipv4_mapped_address_is_its_ipv4_address_both_ways(self):
+        for made in (keyed_attempt, older_attempt):
+            for stored, requested in (('::ffff:203.0.113.21', OFFICE), (OFFICE, '::ffff:203.0.113.21')):
+                with self.subTest(made=made.__name__, stored=stored):
+                    self.seed(stored, 30, 1000, made=made)
+                    self.arm()
+                    self.assert_signs_in(requested)
+
+    def test_what_a_known_address_still_never_is(self):
+        self.seed(OFFICE, settings.KNOWN_DEVICE_DAYS + 1, 10)  # too long ago
+        models.LoginAttempt.objects.bulk_create([
+            models.LoginAttempt(username=self.name, client='192.0.2.83', client_key='192.0.2.83', succeeded=False,
+                                door='cpt', outcome=models.LoginAttempt.WRONG_PASSWORD),  # a failure is no sign-in
+            keyed_attempt('somebody-else', '192.0.2.84'),  # another name's sign-in
+            models.LoginAttempt(username=self.name, client='192.0.2.85', client_key='192.0.2.85', succeeded=False,
+                                door='admin', outcome=models.LoginAttempt.SECOND_FACTOR_PENDING)])  # never settled
+        self.arm()
+        for address in (OFFICE, '192.0.2.83', '192.0.2.84', '192.0.2.85'):
+            with self.subTest(address=address):
+                self.assert_delayed(address)
+        self.assert_signs_in(HOME)
+
+    def test_every_attempt_the_doors_write_carries_its_client_key(self):
+        cases = (('2001:db8:5:6::7', PASSWORD), ('192.0.2.50', 'not the password'), ('::ffff:192.0.2.51', PASSWORD))
+        for address, password in cases:
+            self.attempt(address, password)
+        Client(HTTP_HOST=CPT_HOST).post('/login/', {'username': 'nobody-at-all', 'password': 'x'},
+                                        REMOTE_ADDR='not-an-address')
+        operator, key = enrolled_operator('a2-key-operator')
+        client = admin_client()
+        self.assertEqual(client.post('/login/', {'username': operator.username, 'password': PASSWORD},
+                                     REMOTE_ADDR='2001:db8:9:9::1')['Location'], '/login/second-factor')
+        credential = json.dumps(key.assertion(options_of(client)))
+        self.assertEqual(client.post('/login/second-factor', {'credential': credential}).status_code, 302)
+        rows = list(models.LoginAttempt.objects.order_by('pk'))
+        self.assertEqual([row.outcome for row in rows],
+                         ['signed_in', 'wrong_password', 'signed_in', 'unknown_account', 'signed_in'])
+        for row in rows:
+            with self.subTest(client=row.client):
+                self.assertIsNotNone(row.client_key)
+                self.assertEqual(row.client_key, throttle.key_of_address(row.client))
+        self.assertEqual([row.client_key for row in rows[:3]], ['2001:db8:5:6::/64', '192.0.2.50', '192.0.2.51'])
+        self.assertEqual(len(rows[3].client_key), 64)  # no address: its keyed hash, never the text
+        for text in ('192.0.2.1', '2001:DB8:0:0:1::1', '::ffff:c000:201', '::1', '', 'not-an-address', '1.2.3.04'):
+            with self.subTest(text=text):
+                self.assertEqual(models.LoginAttempt.key_of(text), throttle.key_of_address(text))
+
+    def door(self, address):
+        return throttle.Door(RequestFactory().post('/login/', REMOTE_ADDR=address), request_meta.CPT, self.name)
+
+    def reads(self, address, known):
+        """Door.known_address() for ``address`` answers ``known``; [(the index its scan read, the rows it read)] for each
+        statement it ran, EXPLAIN (ANALYZE)d."""
+        with CaptureQueriesContext(connection) as seen:
+            self.assertEqual(self.door(address).known_address(), known)
+        found = []
+        for item in seen.captured_queries:
+            plan = explain(item['sql'], analyze=True)
+            scans = [line for line in plan.splitlines() if re.search(r'Scan.* on studio_loginattempt', line)]
+            self.assertEqual(len(scans), 1, plan)
+            index = re.search(r'using (\w+)', scans[0])
+            found.append((index.group(1) if index else scans[0].split()[1],
+                          int(re.search(r'actual time=\S+ rows=(\d+) loops=1\)', scans[0]).group(1))))
+        return found
+
+    def test_the_known_address_read_is_one_index_row_however_many_times_the_name_signed_in(self):
+        rows = [keyed_attempt(self.name, f'198.51.100.{index % 200}') for index in range(20_000)]
+        rows += [older_attempt(f'older-{index % 40}', '192.0.2.60') for index in range(2_000)]  # others' older rows
+        rows += [older_attempt(self.name, OFFICE), older_attempt(self.name, '2001:db8:1:2::5')]  # two of the doctor's
+        models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_loginattempt')
+        key, by_address, by_time = 'studio_login_name_key_ok', 'studio_login_name_keyless', 'studio_login_keyless_time'
+        cases = (  # (address, known, [(index, rows read)] of each statement)
+            ('198.51.100.7', True, [(key, 1)]),  # a row release 1 wrote
+            (OFFICE, True, [(key, 0), (by_address, 1)]),  # an older revision's row, by its address
+            ('::ffff:203.0.113.21', True, [(key, 0), (by_address, 1)]),  # the same, IPv4-mapped
+            ('2001:db8:1:2::77', True, [(key, 0), (by_address, 0), (by_time, 2)]),  # an older row of the /64
+            (NEVER_USED, False, [(key, 0), (by_address, 0)]),  # IPv4: every spelling read, nothing more
+            ('2001:db8:9:9::1', False, [(key, 0), (by_address, 0), (by_time, 2)]))
+        for address, known, expected in cases:
+            with self.subTest(address=address):
+                self.assertEqual(self.reads(address, known), expected)
+
+    def test_an_older_revisions_rows_are_read_within_their_bound_however_many(self):
+        # avail-5's shape, written as an older revision writes rows (no key): 20,000 of the doctor's own sign-ins from
+        # one IPv6 /64, and the office (IPv4, and another IPv6 /64) signed in from before all of them
+        rows = [older_attempt(self.name, OFFICE), older_attempt(self.name, '2001:db8:1:2::5')]
+        rows += [older_attempt(self.name, f'2001:db8:77:1::{index % 500 + 1:x}') for index in range(20_000)]
+        models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_loginattempt')
+        bound = models.LoginAttempt.OLDER_SIGN_INS_READ
+        self.assertEqual(self.reads(OFFICE, True)[1:], [('studio_login_name_keyless', 1)])  # IPv4: exact, any age
+        self.assertEqual(self.reads(NEVER_USED, False)[1:], [('studio_login_name_keyless', 0)])
+        self.assertEqual(self.reads('2001:db8:77:1::abc', True)[1:],
+                         [('studio_login_name_keyless', 0), ('studio_login_keyless_time', bound)])
+        # an IPv6 /64 the doctor's newest older rows do not hold: never more than the bound read - the limit this read
+        # had before, kept for rows written before release 1, which release 1 never adds to (refutation round 2)
+        self.assertEqual(self.reads('2001:db8:1:2::9', False)[1:],
+                         [('studio_login_name_keyless', 0), ('studio_login_keyless_time', bound)])
+        models.LoginAttempt.objects.bulk_create([keyed_attempt(self.name, '2001:db8:1:2::abcd')])  # one sign-in now
+        self.assertEqual(self.reads('2001:db8:1:2::9', True), [('studio_login_name_key_ok', 1)])
