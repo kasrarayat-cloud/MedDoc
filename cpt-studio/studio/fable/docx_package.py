@@ -14,12 +14,15 @@ before it waits on it, so the parent's finally kills that group as well as the c
 - Only a Word package is converted (an OpenDocument file or any other zip named .docx is refused, since LibreOffice
   opens what it finds, whatever the name).
 - Its size is checked from the zip directory before any part is read (E1): at most MAX_PART_BYTES a part and
-  MAX_PACKAGE_BYTES in all once inflated, and no XML part (.xml or .rels, or any part read as XML later) over
-  INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION times its stored size - a picture is held to the size
-  limits only, since a clinical image (an ECG strip kept as a metafile) can deflate 133-fold; each part is then read
-  through a bounded reader that inflates at most its declared size plus one byte, so a size header that lies is
-  refused, never believed. Running out of PACKAGE_SECONDS is not a refusal of the file: the conversion is busy, and a
-  member may retry (ConversionBusy).
+  MAX_PACKAGE_BYTES in all once inflated; each part is then read through a bounded reader that inflates at most its
+  declared size plus one byte, so a size header that lies is refused, never believed. No part is held to a ratio of
+  its inflated to its stored size, an XML part no more than a picture: report generators write uniform table XML that
+  deflates 127 to 158 times (a vital-signs flowsheet, a medication grid) and a clinical image can deflate 133 times (an
+  ECG strip kept as a metafile), and the code before release 1 converts both. What a part may cost is bounded by these
+  absolute limits, not by how well it compressed - a crafted part with varied bytes reaches them at a ratio of 2 - and
+  by the bounded child's limits (CONVERT_MEMORY_BYTES of address space, CONVERT_SECONDS) and its container's.
+  Running out of PACKAGE_SECONDS is not a refusal of the file: the conversion is busy, and a member may retry
+  (ConversionBusy).
 - Every relationship with TargetMode External is dropped - a linked picture, template, frame or object LibreOffice would
   fetch from a URL or a local path while it converts, into the PDF that is sent and shown - with any part only they
   referenced.
@@ -98,9 +101,7 @@ WORD_MAIN_TYPES = ('application/vnd.openxmlformats-officedocument.wordprocessing
 OPENDOCUMENT_PARTS = ('mimetype', 'meta-inf/manifest.xml')
 MAX_PACKAGE_PARTS = 10_000
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024  # what the parts may hold once inflated, in all (E1; it was 512 MiB)
-MAX_PART_BYTES = 32 * 1024 * 1024  # and one part
-MAX_INFLATION = 100  # a part may inflate to at most this many times its stored size...
-INFLATION_CHECKED_FROM = 1024 * 1024  # ...once it inflates past this: a smaller part costs nothing whatever its ratio
+MAX_PART_BYTES = 32 * 1024 * 1024  # and one part (no ratio of inflated to stored size: the module's docstring)
 URI_SCHEME = re.compile(r'[A-Za-z][A-Za-z0-9+.-]*:')
 
 # --- what E2 removes --------------------------------------------------------------------------------------------------
@@ -285,26 +286,14 @@ def _check_time(deadline):
 
 
 def _check_sizes(infos):
-    """E1, from the zip directory alone, before any part is read: no part over MAX_PART_BYTES once inflated, no more
-    than MAX_PACKAGE_BYTES in all, and no XML part past INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION
-    times its stored size."""
+    """E1, from the zip directory alone, before any part is read: no part over MAX_PART_BYTES once inflated, and no
+    more than MAX_PACKAGE_BYTES in all. A part's ratio of inflated to stored size is not held against it (the module's
+    docstring says why)."""
     for info in infos:
         if info.file_size > MAX_PART_BYTES:
             raise PackageRefused('a part is too large once inflated')
-        if _xml_named(info.filename) and _inflates_too_much(info):
-            raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
     if sum(info.file_size for info in infos) > MAX_PACKAGE_BYTES:
         raise PackageRefused('its parts are too large once inflated')
-
-
-def _xml_named(name) -> bool:
-    """Whether the part ``name`` is read as XML by its name (an .xml or .rels part)."""
-    return name.casefold().endswith(('.xml', '.rels'))
-
-
-def _inflates_too_much(info) -> bool:
-    """Whether a part past INFLATION_CHECKED_FROM inflates more than MAX_INFLATION times its stored size."""
-    return info.file_size > INFLATION_CHECKED_FROM and info.file_size > MAX_INFLATION * info.compress_size
 
 
 def _read_part(archive, info) -> bytes:
@@ -972,7 +961,7 @@ def _refuse_any_dtd(raw):
 def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
-    SVG picture's excepted. A part read as XML here is held to E1's inflation ratio like an .xml part. The relationships
+    SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The relationships
     only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only they named added
     to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is still sent})."""
     removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
@@ -985,9 +974,6 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
         view = raw.replace(b'\x00', b'') if _wide(raw) else raw
         try:
             triggered = _TRIGGER.search(view) is not None
-            if triggered or (_DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE):
-                if not _xml_named(name) and _inflates_too_much(info) and _begins_as_xml(raw):
-                    raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
             if triggered:
                 outcome = _edited_part(raw, deadline)
                 if outcome is not None:

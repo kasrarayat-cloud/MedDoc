@@ -617,14 +617,14 @@ class PackageLimitTests(SimpleTestCase):
         with mock.patch.object(docx_package, 'MAX_PACKAGE_BYTES', 100):
             self.refused(PLAIN_PACKAGE, 'its parts are too large once inflated')
 
-    def test_an_xml_part_that_inflates_more_than_a_hundred_times_its_size_is_refused(self):
+    def test_an_xml_part_is_held_to_the_size_limits_not_to_a_ratio(self):
+        # repair round 1, C1 (coding-0): the 100-fold rule refused generated Word tables the base converts, and bounded
+        # nothing the size limits do not (tests/test_r1_repair_c.py); this part was refused by it before
         data = bomb(2 * MIB, 'customXml/item1.xml')  # 2 MiB of zeros deflates to about 2 KiB
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             info = archive.getinfo('customXml/item1.xml')
         self.assertGreater(info.file_size, 100 * info.compress_size)
-        with mock.patch.object(docx_package, '_read_part', side_effect=AssertionError('a part was read')):
-            self.refused(data, 'inflates more than 100 times its stored size')
-        # a part too small to cost anything is not held to the ratio
+        self.assertEqual(docx_package.safe_package(data), legacy_safe_package(data))
         small = bomb(512 * 1024, 'customXml/item1.xml')
         self.assertEqual(parts_of(docx_package.safe_package(small))['customXml/item1.xml'], b'\x00' * (512 * 1024))
 
@@ -639,19 +639,20 @@ class PackageLimitTests(SimpleTestCase):
                             overrides='<Default Extension="emf" ContentType="image/x-emf"/>')
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             info = archive.getinfo('word/media/image1.emf')
-        self.assertGreater(info.file_size, docx_package.INFLATION_CHECKED_FROM)  # the positive control: the old rule
-        self.assertGreater(info.file_size, 100 * info.compress_size)  # refused this part
+        self.assertGreater(info.file_size, MIB)  # the positive control: the ratio rule release 1 first had (past
+        self.assertGreater(info.file_size, 100 * info.compress_size)  # 1 MiB, over 100-fold) refused such a part
         self.assertEqual(docx_package.safe_package(data), legacy_safe_package(data))
 
-    def test_a_part_read_as_xml_is_held_to_the_ratio_whatever_its_name(self):
+    def test_a_part_read_as_xml_is_held_to_the_size_limits_only_whatever_its_name(self):
+        # repair round 1, C1 (coding-0): it was refused at more than 100-fold; read for E2, it has nothing to remove
         header = (f'<?xml version="1.0" encoding="UTF-8"?>\n<w:hdr {NAMESPACES}>'
                   + paragraph(complex_field(' PAGE ', '1')) * 9000 + '</w:hdr>')
         data = word_package(TEXT, [relationship('rIdHeader', 'image', 'media/picture.png')],
                             parts=[('word/media/picture.png', header)])
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             info = archive.getinfo('word/media/picture.png')
-        self.assertGreater(info.file_size, max(docx_package.INFLATION_CHECKED_FROM, 100 * info.compress_size))
-        self.refused(data, 'inflates more than 100 times its stored size')
+        self.assertGreater(info.file_size, max(MIB, 100 * info.compress_size))
+        self.assertEqual(docx_package.safe_package(data), legacy_safe_package(data))
 
     def test_a_lying_size_header_is_refused(self):
         real = parts_of(PLAIN_PACKAGE)['word/document.xml']
