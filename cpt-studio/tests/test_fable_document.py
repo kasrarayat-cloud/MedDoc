@@ -10,6 +10,7 @@ import base64
 import hashlib
 import http.server
 import io
+import math
 import os
 import posixpath
 import random
@@ -34,7 +35,7 @@ from xml.sax.saxutils import escape, quoteattr
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import bounded
-from studio.fable import CONVERT, DOCUMENT, STORAGE
+from studio.fable import BUSY, CONVERT, DOCUMENT, STORAGE
 from studio.fable import document, docx_package
 from studio.storage import ALLOWED_SUFFIXES, OriginalCorrupted
 from tests.support import coding as f
@@ -251,6 +252,110 @@ def without_simple_field(xml, instruction):
     return xml.replace(start, '').replace('</w:fldSimple>', '')
 
 
+BEGIN, SEPARATE, END = (f'<w:r><w:fldChar w:fldCharType="{kind}"/></w:r>' for kind in ('begin', 'separate', 'end'))
+
+
+def instruction(text):
+    return f'<w:r><w:instrText xml:space="preserve">{escape(text)}</w:instrText></w:r>'
+
+
+def shown(text):
+    return f'<w:r><w:t xml:space="preserve">{escape(text)}</w:t></w:r>'
+
+
+def word_footer_page_of_pages():
+    """Word's own footer 'Page { PAGE } of { = { NUMPAGES } - 1 }' (a cover page not counted), as Word writes it: rsids
+    on every run, w:noProof on the result runs, and the nested field's result inside the outer instruction written as
+    w:instrText (the L-CODING lens's shape)."""
+    def run(inner, rpr=''):
+        return f'<w:r w:rsidR="00C4157A">{rpr}{inner}</w:r>'
+    proof = '<w:rPr><w:noProof/></w:rPr>'
+    begin, separate, end = ('<w:fldChar w:fldCharType="begin"/>', '<w:fldChar w:fldCharType="separate"/>',
+                            '<w:fldChar w:fldCharType="end"/>')
+    return ('<w:p w14:paraId="1A2B3C4D" w14:textId="77777777" w:rsidR="00C4157A" w:rsidRDefault="00C4157A"><w:pPr>'
+            '<w:pStyle w:val="Footer"/><w:jc w:val="center"/></w:pPr>' + run('<w:t xml:space="preserve">Page </w:t>')
+            + run(begin) + run('<w:instrText xml:space="preserve"> PAGE </w:instrText>') + run(separate)
+            + run('<w:t>1</w:t>', proof) + run(end) + run('<w:t xml:space="preserve"> of </w:t>') + run(begin)
+            + run('<w:instrText xml:space="preserve"> = </w:instrText>') + run(begin)
+            + run('<w:instrText xml:space="preserve"> NUMPAGES </w:instrText>') + run(separate)
+            + run('<w:instrText>4</w:instrText>', proof) + run(end)
+            + run('<w:instrText xml:space="preserve"> - 1 </w:instrText>') + run(separate) + run('<w:t>3</w:t>', proof)
+            + run(end) + '</w:p>')
+
+
+def formula_packages():
+    """The kept shapes the L-CODING lens found removed: formulas ('=' first), with nested fields or over bookmarks whose
+    names begin like a removed type, and an IF whose type a nested field follows with no space. (label, bytes)."""
+    return [
+        ('page of pages minus one, as Word writes it', full_package(TEXT, footer=word_footer_page_of_pages())),
+        ('page minus one', full_package(TEXT, footer=paragraph(shown('Page '), BEGIN, instruction(' = '), complex_field(
+            ' PAGE ', '2'), instruction(' - 1 '), SEPARATE, shown('1'), END))),
+        ('a sum of references', word_package(TEXT + paragraph(
+            shown('Total score: '), BEGIN, instruction(' = '), complex_field(' REF Score1 \\h ', '3'),
+            instruction(' + '), complex_field(' REF Score2 \\h ', '4'), instruction(' '), SEPARATE, shown('7'), END))),
+        ('IF with no space before its nested field', word_package(TEXT + paragraph(
+            BEGIN, instruction(' IF'), complex_field(' PAGE ', '1'), instruction(' = 1 "first" "later" '), SEPARATE,
+            shown('first'), END))),
+        ('IF with a space before its nested field', word_package(TEXT + paragraph(
+            BEGIN, instruction(' IF '), complex_field(' PAGE ', '1'), instruction(' = 1 "first" "later" '), SEPARATE,
+            shown('first'), END))),
+        ('a formula over Included', word_package(TEXT + paragraph(shown('Count: '), complex_field(
+            ' = Included + 1 ', '4')))),
+        ('a formula over Imported_cost', word_package(TEXT + paragraph(shown('Cost: '), complex_field(
+            ' =Imported_cost*2 ', '20')))),
+        ('a formula over Linked_total', word_package(TEXT + paragraph(shown('Sum: '), complex_field(
+            ' = Linked_total ', '9')))),
+        ('a plain formula', word_package(TEXT + paragraph(shown('Total: '), complex_field(' = 3 + 4 ', '7')))),
+        ('a simple formula field', word_package(TEXT + paragraph(simple_field(' = Included + 1 ', '4')))),
+    ]
+
+
+def ecg_emf(width=2400, height=1000):
+    """An ECG strip as Word keeps a pasted Enhanced Metafile: a 24-bit DIB (pink 1 mm and 5 mm grid on white paper,
+    four leads traced in black with a little noise) in one EMR_STRETCHDIBITS record between EMR_HEADER and EMR_EOF -
+    6.9 MiB that deflates about 138-fold, as the L-CODING lens's c3-ecg-emf."""
+    white, light, dark, black = b'\xff\xff\xff', b'\xfa\xc8\xc8', b'\xf0\x78\x78', b'\x00\x00\x00'
+    paper = bytearray(white * width)
+    for x in range(0, width, 10):
+        paper[3 * x:3 * x + 3] = light
+    for x in range(0, width, 50):
+        paper[3 * x:3 * x + 3] = dark
+    rows = [bytearray(dark * width) if y % 50 == 0 else bytearray(light * width) if y % 10 == 0 else bytearray(paper)
+            for y in range(height)]
+    rng = random.Random(3)
+    for x in range(width):
+        beat = x % 200
+        spike = -90 if 95 <= beat <= 99 else 25 if 100 <= beat <= 104 else 0
+        for lead in range(4):
+            y = 125 + lead * 250 + int(8 * math.sin(x / 15.0)) + spike + rng.randint(-1, 1)
+            for row in (y, y + 1):
+                rows[row][3 * x:3 * x + 3] = black
+    bits = b''.join(bytes(row) for row in reversed(rows))
+    info = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 24, 0, len(bits), 11811, 11811, 0, 0)
+    record = struct.pack('<II4iiiiiiiIIIIIIii', 81, 80 + len(info) + len(bits), 0, 0, width - 1, height - 1, 0, 0, 0,
+                         0, width, height, 80, len(info), 80 + len(info), len(bits), 0, 0x00CC0020, width,
+                         height) + info + bits
+    eof = struct.pack('<IIIII', 14, 20, 0, 0, 20)
+    header = struct.pack('<II4i4iIIIIHHIII2i2i', 1, 88, 0, 0, width - 1, height - 1, 0, 0, width * 26, height * 26,
+                         0x464D4520, 0x10000, 88 + len(record) + len(eof), 3, 1, 0, 0, 0, 0, 1920, 1080, 508, 286)
+    return header + record + eof
+
+
+def named_but_missing(parts):
+    """What the package still names that it does not hold: internal relationship targets and content-type Overrides."""
+    present, missing = {name.casefold() for name in parts}, []
+    for name, data in parts.items():
+        if name.casefold().endswith('.rels'):
+            for row in ElementTree.fromstring(data):
+                target = docx_package._part_name(docx_package._source_folder(name), row.get('Target'))
+                if row.get('TargetMode') != 'External' and target and target.casefold() not in present:
+                    missing.append(f'{name} -> {row.get("Target")}')
+    for row in ElementTree.fromstring(parts['[Content_Types].xml']):
+        if row.tag.endswith('Override') and row.get('PartName').lstrip('/').casefold() not in present:
+            missing.append(f'Override {row.get("PartName")}')
+    return missing
+
+
 # Each type E2 removes, with an instruction of the shape Word writes; every instruction names something synthetic
 # (a local path, the TEST-NET 192.0.2.1) that must not survive in the package.
 DANGEROUS = {
@@ -409,6 +514,14 @@ class ConvertTests(SimpleTestCase):
         killpg.assert_called_once()
         self.assertFalse(work.exists())  # the throwaway directory is gone
 
+    def test_running_out_of_the_check_budget_is_busy_not_a_refusal(self):
+        # the lens's finding 3: a host busy enough to slow the checks makes the conversion busy, for a retry
+        with mock.patch.object(docx_package, 'PACKAGE_SECONDS', -1), \
+                self.assertRaises(document.DocumentError) as caught:
+            document.convert_docx(PLAIN_PACKAGE, runner=fake_runner)
+        self.assertEqual((caught.exception.failure_kind, caught.exception.text), (BUSY, document.BUSY_TEXT))
+        self.assertIn('checking it took longer than', caught.exception.detail)
+
     def test_the_moved_names_are_the_same_objects_here(self):
         # E3: the code moved to docx_package (no Django), and document re-exports it, so callers keep their names
         for name in ('safe_package', 'soffice_convert', 'PackageRefused', 'PROFILE_SETTINGS', 'SOFFICE', 'WORK_PREFIX',
@@ -426,7 +539,7 @@ MIB = 1024 * 1024
 
 
 def bomb(size, name='word/media/zeros.bin'):
-    """PLAIN_PACKAGE plus one part of ``size`` zeros: a small zip that inflates hugely."""
+    """PLAIN_PACKAGE plus one part ``name`` of ``size`` zeros: a small zip that inflates hugely."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
         for entry, content in parts_of(PLAIN_PACKAGE).items():
@@ -487,16 +600,41 @@ class PackageLimitTests(SimpleTestCase):
         with mock.patch.object(docx_package, 'MAX_PACKAGE_BYTES', 100):
             self.refused(PLAIN_PACKAGE, 'its parts are too large once inflated')
 
-    def test_a_part_that_inflates_more_than_a_hundred_times_its_size_is_refused(self):
-        data = bomb(2 * MIB)  # 2 MiB of zeros deflates to about 2 KiB
+    def test_an_xml_part_that_inflates_more_than_a_hundred_times_its_size_is_refused(self):
+        data = bomb(2 * MIB, 'customXml/item1.xml')  # 2 MiB of zeros deflates to about 2 KiB
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            info = archive.getinfo('word/media/zeros.bin')
+            info = archive.getinfo('customXml/item1.xml')
         self.assertGreater(info.file_size, 100 * info.compress_size)
         with mock.patch.object(docx_package, '_read_part', side_effect=AssertionError('a part was read')):
             self.refused(data, 'inflates more than 100 times its stored size')
-        # a part too small to cost anything is not held to the ratio (printer settings, empty headers compress so)
-        small = bomb(512 * 1024)
-        self.assertEqual(parts_of(docx_package.safe_package(small))['word/media/zeros.bin'], b'\x00' * (512 * 1024))
+        # a part too small to cost anything is not held to the ratio
+        small = bomb(512 * 1024, 'customXml/item1.xml')
+        self.assertEqual(parts_of(docx_package.safe_package(small))['customXml/item1.xml'], b'\x00' * (512 * 1024))
+
+    def test_a_clinical_image_is_held_to_the_size_limits_not_to_the_ratio(self):
+        # the lens's ECG strip kept as a pasted metafile: 6.9 MiB that deflates about 138-fold, accepted before
+        # release 1
+        emf = ecg_emf()
+        data = word_package(paragraph('<w:r><w:pict><v:shape style="width:400pt;height:166pt"><v:imagedata '
+                                      'r:id="rIdEcg" o:title=""/></v:shape></w:pict></w:r>'),
+                            [relationship('rIdEcg', 'image', 'media/image1.emf')], namespaces=FULL_NAMESPACES,
+                            parts=[('word/media/image1.emf', emf)],
+                            overrides='<Default Extension="emf" ContentType="image/x-emf"/>')
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            info = archive.getinfo('word/media/image1.emf')
+        self.assertGreater(info.file_size, docx_package.INFLATION_CHECKED_FROM)  # the positive control: the old rule
+        self.assertGreater(info.file_size, 100 * info.compress_size)  # refused this part
+        self.assertEqual(docx_package.safe_package(data), legacy_safe_package(data))
+
+    def test_a_part_read_as_xml_is_held_to_the_ratio_whatever_its_name(self):
+        header = (f'<?xml version="1.0" encoding="UTF-8"?>\n<w:hdr {NAMESPACES}>'
+                  + paragraph(complex_field(' PAGE ', '1')) * 9000 + '</w:hdr>')
+        data = word_package(TEXT, [relationship('rIdHeader', 'image', 'media/picture.png')],
+                            parts=[('word/media/picture.png', header)])
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            info = archive.getinfo('word/media/picture.png')
+        self.assertGreater(info.file_size, max(docx_package.INFLATION_CHECKED_FROM, 100 * info.compress_size))
+        self.refused(data, 'inflates more than 100 times its stored size')
 
     def test_a_lying_size_header_is_refused(self):
         real = parts_of(PLAIN_PACKAGE)['word/document.xml']
@@ -513,6 +651,7 @@ class PackageLimitTests(SimpleTestCase):
                          (10, 45, 60))
         with mock.patch.object(docx_package, 'PACKAGE_SECONDS', -1):  # checked between parts
             self.refused(PLAIN_PACKAGE, 'checking it took longer than')
+            self.assertEqual(docx_package._convert_package(fake_runner, PLAIN_PACKAGE, '/nonexistent')[0], 'busy')
         # and within one part, every few thousand elements
         many = (f'<?xml version="1.0"?><w:document {NAMESPACES}><w:body>'
                 + paragraph(complex_field(' PAGE ', '1')) * 1000 + '</w:body></w:document>').encode('utf-8')
@@ -710,6 +849,49 @@ class FieldInstructionTests(SimpleTestCase):
                 self.assertNotIn('secret', xml)
                 self.assertEqual(xml.count('VISIBLE RESULT'), 1)
                 self.assertNotIn('fldChar', xml)
+
+    def test_formulas_and_types_a_nested_field_ends_are_kept_byte_for_byte(self):
+        # the L-CODING lens's finding 1: '=' first is a formula, kept; a type is its run of letters, so IF{PAGE} is IF
+        for label, data in formula_packages():
+            with self.subTest(label):
+                package, removed = docx_package._safe_package(data)
+                self.assertEqual(package, legacy_safe_package(data))
+                self.assertEqual(removed['fields'], 0)
+
+    def test_a_removed_field_whose_result_completes_an_outer_type_is_read_again(self):
+        # ' LI' then a nested INCLUDETEXT whose result is 'NK': once the nested instruction goes, its result stands in
+        # the outer instruction, which now reads LINK - so the part is read again, and the outer instruction goes too
+        outer = (BEGIN + instruction(' LI') + complex_field(DANGEROUS['INCLUDETEXT'], 'NK')
+                 + instruction(' "c:\\\\synthetic\\\\secret-link.xlsx" ') + SEPARATE + shown('OUTER') + END)
+        reads = []
+        real = docx_package._PartReader.read
+
+        def counted(reader):
+            reads.append(reader)
+            return real(reader)
+        with mock.patch.object(docx_package._PartReader, 'read', counted):
+            package, removed = docx_package._safe_package(word_package(paragraph(outer)))
+        xml = document_xml(package)
+        self.assertNotIn('secret', xml)
+        self.assertNotIn('fldChar', xml)
+        self.assertIn('OUTER', xml)
+        self.assertEqual((removed['fields'], len(reads)), (2, 2))
+
+    def test_a_part_is_read_once_even_when_it_is_edited(self):
+        # the lens's finding 3: no part is parsed in full twice when one reading settles what to remove
+        reads = []
+        real = docx_package._PartReader.read
+
+        def counted(reader):
+            reads.append(reader)
+            return real(reader)
+        data = full_package(paragraph(complex_field(DANGEROUS['INCLUDEPICTURE'])) + TEXT * 50,
+                            footer=paragraph(complex_field(' PAGE ', '1')))
+        with mock.patch.object(docx_package._PartReader, 'read', counted):
+            package, removed = docx_package._safe_package(data)
+        self.assertEqual(removed['fields'], 1)
+        self.assertEqual(len(reads), 2)  # the document once, the footer once
+        self.assertEqual(len({id(reader.raw) for reader in reads}), 2)
 
     def test_nesting_removes_exactly_the_dangerous_instruction(self):
         inner = complex_field(DANGEROUS['INCLUDETEXT'], 'INNER RESULT')
@@ -951,6 +1133,36 @@ class EmbeddedContentTests(SimpleTestCase):
         self.assertNotIn('rIdOle', safe['word/_rels/document.xml.rels'].decode('utf-8'))
         self.assertEqual(removed['objects'], 2)
 
+    def test_a_dropped_part_loses_its_override_and_nothing_else_of_the_content_types_changes(self):
+        # the lens's finding 4: the content types named a part E2 dropped
+        control = ('<w:r><w:object w:dxaOrig="1440" w:dyaOrig="360">' + OLE_SHAPE.replace('rIdPreview', 'rIdCtlPrev')
+                   + '<w:control r:id="rIdAx" w:name="CheckBox1" w:shapeid="_x0000_i1025"/></w:object></w:r>')
+        axml = ('<?xml version="1.0" encoding="UTF-8"?><ax:ocx xmlns:ax="http://schemas.microsoft.com/office/2006/'
+                f'activeX" xmlns:r="{REL}" ax:classid="{{8BD21D40-EC42-11CE-9E0D-00AA006002F3}}" '
+                'ax:persistence="persistStreamInit" r:id="rId1"/>')
+        overrides = (override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml')
+                     + override('word/embeddings/Microsoft_Excel_Worksheet.xlsx',
+                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))
+        rels = OLE_RELS + (relationship('rIdCtlPrev', 'image', 'media/image2.wmf'),
+                           relationship('rIdAx', 'control', 'activeX/activeX1.xml'))
+        data = full_package(TEXT + paragraph(f'<w:r>{OLE_OBJECT}</w:r>') + paragraph(control),
+                            defaults=OLE_DEFAULTS + overrides, document_rels=rels,
+                            parts=OLE_PARTS + (('word/media/image2.wmf', b'\xd7\xcd\xc6\x9a synthetic wmf'),
+                                               ('word/activeX/activeX1.xml', axml),
+                                               ('word/activeX/_rels/activeX1.xml.rels', relationships(relationship(
+                                                   'rId1', 'activeXControlBinary', 'activeX1.bin'))),
+                                               ('word/activeX/activeX1.bin', b'\x00synthetic control binary')))
+        safe, original = parts_of(docx_package.safe_package(data)), parts_of(data)
+        self.assertEqual(named_but_missing(safe), [])
+        types = original['[Content_Types].xml'].decode('utf-8')
+        for gone in overrides.split('/>')[:-1]:
+            self.assertEqual(types.count(gone + '/>'), 1)
+            types = types.replace(gone + '/>', '')
+        self.assertEqual(safe['[Content_Types].xml'].decode('utf-8'), types)  # byte ranges: nothing else moved
+        for gone in ('word/activeX/activeX1.xml', 'word/activeX/activeX1.bin',
+                     'word/embeddings/Microsoft_Excel_Worksheet.xlsx'):
+            self.assertNotIn(gone, safe)
+
     def test_a_relationship_kept_content_still_names_is_kept(self):
         shared = paragraph(f'<w:r>{OLE_OBJECT}</w:r>') + paragraph('<w:hyperlink r:id="rIdOle"><w:r><w:t>KEPT LINK'
                                                                    '</w:t></w:r></w:hyperlink>')
@@ -1062,6 +1274,7 @@ def _identity_corpus():
             TEXT + ''.join(paragraph(feature) for feature in chosen) + (toc if rng.random() < 0.3 else ''),
             document_rels=picture_rels + (external if rng.random() < 0.4 else ()), parts=picture_parts,
             stored=('word/document.xml',) if rng.random() < 0.3 else (), **stories)))
+    corpus += formula_packages()
     with_bom = full_package(TEXT + paragraph(page))
     corpus.append(('utf-8 bom', zipped([(name, (b'\xef\xbb\xbf' + body) if name == 'word/document.xml' else body)
                                         for name, body in parts_of(with_bom).items()])))

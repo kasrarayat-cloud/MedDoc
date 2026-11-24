@@ -14,18 +14,22 @@ before it waits on it, so the parent's finally kills that group as well as the c
 - Only a Word package is converted (an OpenDocument file or any other zip named .docx is refused, since LibreOffice
   opens what it finds, whatever the name).
 - Its size is checked from the zip directory before any part is read (E1): at most MAX_PART_BYTES a part and
-  MAX_PACKAGE_BYTES in all once inflated, and no part over INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION
-  times its stored size; each part is then read through a bounded reader that inflates at most its declared size plus
-  one byte, so a size header that lies is refused, never believed.
+  MAX_PACKAGE_BYTES in all once inflated, and no XML part (.xml or .rels, or any part read as XML later) over
+  INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION times its stored size - a picture is held to the size
+  limits only, since a clinical image (an ECG strip kept as a metafile) can deflate 133-fold; each part is then read
+  through a bounded reader that inflates at most its declared size plus one byte, so a size header that lies is
+  refused, never believed. Running out of PACKAGE_SECONDS is not a refusal of the file: the conversion is busy, and a
+  member may retry (ConversionBusy).
 - Every relationship with TargetMode External is dropped - a linked picture, template, frame or object LibreOffice would
   fetch from a URL or a local path while it converts, into the PDF that is sent and shown - with any part only they
   referenced.
 - Field instructions and embedded content LibreOffice could act on are removed (E2), in every part that holds them: the
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
   spell), keeping the result the reader sees; w:object (its preview picture kept), w:control and w:altChunk, with the
-  parts only they named. Each part is edited by byte ranges of its own bytes, never written out again, and a part with
-  nothing to remove passes through byte for byte: a Word file with none of these features gives exactly the package it
-  gave before release 1. What was removed is reported as counts only.
+  parts only they named, and their Overrides in the content types. Each part is edited by byte ranges of its own
+  bytes, never written out again, and a part with nothing to remove passes through byte for byte: a Word file with none
+  of these features gives exactly the package it gave before release 1. A formula ('=' first) is never removed. What
+  was removed is reported as counts only.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -47,9 +51,10 @@ import time
 import zipfile
 import zlib
 from pathlib import Path
+from urllib.parse import unquote
 from xml.etree import ElementTree
 from xml.parsers import expat
-from xml.sax.saxutils import quoteattr
+from xml.sax.saxutils import escape, quoteattr
 
 from .. import bounded
 
@@ -119,6 +124,11 @@ class ConversionRefused(Exception):
     """convert_in_child: safe_package refused the Word file; the reason is in fixed words."""
 
 
+class ConversionBusy(Exception):
+    """convert_in_child: the package checks ran out of PACKAGE_SECONDS - the conversion is busy, not the file refused;
+    a member may retry."""
+
+
 class ConversionFailed(Exception):
     """convert_in_child: no PDF came of the Word file (the child failed, passed a limit or made no PDF); the detail is
     in fixed words."""
@@ -128,7 +138,8 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
     """``data`` (a Word file) as PDF bytes, converted in a bounded child: ``runner(package, work)`` runs there on the
     package safe_package made of ``data`` and the work folder made here (default soffice_convert). The folder is removed
     after every run - a success, a failure or a timeout - once the child and every process group it reported are gone.
-    ConversionRefused when safe_package refused the file, ConversionFailed when no PDF came of it."""
+    ConversionRefused when safe_package refused the file, ConversionBusy when its checks ran out of time,
+    ConversionFailed when no PDF came of it."""
     try:
         work = Path(tempfile.mkdtemp(prefix=WORK_PREFIX))
     except OSError as exc:
@@ -143,6 +154,8 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
             raise ConversionFailed(type(exc).__name__) from None
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'busy':
+        raise ConversionBusy(answer[1])
     if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'refused':
         raise ConversionRefused(answer[1])
     if not (isinstance(answer, tuple) and len(answer) == 3 and answer[0] == 'pdf'):
@@ -159,9 +172,12 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
 
 def _convert_package(runner, data: bytes, work: str):
     """In the bounded child (its memory cap and wall clock bound the zip and XML reading too): ('pdf', what ``runner``
-    makes of safe_package(data) in the work folder ``work``, the removal counts), or ('refused', reason)."""
+    makes of safe_package(data) in the work folder ``work``, the removal counts), ('refused', reason), or ('busy',
+    reason) when the checks ran out of PACKAGE_SECONDS."""
     try:
         package, removed = _safe_package(data)
+    except _OutOfTime as exc:
+        return ('busy', str(exc))
     except PackageRefused as exc:
         return ('refused', str(exc))
     return ('pdf', runner(package, Path(work)), removed)
@@ -236,6 +252,10 @@ def _safe_package(data: bytes):
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     removed, held = _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline)
+    if orphans:  # a dropped part's Override goes with it
+        types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in orphans})
+        if types is not parts[CONTENT_TYPES_PART]:
+            rewritten[CONTENT_TYPES_PART] = types
     for name, refusal in held.items():  # a part that could not be checked is refused only if it is still sent
         if name not in orphans:
             raise refusal
@@ -261,15 +281,25 @@ def _check_time(deadline):
 
 def _check_sizes(infos):
     """E1, from the zip directory alone, before any part is read: no part over MAX_PART_BYTES once inflated, no more
-    than MAX_PACKAGE_BYTES in all, and no part past INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION times
-    its stored size."""
+    than MAX_PACKAGE_BYTES in all, and no XML part past INFLATION_CHECKED_FROM that inflates more than MAX_INFLATION
+    times its stored size."""
     for info in infos:
         if info.file_size > MAX_PART_BYTES:
             raise PackageRefused('a part is too large once inflated')
-        if info.file_size > INFLATION_CHECKED_FROM and info.file_size > MAX_INFLATION * info.compress_size:
+        if _xml_named(info.filename) and _inflates_too_much(info):
             raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
     if sum(info.file_size for info in infos) > MAX_PACKAGE_BYTES:
         raise PackageRefused('its parts are too large once inflated')
+
+
+def _xml_named(name) -> bool:
+    """Whether the part ``name`` is read as XML by its name (an .xml or .rels part)."""
+    return name.casefold().endswith(('.xml', '.rels'))
+
+
+def _inflates_too_much(info) -> bool:
+    """Whether a part past INFLATION_CHECKED_FROM inflates more than MAX_INFLATION times its stored size."""
+    return info.file_size > INFLATION_CHECKED_FROM and info.file_size > MAX_INFLATION * info.compress_size
 
 
 def _read_part(archive, info) -> bytes:
@@ -388,24 +418,29 @@ def _names(*local_names):
     return frozenset(f'{namespace} {local}' for namespace in WORD_NAMESPACES for local in local_names)
 
 
-_FLDCHAR, _FLDSIMPLE, _FLDDATA = _names('fldChar'), _names('fldSimple'), _names('fldData')
-_OBJECT, _CONTROL, _ALTCHUNK, _DRAWING, _RUN = (_names('object'), _names('control'), _names('altChunk'),
-                                                _names('drawing'), _names('r'))
-_FIELD_TEXT = _names('instrText', 'delInstrText', 't', 'delText')  # text that may spell a field's type
-# How a reader might assemble a field's instruction from that text: all of it, the instruction elements only, the text
-# not deleted, or w:instrText alone. The type is read in each, and one that names a removed type removes the field, so
-# no reader's view of the instruction is wider than this one's. A field Word wrote reads the same in all four.
-_READINGS = (('all', _FIELD_TEXT), ('instruction', _names('instrText', 'delInstrText')),
-             ('live', _names('instrText', 't')), ('bare', _names('instrText')))
+# The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
+# with one dictionary lookup.
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE = range(9)
+_ROLES = {name: role for role, local_names in (
+    (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
+    (_ALTCHUNK, ('altChunk',)), (_POINTER, ('objectEmbed', 'objectLink')),
+    (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')))
+    for name in _names(*local_names)}
 # What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
-_OLE_POINTERS = frozenset({'urn:schemas-microsoft-com:office:office OLEObject'}) | _names('objectEmbed', 'objectLink')
-# What a run may hold inside a field's instruction before the field's type is spelled out: anything else in the run (a
-# tab, a symbol, a picture, ...) makes the type unreadable from the text alone, and an unreadable type is removed.
-_RUN_NEUTRAL = _FIELD_TEXT | _names('rPr', 'lastRenderedPageBreak', 'fldChar')
+_ROLES['urn:schemas-microsoft-com:office:office OLEObject'] = _POINTER
+_CONTAINERS = (_OBJECT, _CONTROL, _ALTCHUNK, _POINTER)  # removed whole (an object but for its preview)
+_OBJECTS, _DRAWINGS, _FLDDATAS = _names('object'), _names('drawing'), _names('fldData')
+# How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
+# text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
+# type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
+# wider than this one's. A field Word wrote reads the same in all four.
+_READINGS = ((_names('instrText', 'delInstrText', 't', 'delText'), True), (_names('instrText', 'delInstrText'), False),
+             (_names('instrText', 't'), True), (_names('instrText'), False))
 # the attributes as WordprocessingML qualifies them, and unqualified: a reader lenient about the prefix must not see a
 # field here missed
 _FLDCHARTYPE = tuple(f'{namespace} fldCharType' for namespace in WORD_NAMESPACES) + ('fldCharType',)
 _INSTR = tuple(f'{namespace} instr' for namespace in WORD_NAMESPACES) + ('instr',)
+_SYMBOL_CHAR = tuple(f'{namespace} char' for namespace in WORD_NAMESPACES) + ('char',)
 _RELATIONSHIP_ID_PREFIXES = tuple(f'{namespace} ' for namespace in RELATIONSHIP_ID_NAMESPACES)
 _WORD_PREFIXES = tuple(f'{namespace} ' for namespace in WORD_NAMESPACES)
 _VML_PREFIX = f'{VML_NAMESPACE} '
@@ -417,62 +452,124 @@ _DOCTYPE = re.compile(rb'<!DOCTYPE')
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
 _DECLARED_ENCODING = re.compile(rb'^(?:\xef\xbb\xbf)?<\?xml[^>]*?encoding\s*=\s*["\']([A-Za-z0-9._-]+)["\']')
-_LETTER, _NOT_LETTER = re.compile(r'[A-Za-z]'), re.compile(r'[^A-Za-z]')
+_SKIP_SPACE = re.compile(r'\s*')
+_SKIP_PREFIX = re.compile('[\\s\\\\"\'“”‘’]*')  # white space, backslashes and quotes
+_LETTER_RUN = re.compile(r'[A-Za-z]*')
 _TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED)  # letters enough to decide a type
 _TIME_CHECK_ELEMENTS = 0xFFF  # the deadline is checked every 4,096 elements too
 _REMOVED_KINDS = ('fields', 'objects', 'controls', 'chunks')
+_REREADS = 4  # how often a part may be read again after a removal inside another field's instruction (see below)
+# An element as the reader keeps it: a list [name, offset of its start tag, the namespaces its start tag declares, its
+# property children (only while a field's instruction is open), its children (a w:fldSimple's or w:object's only),
+# expat's index at its end (an end tag's '<', or the end of an empty element), a w:fldSimple's instruction].
+_NAME, _AT, _DECLARED, _PROPS, _CHILDREN, _END, _INSTRUCTION = range(7)
+
+
+class _Reading:
+    """One reading of a field's instruction, as far as it names the field's type. White space is read past; an '='
+    first makes the field a formula, which is kept; otherwise backslashes and quotes are read past and the type is the
+    run of letters that follows, ended by anything else (a space, a quote, a digit, a nested field). A nested field
+    before the type leaves the type unreadable, and the field is removed."""
+    __slots__ = ('state', 'letters')
+    START, PREFIX, LETTERS, DONE, FORMULA, UNREADABLE = range(6)
+
+    def __init__(self):
+        self.state, self.letters = self.START, ''
+
+    @property
+    def done(self) -> bool:
+        return self.state >= self.DONE
+
+    def feed(self, text):
+        at, end = 0, len(text)
+        if self.state == self.START:
+            at = _SKIP_SPACE.match(text).end()
+            if at == end:
+                return
+            if text[at] == '=':
+                self.state = self.FORMULA
+                return
+            self.state = self.PREFIX
+        if self.state == self.PREFIX:
+            at = _SKIP_PREFIX.match(text, at).end()
+            if at == end:
+                return
+            if not ('A' <= text[at] <= 'Z' or 'a' <= text[at] <= 'z'):
+                self.state = self.DONE
+                return
+            self.state = self.LETTERS
+        if self.state == self.LETTERS:
+            run = _LETTER_RUN.match(text, at)
+            self.letters = (self.letters + run.group())[:_TYPE_LETTERS]
+            if run.end() < end or len(self.letters) >= _TYPE_LETTERS:
+                self.state = self.DONE
+
+    def nested(self):
+        if self.state in (self.START, self.PREFIX):
+            self.state = self.UNREADABLE
+        elif self.state == self.LETTERS:
+            self.state = self.DONE
+
+    def removed(self) -> bool:
+        return self.state == self.UNREADABLE or (
+            self.state != self.FORMULA and self.letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED))
 
 
 def _removed_type(text) -> bool:
-    """Whether ``text`` (a field's instruction) names a field E2 removes: its first word of letters starts with one of
-    FIELD_INSTRUCTIONS_REMOVED, compared without case. Whatever precedes the first letter (spaces, a backslash, a quote)
-    is skipped, so a type LibreOffice would read is read here too."""
-    first = _LETTER.search(text or '')
-    if first is None:
-        return False
-    rest = text[first.start():]
-    stop = _NOT_LETTER.search(rest)
-    letters = (rest[:stop.start()] if stop else rest)[:_TYPE_LETTERS].upper()
-    return letters.startswith(FIELD_INSTRUCTIONS_REMOVED)
+    """Whether ``text`` (a w:fldSimple's instruction) names a field E2 removes, read as _Reading reads one."""
+    reading = _Reading()
+    reading.feed(text or '')
+    return reading.removed()
 
 
-class _Element:
-    """An element of the part being read: its name ('namespace local'), the offset of its start tag and of its end
-    mark (expat's index at its end: an end tag's '<', or the end of an empty element), its parent, the namespaces its
-    start tag declares, and - only where they are needed - its property children and its children."""
-    __slots__ = ('name', 'start', 'end_mark', 'parent', 'declared', 'props', 'children', 'instruction')
-
-    def __init__(self, name, start, parent, declared):
-        self.name, self.start, self.parent, self.declared = name, start, parent, declared
-        self.end_mark = self.props = self.children = self.instruction = None
+def _symbol_character(attrs) -> str:
+    """The character a w:sym stands for (its w:char, hexadecimal), as a reader would put it in an instruction."""
+    try:
+        code = int(next((attrs[key] for key in _SYMBOL_CHAR if key in attrs), ''), 16)
+    except ValueError:
+        return '�'
+    return chr(code) if 0 < code < 0x110000 else '�'
 
 
 class _Field:
     """A complex field (w:fldChar begin ... separate ... end) while it is read: its marks with the open elements around
-    each, and its type in each of the _READINGS as far as its own instruction text has spelled it."""
-    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'letters', 'done', 'decided', 'unreadable')
+    each, and its type in each of the _READINGS as far as its own instruction has named it."""
+    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
-        self.letters = {reading: '' for reading, _ in _READINGS}
-        self.done = {reading: False for reading, _ in _READINGS}
-        self.decided = self.unreadable = False
+        self.readings = [_Reading() for _ in _READINGS]
+        self.decided, self.in_instruction = False, True
+
+    def feed(self, text, name=None):
+        """Text of the instruction: in a text element ``name``, or (None) a symbol's character, a tab or a break."""
+        for (kinds, run_content), reading in zip(_READINGS, self.readings):
+            if not reading.done and (name in kinds if name is not None else run_content):
+                reading.feed(text)
+        self.decided = all(reading.done for reading in self.readings)
+
+    def nested(self):
+        for reading in self.readings:
+            reading.nested()
+        self.decided = all(reading.done for reading in self.readings)
 
     def removed(self) -> bool:
-        return self.unreadable or any(letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED)
-                                      for letters in self.letters.values())
+        return any(reading.removed() for reading in self.readings)
 
 
 class _PartReader:
     """One part read once with expat (namespaces resolved): the byte ranges E2 removes from it, the tags it renames,
-    the counts, and the relationship ids found where. ``editable``: whether edits can be made in its bytes (UTF-8 only);
-    when not, a part that needs one is refused."""
+    the counts, and the relationship ids found where a removal can reach. ``editable``: whether edits can be made in its
+    bytes (UTF-8 only); when not, a part that needs one is refused. ``nested_removal``: a field was removed inside
+    another field's instruction, whose type its result may now complete (_edited_part reads the part again)."""
 
-    def __init__(self, raw, deadline, *, editable=True, collect_values=False):
-        self.raw, self.deadline, self.editable, self.collect_values = raw, deadline, editable, collect_values
-        self.stack, self.fields, self.edits, self.declared, self.references, self.values = [], [], [], [], [], set()
+    def __init__(self, raw, deadline, *, editable=True):
+        self.raw, self.deadline, self.editable = raw, deadline, editable
+        self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
-        self.elements, self.text_field, self.text_name, self.parser = 0, None, None, None
+        self.elements = self.instructions = self.containers = 0
+        self.text_field = self.text_name = self.parser = None
+        self.nested_removal = False
 
     def read(self):
         parser = self.parser = expat.ParserCreate(namespace_separator=' ')
@@ -505,100 +602,101 @@ class _PartReader:
         self.elements += 1
         if not self.elements & _TIME_CHECK_ELEMENTS:
             _check_time(self.deadline)
-        parent = self.stack[-1] if self.stack else None
-        declared = self.declared
+        stack, declared = self.stack, self.declared
         if declared:  # the declarations go with this element; the next one starts a list of its own
             self.declared = []
-        element = _Element(name, self.parser.CurrentByteIndex, parent, declared or ())
-        if attrs:
-            if self.collect_values:
-                self.values.update(attrs.values())
+        element = [name, self.parser.CurrentByteIndex, declared or (), None, None, None, None]
+        if stack and stack[-1][_CHILDREN] is not None:
+            stack[-1][_CHILDREN].append(element)
+        role = _ROLES.get(name)
+        if role is not None:
+            self._role_starts(role, element, attrs)
+        if attrs and (self.instructions or self.containers):  # inside what a removal can take: its relationship ids
             for key, value in attrs.items():
                 if key.startswith(_RELATIONSHIP_ID_PREFIXES):
-                    self.references.append((element.start, value))
-        if parent is not None and parent.children is not None:
-            parent.children.append(element)
+                    self.references.append((element[_AT], value))
+        stack.append(element)
+
+    def _role_starts(self, role, element, attrs):
         field = self.fields[-1] if self.fields else None
-        if field is not None and not field.decided and (
-                name in _FLDSIMPLE or (parent is not None and parent.name in _RUN and name not in _RUN_NEUTRAL)):
-            field.decided = field.unreadable = True
-        if name in _FLDCHAR:
+        open_type = field is not None and not field.decided  # a field whose type is still being read
+        if role == _FLDCHAR:
             kind = next((attrs[key] for key in _FLDCHARTYPE if key in attrs), None)
             if kind == 'begin':
-                if field is not None and not field.decided:  # a nested field before the type: it may make the type
-                    field.decided = field.unreadable = True
+                if open_type:
+                    field.nested()
                 self.fields.append(_Field(element, list(self.stack)))
+                self.instructions += 1
             elif kind == 'separate' and field is not None:
                 field.separates.append((element, list(self.stack)))
+                if field.in_instruction:
+                    field.in_instruction = False
+                    self.instructions -= 1
                 field.decided = True
             elif kind == 'end' and field is not None:
                 field.end = (element, list(self.stack))
                 field.decided = True
-        elif name in _FLDSIMPLE:
-            element.children = []
-            element.instruction = next((attrs[key] for key in _INSTR if key in attrs), '')
-        elif name in _OBJECT:
-            element.children = []
-        elif name in _FIELD_TEXT and field is not None and not field.decided:
-            self.text_field, self.text_name = field, name
-            self.parser.CharacterDataHandler = self._text
-        self.stack.append(element)
+        elif role == _FLDSIMPLE:
+            if open_type:
+                field.nested()
+            element[_CHILDREN] = []
+            element[_INSTRUCTION] = next((attrs[key] for key in _INSTR if key in attrs), '')
+        elif role in _CONTAINERS:
+            self.containers += 1
+            if role == _OBJECT:
+                element[_CHILDREN] = []
+        elif role == _TEXT:
+            if open_type:
+                self.text_field, self.text_name = field, element[_NAME]
+                self.parser.CharacterDataHandler = self._text
+        elif open_type:  # a symbol stands for its character, a tab or a break for white space
+            field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
 
     def _end(self, name):
         element = self.stack.pop()
-        element.end_mark = self.parser.CurrentByteIndex
-        if self.text_field is not None and name in _FIELD_TEXT:
-            self.text_field = None
-            self.parser.CharacterDataHandler = None
-        if name.endswith('Pr') and element.parent is not None and name.startswith(_WORD_PREFIXES):
-            if element.parent.props is None:
-                element.parent.props = []
-            element.parent.props.append(element)
-        if name in _FLDCHAR:
+        element[_END] = self.parser.CurrentByteIndex
+        role = _ROLES.get(name)
+        if role is None:
+            if self.instructions and name.endswith('Pr') and self.stack and name.startswith(_WORD_PREFIXES):
+                parent = self.stack[-1]
+                if parent[_PROPS] is None:
+                    parent[_PROPS] = []
+                parent[_PROPS].append(element)
+            return
+        if role == _TEXT:
+            if self.text_field is not None:
+                self.text_field = None
+                self.parser.CharacterDataHandler = None
+        elif role == _FLDCHAR:
             field = self.fields[-1] if self.fields else None
             if field is not None and field.end is not None and field.end[0] is element:
                 self.fields.pop()
+                if field.in_instruction:
+                    self.instructions -= 1
                 if field.removed():
                     self._remove_field(field)
-        elif name in _FLDSIMPLE:
-            if _removed_type(element.instruction):
+                    self.nested_removal = self.nested_removal or bool(self.instructions)
+        elif role == _FLDSIMPLE:
+            if _removed_type(element[_INSTRUCTION]):
                 self._remove_simple_field(element)
-        elif name in _OBJECT:
-            self._remove_object(element)
-        elif name in _CONTROL:
-            self._remove(element)
-            self.removed['controls'] += 1
-        elif name in _ALTCHUNK:
-            self._remove(element)
-            self.removed['chunks'] += 1
-        elif name in _OLE_POINTERS:
-            self._remove(element)  # inside a w:object the object takes it too, and counts it
-            ancestor = element.parent
-            while ancestor is not None and ancestor.name not in _OBJECT:
-                ancestor = ancestor.parent
-            if ancestor is None:
-                self.removed['objects'] += 1
+                self.nested_removal = self.nested_removal or bool(self.instructions)
+        elif role in _CONTAINERS:
+            self.containers -= 1
+            if role == _OBJECT:
+                self._remove_object(element)
+            else:
+                self._remove(element)
+                if role == _CONTROL:
+                    self.removed['controls'] += 1
+                elif role == _ALTCHUNK:
+                    self.removed['chunks'] += 1
+                elif not any(ancestor[_NAME] in _OBJECTS for ancestor in self.stack):
+                    self.removed['objects'] += 1  # a pointer outside an object; inside one the object counts
 
     def _text(self, data):
         field = self.text_field
-        if field is None or field.decided:
-            return
-        for reading, kinds in _READINGS:
-            if self.text_name not in kinds or field.done[reading]:
-                continue
-            text, letters = data, field.letters[reading]
-            if not letters:
-                first = _LETTER.search(text)
-                if first is None:
-                    continue
-                text = text[first.start():]
-            stop = _NOT_LETTER.search(text)
-            letters = (letters + (text[:stop.start()] if stop else text)[:_TYPE_LETTERS])[:_TYPE_LETTERS]
-            field.letters[reading] = letters
-            if stop is not None or len(letters) >= _TYPE_LETTERS:
-                field.done[reading] = True
-        if all(field.done.values()):
-            field.decided = True
+        if field is not None and not field.decided:
+            field.feed(data, self.text_name)
 
     # the removals
     def _edit(self, start, end, replacement=b''):
@@ -614,10 +712,10 @@ class _PartReader:
 
     def _span(self, element):
         """(start, end) of ``element``'s bytes, from its start tag's '<' to its end tag's '>'."""
-        start_end = self._tag_end(element.start)
+        start_end = self._tag_end(element[_AT])
         if self.raw[start_end - 2] == 0x2F:  # '/>': an empty element is its start tag
-            return element.start, start_end
-        return element.start, self._tag_end(element.end_mark)
+            return element[_AT], start_end
+        return element[_AT], self._tag_end(element[_END])
 
     def _remove(self, element):
         self._edit(*self._span(element))
@@ -631,13 +729,13 @@ class _PartReader:
             if mine is not theirs:
                 break
             common += 1
-        low, high = first.start, self._span(last)[1]
-        kept = [(element.end_mark, self._tag_end(element.end_mark)) for element in first_chain[common:]]
+        low, high = first[_AT], self._span(last)[1]
+        kept = [(element[_END], self._tag_end(element[_END])) for element in first_chain[common:]]
         for element in last_chain[common:]:
-            kept.append((element.start, self._tag_end(element.start)))
-            for prop in element.props or ():
+            kept.append((element[_AT], self._tag_end(element[_AT])))
+            for prop in element[_PROPS] or ():
                 span = self._span(prop)
-                if span[0] >= low and span[1] <= last.start:
+                if span[0] >= low and span[1] <= last[_AT]:
                     kept.append(span)
         at = low
         for start, end in sorted(kept):
@@ -662,47 +760,47 @@ class _PartReader:
 
     def _unwrap(self, element, keep):
         """Removes ``element``'s start and end tags and every child but those ``keep`` accepts."""
-        if element.declared:
+        if element[_DECLARED]:
             raise PackageRefused('a field or object to be removed declares namespaces of its own')
-        start_end = self._tag_end(element.start)
-        self._edit(element.start, start_end)
-        for child in element.children:
+        start_end = self._tag_end(element[_AT])
+        self._edit(element[_AT], start_end)
+        for child in element[_CHILDREN]:
             if not keep(child):
                 self._remove(child)
-        self._edit(element.end_mark, self._tag_end(element.end_mark))
+        self._edit(element[_END], self._tag_end(element[_END]))
 
     def _remove_simple_field(self, element):
         """A w:fldSimple's instruction is its attribute: its start and end tags go (and its w:fldData), its runs - the
         result the reader sees - stay."""
-        start_end = self._tag_end(element.start)
+        start_end = self._tag_end(element[_AT])
         if self.raw[start_end - 2] == 0x2F:
-            self._edit(element.start, start_end)
+            self._edit(element[_AT], start_end)
         else:
-            self._unwrap(element, lambda child: child.name not in _FLDDATA)
+            self._unwrap(element, lambda child: child[_NAME] not in _FLDDATAS)
         self.removed['fields'] += 1
 
     def _remove_object(self, element):
         """A w:object goes, and its preview picture stays where there is one: a DrawingML one (w:drawing) in its place,
         a VML one (v:shape) as the w:pict it would be without the object."""
-        start_end = self._tag_end(element.start)
-        children = element.children or []
-        drawings = [child for child in children if child.name in _DRAWING]
-        pictures = [child for child in children if child.name.startswith(_VML_PREFIX)]
+        start_end = self._tag_end(element[_AT])
+        children = element[_CHILDREN] or []
+        drawings = [child for child in children if child[_NAME] in _DRAWINGS]
+        pictures = [child for child in children if child[_NAME].startswith(_VML_PREFIX)]
         if self.raw[start_end - 2] == 0x2F or not (drawings or pictures):
             self._remove(element)
         elif drawings:
-            self._unwrap(element, lambda child: child.name in _DRAWING)
+            self._unwrap(element, lambda child: child[_NAME] in _DRAWINGS)
         else:
-            qualified = _TAG_NAME.match(self.raw, element.start).group(1)
+            qualified = _TAG_NAME.match(self.raw, element[_AT]).group(1)
             prefix = qualified.rpartition(b':')[0]
             pict = prefix + b':pict' if prefix else b'pict'
             declarations = ''.join(f' xmlns={quoteattr(uri)}' if declared is None
-                                   else f' xmlns:{declared}={quoteattr(uri)}' for declared, uri in element.declared)
-            self._edit(element.start, start_end, b'<' + pict + declarations.encode('utf-8') + b'>')
+                                   else f' xmlns:{declared}={quoteattr(uri)}' for declared, uri in element[_DECLARED])
+            self._edit(element[_AT], start_end, b'<' + pict + declarations.encode('utf-8') + b'>')
             for child in children:
-                if not child.name.startswith(_VML_PREFIX):
+                if not child[_NAME].startswith(_VML_PREFIX):
                     self._remove(child)
-            self._edit(element.end_mark, self._tag_end(element.end_mark), b'</' + pict + b'>')
+            self._edit(element[_END], self._tag_end(element[_END]), b'</' + pict + b'>')
         self.removed['objects'] += 1
 
 
@@ -758,30 +856,64 @@ def _editable(raw) -> bool:
     return declared is None or declared.group(1).decode('ascii').casefold() in ('utf-8', 'us-ascii', 'ascii')
 
 
+def _named_by(references, edits) -> set:
+    """The relationship ids among ``references`` ((offset, id) pairs) that lie in what ``edits`` take."""
+    starts, found = [start for start, _, _ in edits], set()
+    for offset, value in references:
+        at = bisect.bisect_right(starts, offset) - 1
+        if at >= 0 and edits[at][0] <= offset < edits[at][1]:
+            found.add(value)
+    return found
+
+
+def _still_named(data, values) -> set:
+    """Which of ``values`` (relationship ids) some attribute of ``data`` still holds, found by their bytes (as written,
+    or with XML's escapes): a relationship whose id any kept attribute holds is kept."""
+    found = set()
+    for value in values:
+        for form in {value, escape(value, {'"': '&quot;', "'": '&apos;'})}:
+            if re.search(rb'=\s*(["\'])' + re.escape(form.encode('utf-8')) + rb'\1', data):
+                found.add(value)
+    return found
+
+
+def _well_formed(data):
+    """Refuses an edited part that expat no longer parses (namespaces resolved): read in C, with no handler."""
+    try:
+        expat.ParserCreate(namespace_separator=' ').Parse(data, True)
+    except expat.ExpatError:
+        raise PackageRefused('a document part could not be edited safely') from None
+
+
 def _edited_part(raw, deadline):
     """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named), or None when
-    nothing is to be removed - the part then passes through byte for byte. The edited part is read again: it must be
-    well-formed, hold nothing E2 removes, and its attribute values decide which ids are still named."""
+    nothing is to be removed - the part then passes through byte for byte.
+
+    The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
+    take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
+    (well-formed, every prefix bound); and an id some kept attribute still holds keeps its relationship, found by its
+    bytes. The one way an edit can make a new instruction is a field removed inside another field's instruction: its
+    result, kept, now stands in that instruction, and may complete the outer field's type ('LI' and a removed field's
+    result 'NK'). Only then is the part read again, and edited again, until nothing more is removed."""
     reader = _PartReader(raw, deadline, editable=_editable(raw)).read()
     if not reader.edits:
         return None
-    edits = _merged(reader.edits)
-    edited = _applied(raw, edits)
-    try:
-        check = _PartReader(edited, deadline, collect_values=True).read()
-    except _OutOfTime:
-        raise
-    except PackageRefused:
-        raise PackageRefused('a document part could not be edited safely') from None
-    if check.edits:
+    data, removed, gone = raw, dict.fromkeys(_REMOVED_KINDS, 0), set()
+    for _ in range(_REREADS):
+        edits = _merged(reader.edits)
+        gone |= _named_by(reader.references, edits)
+        for kind in _REMOVED_KINDS:
+            removed[kind] += reader.removed[kind]
+        data = _applied(data, edits)
+        if not reader.nested_removal:
+            break
+        reader = _PartReader(data, deadline).read()
+        if not reader.edits:
+            break
+    else:
         raise PackageRefused('a document part could not be edited safely')
-    starts = [start for start, _, _ in edits]
-    gone = set()
-    for offset, value in reader.references:
-        at = bisect.bisect_right(starts, offset) - 1
-        if at >= 0 and edits[at][0] <= offset < edits[at][1]:
-            gone.add(value)
-    return edited, reader.removed, gone - check.values
+    _well_formed(data)
+    return data, removed, gone - _still_named(data, gone)
 
 
 def _content_types(raw):
@@ -805,6 +937,31 @@ def _content_type(name, types) -> str:
     return defaults.get(leaf.rpartition('.')[2], '') if '.' in leaf else ''
 
 
+def _without_overrides(raw, dropped) -> bytes:
+    """The content types part ``raw`` without the Override of any part in ``dropped`` (folded part names), removed by
+    byte range; ``raw`` itself when it overrides none of them - or when it is not UTF-8, whose bytes are not edited (a
+    stale Override names a part that is not there, which a reader passes over)."""
+    if not _editable(raw):
+        return raw
+    spans, opened = [], []
+    parser = expat.ParserCreate(namespace_separator=' ')
+
+    def start(name, attrs):
+        part = (attrs.get('PartName') or '').lstrip('/')
+        hit = name == f'{CONTENT_TYPES_NS} Override' and bool({part.casefold(), unquote(part).casefold()} & dropped)
+        opened.append(parser.CurrentByteIndex if hit else None)
+
+    def end(name):
+        at = opened.pop()
+        if at is not None:
+            start_end = _TAG.match(raw, at).end()
+            stop = start_end if raw[start_end - 2] == 0x2F else _TAG.match(raw, parser.CurrentByteIndex).end()
+            spans.append((at, stop))
+    parser.StartElementHandler, parser.EndElementHandler = start, end
+    parser.Parse(raw, True)  # read already (_xml): well-formed, with no DTD
+    return _applied(raw, [(at, stop, b'') for at, stop in spans]) if spans else raw
+
+
 def _refuse_any_dtd(raw):
     """Refuses ``raw`` when an XML parser reading it would meet a DTD; anything else wrong with it is not this
     check's."""
@@ -819,9 +976,9 @@ def _refuse_any_dtd(raw):
 def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
-    SVG picture's excepted. The relationships only removed content named are dropped (``kept_rows`` and ``rewritten``
-    updated) and the parts only they named added to ``orphans``. Returns (the counts, {part: the refusal held until it
-    is known whether the part is still sent})."""
+    SVG picture's excepted. A part read as XML here is held to E1's inflation ratio like an .xml part. The relationships
+    only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only they named added
+    to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is still sent})."""
     removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:
@@ -831,7 +988,11 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
         raw = parts[name]
         view = raw.replace(b'\x00', b'') if _wide(raw) else raw
         try:
-            if _TRIGGER.search(view):
+            triggered = _TRIGGER.search(view) is not None
+            if triggered or (_DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE):
+                if not _xml_named(name) and _inflates_too_much(info) and _begins_as_xml(raw):
+                    raise PackageRefused(f'a part inflates more than {MAX_INFLATION} times its stored size')
+            if triggered:
                 outcome = _edited_part(raw, deadline)
                 if outcome is not None:
                     rewritten[name], counts, ids = outcome

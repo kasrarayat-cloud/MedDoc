@@ -153,10 +153,11 @@ def _text_document(kind, title, text, source_sha256) -> Document:
 
 def convert_docx(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bytes:
     """``data`` (a Word file) as PDF bytes; DocumentError CONVERT when it cannot be converted, BUSY when the converter
-    cannot convert it now (a member may retry). With settings.CONVERTER_SOCKET the converter service converts it (E3);
-    with none, settings.CONVERTER_REQUIRED makes it BUSY, and otherwise it is converted here, in a bounded child, by
-    the same code the service runs (``runner``: the function run there on the package safe_package made of ``data`` and
-    the work folder made for it, default LibreOffice's; ``seconds`` and ``memory_bytes``: the child's limits)."""
+    cannot convert it now or the package checks ran out of time (a member may retry). With settings.CONVERTER_SOCKET the
+    converter service converts it (E3); with none, settings.CONVERTER_REQUIRED makes it BUSY, and otherwise it is
+    converted here, in a bounded child, by the same code the service runs (``runner``: the function run there on the
+    package safe_package made of ``data`` and the work folder made for it, default LibreOffice's; ``seconds`` and
+    ``memory_bytes``: the child's limits)."""
     path = settings.CONVERTER_SOCKET
     if path:
         return _converted_by_service(path, data)
@@ -164,6 +165,8 @@ def convert_docx(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_by
         raise DocumentError(BUSY, BUSY_TEXT, 'a converter is required and no converter socket is set')
     try:
         return docx_package.convert_in_child(data, runner=runner, seconds=seconds, memory_bytes=memory_bytes)
+    except docx_package.ConversionBusy as exc:  # its checks ran out of time: not the file's fault
+        raise DocumentError(BUSY, BUSY_TEXT, str(exc)) from None
     except docx_package.ConversionRefused as exc:
         raise DocumentError(CONVERT, CONVERT_TEXT, f'the Word package was refused: {exc}') from None
     except docx_package.ConversionFailed as exc:

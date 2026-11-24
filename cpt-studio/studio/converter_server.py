@@ -10,8 +10,8 @@ bytes, then a body of the header's ``size`` bytes.
   limit), or {"op": "ping"}.
 - The answer: {"status": "ok", "size": n, "sha256": hex} and the PDF (at most docx_package.MAX_PDF_BYTES), or
   {"status": "error", "kind": "refused" | "failed" | "busy", "size": 0}. The worker reads refused and failed as a failed
-  conversion (CONVERT) and busy - or no answer at all: an unreachable socket, a timeout, a closed connection - as BUSY,
-  which a member may retry.
+  conversion (CONVERT) and busy - the converter stopping, the package checks out of time, or no answer at all: an
+  unreachable socket, a timeout, a closed connection - as BUSY, which a member may retry.
 - Conversions run one at a time; up to BACKLOG more connections wait in the listen backlog. On SIGTERM the server
   finishes the conversion it is running, answers busy to the connections waiting, and stops once none is left.
 - Its log holds sizes, durations and fixed words: never a document's text, title or file name.
@@ -298,6 +298,10 @@ class ConverterServer(socketserver.UnixStreamServer):
         started = time.monotonic()
         try:
             pdf = docx_package.convert_in_child(data, runner=self.runner)
+        except docx_package.ConversionBusy as exc:  # its checks ran out of time: busy, for a retry
+            log.warning('converter: busy (%s)', exc)
+            self._answer(sock, _error(BUSY))
+            return
         except docx_package.ConversionRefused as exc:
             log.info('converter: refused a Word file (%s)', exc)
             self._answer(sock, _error(REFUSED))
@@ -366,7 +370,7 @@ def self_test_docx() -> bytes:
 
 def self_test(*, runner=None) -> int:
     """Converts self_test_docx() as a request would be converted, here (no socket): the PDF's size, or
-    docx_package.ConversionRefused / ConversionFailed."""
+    docx_package.ConversionRefused / ConversionBusy / ConversionFailed."""
     pdf = docx_package.convert_in_child(self_test_docx(), runner=runner)
     if not pdf.startswith(b'%PDF-'):
         raise docx_package.ConversionFailed('the conversion produced no PDF')
@@ -393,7 +397,7 @@ def main(argv=None) -> int:
     if args.self_test:
         try:
             size = self_test()
-        except (docx_package.ConversionRefused, docx_package.ConversionFailed) as exc:
+        except (docx_package.ConversionRefused, docx_package.ConversionBusy, docx_package.ConversionFailed) as exc:
             print(f'cpt-studio converter self-test: failed ({exc})')
             return 1
         print(f'cpt-studio converter self-test: ok, a PDF of {size} bytes')

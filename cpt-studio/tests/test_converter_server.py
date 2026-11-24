@@ -156,6 +156,18 @@ class ServiceTests(SimpleTestCase):
             self.assertIn('did not answer in time', busy(str(folder / 'silent.sock')))
         self.assertLess(time.monotonic() - started, 10)
 
+    def test_package_checks_out_of_time_in_the_service_are_busy_not_a_failed_conversion(self):
+        # the L-CODING lens's finding 3, through the service: the converter answers busy, the worker fails BUSY
+        with Running(fake_runner) as running, mock.patch.object(docx_package, 'PACKAGE_SECONDS', -1), \
+                self.assertLogs('studio.converter_server', 'WARNING') as logged:
+            with self.assertRaises(converter_server.ConverterBusy) as caught:
+                converter_server.request(running.path, PLAIN_PACKAGE, total_seconds=60)
+            self.assertEqual(str(caught.exception), 'the converter was busy')
+            with override_settings(CONVERTER_SOCKET=running.path), self.assertRaises(document.DocumentError) as wrapped:
+                document.convert_docx(PLAIN_PACKAGE)
+        self.assertEqual((wrapped.exception.failure_kind, wrapped.exception.text), (BUSY, document.BUSY_TEXT))
+        self.assertIn('converter: busy (checking it took longer than', '\n'.join(logged.output))
+
     def test_the_worker_allows_two_seconds_to_connect_and_its_threads_turns_in_all(self):
         with override_settings(CONVERTER_SOCKET='/run/cpt-convert/convert.sock', CONCURRENT_DOCUMENTS=4), \
                 mock.patch.object(converter_server, 'request', return_value=CONVERTED) as request:
