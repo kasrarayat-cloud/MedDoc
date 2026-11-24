@@ -656,8 +656,10 @@ class ContractTests(unittest.TestCase):
 
     def test_cookie_names_and_the_csrf_field(self):
         settings = self.read('cptstudio', 'settings.py')
-        self.assertIn(f"SESSION_COOKIE_NAME = '{vl.SESSION_COOKIE}'", settings)
-        self.assertIn(f"CSRF_COOKIE_NAME = '{vl.CSRF_COOKIE}'", settings)
+        # release 1 (B6): under HTTPS the settings give both cookies the __Host- prefix; without HTTPS (the loopback
+        # port, the tests) they keep these names. Which name this tool reads on the public site is Lane 6's (A11).
+        self.assertIn(f"SESSION_COOKIE_NAME = '__Host-{vl.SESSION_COOKIE}' if HTTPS else '{vl.SESSION_COOKIE}'", settings)
+        self.assertIn(f"CSRF_COOKIE_NAME = '__Host-{vl.CSRF_COOKIE}' if HTTPS else '{vl.CSRF_COOKIE}'", settings)
         self.assertIn("CSRF_TRUSTED_ORIGINS = ['https://cpt.quillmd.com']", settings)
         self.assertNotIn('CSRF_USE_SESSIONS', settings)  # the token is the cookie's, so GET /login/ writes no row
         self.assertNotIn('SESSION_SAVE_EVERY_REQUEST', settings)
