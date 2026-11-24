@@ -208,7 +208,8 @@ class IdleAndCapTests(TestCase):
                 self.assertEqual(client.get('/api/session').status_code, 200)
             clock.advance(1)
             answer = client.get('/api/session')
-            self.assertEqual((answer.status_code, answer.json()['reason']), (401, 'expired'))
+            self.assertEqual(answer.status_code, 401)
+            self.assertEqual(answer.json(), {'error': 'signed_out', 'reason': 'expired'})
             self.assertFalse(session_row(client).exists())
 
     def test_an_operator_is_signed_out_after_601_seconds_on_the_admin_host(self):
@@ -219,7 +220,8 @@ class IdleAndCapTests(TestCase):
             self.assertEqual(kept.get('/ops/').status_code, 200)
             clock.advance(1)
             answer = idle.get('/ops/')
-            self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?next=%2Fops%2F&reason=idle'))
+            self.assertEqual(answer.status_code, 302)
+            self.assertEqual(answer['Location'], '/login/?next=%2Fops%2F&reason=idle')
             self.assertFalse(session_row(idle).exists())
             page = idle.get(answer['Location']).content.decode()
             self.assertIn(f'You were signed out after {settings.SESSION_IDLE_OPERATOR_SECONDS // 60} minutes without '
@@ -323,6 +325,7 @@ class CookieAndHeaderTests(TestCase):
             answer = client.get('/login/', secure=True)
         for name in sessions.OLD_COOKIE_NAMES:
             with self.subTest(name=name):
+                self.assertIn(name, answer.cookies)
                 cookie = answer.cookies[name]
                 self.assertEqual((cookie.value, cookie['max-age'], cookie['path']), ('', 0, '/'))
                 self.assertTrue(cookie['secure'])
