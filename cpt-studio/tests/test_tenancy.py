@@ -183,7 +183,7 @@ class OtherWorkspaceTests(TenancyCase):
                             ('inactive', inactive)):
             with self.subTest(who=who):
                 self.assertEqual(set(self.operator_doors(client).values()), {404})
-        operator = ops.client(f.user('synthetic-operator'))  # the positive control: the gate opens for a grant
+        operator = ops.admin_client(f.user('synthetic-operator'))  # the positive control: the gate opens for a grant
         self.assertEqual(operator.get('/ops/').status_code, 200)
         self.assertEqual(operator.get(f'/ops/encounters/{self.enc.pk}').status_code, 200)
 

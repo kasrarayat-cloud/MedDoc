@@ -10,8 +10,12 @@ import hashlib
 import io
 import json
 import re
+from datetime import timedelta
+from unittest import mock
 
-from django.test import TestCase
+from django.conf import settings
+from django.test import TestCase, override_settings
+from django.utils import timezone
 from pypdf import PdfReader
 
 from studio import decisions, exports, models, state
@@ -324,3 +328,163 @@ class TxtAndCsvTests(ExportCase):
                 self.assertEqual(got['Content-Type'], content_type)
                 self.assertEqual(got['Content-Disposition'], f'attachment; filename="{export.filename}"')
                 self.assertEqual(self.client_for(self.outsider).get(report['download_url']).status_code, 404)
+
+
+class ReuseTests(ExportCase):
+    """Release 1, C5: asking again for a report that is still current returns the stored copy (200, one export.reused
+    row), so clicks stop piling up copies of PHI; a new decision makes the next request render a fresh one. The lock
+    is the document's row alone."""
+
+    def make(self, kind='draft', client=None):
+        return (client or self.client).post(f'/api/encounters/{self.enc.pk}/reports', data=json.dumps(
+            {'kind': kind, 'fmt': 'pdf', 'round': self.round.number}), content_type='application/json')
+
+    def test_two_clicks_make_one_row_and_a_decision_in_between_makes_two(self):
+        first, second = self.make(), self.make()
+        self.assertEqual((first.status_code, second.status_code), (201, 200))
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 1)
+        reused = models.AuditEvent.objects.get(event='export.reused')
+        self.assertEqual((reused.data['export'], reused.actor_id), (first.json()['id'], self.reviewer.pk))
+        self.assertEqual(models.AuditEvent.objects.filter(event='export.created').count(), 1)
+        self.assertEqual(self.decide(self.enc, 'L1', '45385', 'approve', round_number=self.round.number).status_code,
+                         201)
+        third = self.make()
+        self.assertEqual(third.status_code, 201)
+        self.assertNotEqual(third.json()['id'], first.json()['id'])
+        self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 2)
+        self.assertEqual(self.make().status_code, 200)  # and that one is reused in its turn
+        # another kind is another report
+        self.assertEqual(self.make('approved').status_code, 201)
+        self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 3)
+
+    def test_a_copy_made_meanwhile_is_answered_as_the_stored_copy(self):
+        """The made path re-checks under the document's lock. Another click may make the report between this
+        request's first look and its lock - here, while this request is being counted. That copy is answered as the
+        stored copy and never made twice."""
+        made = []
+
+        def charge():  # between the first look and the lock: another click makes the report
+            made.append(exports.create(self.enc, self.viewer, 'draft', 'pdf', round_number=self.round.number))
+        answer = exports.create(self.enc, self.reviewer, 'draft', 'pdf', round_number=self.round.number, charge=charge)
+        self.assertEqual(len(made), 1)
+        self.assertEqual((answer.reused, answer.pk), (True, made[0].pk))
+        self.assertEqual(Export.objects.filter(encounter=self.enc).count(), 1)
+        self.assertEqual(models.AuditEvent.objects.filter(event='export.created').count(), 1)
+        self.assertEqual(models.AuditEvent.objects.get(event='export.reused').actor_id, self.reviewer.pk)
+
+    def test_the_stored_copy_names_who_first_made_it(self):
+        first = self.make()
+        again = self.make(client=self.client_for(self.viewer))  # viewers keep making reports (owner decision D8)
+        self.assertEqual((again.status_code, again.json()['id']), (200, first.json()['id']))
+        self.assertEqual(Export.objects.get(pk=first.json()['id']).created_by_id, self.reviewer.pk)
+        self.assertEqual(models.AuditEvent.objects.get(event='export.reused').actor_id, self.viewer.pk)
+
+    def test_the_lock_is_the_documents_row_alone(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(self.make().status_code, 201)
+        locks = [query['sql'] for query in queries.captured_queries if 'FOR UPDATE' in query['sql']]
+        document = [sql for sql in locks if 'FROM "studio_encounter"' in sql]
+        self.assertEqual(len(document), 1, locks)
+        self.assertEqual(document[0][document[0].index('FOR UPDATE'):], 'FOR UPDATE OF "studio_encounter"')
+        self.assertIn('"studio_workspace"', document[0])  # the practice is read in the same query, never locked
+        for sql in locks:
+            self.assertNotIn('studio_workspace', sql[sql.index('FOR UPDATE'):])
+
+
+class LimitTests(ExportCase):
+    """Release 1, C5 (owner decision D8): 10 reports per member in 10 minutes, 60 per practice in an hour, 30 uploads per
+    member in 10 minutes; over a limit the answer is 429 rate_limited with Retry-After, and the first refusal of a window
+    writes one SecurityEvent. Only a report actually made counts (lead ruling 2026-11-24): the stored copy answered
+    again, and a refusal, count toward no limit and are never refused by one."""
+
+    def ready(self, number):
+        """Another document of the practice with a finished round, so asking for its report makes one."""
+        enc = self.encounter(title=f'Synthetic limit note {number}')
+        r.write_round(enc, codes=[r.row('45385', 'ready', reason='A 9 mm polyp was removed with a cold snare (page 2).',
+                                        check_reason='The snare is documented.')])
+        return enc
+
+    def make(self, client, enc=None):
+        enc = enc or self.enc
+        return client.post(f'/api/encounters/{enc.pk}/reports', data=json.dumps(
+            {'kind': 'draft', 'fmt': 'pdf', 'round': state.latest_round(enc).number}), content_type='application/json')
+
+    def upload(self, client, number):
+        return client.post('/api/encounters', {'text': f'SYNTHETIC NOTE {number}: colonoscopy to the cecum.',
+                                               'synthetic_attestation': 'yes', 'title': f'Synthetic note {number}'})
+
+    def assert_limited(self, answer):
+        from tests.support import rounds
+        self.assertEqual(answer.status_code, 429)
+        body = answer.json()
+        self.assertEqual(set(body), {'error', 'retry_after'})
+        self.assertEqual(body['error'], 'rate_limited')
+        self.assertEqual(answer['Retry-After'], str(body['retry_after']))
+        self.assertTrue(1 <= body['retry_after'] <= 3600)
+        scanner = rounds.scan_customer()
+        self.assertEqual(scanner.shape_problems(body, scanner.CONTRACT['rate_limited']), [])
+
+    def test_the_eleventh_report_a_member_makes_in_ten_minutes_is_refused(self):
+        self.assertEqual(settings.EXPORT_LIMIT_PER_MEMBER, (10, 600))
+        documents = [self.enc] + [self.ready(number) for number in range(1, 12)]
+        for number, enc in enumerate(documents[:10]):
+            self.assertEqual(self.make(self.client, enc).status_code, 201, number)  # ten reports made
+        before = Export.objects.count()
+        self.assert_limited(self.make(self.client, documents[10]))
+        self.assert_limited(self.make(self.client, documents[10]))
+        self.assertEqual(Export.objects.count(), before)
+        events = models.SecurityEvent.objects.filter(event='export.rate_limited')
+        self.assertEqual(events.count(), 1)  # the first refusal of the window, once
+        self.assertEqual((events.get().subject_id, events.get().workspace_id, events.get().data),
+                         (self.reviewer.pk, self.ws.pk, {'scope': 'export.member', 'limit': 10, 'window_seconds': 600}))
+        self.assertEqual(self.make(self.client, documents[0]).status_code, 200)  # a stored copy: it makes nothing
+        self.assertEqual(self.make(self.client_for(self.viewer), documents[10]).status_code, 201)  # per member
+        later = timezone.now() + timedelta(seconds=601)
+        with mock.patch.object(timezone, 'now', return_value=later):  # a new window
+            self.assertEqual(self.make(self.client, documents[11]).status_code, 201)
+
+    @override_settings(EXPORT_LIMIT_PER_WORKSPACE=(3, 3600))
+    def test_the_practice_limit_counts_every_member(self):
+        made = [(self.client, self.enc), (self.client, self.ready(1)), (self.client_for(self.viewer), self.ready(2))]
+        for client, enc in made:
+            self.assertEqual(self.make(client, enc).status_code, 201)
+        self.assert_limited(self.make(self.client_for(self.agent), self.ready(3)))
+        self.assertEqual(models.SecurityEvent.objects.get(event='export.rate_limited').data['scope'], 'export.workspace')
+        self.assert_limited(self.make(self.client, self.ready(4)))  # another document of the same practice: refused
+
+    @override_settings(EXPORT_LIMIT_PER_MEMBER=(1, 600))
+    def test_the_stored_copy_answered_again_counts_toward_no_limit(self):
+        self.assertEqual(self.make(self.client).status_code, 201)  # the one report this member may make
+        for number in range(12):
+            self.assertEqual(self.make(self.client).status_code, 200, number)  # the stored copy, never refused
+        self.assertEqual(models.AuditEvent.objects.filter(event='export.reused').count(), 12)
+        self.assertFalse(models.SecurityEvent.objects.filter(event='export.rate_limited').exists())
+        self.assert_limited(self.make(self.client, self.ready(1)))  # the second report made is the one refused
+
+    @override_settings(EXPORT_LIMIT_PER_MEMBER=(1, 600))
+    def test_a_refused_request_counts_toward_no_limit(self):
+        stale = self.client.post(f'/api/encounters/{self.enc.pk}/reports', data=json.dumps(
+            {'kind': 'draft', 'fmt': 'pdf', 'round': self.round.number + 1}), content_type='application/json')
+        for _ in range(3):
+            self.assertEqual(self.client.post(f'/api/encounters/{self.enc.pk}/reports', data=json.dumps(
+                {'kind': 'draft', 'fmt': 'pdf', 'round': self.round.number + 1}),
+                content_type='application/json').status_code, 409)
+        self.assertEqual(stale.status_code, 409)  # not the round the page shows: nothing is made
+        unready = self.encounter(title='Synthetic note with no round yet')
+        self.assertEqual(self.client.post(f'/api/encounters/{unready.pk}/reports', data=json.dumps(
+            {'kind': 'draft', 'fmt': 'pdf', 'round': 1}), content_type='application/json').status_code, 409)
+        self.assertEqual(self.make(self.client).status_code, 201)  # still within the limit of one
+
+    def test_the_thirty_first_upload_of_a_member_in_ten_minutes_is_refused(self):
+        self.assertEqual(settings.UPLOAD_LIMIT_PER_MEMBER, (30, 600))
+        for number in range(30):
+            self.assertEqual(self.upload(self.client, number).status_code, 201, number)
+        before = models.Encounter.objects.count()
+        self.assert_limited(self.upload(self.client, 30))
+        self.assertEqual(models.Encounter.objects.count(), before)  # nothing stored or queued
+        self.assertEqual(models.SecurityEvent.objects.get(event='upload.rate_limited').data,
+                         {'scope': 'upload.member', 'limit': 30, 'window_seconds': 600})
+        self.assertEqual(self.upload(self.client_for(self.agent), 31).status_code, 201)  # another member

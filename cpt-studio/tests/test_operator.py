@@ -1,19 +1,24 @@
-"""Platform-operator access (studio.operator; CORE-UX-DESIGN.md 5). A grant comes only from the management command and
-no workspace role ever makes an operator; a revocation ends it; grants are append-only and no URL records one. An
-operator with no membership signs in on the same page and lands on the console; one who is also a member signs in as the
-member. The console itself (its gate, pages and acts) is tests/test_operator_console.py's. Synthetic data only.
+"""Platform-operator access (studio.operator; CORE-UX-DESIGN.md 5; release 1, C3). A grant comes only from the management
+command, rests on an approval with a review date and a named person who records it, and is for people only: an automated
+account is never granted and never an operator, whatever grant row it has. No workspace role ever makes an operator; a
+revocation ends the grant and every session of the account; each grant and revocation writes a SecurityEvent; grants are
+append-only and no URL records one. The console answers only on the admin host (B3: tests/test_console_host.py); the
+console itself (its gate, pages and acts) is tests/test_operator_console.py's. Synthetic data only.
 """
 import inspect
 import json
 import re
 import shutil
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.sessions.models import Session
 from django.core.management import CommandError, call_command
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, get_resolver
+from django.utils import timezone
 
 from studio import models, operator
 from tests.support import coding as factories
@@ -72,7 +77,7 @@ class GrantTests(TestCase):
         self.assertFalse(operator.is_operator(user))
         user.is_active = False
         user.save()
-        ops.grant(user)
+        operator.grant(user, 'Synthetic test: granted again after its revocation.', 'tests', regrant=True)  # explicit
         self.assertFalse(operator.is_operator(user), 'an inactive account is never an operator')
 
     def test_is_operator_reads_no_membership(self):
@@ -84,14 +89,28 @@ class GrantTests(TestCase):
         with self.assertNumQueries(1):
             self.assertTrue(operator.is_operator(user))
 
+    def grant_command(self, username, *, reason=None, omit=(), **overrides):
+        """grant_operator with every required argument - the reason file, a synthetic approval, a review date 90 days
+        away and a named person - each replaced by ``overrides`` and left out when named in ``omit``."""
+        arguments = {'username': username, 'reason_file': str(reason or self.reason), 'by': 'Synthetic Admin',
+                     'authorization_ref': 'docs/foundation/rulings/synthetic-grant.md',
+                     'review_by': (timezone.localdate() + timedelta(days=90)).isoformat(), **overrides}
+        for name in omit:
+            arguments.pop(name)
+        return call_command('grant_operator', stdout=_out(), **arguments)
+
     def test_grant_operator_records_one_grant_from_the_reason_file(self):
         user = f.user('alice')
-        call_command('grant_operator', username='alice', reason_file=str(self.reason), by='synthetic admin', stdout=_out())
+        review_by = timezone.localdate() + timedelta(days=90)
+        self.grant_command('alice', by='synthetic admin', review_by=review_by.isoformat())
         grant = models.OperatorGrant.objects.get(user=user)
-        self.assertEqual((grant.reason, grant.granted_by),
-                         ('Synthetic platform operator for the diagnostics tests.', 'synthetic admin'))
+        self.assertEqual((grant.reason, grant.granted_by, grant.authorization_ref, grant.review_by),
+                         ('Synthetic platform operator for the diagnostics tests.', 'synthetic admin',
+                          'docs/foundation/rulings/synthetic-grant.md', review_by))
         out = _out()
-        call_command('grant_operator', username='alice', reason_file=str(self.reason), stdout=out)
+        call_command('grant_operator', username='alice', reason_file=str(self.reason), by='Synthetic Admin',
+                     authorization_ref='docs/foundation/rulings/synthetic-grant.md',
+                     review_by=review_by.isoformat(), stdout=out)
         self.assertIn('already holds operator access', out.getvalue())
         self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)
         self.assertTrue(operator.is_operator(user))
@@ -107,8 +126,64 @@ class GrantTests(TestCase):
                                         ('bob', self.tmp / 'missing.txt', 'cannot be read'),
                                         ('bob', empty, 'empty'), ('carol', self.reason, 'not active')):
             with self.subTest(username=username, reason=reason.name), self.assertRaisesRegex(CommandError, words):
-                call_command('grant_operator', username=username, reason_file=str(reason), stdout=_out())
+                self.grant_command(username, reason=reason)
         self.assertFalse(models.OperatorGrant.objects.exists())
+
+    def test_grant_operator_requires_the_approval_the_review_date_and_the_person(self):
+        # release 1, C3: all three are required, and each refusal records nothing
+        f.user('bob')
+        for missing in ('authorization_ref', 'review_by', 'by'):
+            with self.subTest(missing=missing), self.assertRaisesRegex(CommandError, 'arguments are required'):
+                self.grant_command('bob', omit=(missing,))
+        today = timezone.localdate()
+        for label, arguments, words in (
+                ('a past review date', {'review_by': (today - timedelta(days=1)).isoformat()}, 'already passed'),
+                ('more than 12 months away', {'review_by': (today + timedelta(days=400)).isoformat()}, '12 months'),
+                ('not a date', {'review_by': '2026-13-01'}, 'YYYY-MM-DD'),
+                ('a blank approval', {'authorization_ref': '   '}, 'authorization reference is required'),
+                ('an approval too long', {'authorization_ref': 'x' * 201}, 'at most 200'),
+                ('a role as --by', {'by': 'operator'}, 'names a role'),
+                ('another role as --by', {'by': '[SECURITY OFFICER]'}, 'names a role'),
+                ('a uid as --by', {'by': 'uid 1000'}, 'names a role'),
+                ('a blank --by', {'by': '  '}, 'names the person')):
+            with self.subTest(label), self.assertRaisesRegex(CommandError, words):
+                self.grant_command('bob', **arguments)
+        self.assertFalse(models.OperatorGrant.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exists())
+        # the furthest review date allowed is the same day twelve months on
+        self.grant_command('bob', review_by=operator.review_limit(today).isoformat())
+        self.assertEqual(models.OperatorGrant.objects.get(user__username='bob').review_by, operator.review_limit(today))
+
+    def test_an_automated_account_is_never_granted_and_never_an_operator(self):
+        agent = f.user('review-agent', actor_kind=models.User.AGENT)
+        with self.assertRaisesRegex(CommandError, 'automated account cannot be an operator'):
+            self.grant_command('review-agent')
+        with self.assertRaisesRegex(ValueError, 'automated account cannot be an operator'):
+            operator.grant(agent, 'Synthetic test reason for an automated account.', 'tests')
+        self.assertFalse(models.OperatorGrant.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exists())
+        # a grant row written before release 1 (as the installer once granted ops-agent) gives it no power at all
+        models.OperatorGrant.objects.create(user=agent, reason='Synthetic grant from before release 1.',
+                                            granted_by='synthetic installer')
+        agent.refresh_from_db()
+        self.assertFalse(operator.is_operator(agent))
+        with self.assertNumQueries(0):
+            operator.is_operator(agent)  # refused on the account it already holds, before any query
+
+    def test_a_grant_and_a_revocation_write_their_security_events_with_ids_only(self):
+        user = f.user('frank')
+        self.grant_command('frank', by='Synthetic Admin')
+        grant = models.OperatorGrant.objects.get(user=user)
+        granted = models.SecurityEvent.objects.get(event='operator.granted')
+        self.assertEqual((granted.subject_id, granted.actor_label, granted.data),
+                         (user.pk, 'Synthetic Admin', {'grant': str(grant.pk), 'review_by': grant.review_by.isoformat()}))
+        call_command('revoke_operator', username='frank', reason_file=str(self.reason), by='Synthetic Admin',
+                     stdout=_out())
+        revoked = models.SecurityEvent.objects.get(event='operator.revoked')
+        self.assertEqual((revoked.subject_id, revoked.actor_label, revoked.data),
+                         (user.pk, 'Synthetic Admin', {'grants': [str(grant.pk)], 'sessions_ended': 0}))
+        for row in (granted, revoked):  # ids, a date and counts: never the reason or the approval's text
+            self.assertNotIn('Synthetic platform operator', json.dumps(row.data))
 
     def test_revoke_operator_ends_the_grant_and_refuses_without_one(self):
         user = f.user('dave')
@@ -121,8 +196,64 @@ class GrantTests(TestCase):
         self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)  # the grant row stays
         for username in ('dave', 'nobody-here'):
             with self.assertRaises(CommandError):
-                call_command('revoke_operator', username=username, reason_file=str(self.reason), stdout=_out())
+                call_command('revoke_operator', username=username, reason_file=str(self.reason), by='Synthetic Admin',
+                             stdout=_out())
         self.assertEqual(models.OperatorRevocation.objects.count(), 1)
+
+    def test_a_revoked_account_is_granted_again_only_with_regrant_and_the_regrant_is_recorded(self):
+        user = f.user('olga')
+        self.grant_command('olga')
+        call_command('revoke_operator', username='olga', reason_file=str(self.reason), by='Synthetic Admin',
+                     stdout=_out())
+        with self.assertRaises(CommandError) as refused:  # anyone who runs grant_operator: refused
+            self.grant_command('olga')
+        self.assertIn('--regrant', str(refused.exception))
+        self.assertIn('Nothing was recorded.', str(refused.exception))
+        with self.assertRaises(ValueError):  # and the function itself
+            operator.grant(user, 'Synthetic regrant without the flag.', 'Synthetic Admin')
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)
+        self.assertFalse(operator.is_operator(user))
+        out = _out()
+        call_command('grant_operator', username='olga', reason_file=str(self.reason), by='Synthetic Admin',
+                     authorization_ref='docs/foundation/deploys/synthetic-regrant.md@0123abcd',
+                     review_by=(timezone.localdate() + timedelta(days=30)).isoformat(), regrant=True, stdout=out)
+        self.assertIn('Granted operator access again to olga', out.getvalue())
+        self.assertIn('a regrant', out.getvalue())
+        self.assertTrue(operator.is_operator(user))
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 2)  # a new grant row; the old stays
+        events = list(models.SecurityEvent.objects.filter(event='operator.granted').order_by('created_at', 'pk'))
+        self.assertEqual([event.data.get('regrant') for event in events], [None, True])
+
+    def test_regrant_changes_nothing_for_an_account_never_revoked_or_still_granted(self):
+        user = f.user('pete')
+        self.grant_command('pete', regrant=True)  # never revoked: an ordinary first grant
+        self.assertEqual(models.SecurityEvent.objects.get(event='operator.granted').data.get('regrant'), None)
+        self.grant_command('pete', regrant=True)  # still granted: it keeps its grant, nothing is written
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)
+        self.assertEqual(models.SecurityEvent.objects.filter(event='operator.granted').count(), 1)
+
+    def test_revoke_operator_requires_a_named_person(self):
+        user = f.user('gina')
+        ops.grant(user)
+        with self.assertRaises(CommandError):  # --by left out: argparse's own refusal
+            call_command('revoke_operator', username='gina', reason_file=str(self.reason), stdout=_out())
+        for by in ('operator', 'Platform-Operator', 'root', 'uid 0', ''):
+            with self.subTest(by=by), self.assertRaises(CommandError):
+                call_command('revoke_operator', username='gina', reason_file=str(self.reason), by=by, stdout=_out())
+        self.assertFalse(models.OperatorRevocation.objects.exists())
+        self.assertTrue(operator.is_operator(user))
+
+    def test_a_revocation_ends_every_session_of_the_account(self):
+        user, other = f.user('hank'), f.user('ivy')
+        ops.grant(user)
+        sessions = [ops.admin_client(user), ops.client(user, HTTP_HOST='cpt.quillmd.com'), ops.admin_client(other)]
+        self.assertEqual(sessions[0].get('/ops/people').status_code, 200)
+        self.assertEqual(sessions_of(user), 2)
+        operator.revoke(user, 'Synthetic test revocation.', 'Synthetic Admin')
+        self.assertEqual(sessions_of(user), 0)  # every session of the account ended at once
+        self.assertEqual(sessions_of(other), 1)  # another account's session stays
+        self.assertEqual(models.SecurityEvent.objects.get(event='operator.revoked').data['sessions_ended'], 2)
+        self.assertEqual(sessions[0].get('/ops/people').status_code, 302)  # signed out: the admin host's sign-in
 
     def test_grants_and_revocations_are_append_only(self):
         grant = ops.grant(f.user('erin'))
@@ -169,6 +300,10 @@ class GrantTests(TestCase):
 
 @override_settings(STORAGES=PLAIN_STATIC)
 class LoginTests(TestCase):
+    """Where an operator's sign-in leads is the doors' (Lane 2: the cpt door loses its operator branch, B3 step 2); what
+    is held here is the console's side of it (B3, C3): no session from cpt.quillmd.com ever reaches the console, an
+    operator who is also a member keeps the doctors' app, and an account that is no operator is refused."""
+
     def setUp(self):
         self.ws = f.workspace()
 
@@ -178,26 +313,44 @@ class LoginTests(TestCase):
             data['next'] = next_url
         return Client().post('/login/', data)
 
-    def test_an_operator_without_a_membership_signs_in_and_lands_on_the_diagnostics(self):
-        user = f.user('ops-agent', actor_kind=models.User.AGENT)
+    def test_an_operator_without_a_membership_reaches_no_console_on_the_doctors_host(self):
+        user = f.user('platform-operator')
         ops.grant(user)
-        response = self.login('ops-agent')
-        self.assertEqual((response.status_code, response['Location']), (302, '/ops/'))
-        client = Client()
-        client.force_login(user)
-        self.assertEqual(client.get('/')['Location'], '/ops/')
-        self.assertEqual(client.get('/api/session').status_code, 404)  # no workspace of their own
-        self.assertEqual(client.get('/ops/').status_code, 200)
-        where = '/ops/encounters/00000000-0000-4000-8000-000000000001'
-        asked = self.login('ops-agent', where)
-        self.assertEqual(asked['Location'], where)
+        for host in ('testserver', 'cpt.quillmd.com'):
+            client = ops.client(user, HTTP_HOST=host)  # a session opened at the cpt door
+            with self.subTest(host=host):
+                self.assertEqual(client.get('/ops/').status_code, 404)
+                self.assertEqual(client.get('/api/session').status_code, 404)  # no workspace of their own
+        self.assertEqual(ops.admin_client(user).get('/ops/').status_code, 200)  # the console is the admin host's
+
+    def test_an_operator_without_a_membership_is_refused_at_the_doctors_door(self):
+        # needs Lane 2's B3 door half (bda98ab84, studio/views.py): the cpt door admits members only
+        user = f.user('platform-operator')
+        ops.grant(user)
+        response = Client(HTTP_HOST='cpt.quillmd.com').post('/login/', {'username': 'platform-operator',
+                                                                        'password': 'synthetic-pass-123!'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('The username or password is not correct.', response.content.decode())  # the wrong-password answer
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, response.cookies)  # no session is opened
+        attempt = models.LoginAttempt.objects.get(username='platform-operator')
+        self.assertEqual((attempt.door, attempt.outcome, attempt.succeeded), ('cpt', 'no_access', False))
+        self.assertEqual(ops.client(user, HTTP_HOST='cpt.quillmd.com').get('/').status_code, 404)  # no workspace here
+
+    def test_an_automated_account_signs_in_to_no_console(self):
+        agent = f.user('ops-agent', actor_kind=models.User.AGENT)
+        models.OperatorGrant.objects.create(user=agent, reason='Synthetic grant from before release 1.',
+                                            granted_by='synthetic installer')
+        response = self.login('ops-agent')  # no membership and no operator power: the wrong-password answer
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('The username or password is not correct.', response.content.decode())
+        signed_in = ops.mark_signed_in(_signed_in(agent, 'admin.quillmd.com'), door='admin')  # the door's markers
+        self.assertEqual(signed_in.get('/ops/').status_code, 404)
 
     def test_a_member_operator_lands_where_members_land(self):
         user = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
         ops.grant(user)
         self.assertEqual(self.login('owner')['Location'], '/')
-        client = Client()
-        client.force_login(user)
+        client = ops.mark_signed_in(_signed_in(user), door='cpt')
         self.assertEqual(client.get('/').status_code, 200)
 
     def test_without_a_membership_or_a_grant_sign_in_is_refused_as_before(self):
@@ -223,3 +376,14 @@ class MigrationTests(SimpleTestCase):
 def _out():
     import io
     return io.StringIO()
+
+
+def _signed_in(user, host='testserver'):
+    client = Client(HTTP_HOST=host)
+    client.force_login(user)
+    return client
+
+
+def sessions_of(user):
+    """How many stored sessions are signed in as ``user``."""
+    return sum(1 for item in Session.objects.all() if item.get_decoded().get('_auth_user_id') == str(user.pk))

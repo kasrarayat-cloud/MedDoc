@@ -17,6 +17,14 @@ again. ExportArtifact.fmt's declared choices name only txt and csv; they are not
 would be a field migration the installer refuses. A PDF that cannot be made is refused (NotMade) before anything is
 stored: no empty or partial file is ever saved or served.
 
+Release 1, C5: a request for a report that is still current by the page's own rule (customer.export_current: made from
+the latest round, no decision on that round after it) returns the stored copy instead of rendering another - one
+export.reused audit row records it - so clicks stop piling up copies of PHI; a new decision makes the next request render
+a fresh one. The lock is the document's row alone (select_for_update(of=('self',))), so a report being made blocks no
+other work in its practice. How many reports a member and a practice may ask for is studio.api's limit.
+
+Release 1b, not built here (D402): F1's reports half - sealing ExportArtifact.content with studio.file_crypto.
+
 Readiness: a draft needs the latest round done; the approved report needs a code of it approved (customer.readiness, the
 rule the page shows). A request names the round the page shows (FIX-SPEC-2 section 5): one that is not the latest is
 refused as changed, so a page left open never downloads a round its member did not see. An export made from an earlier
@@ -123,24 +131,68 @@ def render_pdf(snap, encounter, round_) -> bytes:
 
 # --- making and serving an export ------------------------------------------------------------------------------------------
 
-def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact:
+def current_export(encounter, round_, kind, fmt):
+    """The latest stored export of ``round_`` of this kind and format when it is still current
+    (customer.export_current), or None. Its bytes are not read: the caller lists it."""
+    latest = (Export.objects.filter(encounter_id=encounter.pk, round_id=round_.pk, kind=kind, fmt=fmt)
+              .defer('content').order_by('-created_at', '-pk').first())
+    if latest is None or not customer.export_current(latest, round_.pk, customer.last_decision_at(round_.pk)):
+        return None
+    return latest
+
+
+def _checked(encounter, kind, round_number):
+    """(the latest round, its current decisions) when a ``kind`` report of it can be made now: it must be round
+    ``round_number``, the one the page shows - decisions.Refused (409, changed) otherwise - and ready (NotReady)."""
+    round_ = state.latest_round(encounter)
+    if round_ is None or round_.number != round_number:
+        raise decisions.Refused(409, decisions.ROUND_CHANGED)
+    current = state.current_decisions(round_) if round_.state == Round.DONE else {}
+    ready = customer.readiness(round_, current)
+    if not ready['draft']:
+        raise NotReady(NOTHING_YET, ready['blockers'])
+    if kind == APPROVED and not ready['approved']:
+        raise NotReady(APPROVED_NOT_YET, ready['blockers'])
+    return round_, current
+
+
+def _reused(encounter, round_, stored, user, kind, fmt):
+    """The stored copy, answered again: export.reused recorded, ``reused`` true on it."""
+    audit.record(encounter.workspace, 'export.reused', encounter=encounter, actor=user, export=str(stored.pk),
+                 round=str(round_.pk), number=round_.number, kind=kind, fmt=fmt)
+    stored.reused = True
+    return stored
+
+
+def create(encounter, user, kind, fmt, *, round_number, charge=None) -> models.ExportArtifact:
     """Make and store one export of the latest round, which must be round ``round_number`` - the one the page shows
-    (any active member of the workspace may; the caller has scoped the encounter to the member), as a PDF. ValueError for
-    an unknown kind or any format but the PDF; decisions.Refused (409, changed) for another round; NotReady when it is
-    not available now; NotMade when the PDF cannot be made (nothing stored)."""
+    (any active member of the workspace may; the caller has scoped the encounter to the member), as a PDF - or, when
+    one of that round, kind and format is still current, return it (``reused`` true on the answer, export.reused
+    recorded). ValueError for an unknown kind or any format but the PDF; decisions.Refused (409, changed) for another
+    round; NotReady when it is not available now; NotMade when the PDF cannot be made (nothing stored).
+
+    ``charge`` (release 1, C5; lead ruling 2026-11-24: only a report actually made counts toward the limits) is called
+    once a request is found to make a new report, before it is rendered and outside any transaction, so studio.rate's
+    counter is never held under the document's lock. It counts the request or raises, and then nothing is made. A
+    report still current is answered first, read without a lock, so it is never counted. A refusal (409) is never
+    counted either. The made path re-checks everything under the document's lock: a copy that another request made
+    meanwhile is answered as the stored copy, and this request has then been counted once."""
     if kind not in KINDS or fmt not in FORMATS:
         raise ValueError(FORMAT_REQUIRED)
+    if charge is not None:
+        round_, _ = _checked(encounter, kind, round_number)
+        stored = current_export(encounter, round_, kind, fmt)
+        if stored is not None:
+            return _reused(encounter, round_, stored, user, kind, fmt)
+        charge()
     with transaction.atomic():
-        locked = models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
-        round_ = state.latest_round(locked)
-        if round_ is None or round_.number != round_number:
-            raise decisions.Refused(409, decisions.ROUND_CHANGED)
-        current = state.current_decisions(round_) if round_ is not None and round_.state == Round.DONE else {}
-        ready = customer.readiness(round_, current)
-        if not ready['draft']:
-            raise NotReady(NOTHING_YET, ready['blockers'])
-        if kind == APPROVED and not ready['approved']:
-            raise NotReady(APPROVED_NOT_YET, ready['blockers'])
+        # the document's row alone: never its practice's, so a report being made blocks no other work there (UP-4)
+        locked = models.Encounter.objects.select_for_update(of=('self',)).select_related('workspace').get(
+            pk=encounter.pk)
+        round_, current = _checked(locked, kind, round_number)
+        stored = current_export(locked, round_, kind, fmt)
+        if stored is not None:
+            return _reused(locked, round_, stored, user, kind, fmt)
         now = timezone.now()
         snap = snapshot(locked, round_, current, kind, user, now)
         content = render_pdf(snap, locked, round_)
@@ -150,6 +202,7 @@ def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact
             content=content, sha256=hashlib.sha256(content).hexdigest(), created_by=user)
         audit.record(locked.workspace, 'export.created', encounter=locked, actor=user, export=str(export.pk),
                      round=str(round_.pk), number=round_.number, kind=kind, fmt=fmt)
+    export.reused = False
     return export
 
 

@@ -1,14 +1,18 @@
 """manage.py provision: the owner, the review agent and a human reviewer (owner decision 2026-10-28, a doctor's
 demonstration account). Passwords come from files and are never printed."""
+import ast
 import io
+import os
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.conf import settings
 from django.test import TestCase
 
-from studio import models
+from studio import models, operator
 
 OWNER_PASSWORD = 'owner-Pass-0rd-for-tests-9184'
 AGENT_PASSWORD = 'agent-Pass-0rd-for-tests-7731'
@@ -95,6 +99,164 @@ class ProvisionTests(TestCase):
             self.run_command('--reviewer-username', 'agent1', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
         self.assertEqual(models.User.objects.get(username='agent1').actor_kind, models.User.AGENT)
 
+
+class OperatorAccountTests(TestCase):
+    """Release 1, the installer lens: provisioning refuses an operator's account in every role before it reads or
+    writes anything, and so never makes an operator a member of a practice or sets, or lets anything write, an
+    operator's password. An operator's account is one named in the installer's operator accounts (whether or not it
+    exists yet) or one that holds an operator grant."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.password = self.secret('p', OWNER_PASSWORD)
+
+    def secret(self, name, value):
+        path = Path(self.dir.name) / name
+        path.write_text(value + '\n', encoding='utf-8')
+        return str(path)
+
+    def state(self):
+        return (models.User.objects.count(), models.Membership.objects.count(), models.Workspace.objects.count(),
+                models.AuditEvent.objects.count(), list(models.User.objects.order_by('pk').values_list('password', flat=True)))
+
+    def refused(self, *args):
+        out = io.StringIO()
+        with self.assertRaises(CommandError) as raised:
+            call_command('provision', *args, stdout=out)
+        message = str(raised.exception)
+        self.assertIn('operator account', message)
+        self.assertIn('nothing was changed', message)
+        for text in (message, out.getvalue()):  # no password is ever written, refused or not
+            self.assertNotIn(OWNER_PASSWORD, text)
+        return message
+
+    def operator_account(self, username, kind=models.User.HUMAN):
+        user = models.User.objects.create(username=username, actor_kind=kind, display_name=username)
+        user.set_password('synthetic-operator-Pass-0rd-4471')
+        user.save()
+        if kind == models.User.HUMAN:
+            operator.grant(user, 'Synthetic test grant: an operator account for the provisioning refusal.', 'tests')
+        return user
+
+    def test_the_installers_operator_is_never_made_an_owner_and_its_password_is_never_set(self):
+        user = self.operator_account('platform-operator')
+        before = self.state()
+        message = self.refused('--owner-username', 'platform-operator', '--owner-password-file', self.password,
+                               '--reset-passwords')
+        self.assertIn("installer's operator accounts", message)
+        self.assertEqual(self.state(), before)  # no workspace, membership, audit row or password change
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('synthetic-operator-Pass-0rd-4471'))
+        self.assertFalse(models.Membership.objects.filter(user=user).exists())
+
+    def test_the_installers_operator_names_are_refused_before_the_accounts_exist_and_in_every_role(self):
+        before = self.state()
+        for args in (('--owner-username', 'platform-operator', '--owner-password-file', self.password),
+                     ('--owner-username', 'Platform-Operator ', '--owner-password-file', self.password),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--agent-username', 'ops-agent', '--agent-password-file', self.password),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--reviewer-username', 'platform-operator', '--reviewer-password-file', self.password)):
+            with self.subTest(args=args):
+                self.refused(*args)
+        self.assertEqual(self.state(), before)  # neither account was created, nor owner1, nor any workspace
+
+    def test_any_account_holding_an_operator_grant_is_refused_in_every_role(self):
+        self.operator_account('dr-ops')
+        before = self.state()
+        for args in (('--owner-username', 'dr-ops', '--owner-password-file', self.password, '--reset-passwords'),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--reviewer-username', 'dr-ops', '--reviewer-password-file', self.password)):
+            with self.subTest(args=args):
+                self.assertIn('holds an operator grant', self.refused(*args))
+        self.assertEqual(self.state(), before)
+
+    def test_an_account_whose_grant_was_revoked_is_no_operator_here(self):
+        user = self.operator_account('former-ops')
+        operator.revoke(user, 'Synthetic test: revoked before provisioning.', 'Synthetic Admin')
+        call_command('provision', '--owner-username', 'former-ops', '--owner-password-file', self.password,
+                     '--reset-passwords', stdout=io.StringIO())
+        self.assertEqual(models.Membership.objects.get(user=user).role, models.Membership.OWNER)
+
+    def test_the_names_are_the_installers_own(self):
+        """INSTALLER_OPERATOR_USERNAMES is ops/install.py's OPERATOR_ACCOUNTS_SPEC, read as source (never imported):
+        an operator account the installer adds that provisioning does not know fails here."""
+        source = (Path(settings.BASE_DIR) / 'ops' / 'install.py').read_text(encoding='utf-8')
+        specs = [node.value for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                 and any(isinstance(target, ast.Name) and target.id == 'OPERATOR_ACCOUNTS_SPEC' for target in node.targets)]
+        self.assertEqual(len(specs), 1)
+        names = {username for username, _kind, _label in ast.literal_eval(specs[0])}
+        self.assertEqual(names, set(operator.INSTALLER_OPERATOR_USERNAMES))
+
+
+class ProvisionRecordTests(TestCase):
+    """Release 1: provisioning records who ran it and, for an account that already had a membership here, the role it
+    had before (C3 item 5); with --require-password-change a person's account whose password the run sets must choose
+    its own at the first sign-in (B4), and an automated account never is flagged."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+
+    def secret(self, name, value):
+        path = Path(self.dir.name) / name
+        path.write_text(value + '\n', encoding='utf-8')
+        return str(path)
+
+    def run_command(self, *args):
+        out = io.StringIO()
+        call_command('provision', *args, stdout=out)
+        return out.getvalue()
+
+    def owner_and_agent(self, *extra):
+        return self.run_command('--owner-username', 'owner1', '--owner-password-file', self.secret('o', OWNER_PASSWORD),
+                                '--agent-username', 'agent1', '--agent-password-file', self.secret('a', AGENT_PASSWORD),
+                                *extra)
+
+    def events(self, username):
+        return list(models.AuditEvent.objects.filter(event='account.provisioned', data__username=username)
+                    .order_by('created_at', 'pk'))
+
+    def test_the_run_records_who_ran_it_and_an_accounts_earlier_role(self):
+        self.owner_and_agent('--by', 'Synthetic Installer Person')
+        first = self.events('owner1')[0].data
+        self.assertEqual((first['by'], first['role_before'], first['created']),
+                         ('Synthetic Installer Person', None, True))
+        self.run_command('--reviewer-username', 'demo-reviewer', '--reviewer-password-file',
+                         self.secret('r', REVIEWER_PASSWORD), '--by', 'Synthetic Installer Person')
+        membership = models.Membership.objects.get(user__username='demo-reviewer')
+        membership.role = models.Membership.VIEWER
+        membership.save(update_fields=['role'])
+        self.run_command('--reviewer-username', 'demo-reviewer', '--reviewer-password-file',
+                         self.secret('r', REVIEWER_PASSWORD), '--by', 'Another Person')
+        again = self.events('demo-reviewer')[-1].data
+        self.assertEqual((again['by'], again['role_before'], again['role'], again['created']),
+                         ('Another Person', models.Membership.VIEWER, models.Membership.REVIEWER, False))
+
+    def test_without_by_the_environments_login_is_recorded(self):
+        with mock.patch.dict(os.environ, {'LOGNAME': 'synthetic-login'}):
+            self.owner_and_agent()
+        self.assertEqual(self.events('owner1')[0].data['by'], 'synthetic-login')
+
+    def test_require_password_change_flags_the_people_whose_password_the_run_sets_and_never_an_agent(self):
+        self.owner_and_agent('--require-password-change')
+        owner, agent = models.User.objects.get(username='owner1'), models.User.objects.get(username='agent1')
+        self.assertIsNotNone(owner.password_change_required_at)
+        self.assertIsNone(agent.password_change_required_at)
+        self.assertEqual(self.events('owner1')[0].data['password_change_required'], True)
+        self.assertEqual(self.events('agent1')[0].data['password_change_required'], False)
+        # a run that sets no password flags no one; --reset-passwords with the flag starts a new clock
+        models.User.objects.filter(pk=owner.pk).update(password_change_required_at=None)
+        self.owner_and_agent('--require-password-change')
+        self.assertIsNone(models.User.objects.get(pk=owner.pk).password_change_required_at)
+        self.owner_and_agent('--require-password-change', '--reset-passwords')
+        self.assertIsNotNone(models.User.objects.get(pk=owner.pk).password_change_required_at)
+        self.assertIsNone(models.User.objects.get(pk=agent.pk).password_change_required_at)
+
+    def test_without_the_flag_no_account_is_flagged(self):
+        self.owner_and_agent()
+        self.assertFalse(models.User.objects.filter(password_change_required_at__isnull=False).exists())
 
 class ProvisionCommand:
     """Mixin: password files in a temporary folder and the provision command's output."""

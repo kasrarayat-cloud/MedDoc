@@ -275,6 +275,17 @@ stored bytes; one made from an earlier round stays listed, marked earlier. The r
 directions 2026-11-21: the doctor-facing report, then the only one); the TXT and CSV exports made before that stay
 stored, listed and downloadable as records, and none is made again (`exports.FORMATS`).
 
+Release 1 (C5): a request for a report that is still current (made from the latest round, no decision on that round
+since; `customer.export_current`, the page's own rule) returns the stored copy - 200, one `export.reused` audit row -
+instead of rendering another, and a new decision makes the next request render a fresh one. The lock is the document's
+row alone (`select_for_update(of=('self',))`). Reports made are limited to 10 per member in 10 minutes and 60 per
+practice in an hour, and uploads to 30 per member in 10 minutes (`studio.rate`; 429 `rate_limited` with `Retry-After`;
+the first refusal of a window writes a `SecurityEvent`). Only a report actually made counts (lead ruling 2026-11-24).
+`exports.create` answers a current stored copy from a read without a lock, before anything is counted. It calls the
+API's `charge` only when it is about to render a new report, outside any transaction, so the counter is never held under
+the document's lock. A refusal (409) is never counted. Encrypting `ExportArtifact.content` (F1's reports half) is release 1b
+(D402): not built.
+
 The physician PDF is made from the snapshot every customer export has been made from (`exports.snapshot`):
 `studio/physician_report.py` chooses its words from that snapshot (a draft: every line with its status, decision and
 evidence, then the questions, the lines with no saved decision and the notes; an approved report: only the lines with a
@@ -320,8 +331,8 @@ the install still offers TXT and CSV, and the server refuses them with its sente
 
 ### 5.9 The operator console (`studio/operator.py`)
 
-Server-rendered pages under `/ops/` for users holding an operator grant (from `grant_operator` only; no workspace role
-confers it). Everyone else - signed out, any member, a revoked operator - gets exactly an unknown URL's 404 before the
+Server-rendered pages under `/ops/` for people holding an operator grant (from `grant_operator` only; no workspace role
+confers it), on admin.quillmd.com after the second factor (release 1; see the end of this section). Everyone else - signed out, any member, a revoked operator - gets exactly an unknown URL's 404 before the
 method, body, CSRF token or any record is read. The console has a second address, admin.quillmd.com (owner direction
 2026-11-23, D396; `studio/hosts.py`, `cptstudio/urls_admin.py`): that host's urlconf holds the console's own routes
 (taken from the full urlconf, so the two cannot drift), an operator-only sign-in (any other account gets the same
@@ -362,6 +373,46 @@ Every act is audited in the workspace it concerns (`operator.member_added`, `ope
 `operator.password_reset`, `operator.access_off`, `operator.access_on`, `operator.workspace_created`); those rows name
 no encounter, so the customer's activity never shows them.
 
+**Release 1 (RELEASE-1-SPEC B3, C1-C3, C4 item 4, B1 step 8).**
+- *The gate* (`operator.may_use_console`): the console answers only on admin.quillmd.com, to a session that passed the
+  second factor at the admin door (`second_factor.satisfied`), of a person's account holding a grant. On
+  cpt.quillmd.com every console route answers an unknown URL's 404 to everyone, a valid admin-door session included; a
+  password-only session, a session from the cpt door or one from before release 1 gets the same 404 on the admin host.
+- *Operators are people* (C3): `is_operator` refuses an automated account whatever grant row it has; `grant_operator`
+  refuses one and requires `--authorization-ref`, `--review-by` (at most 12 months away) and `--by` (a person, never a
+  role); `revoke_operator` requires `--by`, and a revocation ends every session of the account. An account whose access
+  was ever revoked is granted again only with `--regrant` (`operator.grant(regrant=True)`); the installer passes it only
+  when its committed declaration names the regrant, and the `operator.granted` event of a regrant says `regrant: true`.
+  Each grant and revocation writes a `SecurityEvent` (`operator.granted`, `operator.revoked`). The Operators card shows
+  each grant's approval and review date and flags the overdue ones. `provision` refuses an operator's account in every
+  role (owner, agent, reviewer) before it writes anything. An operator's account is one named in the installer's
+  `OPERATOR_ACCOUNTS_SPEC` (`operator.INSTALLER_OPERATOR_USERNAMES`; a test holds the two equal) or one holding a grant.
+  So provisioning never makes an operator a member or sets an operator's password.
+- *Every read is recorded first* (C1, `studio.read_audit`): the front page (`ops.list`), a document's page
+  (`ops.detail`, every view), the opening of its content (`ops.content_open`), its original (`ops.original`), a
+  practice's page (`ops.workspace`), spending (`ops.spending`), the activity (`ops.activity`) and the reads page
+  (`ops.reads`) write their access record before the page or file is built; a read that cannot be recorded answers 503
+  and nothing else. A refused act answers 303 back to its page with an error code, so no page with data is served
+  unrecorded. `/ops/activity/reads` lists every recorded read - members' and operators', served and refused - by
+  account, practice, kind and day.
+- *Less by default* (C2): no list shows a title or a file name (a document is its short reference, the first 8
+  characters of its id); a document's page opens on its metadata (state, times, failure kinds, run ids, costs, sizes,
+  decision counts, holds; the tab says "Encounter <reference>"). "Open the content" asks for one of four reasons and a
+  reference with a digit (a ticket or request number, never patient details) and opens that one document for
+  `CONTENT_GRANT_SECONDS` in that session only; without it the original answers 403. The original downloads as
+  `encounter-<reference>.<extension>`; a Word document's is its converted PDF, the Word file only with `format=original`
+  (C6). Retry, reconcile and the holds work from the metadata.
+- *Access acts*, Clear sign-in delay included, ask "Requested by" (the practice's contact or a ticket reference;
+  stored on the act's audit row) and the
+  key again within `SECOND_FACTOR_STEP_UP_SECONDS` (B2 step 5). The access switch is the membership's - this practice
+  only - by default; "Turn off everywhere" (the account) stays apart. Add-person and reset set
+  `password_change_required_at` (B4). Clear sign-in delay (`ops/people/<id>/unlock`) calls Lane 2's
+  `throttle.clear_failures(username)` and writes `signin.delay_cleared`; sign-in rows are never deleted. The Sign-ins
+  page names each attempt's door and outcome, states the rule (a slowdown, never a lock) and shows, for each account on
+  it, the attempts the slowdown refused in the last hour (`throttle.refused_in(username)`).
+- *Disposal* (D1, Lane 4): a destroyed document's tombstone is in no list and its routes answer 404; a closed practice
+  drops out of the front page and the add form, and the Workspaces page lists it apart.
+
 ### 5.10 Display hygiene
 
 Text the coding review wrote (reasons, questions, notes, and the evidence quotes its answer gave for a line the API
@@ -379,8 +430,9 @@ switched back to. Nothing writes them.
 
 ## 6. Security
 
-Session authentication with Argon2 password hashes and a sign-in throttle (8 failures per username, 24 per client, in 15
-minutes); CSRF on every POST; `Cache-Control: no-store` on everything but static files; a Content-Security-Policy with
+Session authentication with Argon2 password hashes and a sign-in throttle (release 1, B1: it slows a username down
+instead of locking it out; Lane 2's `studio/throttle.py`); CSRF on every POST; every read of PHI recorded before it is
+served, and nothing served when it cannot be (release 1, C1: `studio/read_audit.py`, the `AccessRecord` table); `Cache-Control: no-store` on everything but static files; a Content-Security-Policy with
 `script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the text viewer and for the
 browser's own PDF viewer, framed where the page cannot draw a PDF itself, and only the in-page view of an original may
 be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. The PDF library the review page draws a PDF

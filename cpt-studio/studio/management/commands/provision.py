@@ -22,6 +22,19 @@ A human reviewer (for example a doctor's demonstration account, owner decision
 2026-10-28) is added to the existing workspace with --reviewer-username and
 --reviewer-password-file; the owner arguments may then be left out, and the
 workspace must already exist.
+
+Release 1: every account's audit row records who ran the run (--by, a person's name; left out, the login the
+environment names, else the uid - grant_operator.by_label) and, for an account that already had a membership here, the
+role it had before (C3 item 5). With --require-password-change, every person's account whose password this run sets
+(a new one, or any with --reset-passwords) must choose its own at the first sign-in, within
+STAFF_PASSWORD_UNUSED_SECONDS: password_change_required_at starts that clock (B4). An automated account is never
+flagged (B4 step 6): it exists for the release walk.
+
+An operator's account is refused in every role - the owner, the agent and the reviewer - before anything is read or
+written (release 1, the installer lens; studio.operator.operator_account_reason). That covers an account named in the
+installer's operator accounts (ops/install.py OPERATOR_ACCOUNTS_SPEC), whether or not it exists yet, and an account
+that holds an operator grant. So provisioning never makes an operator a member of a practice and never sets an
+operator's password, and the installer has no operator password to write anywhere.
 """
 from pathlib import Path
 
@@ -29,7 +42,10 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
-from studio import audit, models
+from django.utils import timezone
+
+from studio import audit, models, operator
+from studio.management.commands.grant_operator import by_label
 
 # Each specialty's category: slug -> (name, profiles_version). Gastroenterology keeps the identity studio/gi/profiles.py
 # defined (that module went with the earlier pipeline, DECISIONS D351-D352), so provisioning finds, and leaves as it is,
@@ -114,6 +130,10 @@ class Command(BaseCommand):
         parser.add_argument('--reviewer-display-name', default='')
         parser.add_argument('--reviewer-password-file', default='')
         parser.add_argument('--reset-passwords', action='store_true')
+        parser.add_argument('--require-password-change', action='store_true',
+                            help='each person whose password this run sets must choose a new one at the first sign-in')
+        parser.add_argument('--by', default='', help='who runs this (a person\'s name; default: the login the '
+                                                     'environment names, else the uid)')
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -132,6 +152,12 @@ class Command(BaseCommand):
         # released when this run commits or fails
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [PROVISION_LOCK])
+        for flag in ('owner_username', 'agent_username', 'reviewer_username'):
+            why = operator.operator_account_reason(options[flag]) if options[flag] else ''
+            if why:
+                raise CommandError(f'Account {options[flag]} is a CPT Studio operator account ({why}): provisioning '
+                                   f'never makes an operator a member of a practice or sets its password; nothing was '
+                                   f'changed.')
         category, _ = models.Category.objects.get_or_create(
             slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
         if category.profiles_version != profiles_version:
@@ -155,6 +181,7 @@ class Command(BaseCommand):
                                    + (f' {problem}' if problem else '') + alike)
             _check_new_name(workspace_name, slug, category)
             workspace = models.Workspace.objects.create(category=category, name=workspace_name)
+        by = by_label(options['by'])
         accounts, lines = [], []
         if options['owner_username']:
             accounts.append((options['owner_username'], options['owner_display_name'], options['owner_password_file'],
@@ -189,20 +216,25 @@ class Command(BaseCommand):
                         + f'; this run is for the {category.name} workspace {workspace.name!r}'
                         + (' (new)' if made else '') + '; one login serves one workspace until a workspace switcher '
                         'exists (D390).')
+            flagged = False
             if created or options['reset_passwords']:
                 password = _password(password_file)
                 validate_password(password, user)
                 user.set_password(password)
+                if options['require_password_change'] and kind == models.User.HUMAN:
+                    user.password_change_required_at, flagged = timezone.now(), True
             user.save()
-            membership, _ = models.Membership.objects.get_or_create(user=user, workspace=workspace,
-                                                                    defaults={'role': role})
+            membership, new_membership = models.Membership.objects.get_or_create(user=user, workspace=workspace,
+                                                                                 defaults={'role': role})
+            role_before = None if new_membership else membership.role
             if membership.role == models.Membership.OWNER and role != models.Membership.OWNER:
                 raise CommandError(f'Account {username} is this workspace\'s owner; provisioning never demotes an owner.')
             if membership.role != role or not membership.active:
                 membership.role, membership.active = role, True
                 membership.save(update_fields=['role', 'active'])
             audit.record(workspace, 'account.provisioned', actor=None, username=username, actor_kind=kind,
-                         role=role, created=created)
+                         role=role, created=created, by=by, role_before=role_before,
+                         password_change_required=flagged)
             lines.append(f'{"created" if created else "kept"} {kind} account {username} ({role})')
         # written once every account has passed: a refused run prints no account it rolled back (refutation N7-1-6)
         for line in lines:
