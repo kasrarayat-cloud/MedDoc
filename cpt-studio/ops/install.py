@@ -8330,13 +8330,16 @@ class RamFiles:
         return self
 
     def __exit__(self, *exc):
-        if self.given:
-            run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
-            return False
-        for path in self.path.iterdir():
-            path.write_bytes(b'\0' * max(64, path.stat().st_size))
-            path.unlink()
-        self.path.rmdir()
+        # refutation round 1, installer-3: a SIGTERM, SIGHUP or Ctrl-C that lands while the folder is wiped is acted on
+        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm
+        with signals_deferred():
+            if self.given:
+                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
+                return False
+            for path in self.path.iterdir():
+                path.write_bytes(b'\0' * max(64, path.stat().st_size))
+                path.unlink()
+            self.path.rmdir()
         return False
 
 
@@ -10508,7 +10511,50 @@ def interrupt(signum, frame):
     # later ones are ignored while the cleanup runs (the door's SIGKILL follows 15 s after its SIGTERM)
     for each in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(each, signal.SIG_IGN)
+    if SIGNALS_HELD['depth']:  # inside signals_deferred: acted on once its body has finished
+        SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'] or signal.Signals(signum).name
+        return
     raise Interrupted(signal.Signals(signum).name)
+
+
+# What signals_deferred holds: how deep its bodies run, and the first signal that landed in one (its name).
+SIGNALS_HELD = {'depth': 0, 'pending': None}
+
+
+class signals_deferred:  # noqa: N801 - used as a context manager, as contextlib's are
+    """A body no signal stops half way (refutation round 1, installer-3: a RAM folder's wipe): a SIGTERM or SIGHUP that
+    lands in it (interrupt, main's handler) is raised as Interrupted once the outermost such body has finished, and a
+    Ctrl-C as KeyboardInterrupt (when Python's own handler was the one in place) - the first that landed, chained to
+    whatever the body raised, which it replaces. The door's SIGKILL, 15 s after its SIGTERM, cannot be held."""
+
+    def __enter__(self):
+        self.outermost, self.handler = SIGNALS_HELD['depth'] == 0, None
+        SIGNALS_HELD['depth'] += 1
+        if self.outermost:
+            try:  # the main thread alone can set a handler; anywhere else a Ctrl-C is not held
+                if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+                    self.handler = signal.signal(signal.SIGINT, held_ctrl_c)
+            except ValueError:
+                self.handler = None
+        return self
+
+    def __exit__(self, kind, error, trace):
+        SIGNALS_HELD['depth'] -= 1
+        if not self.outermost:
+            return False
+        if self.handler is not None:
+            signal.signal(signal.SIGINT, self.handler)
+        pending, SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'], None
+        if pending == 'SIGINT':
+            raise KeyboardInterrupt() from error
+        if pending:
+            raise Interrupted(pending) from error
+        return False
+
+
+def held_ctrl_c(signum, frame):
+    """A Ctrl-C inside signals_deferred: held, as interrupt holds a SIGTERM there."""
+    SIGNALS_HELD['pending'] = SIGNALS_HELD['pending'] or 'SIGINT'
 
 
 def rewrite_receipt(path: Path, record: dict) -> Path:

@@ -20,6 +20,8 @@ never passed, without one). Synthetic data only.
       whole in a log of its own and records its sha256, size and line count.
   I8  installer-5 (judged no defect; the one call): the app phase's converter precondition holds the seal too.
   I9  installer-6: the ids-only copy of a retired web keeps the access line of the format before release 1 too.
+  I10 installer-3: a SIGTERM, SIGHUP or Ctrl-C that lands while a RAM folder is wiped is acted on once the wipe has
+      finished: the reason never stays in /dev/shm.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -27,6 +29,7 @@ import datetime as dt
 import hashlib
 import io
 import json
+import os
 import sys
 import unittest
 import uuid
@@ -1227,6 +1230,98 @@ class OlderAccessLineTests(unittest.TestCase):
             raise unittest.SkipTest(f'{r0[:12]} is not in this clone')
         self.assertIn("access_log_format = '%(t)s %({x-forwarded-for}i)s \"%(m)s %(U)s %(H)s\" %(s)s %(B)s %(M)sms'",
                       found.stdout.decode())
+
+
+# --- I10: no signal stops a RAM folder's wipe half way ----------------------------------------------------------------
+
+class SignalDuringWipeTests(TemporaryDirectoryTest):
+    """installer-3's input through the real install.main(): --phase manage dispose --dispose-step plan, whose files
+    act hands the RAM folder to the application's uid (give); the signal lands while the root helper's wipe starts."""
+
+    def run_main(self, signum):
+        import signal as signals
+        from test_install import FakeOwnership, run_body
+        shm = self.tmp / 'shm'
+        shm.mkdir(mode=0o700)
+        reason = self.tmp / 'reason.txt'
+        reason.write_bytes(b'Ticket 4521: Dr Example asked us to remove the practice of Example Clinic.\n')
+        owner, seen = FakeOwnership(), {}
+
+        def ram_init(ram, prefix, *, owner=None):
+            ram.path = shm / f'{prefix}{uuid.uuid4().hex}'
+            ram.path.mkdir(mode=0o700)
+            ram.owner, ram.given = owner, False
+
+        def run_helper(body, params, *, mounts, **kwargs):
+            assert mounts == [install.SHM_MOUNT], mounts
+            if body is install.H_RAM_WIPE:
+                seen['folder'] = shm / params['name']
+                seen['before'] = sorted(path.name for path in seen['folder'].iterdir())
+                expected = install.interrupt if signum != signals.SIGINT else signals.default_int_handler
+                assert signals.getsignal(signum) is expected or signals.getsignal(signum) is install.held_ctrl_c, \
+                    'refusing to signal this process without the handler that holds it'
+                os.kill(os.getpid(), signum)  # the signal lands as the helper container starts
+            return run_body(body, params, {'/host-shm': str(shm)}, fake_os=owner)
+
+        def oneshot(image_id, command, env, **kwargs):
+            if command == ['manage', 'migrate', '--check']:
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return SimpleNamespace(returncode=0, stdout=b'Plan 1 recorded: 3 rows.\n', stderr=b'')
+        printed = io.StringIO()
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=oneshot, inspect=mock.Mock(return_value=None),
+                                 run_helper=run_helper, read_protected_env=mock.Mock(
+                                     return_value=b'CPT_STUDIO_SECRET_KEY=' + b'S' * 48 + b'\n'),
+                                 check_door=mock.Mock(return_value={'declaration': 'docs/d.md',
+                                                                    'declaration_commit': 'd' * 40}),
+                                 check_tree=mock.Mock(return_value={'mode': 'exact'})), \
+                mock.patch.object(install.RamFiles, '__init__', ram_init), mock.patch('sys.stdout', printed):
+            try:
+                code = install.main(['--phase', 'manage', '--revision', REVISION, '--receipts',
+                                     str(self.tmp / 'receipts'), '--command', 'dispose', '--dispose-step', 'plan',
+                                     '--workspace-id', WORKSPACE, '--reason-file', str(reason), '--by',
+                                     'Ada Lovelace'])
+            except KeyboardInterrupt:
+                code = 'KeyboardInterrupt'
+        receipts = sorted((self.tmp / 'receipts').glob('manage-*.json'))
+        record = json.loads(receipts[-1].read_text()) if receipts else None
+        return code, record, seen, shm
+
+    def test_a_sigterm_or_sighup_during_the_wipe_is_acted_on_once_the_folder_is_gone(self):
+        import signal as signals
+        for signum, code in ((signals.SIGTERM, 143), (signals.SIGHUP, 129)):
+            with self.subTest(signal=signum.name):
+                exit_code, record, seen, shm = self.run_main(signum)
+                self.assertEqual(seen['before'], ['reason'])  # the reason was there when the wipe began
+                self.assertFalse(seen['folder'].exists(), 'the RAM folder was left in /dev/shm')
+                self.assertEqual(list(shm.iterdir()), [])
+                self.assertEqual(exit_code, code)
+                self.assertEqual((record['ok'], record['interrupted']), (False, signum.name))
+                for path in [*shm.rglob('*'), *(shm.parent / 'receipts').rglob('*')]:  # never the input reason
+                    if path.is_file():
+                        self.assertNotIn(b'Dr Example', path.read_bytes())
+                import shutil
+                shutil.rmtree(shm.parent / 'receipts')
+                shm.rmdir()
+                (shm.parent / 'reason.txt').unlink()
+
+    def test_a_ctrl_c_during_the_wipe_too(self):
+        import signal as signals
+        exit_code, record, seen, shm = self.run_main(signals.SIGINT)
+        self.assertEqual(exit_code, 'KeyboardInterrupt')
+        self.assertFalse(seen['folder'].exists(), 'the RAM folder was left in /dev/shm')
+        self.assertEqual((record['ok'], record['interrupted']), (False, 'SIGINT'))
+        self.assertIs(signals.getsignal(signals.SIGINT), signals.default_int_handler)  # put back as it was
+
+    def test_the_hold_nests_and_says_nothing_when_no_signal_landed(self):
+        with install.signals_deferred():
+            with install.signals_deferred():
+                self.assertEqual(install.SIGNALS_HELD['depth'], 2)
+        self.assertEqual(install.SIGNALS_HELD, {'depth': 0, 'pending': None})
+        with self.assertRaisesRegex(ValueError, 'the body'):
+            with install.signals_deferred():
+                raise ValueError('the body')
+        self.assertEqual(install.SIGNALS_HELD, {'depth': 0, 'pending': None})
 
 
 class SessionScriptImportTests(unittest.TestCase):

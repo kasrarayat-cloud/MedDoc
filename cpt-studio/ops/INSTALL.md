@@ -804,7 +804,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   (`RULED_ACT_MAX_SECS`), which leaves its cleanup, the export's seal and the
   receipt their time. A SIGTERM - the door's kill at its ceiling - or a SIGHUP
   stops any phase where it is: its RAM files are wiped, its one-shot removed,
-  its undo run, and its receipt says `interrupted` (exit 143, or 129). Every
+  its undo run, and its receipt says `interrupted` (exit 143, or 129). One that
+  lands while the RAM files are being wiped - or a Ctrl-C there - is acted on
+  once the wipe has finished (refutation round 1, installer-3: it had stopped
+  the wipe and left the reason in `/dev/shm`); only the door's SIGKILL, 15 s
+  after its SIGTERM, or a `kill -9` can still leave a
+  `/dev/shm/cpt-studio-<word>-<32 hex>` folder, which holds the act's RAM-only
+  files (the reason, a code): overwrite and remove it as root (the root-via-
+  docker path), never read it. Every
   phase's receipt is written before its journal (A13), so an interrupt while the
   journal is written never costs a finished phase its receipt.
 - **http-vhost / https-vhost / ingress / ingress-rollback / rollback-vhost**
