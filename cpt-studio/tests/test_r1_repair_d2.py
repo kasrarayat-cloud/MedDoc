@@ -134,6 +134,20 @@ def statement_sent(frame, event) -> bool:
     return event == 'line' and frame.f_code is STATEMENT_GEN and frame.f_lineno == STATEMENT_SENT
 
 
+def end_of_process():
+    """What the one-shot's exit does to its connection: gone, so the server rolls back whatever the run left open; and
+    this process's Django connection as a new process would find it - nothing a run left open (a block whose __exit__
+    stopped half way, a transaction closed inside it) carries into the next run, which reconnects."""
+    raw, connection.connection = connection.connection, None
+    if raw is not None:
+        try:
+            raw.close()
+        except Exception:  # noqa: BLE001 - already gone
+            pass
+    connection.in_atomic_block, connection.atomic_blocks, connection.savepoint_ids = False, [], []
+    connection.closed_in_transaction = connection.needs_rollback = False
+
+
 def at_block_exit(opener, point, *, signum=signal.SIGTERM):
     """(tracer, fired): ONE real signal at ``point`` of the Atomic.__exit__ of the block ``opener`` (a code) opened -
     ('call', 0, 1) its call event, ('line', line, n) the n-th line event of that line."""
@@ -189,8 +203,8 @@ class HoldCase(TransactionTestCase):
     def dispose(self, *argv, tracer=None, ctrl_c=False):
         """`dispose <argv>` (the installer's idle answer given): (the status the one-shot ends with - 0, a CommandError's
         returncode, a SystemExit's code, or 'KeyboardInterrupt' -, stdout, stderr). ``ctrl_c``: Python's own SIGINT
-        handler in place, as in a terminal. The run's connection is closed afterwards, as the process's exit closes it:
-        what is read next is what committed."""
+        handler in place, as in a terminal. The run's connection goes afterwards, as at the process's exit
+        (end_of_process): what is read next is what committed."""
         out, err, status = io.StringIO(), io.StringIO(), 0
         before = signal.signal(signal.SIGINT, signal.default_int_handler if ctrl_c else signal.SIG_IGN)
         try:
@@ -210,7 +224,8 @@ class HoldCase(TransactionTestCase):
                     sys.settrace(None)
         finally:
             signal.signal(signal.SIGINT, before)
-        connection.close()
+        self.left_open = connection.in_atomic_block or bool(connection.atomic_blocks) or connection.closed_in_transaction
+        end_of_process()
         return status, out.getvalue(), err.getvalue()
 
     def execute(self, plan, **options):
@@ -219,7 +234,9 @@ class HoldCase(TransactionTestCase):
 
     def assert_names_only_what_committed(self, out):
         """Every DisposalEvent the output names exists, at the stage it names; every ledger line it prints verifies and
-        is one of the ledger's (dispose --ledger); nothing is said to be unrecorded; no title is printed."""
+        is one of the ledger's (dispose --ledger); nothing is said to be unrecorded; no title is printed; and the run
+        left no transaction open for a record to vanish with."""
+        self.assertFalse(self.left_open)
         named = NAMED.findall(out)
         self.assertTrue(named, out[:400])
         for pk, stage in named:
