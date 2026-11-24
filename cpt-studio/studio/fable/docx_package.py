@@ -452,8 +452,7 @@ _DOCTYPE = re.compile(rb'<!DOCTYPE')
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
 _DECLARED_ENCODING = re.compile(rb'^(?:\xef\xbb\xbf)?<\?xml[^>]*?encoding\s*=\s*["\']([A-Za-z0-9._-]+)["\']')
-_SKIP_SPACE = re.compile(r'\s*')
-_SKIP_PREFIX = re.compile('[\\s\\\\"\'“”‘’]*')  # white space, backslashes and quotes
+_SKIP_PREFIX = re.compile('[\\s\\\\"\'\\u201c\\u201d\\u2018\\u2019]*')  # white space, backslashes and quotes
 _LETTER_RUN = re.compile(r'[A-Za-z]*')
 _TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED)  # letters enough to decide a type
 _TIME_CHECK_ELEMENTS = 0xFFF  # the deadline is checked every 4,096 elements too
@@ -466,15 +465,16 @@ _NAME, _AT, _DECLARED, _PROPS, _CHILDREN, _END, _INSTRUCTION = range(7)
 
 
 class _Reading:
-    """One reading of a field's instruction, as far as it names the field's type. White space is read past; an '='
-    first makes the field a formula, which is kept; otherwise backslashes and quotes are read past and the type is the
-    run of letters that follows, ended by anything else (a space, a quote, a digit, a nested field). A nested field
-    before the type leaves the type unreadable, and the field is removed."""
+    """One reading of a field's instruction, as far as it names the field's type: white space, backslashes and quotes
+    are read past, and the type is the run of letters that follows, ended by anything else (a space, a quote, a digit,
+    a nested field) - so IF{PAGE} is IF. Anything else first names no type that is removed: an '=' first is a formula,
+    which is kept, whatever bookmark names follow it ('= Included + 1'). A nested field before anything is read leaves
+    the type unreadable, and the field is removed."""
     __slots__ = ('state', 'letters')
-    START, PREFIX, LETTERS, DONE, FORMULA, UNREADABLE = range(6)
+    BEFORE, LETTERS, DONE, UNREADABLE = range(4)
 
     def __init__(self):
-        self.state, self.letters = self.START, ''
+        self.state, self.letters = self.BEFORE, ''
 
     @property
     def done(self) -> bool:
@@ -482,19 +482,11 @@ class _Reading:
 
     def feed(self, text):
         at, end = 0, len(text)
-        if self.state == self.START:
-            at = _SKIP_SPACE.match(text).end()
+        if self.state == self.BEFORE:
+            at = _SKIP_PREFIX.match(text).end()
             if at == end:
                 return
-            if text[at] == '=':
-                self.state = self.FORMULA
-                return
-            self.state = self.PREFIX
-        if self.state == self.PREFIX:
-            at = _SKIP_PREFIX.match(text, at).end()
-            if at == end:
-                return
-            if not ('A' <= text[at] <= 'Z' or 'a' <= text[at] <= 'z'):
+            if not ('A' <= text[at] <= 'Z' or 'a' <= text[at] <= 'z'):  # an '=', a digit: no type removed
                 self.state = self.DONE
                 return
             self.state = self.LETTERS
@@ -505,14 +497,13 @@ class _Reading:
                 self.state = self.DONE
 
     def nested(self):
-        if self.state in (self.START, self.PREFIX):
+        if self.state == self.BEFORE:
             self.state = self.UNREADABLE
         elif self.state == self.LETTERS:
             self.state = self.DONE
 
     def removed(self) -> bool:
-        return self.state == self.UNREADABLE or (
-            self.state != self.FORMULA and self.letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED))
+        return self.state == self.UNREADABLE or self.letters.upper().startswith(FIELD_INSTRUCTIONS_REMOVED)
 
 
 def _removed_type(text) -> bool:
@@ -527,8 +518,8 @@ def _symbol_character(attrs) -> str:
     try:
         code = int(next((attrs[key] for key in _SYMBOL_CHAR if key in attrs), ''), 16)
     except ValueError:
-        return '�'
-    return chr(code) if 0 < code < 0x110000 else '�'
+        return '\ufffd'
+    return chr(code) if 0 < code < 0x110000 else '\ufffd'
 
 
 class _Field:
