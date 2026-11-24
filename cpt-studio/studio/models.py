@@ -9,7 +9,8 @@ import uuid
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
+from django.db.models.functions import Upper
 
 
 DECISION_SEQUENCE = 'studio_decision_sequence'
@@ -867,6 +868,31 @@ class ReferencePassage(models.Model):
         indexes = [models.Index(fields=['topic', 'topic_value'])]
 
 
+class LoginAttemptQuerySet(models.QuerySet):
+    """The bounded reads of sign-in rows (refutation round 1 of release 1, avail-5; B1 item 6: every read stops at its
+    limit), each served by an index of migration 0018 however many rows one name holds."""
+
+    def latest_sign_ins(self, usernames) -> dict:
+        """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
+        succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
+        by aggregating every succeeded row of each name."""
+        latest = {}
+        for name in sorted(set(usernames)):
+            last = (self.filter(succeeded=True, username=name).order_by('-created_at')
+                    .values_list('created_at', flat=True).first())
+            if last is not None:
+                latest[name] = last
+        return latest
+
+    def signed_in_clients(self, username, since, limit=None) -> set:
+        """The clients (addresses) of ``username``'s newest successful sign-ins at or after ``since``, at most ``limit``
+        rows of them (SIGNED_IN_CLIENTS_READ): read newest first by studio_login_name_signed_in, so the cost stays the
+        limit's however many times the name signed in - what throttle.Door.known_address reads unbounded."""
+        rows = (self.filter(username=username, succeeded=True, created_at__gte=since).order_by('-created_at')
+                .values_list('client', flat=True)[:limit or self.model.SIGNED_IN_CLIENTS_READ])
+        return set(rows)
+
+
 class LoginAttempt(models.Model):
     # Release 1, B1: the door an attempt was made at (studio.request_meta.CPT or ADMIN) and its outcome. ``outcome`` is
     # a plain column with no choices, so a new outcome needs no migration (the installer's gate refuses AlterField).
@@ -886,11 +912,24 @@ class LoginAttempt(models.Model):
     door = models.CharField(max_length=8, null=True, blank=True)
     outcome = models.CharField(max_length=24, null=True, blank=True)
     sign_in_ref = models.UUIDField(null=True, blank=True)  # the session's reference (request_meta.sign_in_ref)
+    # a name's newest successful sign-ins read for its known addresses (LoginAttemptQuerySet.signed_in_clients): more
+    # than one a day for 90 days, so only a name signed in again and again ever has an older one left out
+    SIGNED_IN_CLIENTS_READ = 1_000
+
+    objects = LoginAttemptQuerySet.as_manager()
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at']),
                    # release 1 (AUTH-6): the per-address count reads this, not the whole table
-                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time')]
+                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time'),
+                   # refutation round 1 (avail-5), however many rows one name holds: the console's sign-ins page newest
+                   # first and page by page, and by result; clear_failures' case-insensitive name (username__iexact is
+                   # UPPER(username)); and a name's newest successful sign-ins (LoginAttemptQuerySet)
+                   models.Index(fields=['created_at', 'id'], name='studio_login_time'),
+                   models.Index(fields=['succeeded', 'created_at', 'id'], name='studio_login_result_time'),
+                   models.Index(Upper('username'), F('created_at'), name='studio_login_upper_name_time'),
+                   models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True),
+                                name='studio_login_name_signed_in')]
 
 
 class WorkerBeat(models.Model):

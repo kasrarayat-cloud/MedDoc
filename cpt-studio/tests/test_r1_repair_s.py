@@ -10,6 +10,7 @@ The reproductions use only what existed before the repair - end_sessions, real s
 they fail on the shipped code. Synthetic accounts and sessions only."""
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import uuid
@@ -516,3 +517,85 @@ class ReadsPageIndexTests(TestCase):
                 plan = self.plan(self.window_query('/ops/activity/reads' + query))
                 self.assertNotIn('Seq Scan on studio_accessrecord', plan)
                 self.assertIn(index or 'studio_access', plan)  # a common kind may read either index
+
+
+# --- avail-5: sign-in rows read by an index, however many one name holds ---------------------------------------------------
+
+from studio import customer, throttle  # noqa: E402
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class SignInRowsTests(TestCase):
+    """The finding's input, scaled: one owner's own right-password sign-ins hold most of LoginAttempt."""
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.owner = f.member(self.ws, role=models.Membership.OWNER)
+        self.colleague = f.member(self.ws)
+        rows = [models.LoginAttempt(username=self.owner.username, client=f'203.0.113.{index % 200}', succeeded=True,
+                                    door='cpt', outcome=models.LoginAttempt.SIGNED_IN) for index in range(20_000)]
+        rows += [models.LoginAttempt(username=f'unknown-{index}', client='198.51.100.7', succeeded=False, door='cpt',
+                                     outcome=models.LoginAttempt.UNKNOWN_ACCOUNT) for index in range(2_000)]
+        rows.append(models.LoginAttempt(username=self.colleague.username, client='192.0.2.44', succeeded=True,
+                                        door='cpt', outcome=models.LoginAttempt.SIGNED_IN))
+        models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
+        with connection.cursor() as cursor:  # 12 days of them, as the lens seeded them (60 a minute)
+            cursor.execute("UPDATE studio_loginattempt SET created_at = now() - random() * interval '12 days'")
+        self.newest_client = '203.0.113.250'  # the owner's newest sign-in, from an address no other row holds
+        models.LoginAttempt.objects.create(username=self.owner.username, client=self.newest_client, succeeded=True,
+                                           door='cpt', outcome=models.LoginAttempt.SIGNED_IN)
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_loginattempt')
+
+    def plan(self, sql, *, analyze=False):
+        with connection.cursor() as cursor:
+            cursor.execute(('EXPLAIN (ANALYZE, BUFFERS OFF) ' if analyze else 'EXPLAIN ') + sql)
+            return '\n'.join(row[0] for row in cursor.fetchall())
+
+    def sql_of(self, call, needle):
+        with CaptureQueriesContext(connection) as seen:
+            call()
+        found = [item['sql'] for item in seen.captured_queries
+                 if 'FROM "studio_loginattempt"' in item['sql'] and needle in item['sql']]
+        self.assertTrue(found, needle)
+        return found
+
+    def test_the_sign_ins_page_reads_an_index_by_time_and_by_result(self):
+        auditor = ops.admin_client(f.user('sign-ins-auditor'))
+        newest = models.LoginAttempt.objects.order_by('-created_at', '-pk')[150]
+        cursor_text = f'{newest.created_at.astimezone(dt_timezone.utc):%Y%m%dT%H%M%S.%fZ}~{newest.pk}'
+        for query, index in (('', 'studio_login_time'), ('?result=failed', 'studio_login_result_time'),
+                             ('?result=succeeded', None),  # most rows: either index, filtered, is the plan
+                             (f'?before={cursor_text}', 'studio_login_time')):
+            with self.subTest(query=query):
+                (sql,) = self.sql_of(lambda: self.assertEqual(
+                    auditor.get('/ops/activity/sign-ins' + query).status_code, 200), 'LIMIT 101')
+                plan = self.plan(sql)
+                self.assertNotIn('Seq Scan on studio_loginattempt', plan)
+                self.assertIn(index or 'studio_login_', plan)
+
+    def test_clearing_a_names_delay_reads_the_case_insensitive_index(self):
+        (sql,) = self.sql_of(lambda: throttle.clear_failures(self.owner.username.upper()), 'UPPER(')
+        plan = self.plan(sql)
+        self.assertNotIn('Seq Scan on studio_loginattempt', plan)
+        self.assertIn('studio_login_upper_name_time', plan)
+
+    def test_the_latest_sign_ins_read_one_row_a_name_and_answer_as_before(self):
+        names = [self.owner.username, self.colleague.username, 'never-signed-in']
+        self.assertEqual(models.LoginAttempt.objects.latest_sign_ins(names), customer.last_sign_ins(names))
+        for sql in self.sql_of(lambda: models.LoginAttempt.objects.latest_sign_ins(names), 'LIMIT 1'):
+            with self.subTest(sql=sql[-80:]):
+                plan = self.plan(sql, analyze=True)
+                self.assertIn('studio_login_name_signed_in', plan)
+                self.assertNotRegex(plan, r'actual time=\S+ rows=(?:[2-9]|\d{2,}) ')  # at most one row a name
+
+    def test_the_known_addresses_read_at_most_their_limit_of_rows(self):
+        since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
+        clients = models.LoginAttempt.objects.signed_in_clients(self.owner.username, since)
+        self.assertLessEqual(len(clients), models.LoginAttempt.SIGNED_IN_CLIENTS_READ)
+        self.assertIn(self.newest_client, clients)  # the newest sign-in's address is among them
+        (sql,) = self.sql_of(lambda: models.LoginAttempt.objects.signed_in_clients(self.owner.username, since), 'LIMIT')
+        plan = self.plan(sql, analyze=True)
+        self.assertIn('studio_login_name_signed_in', plan)
+        read = [int(rows) for rows in re.findall(r'Index Scan .*? rows=(\d+) loops', plan)]
+        self.assertTrue(read and max(read) <= models.LoginAttempt.SIGNED_IN_CLIENTS_READ, plan)
