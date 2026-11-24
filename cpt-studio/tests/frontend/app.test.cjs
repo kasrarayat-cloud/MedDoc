@@ -5463,3 +5463,34 @@ test('B5: the console\'s deadline is the earlier of the idle end and the cap, wh
   assert.equal(opsSession.capWarningText(60000), 'Your session ends in 1 minute');
   assert.deepEqual(opsSession.pageSession({ idleSeconds: '600', session: 'x' }), { idle: 600, cap: null, warning: null, session: 'x' });
 });
+
+test('B5: input inside the viewer\'s frame is the member\'s input, and the focus goes back into the frame when the warning closes', async () => {
+  const answers = [{ match: (method, url) => url === '/session/activity', status: 200, body: { idle_seconds: 900, cap_seconds: 28800, warning_seconds: 120, session: 'tag-a' } }];
+  await withTimerPage({ answers }, PAGE_SECONDS, async ({ calls }) => {
+    // each document a frame loads gets the page's listeners (refutation r2, finding 15)
+    const heard = {};
+    const framed = { addEventListener(type, listener, options) { heard[type] = { listener, options }; } };
+    const frame = { tagName: 'IFRAME', contentDocument: framed, dataset: {} };
+    app.noteFrameLoad({ target: frame });
+    assert.deepEqual(Object.keys(heard).sort(), [...app.ACTIVITY_INPUTS].sort());
+    assert.deepEqual(heard.wheel.options, { capture: true, passive: true });
+    Object.assign(app.idle, { lastPing: 0, pinging: null, session: 'tag-a' });
+    heard.wheel.listener({ type: 'wheel' });  // the member scrolls the framed text
+    await app.idle.pinging;
+    assert.equal(calls.filter(call => call.url === '/session/activity' && call.method === 'POST').length, 1);
+    // a frame this page cannot read gives nothing to listen to, and breaks nothing
+    app.noteFrameLoad({ target: { tagName: 'IFRAME', get contentDocument() { throw new Error('cross-origin'); }, dataset: {} } });
+    // the warning takes the focus from the frame, and gives it back when it closes
+    const focused = [];
+    const viewer = { tagName: 'IFRAME', isConnected: true, focus() { focused.push('frame'); }, contentWindow: { focus() { focused.push('frame document'); } } };
+    global.document.activeElement = viewer;
+    const dialog = fakeElement();
+    const element = global.document.querySelector;
+    global.document.querySelector = selector => (selector === '#idleDialog' ? dialog : element(selector));
+    app.showIdleWarning(60000);
+    assert.equal(dialog.open, true);
+    app.hideIdleWarning();
+    assert.equal(dialog.open, false);
+    assert.deepEqual(focused, ['frame', 'frame document']);
+  });
+});

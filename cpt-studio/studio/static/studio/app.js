@@ -3336,7 +3336,20 @@ function noteFrameLoad(event) {
     page = null;
   }
   loadedPages.set(frame, page || UNREADABLE);
+  watchFrameInput(page);
   if (state.framePassage?.frame === frame) paintFrame(frame);
+}
+
+// Input inside a frame of the page - a wheel, a key, a touch in the viewer's framed text - is the member's input as much
+// as on the page itself (B5; refutation r2, finding 15): each document a frame loads gets the page's own listeners. A
+// document this page cannot read (another origin, the browser's own viewer of a PDF) has none to give.
+function watchFrameInput(page) {
+  if (!page || typeof page.addEventListener !== 'function') return;
+  try {
+    for (const type of ACTIVITY_INPUTS) page.addEventListener(type, noteInput, { capture: true, passive: true });
+  } catch {
+    // a document that refuses listeners: the page's own input still counts
+  }
 }
 
 // Whether the text frame holds the document this page asked for: 'waiting' until the frame's current document has had
@@ -4416,13 +4429,13 @@ if (typeof module === 'object' && module.exports) {
     PDF_IMPORT, mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, drawPage, releasePage,
     paintPage, layoutPages, zoomViewer, renderDocument, PDF_VIEW, ZOOM_STEPS, ZOOM_FIT,
     continuesDrawing, keepsEdge, NUMBER_SEPARATORS, libraryWatchdog, startWorker, downloadDocument, scrollToQuote, relayoutPages,
-    buildPages, frameHolds, noteFrameLoad, markInFrame, paintFrame,
+    buildPages, frameHolds, noteFrameLoad, watchFrameInput, markInFrame, paintFrame,
     csrfCookieName, csrfValue, signedOutReason, loginAddress, idleStep, idleWarningText, rateLimitText, teamMembers, memberRow,
     teamList, teamView, downloadLinks, showTeam, setMemberAccess, askConfirm, confirmChosen, askWordOriginal, clearScreen,
     goToLogin, goToAccount, sendActivity, adoptDeadline, scheduleIdle, signOutIdle, receiveSession, shareSession, noteInput,
     pageSession, armFromPage, applySessionAnswer, checkSession, sessionEnded, leaveSignedOut, capFirst, capWarningText,
     showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,
-    idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
+    idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, ACTIVITY_INPUTS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
     refreshIfWaiting, renderSession,
   };
 }
