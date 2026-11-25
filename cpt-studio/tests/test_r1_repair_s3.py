@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import threading
 from contextlib import contextmanager
 from unittest import mock
@@ -27,7 +28,8 @@ from django.conf import settings
 from django.contrib.auth import SESSION_KEY
 from django.core.management import call_command
 from django.db import connection, transaction
-from django.test import Client, TransactionTestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from studio import client_contract, models, second_factor, session_store, sessions
 from tests.support import coding as f
@@ -762,3 +764,89 @@ class RecoveryCodeCheckTests(RaceCase):
         self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT - 1)
         self.assertEqual(events_of(operator).count('second_factor.recovery_used'), 1)
         self.assertEqual([console_status(browser) == 200 for browser in (first, second)].count(True), 1)
+
+
+# --- S3-3: the console's acts take the account FOR NO KEY UPDATE ------------------------------------------------------
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ConsoleAgainstAnOwnersAccessOffTests(RaceCase):
+    """locks-3: an owner turns a member's access off (api._set_member_access: the member's account, then every
+    membership of the practice FOR UPDATE - the owner's own included - and at its commit its audit row's deferred actor
+    foreign key takes KEY SHARE on the owner's account), while the console changes that same owner's role or practice
+    access (the owner's account locked, then the owner's membership updated). The console's plain FOR UPDATE blocked
+    that KEY SHARE: 'deadlock detected', one of the two answered 500."""
+
+    def race(self, path, data_of):
+        practice = f.workspace(f'Synthetic practice s3 console {path}')
+        member = f.member(practice)
+        owner = f.member(practice, role=models.Membership.OWNER)
+        f.member(practice, role=models.Membership.OWNER)  # a second owner: the practice keeps one whatever happens
+        owners = Client(raise_request_exception=False)
+        self.assertEqual(owners.post('/login/', {'username': owner.username, 'password': PASSWORD}).status_code, 302)
+        member_row = models.Membership.objects.get(user=member, workspace=practice)
+        owner_row = models.Membership.objects.get(user=owner, workspace=practice)
+        from tests.support import operator as ops
+        console = ops.admin_client(f.user('s3-console-operator'))
+        console.raise_request_exception = False
+        toggle = Worker('toggle', lambda: owners.post(f'/api/members/{member.pk}/access', json.dumps({'active': False}),
+                                                      content_type='application/json', **API))
+        act = Worker('console', lambda: console.post(f'/ops/people/{owner.pk}/{path}',
+                                                     {**data_of(owner_row), 'requested_by': 'Synthetic contact'}))
+        before = deadlocks_counted()
+        with server_errors() as errors, \
+                held_right_after_updating('studio_membership', member_row.pk, toggle) as release:
+            toggle.start()
+            self.assertTrue(wait_until(lambda: wait_of(toggle) == ('Lock', 'advisory')), 'the access off never held')
+            act.start()
+            self.assertTrue(wait_until(lambda: finished_or_waiting(act)), 'the console act neither ended nor waited')
+            release()
+            self.finish(toggle, act)
+        assert_no_deadlock(self, before)
+        self.assertEqual(errors, [])
+        self.assertEqual((toggle.status, toggle.error), (200, None))
+        self.assertEqual((act.status, act.error), (303, None))
+        member_row.refresh_from_db()
+        owner_row.refresh_from_db()
+        self.assertFalse(member_row.active)
+        return owner_row
+
+    def test_the_access_off_and_the_consoles_role_change_on_the_owner(self):
+        owner_row = self.race('role', lambda row: {'membership': str(row.pk), 'role': models.Membership.REVIEWER})
+        self.assertEqual(owner_row.role, models.Membership.REVIEWER)
+
+    def test_the_access_off_and_the_consoles_practice_access_change_on_the_owner(self):
+        owner_row = self.race('access', lambda row: {'membership': str(row.pk), 'access': 'off'})
+        self.assertFalse(owner_row.active)
+
+
+PERSON_LOCKS = re.compile(r'^SELECT .*FROM "studio_user" .*FOR (NO KEY )?UPDATE', re.S)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ConsoleLockStatementTests(TestCase):
+    """Every console act on a person - a role, practice or account access, a password reset, a sign-in delay cleared -
+    takes the person's account row FOR NO KEY UPDATE (session_store.lock_accounts), never a plain FOR UPDATE, which
+    blocks the KEY SHARE of any row written with a foreign key to the account."""
+
+    def test_each_act_locks_the_person_for_no_key_update_only(self):
+        from tests.support import operator as ops
+        practice = f.workspace('Synthetic practice s3 console locks')
+        console = ops.admin_client(f.user('s3-console-locks'))
+        acts = (('role', lambda row: {'membership': str(row.pk), 'role': models.Membership.VIEWER}),
+                ('access', lambda row: {'membership': str(row.pk), 'access': 'off'}),
+                ('access', lambda row: {'access': 'off', 'scope': 'everywhere'}),
+                ('password', lambda row: {}),
+                ('unlock', lambda row: {}))
+        for path, data_of in acts:
+            with self.subTest(act=path, data=sorted(data_of(models.Membership(pk=0)))):
+                person = f.member(practice)
+                row = models.Membership.objects.get(user=person, workspace=practice)
+                with CaptureQueriesContext(connection) as seen:
+                    answer = console.post(f'/ops/people/{person.pk}/{path}',
+                                          {**data_of(row), 'requested_by': 'Synthetic contact'})
+                self.assertIn(answer.status_code, (200, 303))
+                locks = [item['sql'] for item in seen.captured_queries if PERSON_LOCKS.search(item['sql'])]
+                self.assertTrue(locks, 'the act locked no account row')
+                for sql in locks:
+                    self.assertIn('FOR NO KEY UPDATE', sql)
+                    self.assertIn(f"'{person.pk}'".replace('-', ''), sql.replace('-', ''))

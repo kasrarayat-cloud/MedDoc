@@ -54,7 +54,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 
-from . import audit, jobs, models, read_audit, security_events, spend
+from . import audit, jobs, models, read_audit, security_events, session_store, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
@@ -319,6 +319,16 @@ def _lock():
         cursor.execute('SELECT pg_advisory_xact_lock(%s)', [provision.PROVISION_LOCK])
 
 
+def _locked_person(person):
+    """``person`` read again once its account's row is locked as every act that ends an account's sessions locks it: the
+    account first, FOR NO KEY UPDATE (session_store.lock_accounts). A row written meanwhile with a foreign key to the
+    account - an owner's access off, whose audit row names this owner as its actor, takes KEY SHARE on it at its commit
+    - is never blocked by that lock, so the console's act on that owner and the access off cannot deadlock (repair round
+    3 of release 1, locks-3): the plain FOR UPDATE the acts took conflicted with that KEY SHARE."""
+    session_store.lock_accounts([person.pk])
+    return User.objects.get(pk=person.pk)
+
+
 def _changeable(user, operators=None) -> list:
     """The memberships of ``user`` an act may touch, refused for an operator's account or one with no workspace."""
     operators = operator_ids() if operators is None else operators
@@ -425,7 +435,7 @@ def reset_password(request, user_id):
     memberships = []
     try:
         with transaction.atomic():
-            person = User.objects.select_for_update().get(pk=person.pk)
+            person = _locked_person(person)
             memberships = _changeable(person)
             requested_by = _requested_by(request)
             password = new_password(person)
@@ -452,7 +462,7 @@ def set_role(request, user_id):
     memberships = []
     try:
         with transaction.atomic():
-            person = User.objects.select_for_update().get(pk=person.pk)
+            person = _locked_person(person)
             memberships = _changeable(person)
             requested_by = _requested_by(request)
             target = next((item for item in memberships if str(item.pk) == request.POST.get('membership', '')), None)
@@ -495,7 +505,7 @@ def set_access(request, user_id):
         if scope not in ACCESS_SCOPES:
             raise Refused('Choose whether access changes in this workspace or everywhere.')
         with transaction.atomic():
-            person = User.objects.select_for_update().get(pk=person.pk)
+            person = _locked_person(person)
             memberships = _changeable(person)
             requested_by = _requested_by(request)
             active = wanted == 'on'
@@ -1042,7 +1052,7 @@ def unlock_sign_in(request, user_id):
     memberships = []
     try:
         with transaction.atomic():
-            person = User.objects.select_for_update().get(pk=person.pk)
+            person = _locked_person(person)
             memberships = _changeable(person)
             requested_by = _requested_by(request)
             cleared = throttle().clear_failures(person.username)
