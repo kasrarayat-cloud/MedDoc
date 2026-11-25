@@ -4340,3 +4340,54 @@ that hash a password under the account lock (setup's key step, about 0.8 s). Wit
 holds: no high finding and no medium regression. The rehearsal, run in the act's order (the db phase before the pre-app
 check), showed that pre_app_r1.sh stopped at the db phase's own declared changes; the earlier rehearsals ran it before
 that step, so it passed there. The check now requires exactly those declared changes and stops at any other.
+
+### Owner answer, 2026-11-25 (738699b2) — five points before release 1's install — DECISIONS D419
+
+> yes
+
+In reply to the session's message of 09:42:12Z, which asked for "one 'yes to all'" on five points and stated two things about
+the day. The points as he was shown them: (1) besides the one rehearsal copy, the install folder still holds 23 full copies
+of the database from earlier installs, 9 of them made after 20 November, so they may contain the real documents of that day;
+they are not encrypted and only the server account can read them; the install touches and deletes none of them, and he
+decides about them with his lawyer; (2) no copy of the live data is taken before this install, so if data were somehow lost
+there is no copy to restore (the install only adds tables and settings, and the old version can be switched back); (3) after
+the install no automated account can sign in to his admin console, so the check afterwards proves that strangers cannot get
+in and no longer opens a page as an operator; he opens one page himself after he sets up the passkey; (4) a Word file that
+unpacks to more than 64 MB, or has one part over 32 MB, is refused (the old limit was 512 MB); (5) making the existing
+accounts choose new passwords is not part of this install: a separate step when he says. Read as: yes to all five. (3) is
+D10's accepted-capability loss and (4) another (class b), both accepted by him before the declaration's commit; under (5)
+D22 waits for his word. Stated, not asked: the install is Wednesday 25 November 2026 at 11:00 AM Pacific, and he was asked
+to keep off CPT Studio and the console from 10:00 AM Pacific until told it is finished.
+
+### Correction, 2026-11-25 (738699b2) — the install window's weekday (D412)
+
+The "Read as" of D412 above says Tuesday 2026-11-25. 2026-11-25 is a Wednesday; the date and the hours (11:00 AM-12:00 PM
+Pacific, 19:00-20:00 UTC) stand as read. The session's own messages once said Tuesday too; the owner was told the correction
+on 2026-11-25 (D419).
+
+### Session record, 2026-11-25 (738699b2) — the release package's review — DECISIONS D420
+
+The release package (the declaration's draft and the act's scripts) was refuted by four lenses - the declaration's facts, the
+scripts, the safety of the act, and what the declaration says the owner decided - with one independent re-test per finding:
+75 findings, 71 real (2 high, 15 medium, 54 low), 4 not real. The two highs: the declared database deltas lacked one table of
+migration 0018, so the post-check would have stopped a correct install; and the live check read a credentials file of another
+shape, so it could not run. Both are repaired, with every script finding (the pre-app check now stops unless the first
+maintenance run would remove exactly what the declaration declares, the post-check is bound to the committed declaration and
+judges that run's records, the two operator acts need a verify that passed after license-note, a reissue of the setup code
+is not barred by a rerun, switch-back's freshness reads the reissues) and every text finding. Two more lenses then refuted the
+script repairs: a stored file no row names and under an hour old now stops the pre-app check, app runs on the newest pre-app
+reading alone, the post-check reads the log app ran on, the counts are read again before any phase, a verify must be newer
+than a switch-back that failed. The scripts' tests and mutants are in the package's TESTS.md. Decided: the declared second run of app is withdrawn (its own checks could never let it start); the
+first maintenance run removes no file today (95 stored files, all named), and any other count stops the act until the owner
+is asked; the revocation's reason names ops-agent.
+
+### Session record, 2026-11-25 (738699b2) — two Word losses put to the owner before the act — DECISIONS D421
+
+The last read of the declaration found that two losses on unusual Word files (RELEASE-1-SPEC E2) had not been put to the owner
+by name: a file damaged inside, or built in a way Word does not produce, is refused ("The Word file could not be opened."),
+where 6ab8e503a400 would have tried to convert it; and a document inserted whole into a Word file without being merged
+(w:altChunk) is left out of the PDF with no notice, where 6ab8e503a400 kept it in the package (how LibreOffice 7.4 shows one
+was not measured). Both are put to him in the session at 16:15:09Z, with the session's recommendation (yes for this install,
+with no real customer; in the next release such a file is refused with a message instead of losing a part). A draft of the
+declaration had said they were put to him at 15:50Z: that message never reached him, and the sentence was corrected before
+the commit. The act's app phase does not start without his yes; his answer is recorded with the act.
