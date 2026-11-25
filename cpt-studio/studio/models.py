@@ -870,14 +870,26 @@ class ReferencePassage(models.Model):
 
 class LoginAttemptQuerySet(models.QuerySet):
     """The bounded reads of sign-in rows (refutation round 1 of release 1, avail-5; B1 item 6: every read stops at its
-    limit), each served by an index of migration 0018 however many rows one name holds."""
+    limit), each served by an index of migration 0018 however many rows one name holds.
+
+    Each is a LIMIT 1 statement ORDER BY its index's own columns, in an order only that index - or only indexes that
+    lead with the name - gives (refutation round 3 of release 1, rows-0): the planner multiplies a name's share of the
+    table by an address's as if they were independent (or, for a name it is given row by row, takes the table's rows
+    over the names' count), so where one name holds most rows a lookup looked like thousands of matches, and a scan that
+    stops at the first - of the whole table, or of an index read by time - looked cheaper than the index; when nothing
+    matched, that scan read every row. A plan that does not read the index in its order must now sort every matching
+    row before its first, so the index serves the read whatever the rows' distribution. A value the order must not be
+    a constant for is written as a one-value array (= ANY), which the planner does not fold into a constant. These
+    statements read the table, not ``self``'s filters."""
 
     def latest_sign_ins(self, usernames) -> dict:
         """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
         succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
         by aggregating every succeeded row of each name. Every name in ONE statement (refutation round 2 of release 1,
         phi-0: a query a name cost a round trip each), so the read costs one statement whatever the number of names
-        and whatever the rows one name holds."""
+        and whatever the rows one name holds. Each name's lookup is ORDER BY the name, then the time (rows-0: ordered by
+        time alone, a backward scan of studio_login_time read every row for a member who never signed in where one name
+        held the rows), an order only an index that leads with the name gives."""
         from django.db import connections  # here: the one read in this module that names its connection
         names = sorted({str(name) for name in usernames})
         if not names:
@@ -889,8 +901,8 @@ class LoginAttemptQuerySet(models.QuerySet):
                                            for field in ('username', 'created_at', 'succeeded'))
         with database.cursor() as cursor:
             cursor.execute(f'SELECT wanted.name, (SELECT attempt.{created_at} FROM {table} AS attempt '
-                           f'WHERE attempt.{succeeded} AND attempt.{username} = wanted.name '
-                           f'ORDER BY attempt.{created_at} DESC LIMIT 1) '
+                           f'WHERE attempt.{succeeded} AND attempt.{username} = ANY(ARRAY[wanted.name]) '
+                           f'ORDER BY attempt.{username} DESC, attempt.{created_at} DESC LIMIT 1) '
                            f'FROM unnest(%s::text[]) AS wanted(name)', [names])
             return {name: last for name, last in cursor.fetchall() if last is not None}
 
@@ -898,22 +910,44 @@ class LoginAttemptQuerySet(models.QuerySet):
         """Whether ``username`` signed in successfully from the client key ``client_key`` - an IPv4 address, or an IPv6
         address's /64 (studio.request_meta.client_key) - at or after ``since`` (``client``: the address the key was read
         from). However many times the name signed in (refutation round 2 of release 1, regression-1: a read of the
-        name's newest 1,000 sign-ins left an older address out), each read is one equality lookup of one partial index,
-        so neither its cost nor its answer depends on how many rows the name holds:
+        name's newest 1,000 sign-ins left an older address out), each read is one LIMIT 1 statement whose first row in
+        its partial index's order answers, so neither its cost nor its answer depends on how many rows the name holds or
+        how the table's rows are spread (refutation round 3, rows-0: see the class):
         - a row release 1 writes carries its client's key (LoginAttempt.client_key): any address of the key - every
-          address of an IPv6 /64 - is found (studio_login_name_key_ok);
+          address of an IPv6 /64 - is found (studio_login_name_key_ok). The name is one value and the key an array,
+          ORDER BY the key, then the time: no other index gives that order;
         - a row an older revision wrote carries none, and is found by the texts the key is stored as (spellings_of):
           ``client`` itself, and an IPv4 key as nginx writes it, plain or IPv4-mapped - all of an IPv4 key's texts
-          (studio_login_name_keyless, which holds those rows alone: no row release 1 writes enters it). An IPv6 /64's
-          other addresses are no list of texts, so an older revision's row is found by its own address only."""
+          (studio_login_name_keyless, which holds those rows alone: no row release 1 writes enters it). The name is an
+          array too, ORDER BY the name, the address, the time: an index that leads with the address
+          (studio_login_client_time) gives no part of that order, and each that does leads with the name and holds every
+          row studio_login_name_keyless holds. An IPv6 /64's other addresses are no list of texts, so an older
+          revision's row is found by its own address only."""
         if not client_key:
             return False
-        signed_in = self.filter(username=username, succeeded=True, created_at__gte=since)
-        if signed_in.filter(client_key=client_key).exists():
-            return True
+        from django.db import connections  # here: as latest_sign_ins
+        database = connections[self.db]
+        quote, meta = database.ops.quote_name, self.model._meta
+        table = quote(meta.db_table)
+        column = {field: quote(meta.get_field(field).column)
+                  for field in ('username', 'client', 'client_key', 'succeeded', 'created_at')}
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT 1 FROM {table} WHERE {column["username"]} = %s AND {column["client_key"]} = '
+                           f'ANY(%s::text[]) AND {column["client_key"]} IS NOT NULL AND {column["succeeded"]} AND '
+                           f'{column["created_at"]} >= %s ORDER BY {column["client_key"]}, {column["created_at"]} '
+                           f'LIMIT 1', [str(username), [str(client_key)], since])
+            if cursor.fetchone() is not None:
+                return True
         spellings = [text for text in dict.fromkeys(self.model.spellings_of(client_key, client))
                      if self.model.key_of(text) == client_key]
-        return bool(spellings) and signed_in.filter(client_key__isnull=True, client__in=spellings).exists()
+        if not spellings:
+            return False
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT 1 FROM {table} WHERE {column["username"]} = ANY(%s::text[]) AND {column["client"]} '
+                           f'= ANY(%s::text[]) AND {column["client_key"]} IS NULL AND {column["succeeded"]} AND '
+                           f'{column["created_at"]} >= %s ORDER BY {column["username"]}, {column["client"]}, '
+                           f'{column["created_at"]} LIMIT 1', [[str(username)], spellings, since])
+            return cursor.fetchone() is not None
 
 
 class LoginAttempt(models.Model):
