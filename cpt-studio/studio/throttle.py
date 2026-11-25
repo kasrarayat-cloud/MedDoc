@@ -250,7 +250,9 @@ def reserve(scope, key, limit, now=None) -> bool:
     now = now or timezone.now()
     start = rate.window_start(MINUTE, now)
     earlier = sum(count for window, count in _rows(scope, key, _since(now)) if window < start)
-    if earlier + rate.hit(scope, key, window_seconds=MINUTE) > limit:
+    # the hit lands in the window ``start`` names, never one the clock reached since: a minute boundary between the
+    # two readings hid the window's earlier failures from this place (repair round 3, found by builder d3's suite)
+    if earlier + rate.hit(scope, key, window_seconds=MINUTE, now=now) > limit:
         give_back(scope, key)
         return False
     return True
