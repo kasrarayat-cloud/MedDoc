@@ -229,6 +229,131 @@ class RestoreSequenceTests(TemporaryDirectoryTest):
         self.assertEqual(host.names(), {WEB: (IMAGE, install.WEB_PORT, True), WORKER: (IMAGE, None, True)})
 
 
+# --- I3-2: a reason in words is never refused; a line, or a whole reason, of ids, links and numbers alone still is -------
+
+# the finding's reasons (refutation round 3, installer-2 - the lens's and the verifier's), each refused before the act
+REASONS_IN_WORDS_R3 = {
+    'a heading line': 'Justification\nThe practice ended its contract with us on 2026-11-20 and asked in writing for its '
+                      'data to be destroyed.\n',
+    'the specialty on its own line': 'Gastroenterology\nThe owner of this practice asked us to close it at the end of '
+                                     'its contract.\n',
+    'a label line': 'Confidential\nThe practice owner asked us in writing to close the practice.\n',
+    'a German subject line': 'Vertragsbeendigung\nDie Praxis hat die Löschung ihrer Daten schriftlich verlangt.\n',
+    'Japanese, no spaces': '契約終了に伴い、診療所のデータ削除を書面で依頼されました。\n',
+    'two words': 'Contract terminated.\n',
+    'two words, no stop': 'Practice closure\n',
+    'a last line of one word': 'The owner asked us in writing to close it.\nAcknowledgement\n',
+    'an indented word': 'Closing the practice per the owner.\n  Gastroenterology\n',
+    'a paragraph wrapped at 80 columns': '\n'.join(__import__('textwrap').wrap(
+        'The practice ended its contract with us on 2026-11-20 and asked us in writing to destroy all of its data; '
+        "the signed request is on file with the owner's written acknowledgement.", width=80)) + '\n',
+    'a sign-off': 'The practice asked us in writing on 2026-11-20 for its data to be destroyed.\nRespectfully,\n',
+}
+# and more of the class, words in other forms: a heading with its colon, separator lines, a date in a Japanese sentence,
+# a German word written decomposed (o and its combining diaeresis), a word alone
+WORDS_IN_OTHER_FORMS_R3 = {
+    'a heading with its colon': 'Justification:\nThe practice asked us to close it.\n',
+    'separator lines': 'Reason\n------------\n============\n____________\nThe practice asked us to close it.\n',
+    'a date in a Japanese sentence': '2026年11月20日、診療所から書面でデータ削除の依頼を受けました。\n',
+    'a decomposed German word': 'Löschung der Praxisdaten verlangt\n',
+    'one long word': 'Vertragsbeendigung\n',
+}
+# round 2's own refusals (installer-5's class), which still refuse: too short, or ids, links and numbers alone
+REASONS_TOO_PLAIN_R2 = ('4521\n', '40de\n', '7c9e6679\n', 'Ticket 4521\n', 'Grace Hopper\n', 'per ticket\n', 'a b\n',
+                        '4521 4522 4523\n', '4521\n4522\n4523\n')
+LINES_NOT_WORDS_R2 = ('1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9', 'https://support.example/tickets/4521', '123456789012',
+                      'deadbeefcafe', 'deadbeefcafe,', 'abcdefab-cdef-abcd-efab-cdefabcdefab',
+                      '7c9e6679-4521-40de-944b-e07fc1f90ae7, 1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9',
+                      'https://support.example/tickets', 'support.example.com', 'owner@practice.example',
+                      'studio_encounter', '/run/cpt-manage/reason', 'docs/foundation/mutations/x.md',
+                      '2026-11-25T01:00:00Z', 'sha256:9f86d081884c7d65')
+# the act's output in dispose.py's own formats (the close line, the plan, its rows, files and manifest line, a ledger
+# JSON line), and what its record needs whole: every id, count and digest
+PRINTED_WORKSPACE, PRINTED_PLAN = '7a1c2e9b-4d3f-4b8a-9c6d-0e1f2a3b4c5d', '7c9e6679-4521-40de-944b-e07fc1f90ae7'
+PRINTED_DIGEST = '3b8f0a1c9d2e4f5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c'
+PRINTED_FILE = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+PRINTED_BY_DISPOSE = (
+    f'Closed practice {PRINTED_WORKSPACE} at 2026-11-25T00:41:07Z: no new upload or coding; reading stays on. '
+    f'DisposalEvent {PRINTED_PLAN} (closed).\n'
+    f'Plan {PRINTED_PLAN} for practice {PRINTED_WORKSPACE} (3 document(s)); nothing was changed. Carry it out within 24 '
+    'hours with --execute --plan <id>, run and approved by two different people.\n'
+    'Rows in scope: studio_encounter 3, studio_sourcefile 3, studio_sourcerevision 4521\n'
+    f'Files in scope: 1 (4521 bytes; 0 missing); manifest sha256 {PRINTED_DIGEST}\n'
+    f'  {PRINTED_FILE}  4521  {"c0ffee" * 8}.pdf\n'
+    + __import__('json').dumps({'event': PRINTED_PLAN, 'workspace': PRINTED_WORKSPACE, 'manifest_digest': PRINTED_DIGEST,
+                                'files': 1, 'bytes': 4521}) + '\n').encode()
+PRINTED_WHOLE = (PRINTED_WORKSPACE, PRINTED_PLAN, PRINTED_DIGEST, PRINTED_FILE, '4521', '3 document(s)', 'c0ffee' * 8,
+                 '2026-11-25T00:41:07Z')
+
+
+class ReasonInWordsTests(TemporaryDirectoryTest):
+    def close(self, reason, name):
+        folder = self.tmp / name
+        folder.mkdir(mode=0o700)
+        world = r1.ManageWorld(folder)
+        try:
+            return world.run('--command', 'dispose', *CLOSE, '--by', 'Ada Lovelace', reason=reason), None, world
+        except install.InstallError as error:
+            return None, error, world
+
+    def test_every_reason_in_words_runs_through_the_manage_phase(self):
+        # the finding's input: --dispose-step close --workspace-id ... --reason-file R, with each reason it refused
+        for index, (label, text) in enumerate({**REASONS_IN_WORDS_R3, **WORDS_IN_OTHER_FORMS_R3}.items()):
+            with self.subTest(reason=label):
+                details, error, world = self.close(text.encode(), f'r{index}')
+                self.assertIsNone(error, error and str(error))
+                self.assertEqual(details['summary'], 'dispose close: executed')
+                self.assertEqual(world.acts()[0][:3], ['manage', 'dispose', '--close'])
+                self.assertEqual(world.mounted['reason'][0], text)  # the reason reached the act as written
+
+    def test_round_twos_refusals_still_refuse_before_the_act(self):
+        for index, text in enumerate(REASONS_TOO_PLAIN_R2):
+            with self.subTest(reason=text):
+                details, error, world = self.close(text.encode(), f'p{index}')
+                self.assertIn('--reason-file must give the reason in words', str(error))
+                self.assertIn('nothing was run', str(error))
+                self.assertNotIn(text.strip(), str(error))  # the refusal never repeats the reason
+                self.assertEqual(world.acts(), [])
+        for index, line in enumerate(LINES_NOT_WORDS_R2):
+            with self.subTest(line=line):
+                details, error, world = self.close(f'The practice asked to end access.\n{line}\n'.encode(), f'l{index}')
+                self.assertIn('is an id, a link or a number alone', str(error))
+                self.assertNotIn(line, str(error))
+                self.assertEqual(world.acts(), [])
+
+    def test_what_the_rule_lets_through_never_alters_an_id_a_count_or_a_digest_the_act_prints(self):
+        # the rule's purpose: each value redact_output replaces (reason_values) of a reason it lets through leaves
+        # every id, count and digest whole - as printed, and with the reason echoed in the output too
+        for label, text in {**REASONS_IN_WORDS_R3, **WORDS_IN_OTHER_FORMS_R3}.items():
+            data = text.encode()
+            self.assertEqual(install.reason_words_problem(data), '', label)
+            echoed = PRINTED_BY_DISPOSE + data + b'\n' + PRINTED_BY_DISPOSE
+            for output in (PRINTED_BY_DISPOSE, echoed):
+                with self.subTest(reason=label, echoed=output is echoed):
+                    redacted, counts = install.redact_output(output, reasons=install.reason_values(data))
+                    for value in PRINTED_WHOLE:
+                        self.assertEqual(redacted.count(value.encode()), output.count(value.encode()), value)
+        # the positive control: a line that is an id alone, if it were let through, alters the plan id it names
+        values = install.reason_values(f'The practice asked to end access.\n{PRINTED_PLAN}\n'.encode())
+        redacted, counts = install.redact_output(PRINTED_BY_DISPOSE, reasons=values)
+        self.assertEqual(redacted.count(PRINTED_PLAN.encode()), 0)
+        self.assertGreater(counts['reason'], 0)
+
+    def test_ids_links_and_numbers_are_told_from_words(self):
+        for part in ('Gastroenterology', 'Justification:', 'acknowledgement.', 'Respectfully,', '(Confidential)',
+                     'end-of-contract', "practice's", 'Löschung', '診療所のデータ削除を書面で依頼されました。',
+                     '2026年11月20日、', '------------', '____________', 'faced', 'decade'):
+            with self.subTest(word=part):
+                self.assertFalse(install.reason_part_is_an_id(part))
+        for part in ('4521', '40de-944b', 'ADM-4521', 'https://support.example', 'owner@practice', 'x.md',
+                     'studio_encounter', 'key=value', '/run', 'deadbeefcafe', '(deadbeefcafe)', 'DEADBEEFCAFE'):
+            with self.subTest(not_a_word=part):
+                self.assertTrue(install.reason_part_is_an_id(part))
+        self.assertTrue(install.reason_holds_a_word('Ticket 4521'))
+        self.assertFalse(install.reason_holds_a_word('4521 4522'))
+        self.assertFalse(install.reason_holds_a_word(''))  # nothing in it: no word
+
+
 class RestoreGuideTests(unittest.TestCase):
     """INSTALL.md's restore procedure is the sequence the tests above run, for both hosts."""
 

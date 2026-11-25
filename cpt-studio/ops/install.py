@@ -8351,24 +8351,47 @@ def reason_values(reason) -> list:
 # characters - a bare ticket number, '4521' - was redacted wherever no letter or digit stood beside it, and '-' bounds
 # every group of an id: it changed a group of the plan id execute needs, which the receipt then no longer showed, and hid
 # a count). Every text redact_output replaces of a reason (reason_values: its whole text, and each of its lines of 12
-# characters or more) must be in words: the whole text REASON_MIN_CHARACTERS characters or more that are not white
-# space and REASON_MIN_WORDS words or more (the release's act script, act_r1.sh, refuses the same), and each such line
-# two words or more - white space, which no id, digest, link or number holds. Anything else is refused before the act.
+# characters or more) is replaced wherever it stands, so each must hold a word: the whole text REASON_MIN_CHARACTERS
+# characters or more that are not white space, and neither it nor any such line made of ids, links and numbers alone
+# (reason_part_is_an_id). Anything else is refused before the act. Refutation round 3, installer-2: round 2 asked for
+# three words and refused every line of one word, so a heading, a label, a specialty, a compound, a sign-off, a reason
+# of two words and one written in a language without spaces were refused as ids; a word is never refused.
 REASON_MIN_CHARACTERS = 12
-REASON_MIN_WORDS = 3
+
+
+def reason_part_is_an_id(part: str) -> bool:
+    """Whether ``part`` - a run of a reason between white space - is an id, a link or a number, so that its redaction
+    could alter one the act prints. Every id, count, digest, date, path and link the act prints is ASCII, so a part
+    holding any other character (a letter of another script: a German compound, a Japanese sentence and a date in it),
+    or no letter or digit at all (a line of dashes), is never one. A part written in ASCII is one when it holds a digit
+    (a number, a date, an id or a digest with digits), a '/', '\\' or '@' (a link, a path, an address), or a '.', '_'
+    or '=' between two letters or digits (a host, a file, a name in the code, a key and its value), or is 12 or more
+    hexadecimal letters and '-' once its punctuation at either end is set aside (an id or a digest without a digit).
+    Any other is a word: letters, with hyphens, apostrophes and punctuation."""
+    if not part.isascii() or not re.search(r'[A-Za-z0-9]', part):
+        return False
+    return bool(re.search(r'[0-9/\\@]|[A-Za-z0-9][._=][A-Za-z0-9]', part)
+                or re.fullmatch(r'[A-Fa-f-]{12,}', re.sub(r'^[^A-Za-z0-9]+|[^A-Za-z0-9]+$', '', part)))
+
+
+def reason_holds_a_word(text: str) -> bool:
+    """Whether one of ``text``'s parts (its runs between white space) is a word (reason_part_is_an_id)."""
+    return any(not reason_part_is_an_id(part) for part in text.split())
 
 
 def reason_words_problem(reason: bytes) -> str:
-    """'' when ``reason`` is in words (above), else the refusal."""
+    """'' when ``reason`` is in words (above), else the refusal - which never repeats the reason."""
     whole, *lines = reason_values(reason)
-    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or len(whole.split()) < REASON_MIN_WORDS:
+    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or not reason_holds_a_word(whole):
         return (f'--reason-file must give the reason in words - {REASON_MIN_CHARACTERS} characters or more that are not '
-                f'white space, and {REASON_MIN_WORDS} words or more: a shorter or plainer one (a ticket number alone) '
-                "would be redacted from the act's output wherever it stands, inside an id or a count too")
-    if any(len(line.split()) < 2 for line in lines):
-        return ('--reason-file has a line of 12 characters or more that is one word - an id, a link or a number alone: '
-                "each such line is redacted on its own wherever it stands in the act's output, inside an id or a count "
-                'too; put it in a sentence')
+                'white space, a word among them: a shorter one, or one of ids, links and numbers alone (a ticket '
+                "number alone), would be redacted from the act's output wherever it stands, inside an id or a count "
+                'too')
+    if not all(reason_holds_a_word(line) for line in lines):
+        return ('--reason-file has a line of 12 characters or more that is an id, a link or a number alone, with no '
+                'word in it (a part written in ASCII that holds a digit, a /, \\ or @, or a ., _ or = between two '
+                'letters or digits, or is 12 or more hexadecimal letters): each such line is redacted on its own '
+                "wherever it stands in the act's output, inside an id or a count too; put a word beside it")
     return ''
 
 

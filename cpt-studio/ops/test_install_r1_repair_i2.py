@@ -849,11 +849,12 @@ class ReasonInWordsTests(TemporaryDirectoryTest):
                 self.assertIn('nothing was run', str(error))
                 self.assertEqual(world.acts(), [])
                 self.assertNotIn(reason.decode().strip(), str(error))  # the refusal never repeats the reason
-        # a line of 12 characters or more that is one word: an id, a link, a number alone
+        # a line of 12 characters or more that is an id, a link, a number alone (refutation round 3, installer-2: the
+        # refusal no longer calls every one-word line one - a word is never refused - so it names what it refuses)
         for line in (PLAN_ID, 'https://support.example/tickets/4521', '123456789012'):
             with self.subTest(line=line):
                 details, error, world = self.plan(f'The practice asked to end access.\n{line}\n'.encode())
-                self.assertIn('is one word - an id, a link or a number alone', str(error))
+                self.assertIn('is an id, a link or a number alone', str(error))
                 self.assertEqual(world.acts(), [])
 
     def test_a_reason_in_words_runs_and_leaves_the_plan_id_and_the_counts_whole(self):
@@ -871,8 +872,13 @@ class ReasonInWordsTests(TemporaryDirectoryTest):
         # the rule reads reason_values' own forms: the whole text, and each line of 12 characters or more
         self.assertEqual(install.reason_words_problem(b'Short.\nA longer second line here\n'), '')
         self.assertIn('in words', install.reason_words_problem(b'a b\n'))  # three words, but 2 characters
-        self.assertIn('in words', install.reason_words_problem(b'abcdefghijkl mnop\n'))  # two words
-        self.assertIn('one word', install.reason_words_problem(b'one two three\nabcdefghijklmnop\n'))
+        # refutation round 3, installer-2: two words, and a line of one word, are words - refused before as 'too plain'
+        # (as 'Practice closure' and a heading 'Gastroenterology' were), though neither can be inside an id, a count or
+        # a digest; what the rule refuses is a line, or a whole text, of ids, links and numbers alone
+        self.assertEqual(install.reason_words_problem(b'abcdefghijkl mnop\n'), '')  # two words
+        self.assertEqual(install.reason_words_problem(b'one two three\nabcdefghijklmnop\n'), '')
+        self.assertIn('an id, a link or a number', install.reason_words_problem(b'one two three\nabcdefabcdefab\n'))
+        self.assertIn('an id, a link or a number', install.reason_words_problem(b'one two three\nabcdefghijk-12\n'))
         self.assertEqual(install.reason_words_problem(b'one two three\nabcdefghijk\n'), '')  # 11: never redacted alone
 
 

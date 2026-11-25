@@ -823,9 +823,14 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   need. The receipt keeps the
   command's stdout (ids and counts) and its log. A reason must be in words, so
   that its redaction can never touch an id or a count: its text 12 characters
-  or more that are not white space and three words or more (as the release's
-  act script requires), and each line of 12 characters or more two words or
-  more. A ticket number alone, or a line that is an id, a link or a number
+  or more that are not white space, and neither the text nor any line of 12
+  characters or more made of ids, links and numbers alone. A part of it (a run
+  between white space) is one of those when it is written in ASCII and holds a
+  digit, a `/`, `\` or `@`, or a `.`, `_` or `=` between two letters or digits,
+  or is 12 or more hexadecimal letters; a word, in any script, never is, so a
+  heading, a label, a line of one word, a reason of two words and one written
+  without spaces all run (refutation round 3, installer-2: they were refused).
+  A ticket number alone, or a line that is an id, a link or a number
   alone, is refused before the act (refutation round 2, installer-5: a reason
   `4521` was redacted inside a plan id's group, which `--plan-id` then needs,
   and inside a byte count). Nothing that is not on the list
