@@ -195,8 +195,12 @@ class Command(BaseCommand):
             accounts.append((options['reviewer_username'], options['reviewer_display_name'],
                              options['reviewer_password_file'], models.User.HUMAN, models.Membership.REVIEWER))
         for username, display, password_file, kind, role in accounts:
-            # the row is locked, so two runs at once cannot both pass the one-workspace check (refutation N1-2-3)
-            user = models.User.objects.select_for_update().filter(username=username).first()
+            # the row is locked, so two runs at once cannot both pass the one-workspace check (refutation N1-2-3); FOR NO
+            # KEY UPDATE, as the session store's lock_accounts takes an account (repair round 3, s3: a plain FOR UPDATE
+            # blocks a foreign key's KEY SHARE on the account, so an owner's access off - which records the owner as its
+            # actor - deadlocked with a re-provisioning that changes that owner's membership); two runs still exclude
+            # each other
+            user = models.User.objects.select_for_update(no_key=True).filter(username=username).first()
             created = user is None
             if created:
                 user = models.User(username=username, actor_kind=kind, display_name=display or username)
