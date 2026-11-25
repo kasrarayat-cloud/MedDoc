@@ -4402,3 +4402,25 @@ direction to run the install at its hour without waiting for a further word from
 is amended before any phase: app does not wait for his presence, and at the window's end no phase up to app starts any more,
 without asking him (the act then ends); issue-enrolment still waits for him, since only he can enrol and the code lives 30 minutes. Not read as permission to delete data, to spend or
 agree anything, or to make or hand out a key.
+
+### Session record, 2026-11-25 (738699b2) — release 1 installed live — DECISIONS D423
+
+CPT Studio release 1 (6ab8e503a400 to 816045c72644) was installed on 2026-11-25 between 19:00Z and 19:07Z through the ruled-act door,
+under the declaration committed as 7df845feb271: every phase exit 0 and judged row by row, 310 availability samples all 200,
+migrations 0017 and 0018 applied exactly, every session ended once, nothing deleted by the first maintenance run, the live check
+25 of 25, and the first post-check every declared row but the two the setup code makes. ops-agent's operator grant is revoked.
+The operator's enrolment (issue-enrolment, the second post-check, his passkey) waits for the owner; report
+`docs/deploy-reports/20261125-cpt-studio-816045c7-release-1-install-and-live-check.md`.
+
+### Session record, 2026-11-25 (738699b2) — the owner's enrolment, and release 1 complete — DECISIONS D424
+
+> Ready
+
+At about 19:56Z, in reply to the session's "write ready": issue-enrolment ran (19:57:00Z, exit 0, the code kept root-only), the
+second post-check ended exit 0 with 0 unexpected differences (19:57:22Z), and the owner read the code himself, set a new
+password, registered one passkey (19:59:14Z, 10 recovery codes) and opened the console's list and activity page (20:01Z). He
+then wrote:
+
+> done
+
+Release 1's install is complete, as reported in `docs/deploy-reports/20261125-cpt-studio-816045c7-release-1-install-and-live-check.md`.
