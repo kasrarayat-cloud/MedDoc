@@ -24,9 +24,9 @@ act_still_stands(request, user, *also)
     regression-3): every act that opens a session or changes the account's credentials - the admin door's key and
     recovery-code sign-ins and its recovery-code step-up, setup's key step, a key added or removed on /ops/security,
     the cpt door's sign-in, the account page's password change - calls it first in its transaction. It takes the
-    account's lock (the account first) and proves, under it, that the request's own session, when it names the account,
-    still has its row, and that what the act's admission read (``also``) still holds; else the act refuses, changing
-    nothing. An end of the account's sessions served after the act is the act served first: the act's session is
+    account's lock (the account first; with any other account the request's session names, in id order) and proves,
+    under it, that the request's own session, when it names the account, still has its row, and that what the act's
+    admission read (``also``) still holds; else the act refuses, changing nothing. An end of the account's sessions served after the act is the act served first: the act's session is
     written before its commit (session_saved_before_commit at the cpt door), so the end finds it.
 
 Every sign-in writes the session keys of studio.request_meta (the contract between the lanes, RELEASE-1-SPEC section 5):
@@ -147,10 +147,11 @@ def waits_on(data, user_id) -> bool:
 def act_still_stands(request, user, *also) -> bool:
     """Inside the transaction of an act that opens a session or changes ``user``'s credentials, as its first statement
     (repair round 3 of release 1, cap-1, locks-0, locks-1, locks-4, regression-3): take the account's row lock - the
-    account first, studio.session_store's lock order - and answer whether what the act stands on still holds. Every end
-    of the account's sessions (the server's reset, a sign-out everywhere, a password change, an access off) takes the
-    same lock and deletes the row of each session it ends, so once the lock is held the answer cannot change before the
-    act commits:
+    account first, studio.session_store's lock order, together with any other account the request's session names, in
+    id order (a sign-in over a session signed in as another account flushes that session, whose delete locks that
+    account) - and answer whether what the act stands on still holds. Every end of the account's sessions (the server's
+    reset, a sign-out everywhere, a password change, an access off) takes the same lock and deletes the row of each
+    session it ends, so once the lock is held the answer cannot change before the act commits:
       - the request's own session, when its data names ``user`` (signed in as it, or waiting on it: a pending sign-in, a
         setup under way), still has its row, unexpired (session_store.session_is_live): an end served after the request
         loaded the session deleted it - and a session that names the account but has no key has no row either;
@@ -161,10 +162,11 @@ def act_still_stands(request, user, *also) -> bool:
     and changes nothing. Outside a transaction it raises: the lock would end with the statement."""
     if not transaction.get_connection().in_atomic_block:
         raise RuntimeError('act_still_stands runs inside the transaction of the act it proves.')
-    session_store.lock_accounts([user.pk])
     session = getattr(request, 'session', None)
-    if session is not None and waits_on(dict(session.items()), user.pk) \
-            and not session_store.session_is_live(session.session_key):
+    data = dict(session.items()) if session is not None else {}
+    named = {account for _, account in session_store.account_links(data)}
+    session_store.lock_accounts([user.pk, *named])
+    if session_store.account_of(user.pk) in named and not session_store.session_is_live(session.session_key):
         return False
     return all(queryset.exists() for queryset in also)
 

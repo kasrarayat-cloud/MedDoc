@@ -664,6 +664,26 @@ class ActStillStandsTests(TransactionTestCase):
             self.assertTrue(locked_elsewhere(member))  # the account's row is held until this transaction ends
         self.assertFalse(locked_elsewhere(member))
 
+    def test_it_locks_the_acts_account_and_every_account_its_session_names(self):
+        """A cpt-door sign-in of one account from a browser signed in as another flushes that session, and the flush's
+        delete locks the other account: the helper takes both at its start, in id order, so two such sign-ins crossing
+        never take the two accounts in opposite orders."""
+        from tests.test_r1_repair_s import signed_in_data, store_session
+        practice = f.workspace('Synthetic practice s3 helper two')
+        signing_in, signed_in = f.member(practice), f.member(practice)
+        store = session_store.SessionStore(store_session(signed_in_data(signed_in)))
+        store.load()
+        request = type('Request', (), {'session': store})()
+        with transaction.atomic():
+            self.assertTrue(sessions.act_still_stands(request, signing_in))
+            self.assertEqual((locked_elsewhere(signing_in), locked_elsewhere(signed_in)), (True, True))
+        with CaptureQueriesContext(connection) as seen, transaction.atomic():
+            sessions.act_still_stands(request, signing_in)
+        locks = [item['sql'] for item in seen.captured_queries if 'FOR NO KEY UPDATE' in item['sql']]
+        self.assertEqual(len(locks), 1)  # one statement takes both, in id order (session_store.lock_accounts)
+        self.assertLess(*[locks[0].replace('-', '').index(str(account.pk).replace('-', ''))
+                          for account in sorted((signing_in, signed_in), key=lambda user: str(user.pk))])
+
     def test_a_session_that_names_the_account_with_no_row_does_not_stand(self):
         member = f.member(f.workspace('Synthetic practice s3 helper no row'))
         unsaved = session_store.SessionStore()
