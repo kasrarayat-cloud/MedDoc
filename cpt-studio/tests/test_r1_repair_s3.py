@@ -21,6 +21,7 @@ import io
 import json
 import threading
 from contextlib import contextmanager
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY
@@ -668,3 +669,96 @@ class ActStillStandsTests(TransactionTestCase):
         request = type('Request', (), {'session': unsaved})()
         with transaction.atomic():
             self.assertFalse(sessions.act_still_stands(request, member))
+
+
+# --- S3-2: no recovery code is checked under the account's lock -------------------------------------------------------
+
+@contextmanager
+def code_checks_held(*names):
+    """Hold the recovery-code checks of the workers ``names`` right after each one's first check_password returns: the
+    one hold in this module that is no trigger, because the hashing is Python - a wrapper of second_factor's
+    check_password that runs the real check (Argon2) and only then waits, on those workers' threads alone. It lengthens
+    the check the act already makes; it changes no result. (each one's Event set once its check returned, the Event that
+    lets them all go, the results seen)."""
+    real = second_factor.check_password
+    entered = {name: threading.Event() for name in names}
+    let_go = threading.Event()
+    seen = []
+
+    def checked(plain, encoded, *args, **kwargs):
+        result = real(plain, encoded, *args, **kwargs)
+        name = threading.current_thread().name
+        if name in entered and not entered[name].is_set():
+            seen.append((name, result))
+            entered[name].set()
+            let_go.wait(60)
+        return result
+    with mock.patch.object(second_factor, 'check_password', checked):
+        try:
+            yield entered, let_go, seen
+        finally:
+            let_go.set()
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class RecoveryCodeCheckTests(RaceCase):
+    """locks-6: round 2 made the recovery view take the account first and then check the typed code against every unused
+    code (Argon2, about 0.07 s each), so a wrong code held the account's row across ten checks and the operator's own
+    key sign-in waited behind it (1.09 s against 0.06 s alone). Now the codes are checked before the lock, and the
+    match is used up under it in one statement."""
+
+    def test_a_wrong_code_holds_no_lock_while_its_codes_are_checked(self):
+        """The finding's input: an operator with a key and ten recovery codes; browser G sends a wrong code; while its
+        check runs, the operator's own browser sends a valid key assertion."""
+        operator, authenticator = enrolled_operator('s3-recovery-hashing')
+        second_factor.new_recovery_codes(operator)
+        guesser = admin_client(raise_request_exception=False)
+        own = admin_client(raise_request_exception=False, REMOTE_ADDR=OWN)
+        for browser in (guesser, own):
+            self.assertEqual(password_step(browser, operator)['Location'], '/login/second-factor')
+        credential = json.dumps(authenticator.assertion(options_of(own)))
+        wrong = Worker('guess', lambda: guesser.post('/login/recovery', {'code': 'kkkkk-mmmmm-nnnnn'}))
+        key = Worker('key', lambda: own.post('/login/second-factor', {'credential': credential}))
+        before = deadlocks_counted()
+        with server_errors() as errors, code_checks_held(wrong.name) as (entered, let_go, seen):
+            wrong.start()
+            self.assertTrue(entered[wrong.name].wait(30), 'the code check never began')
+            self.assertFalse(locked_elsewhere(operator), "the account's row is locked while the codes are checked")
+            key.start()
+            key.join(20)  # while the wrong code's check is held
+            self.assertEqual((key.status, key.location, key.error), (302, '/ops/', None))
+            let_go.set()
+            self.finish(wrong, key)
+        assert_no_deadlock(self, before)
+        self.assertEqual(errors, [])
+        self.assertEqual(seen, [(wrong.name, False)])
+        self.assertEqual((wrong.status, wrong.error), (400, None))  # the wrong code refused, as before
+        self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT)
+        self.assertEqual(console_status(own), 200)
+
+    def test_one_code_sent_twice_at_once_still_works_once(self):
+        """B2 item 2.7: a code works once. Two browsers send the same right code at the same moment, and both match it
+        before either uses it up (each held right after its check): under the account's lock one uses it up and signs
+        in, and the other finds it used - refused as a used code, and counted as one."""
+        operator, _authenticator = enrolled_operator('s3-recovery-twice')
+        codes = second_factor.new_recovery_codes(operator)
+        first, second = admin_client(raise_request_exception=False), admin_client(raise_request_exception=False)
+        for browser in (first, second):
+            self.assertEqual(password_step(browser, operator)['Location'], '/login/second-factor')
+        one = Worker('one', lambda: first.post('/login/recovery', {'code': codes[0]}))
+        two = Worker('two', lambda: second.post('/login/recovery', {'code': codes[0]}))
+        before = deadlocks_counted()
+        with server_errors() as errors, code_checks_held(one.name, two.name) as (entered, let_go, seen):
+            one.start()
+            two.start()
+            self.assertTrue(entered[one.name].wait(30) and entered[two.name].wait(30), 'the checks never both ran')
+            let_go.set()
+            self.finish(one, two)
+        assert_no_deadlock(self, before)
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(result for _, result in seen), [True, True])  # each matched the code
+        answers = sorted([(one.status, one.location), (two.status, two.location)], key=str)
+        self.assertEqual(answers, [(302, '/ops/'), (400, None)])
+        self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT - 1)
+        self.assertEqual(events_of(operator).count('second_factor.recovery_used'), 1)
+        self.assertEqual([console_status(browser) == 200 for browser in (first, second)].count(True), 1)

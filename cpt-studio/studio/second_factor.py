@@ -45,7 +45,9 @@ every credential row records its relying-party id)
         holds the device cookie can spend the device's count too (the cookie is HttpOnly, Secure and SameSite=Strict,
         and it opens nothing: the password and a key or code are still needed). Each pending sign-in keeps its own
         limit, whichever count its requests spend.
-    use_recovery_code  a recovery code stands in for a key once: stored as Django's make_password hash.
+    matching_recovery_code / use_up_recovery_code  a recovery code stands in for a key once: stored as Django's
+        make_password hash, checked (Argon2) before the account's lock is taken, and used up under it in one
+        conditional UPDATE (use_recovery_code: both).
     issue_setup_code / setup_token  setup needs a single-use code issued on the server (OneTimeToken OPERATOR_SETUP, valid
         ENROLMENT_CODE_SECONDS, stored as its sha256 only; issuing one revokes the account's earlier unused ones).
     claim_setup_code / live_claim  the setup's first step uses the code up at once and gives its session a claim
@@ -53,7 +55,7 @@ every credential row records its relying-party id)
     registration_options / checked_registration / store_key  a new key, from a setup code (enrolment) or from the keys
         page: checked first, its challenge used up outside any transaction, then stored by store_key inside the
         caller's transaction, beside the act's SecurityEvent (release 1 repair round 1, failclosed-2 and -5). Every act
-        here that changes a key or a code - store_key, remove_key, use_recovery_code, new_recovery_codes,
+        here that changes a key or a code - store_key, remove_key, use_up_recovery_code, new_recovery_codes,
         claim_setup_code - is written in the transaction of its caller, which writes the act's record in it too.
     new_recovery_codes  RECOVERY_CODE_COUNT codes, shown once; the earlier unused ones are voided.
     reset(user, ...)  the server's reset of lost keys (B2, item 7): keys removed, recovery codes voided, sessions ended, a
@@ -542,19 +544,35 @@ def recovery_codes_left(user) -> int:
     return SecondFactorRecoveryCode.objects.filter(user=user, used_at__isnull=True).count()
 
 
-def use_recovery_code(user, typed) -> bool:
-    """Whether ``typed`` is one of ``user``'s unused recovery codes; a match is used up at once."""
+def matching_recovery_code(user, typed):
+    """The id of ``user``'s unused recovery code that ``typed`` is, or None (a code of another form, or none of them).
+    Each unused code's hash is checked with check_password (Argon2) in turn until one matches - a wrong code checks
+    every one - and nothing is locked meanwhile: the caller takes the account's lock only afterwards and uses the match
+    up under it (use_up_recovery_code), so no slow work is held under the lock (repair round 3 of release 1, locks-6)."""
     plain = plain_code(typed, RECOVERY_CODE_GROUPS)
     if plain is None:
+        return None
+    for code_id, code_hash in (SecondFactorRecoveryCode.objects.filter(user=user, used_at__isnull=True)
+                               .order_by('created_at', 'pk').values_list('pk', 'code_hash')):
+        if check_password(plain, code_hash):
+            return code_id
+    return None
+
+
+def use_up_recovery_code(user, code_id) -> bool:
+    """Use ``user``'s recovery code ``code_id`` (matching_recovery_code's) up in one UPDATE ... WHERE used_at IS NULL, in
+    the caller's transaction, which holds the account's lock: whether it was still unused. A code works once: one used
+    since it was matched - by another request, or voided by the server's reset or by new codes - is refused."""
+    if code_id is None:
         return False
-    with transaction.atomic():
-        for code in (SecondFactorRecoveryCode.objects.select_for_update()
-                     .filter(user=user, used_at__isnull=True).order_by('created_at', 'pk')):
-            if check_password(plain, code.code_hash):
-                code.used_at = _now()
-                code.save(update_fields=['used_at'])
-                return True
-    return False
+    return SecondFactorRecoveryCode.objects.filter(pk=code_id, user=user, used_at__isnull=True).update(
+        used_at=_now()) == 1
+
+
+def use_recovery_code(user, typed) -> bool:
+    """Whether ``typed`` is one of ``user``'s unused recovery codes; a match is used up at once (matching_recovery_code,
+    then use_up_recovery_code)."""
+    return use_up_recovery_code(user, matching_recovery_code(user, typed))
 
 
 # --- the second step of the admin door ---------------------------------------------------------------------------------

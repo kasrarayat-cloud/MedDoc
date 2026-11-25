@@ -162,28 +162,34 @@ def recovery(request):
     if request.method == 'POST':
         error = factor.too_many(user, request)
         if not error:
-            completed = False
-            # the code used up, its record and what it completes: one act
-            with factor.new_sign_in_only_if_kept(request), transaction.atomic():
-                # the account first (the lock order), and under its lock this session's own row proved again
-                # (sessions.act_still_stands): an end of the account's sessions served after this request loaded it -
-                # a sign-out everywhere, the server's reset - ended this sign-in or step-up (repair round 3, locks-0)
-                stands = sessions.act_still_stands(request, user)
-                used = stands and factor.use_recovery_code(user, request.POST.get('code', ''))
-                if used:
-                    security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
-                                           stage=purpose, codes_left=factor.recovery_codes_left(user))
-                    if purpose == factor.SIGN_IN:
-                        completed = factor.complete_sign_in(request, user, state)
-                    else:
-                        factor.refresh(request)
-                        completed = True
-                    # the session and its link written before the commit, so an end of the account's sessions
-                    # served after this act (the server's reset waiting on the account) ends this sign-in too
-                    request.session.save()
-            if not stands:
-                factor.drop_pending(request)
-                return redirect(f'{SIGN_IN_PAGE}?reason=key')  # ended meanwhile: no code used, no failure counted
+            completed = stands = used = False
+            # the typed code checked first (Argon2, one check per unused code) with no lock held: a wrong code checks
+            # every code, and nothing waits on it meanwhile (repair round 3 of release 1, locks-6)
+            matched = factor.matching_recovery_code(user, request.POST.get('code', ''))
+            if matched is not None:
+                # the code used up, its record and what it completes: one act
+                with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+                    # the account first (the lock order), and under its lock this session's own row proved again
+                    # (sessions.act_still_stands): an end of the account's sessions served after this request loaded
+                    # it - a sign-out everywhere, the server's reset - ended this sign-in or step-up (round 3, locks-0);
+                    # then the matched code used up in one statement, unless it was used or voided since it matched
+                    stands = sessions.act_still_stands(request, user)
+                    used = stands and factor.use_up_recovery_code(user, matched)
+                    if used:
+                        security_events.record('second_factor.recovery_used', actor=user, subject=user,
+                                               request=request, stage=purpose,
+                                               codes_left=factor.recovery_codes_left(user))
+                        if purpose == factor.SIGN_IN:
+                            completed = factor.complete_sign_in(request, user, state)
+                        else:
+                            factor.refresh(request)
+                            completed = True
+                        # the session and its link written before the commit, so an end of the account's sessions
+                        # served after this act (the server's reset waiting on the account) ends this sign-in too
+                        request.session.save()
+                if not stands:
+                    factor.drop_pending(request)
+                    return redirect(f'{SIGN_IN_PAGE}?reason=key')  # ended meanwhile: no code used, no failure counted
             if used:
                 if not completed:
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
