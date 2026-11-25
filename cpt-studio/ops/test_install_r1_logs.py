@@ -5,6 +5,7 @@ temporary folders (test_install.run_body); Docker is a fake, under test_install'
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_logs -v
 """
+import datetime as dt
 import hashlib
 import json
 import os
@@ -12,6 +13,7 @@ import re
 import stat
 import subprocess
 import sys
+import types
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,6 +46,27 @@ def tearDownModule():
 
 def stamped(seconds, line, fraction='123456789'):
     return f'2026-11-24T10:00:{seconds:02d}.{fraction}Z {line}'
+
+
+# The one moment the journal's flush test reads install's clock at (refutation round 3, regression-9: the test took
+# 'today' from its own read of the clock while flush_journal files each line under the date of its own 'at', so a run
+# in whose milliseconds UTC midnight fell failed): noon, clear of either midnight.
+JOURNAL_TEST_MOMENT = dt.datetime(2026, 11, 25, 12, 0, 0, tzinfo=dt.timezone.utc)
+
+
+def install_clock_pinned(moment):
+    """A patch (a test's decorator, or a context manager): install.py's clock - its dt, which every reading of the time
+    there goes through (dt.datetime.now) - reads ``moment`` at every call; every other name is the datetime module's."""
+    class PinnedDatetime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return moment.astimezone(tz) if tz is not None else moment.replace(tzinfo=None)
+    pinned = types.ModuleType('datetime')
+    for name in dir(dt):
+        if not name.startswith('__'):
+            setattr(pinned, name, getattr(dt, name))
+    pinned.datetime = PinnedDatetime
+    return mock.patch.object(install, 'dt', pinned)
 
 
 class KeptFormatTests(unittest.TestCase):
@@ -287,6 +310,7 @@ class JournalFlushAndRetentionTests(TemporaryDirectoryTest):
             raise install.InstallError(f'Root helper refused: {answer["error"]}')
         return answer
 
+    @install_clock_pinned(JOURNAL_TEST_MOMENT)  # every line and both cutoffs on one UTC date, wherever midnight falls
     def test_lines_are_appended_and_files_older_than_the_retention_are_deleted_and_counted(self):
         base, containers = self.host_log / 'cpt-studio', self.host_log / 'cpt-studio' / 'containers'
         # a first flush makes the folders root 0700

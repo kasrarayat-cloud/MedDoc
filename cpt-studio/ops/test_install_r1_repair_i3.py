@@ -11,6 +11,9 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
         alone still is; what the rule lets through never alters an id, a count or a digest the act prints.
   I3-3  installer-3: after docker's own failure (125: its --rm removal failed) or a CLI killed by a signal, the one-shot
         is looked for, stopped and removed; nothing in that check takes the act's answer, or its record, away.
+  I3-4  regression-9: the journal's flush test (test_install_r1_logs) reads install's clock at one pinned moment, so
+        it passes when UTC midnight falls inside it - run here under the finding's midnight-crossing clock, with the
+        unpinned body as the control that fails there.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i3 -v
 """
@@ -541,6 +544,61 @@ class AnsweredLeftoverTests(TemporaryDirectoryTest):
                       '--by', 'Ada Lovelace')
         self.assertEqual((caught.exception.details['exit'], caught.exception.details['setup_code_kept']), (125, False))
         self.assertEqual(world.left, {})
+
+
+# --- I3-4: the journal's flush test reads one moment, wherever UTC midnight falls ------------------------------------
+
+JOURNAL_TEST_NAME = 'test_lines_are_appended_and_files_older_than_the_retention_are_deleted_and_counted'
+
+
+def install_clock_crossing_midnight(start='2026-11-25T23:59:59.999500+00:00', step_ms=1):
+    """(a patch, the moments it gave): install.py's clock (its dt) answering its k-th read with ``start`` + k *
+    ``step_ms`` ms, so UTC midnight falls between its first two reads - the finding's input (refutation round 3,
+    regression-9: the verifier's scripted clock)."""
+    import datetime as dt
+    import types
+    first, given = dt.datetime.fromisoformat(start), []
+
+    class CrossingDatetime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = first + dt.timedelta(milliseconds=step_ms * len(given))
+            given.append(value)
+            return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+    crossing = types.ModuleType('datetime')
+    for name in dir(dt):
+        if not name.startswith('__'):
+            setattr(crossing, name, getattr(dt, name))
+    crossing.datetime = CrossingDatetime
+    return mock.patch.object(install, 'dt', crossing), given
+
+
+class JournalMidnightTests(unittest.TestCase):
+    def run_journal_test(self, test):
+        """``test`` (a body of the journal's flush test) run as that test, with install's clock crossing midnight."""
+        import test_install_r1_logs as logs
+
+        class Case(logs.JournalFlushAndRetentionTests):
+            pass
+        setattr(Case, JOURNAL_TEST_NAME, test)
+        result, (patch, given) = unittest.TestResult(), install_clock_crossing_midnight()
+        with patch:
+            Case(JOURNAL_TEST_NAME).run(result)
+        return result, given
+
+    def test_the_journal_flush_test_passes_when_utc_midnight_falls_inside_it(self):
+        import test_install_r1_logs as logs
+        test = getattr(logs.JournalFlushAndRetentionTests, JOURNAL_TEST_NAME)
+        result, given = self.run_journal_test(test)
+        self.assertEqual((result.testsRun, result.failures, result.errors), (1, [], []))
+        self.assertEqual(given, [])  # its every read of install's clock was its own pinned moment
+        # the control: the same body reading install's clock as it was fails on this clock, at its two dates
+        result, given = self.run_journal_test(getattr(test, '__wrapped__', test))
+        self.assertEqual((result.testsRun, len(result.failures), result.errors), (1, 1, []))
+        self.assertIn("['oneshots-20261125.log', 'oneshots-20261126.log'] != ['oneshots-20261126.log']",
+                      result.failures[0][1])
+        self.assertEqual(sorted({moment.date().isoformat() for moment in given}), ['2026-11-25', '2026-11-26'])
+        self.assertEqual(logs.JOURNAL_TEST_MOMENT.isoformat(), '2026-11-25T12:00:00+00:00')  # clear of midnight
 
 
 class RestoreGuideTests(unittest.TestCase):
