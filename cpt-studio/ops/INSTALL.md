@@ -2015,11 +2015,12 @@ this revision's migrations applied (`manage migrate --check`). One sequence
 serves both kinds of host (refutation round 3, installer-0):
 
 1. Stop the pair, never remove it, before the restore, so nothing runs on the
-   restored copy: as root, `docker stop --time 3600 cpt-studio-worker`, then
-   `docker stop --time 30 cpt-studio-web` - the worker first, with the bounds
-   the installer stops them with (the worker finishes the stage it is in and
-   claims nothing new). A fresh server has no pair (neither
-   `cpt-studio-web` nor `cpt-studio-worker`) and nothing to stop.
+   restored copy: as root, first `docker stop cpt-studio-worker`, then
+   `docker stop cpt-studio-web` - each waits its own stop timeout, the one the
+   installer starts the container with (**What gets installed**; the worker
+   finishes the stage it is in and claims nothing new). A fresh server has no
+   pair (neither `cpt-studio-web` nor `cpt-studio-worker`) and nothing to
+   stop.
 2. Restore the database, and the files volume from the same backup.
 3. Wait two minutes after the worker stopped (on a fresh server, after the
    backup was taken): the restored database holds the worker's last beat.

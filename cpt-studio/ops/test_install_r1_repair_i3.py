@@ -207,11 +207,14 @@ class RestoreSequenceTests(TemporaryDirectoryTest):
         from test_install_bluegreen import IMAGE, REVISION, WEB, WORKER, BlueGreenWorld, run_app
         host = BlueGreenWorld(self.tmp, serving=(REVISION, IMAGE))  # this revision serves on 9150
         host.checking = False  # from the stop on the site serves nothing: no blue/green invariant to hold
+        # step 1, as INSTALL.md gives it - `docker stop <name>`, the worker first - waits each container's own stop
+        # timeout, which the installer starts it with: its role's STOP_SECONDS
         stopped = {}
-        for name, seconds in ((WORKER, install.STOP_SECONDS['worker']), (WEB, install.STOP_SECONDS['web'])):
-            host.docker('stop', '--time', str(seconds), name)  # step 1, as INSTALL.md gives it: the worker first
+        for name, role in ((WORKER, 'worker'), (WEB, 'web')):
+            started = install.service_args(role, IMAGE, REVISION, 'disabled', '')
+            self.assertEqual(started[started.index('--stop-timeout') + 1], str(install.STOP_SECONDS[role]))
+            host.docker('stop', '--time', str(install.STOP_SECONDS[role]), name)
             stopped[name] = host.containers[name]['Id']
-        self.assertEqual((install.STOP_SECONDS['worker'], install.STOP_SECONDS['web']), (3600, 30))  # INSTALL.md's
         self.replay(host, 'replay')  # step 4: the stopped pair is read, its revision has disposal
         self.assertEqual({name: host.containers[name]['running'] for name in (WEB, WORKER)},
                          {WEB: False, WORKER: False})  # the replay starts nothing
@@ -645,7 +648,8 @@ class RestoreGuideTests(unittest.TestCase):
         text = (Path(__file__).resolve().parent / 'INSTALL.md').read_text(encoding='utf-8')
         start = text.index('**Restoring the database.**')
         restore = ' '.join(text[start:text.index('\n## ', start)].split())
-        for said in ('`docker stop --time 3600 cpt-studio-worker`, then `docker stop --time 30 cpt-studio-web`',
+        for said in ('first `docker stop cpt-studio-worker`, then `docker stop cpt-studio-web` - each waits its own '
+                     'stop timeout, the one the installer starts the container with',
                      'Wait two minutes after the worker stopped', 'with no pair at all the replay runs too',
                      'rerun `app` with the `--coding-mode`', '`docker start cpt-studio-web cpt-studio-worker`',
                      'On a fresh server, `app`, and only then `https-vhost`', '`--coding-mode disabled`',
