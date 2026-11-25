@@ -10,11 +10,24 @@ end_sessions(user, keep_session_key=None)
     account it ends the anonymous ones waiting on it - a pending sign-in at the admin door, a setup under way - so a
     password change or a sign-out everywhere drops a sign-in made with the old password (refutation r2, finding 11).
     It reads the account's own sessions from the site's session store's links (studio.session_store, refutation round 1
-    of release 1, avail-0): its cost is that account's sessions, never every session of the site, and one account holds
-    at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind - each door's sign-ins, the pending sign-ins, the setups -
-    besides the pending sign-ins that can still complete, which the cap never ends (repair round 2, sessions-0). It
-    takes the account's row lock before it deletes any session, and deletes them in session key order (repair round 2,
-    records-0 and -1: see the session store's lock order).
+    of release 1, avail-0): its cost is that account's sessions, never every session of the site. One account holds at
+    most SESSION_LIVE_PER_ACCOUNT live sessions of each door's sign-ins and of its setups; of its pending sign-ins, at
+    each of them, that many plus those made in the last SECOND_FACTOR_PENDING_SECONDS, which the cap never ends while
+    they can still complete (repair round 2, sessions-0) - and between two of them those that can no longer complete
+    stay live until they expire (SESSION_COOKIE_AGE), the next pending sign-in or an end of the account's sessions
+    (repair round 3, cap-0; the session store says what bounds them). It takes the account's row lock before it deletes
+    any session, and deletes them in session key order (repair round 2, records-0 and -1: see the session store's lock
+    order).
+
+act_still_stands(request, user, *also)
+    an act in flight never outlives an end of the account's sessions (repair round 3, cap-1, locks-0, locks-1, locks-4,
+    regression-3): every act that opens a session or changes the account's credentials - the admin door's key and
+    recovery-code sign-ins and its recovery-code step-up, setup's key step, a key added or removed on /ops/security,
+    the cpt door's sign-in, the account page's password change - calls it first in its transaction. It takes the
+    account's lock (the account first; with any other account the request's session names, in id order) and proves,
+    under it, that the request's own session, when it names the account, still has its row, and that what the act's
+    admission read (``also``) still holds; else the act refuses, changing nothing. An end of the account's sessions served after the act is the act served first: the act's session is
+    written before its commit (session_saved_before_commit at the cpt door), so the end finds it.
 
 Every sign-in writes the session keys of studio.request_meta (the contract between the lanes, RELEASE-1-SPEC section 5):
 SESSION_DOOR (the door it was made at), SESSION_AUTH_AT and SESSION_LAST_ACTIVE (now) and SESSION_SIGN_IN_REF (the sign-in's
@@ -65,12 +78,14 @@ from __future__ import annotations
 
 import math
 import uuid
+from contextlib import contextmanager
 from importlib import import_module
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.signals import user_logged_in
+from django.db import transaction
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.crypto import salted_hmac
 
@@ -85,6 +100,7 @@ NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them,
                     'password reset here.')
 
 IDLE, EXPIRED = 'idle', 'expired'  # why the policy ended a session: the 401's reason, the sign-in page's sentence
+SESSION_ENDED = 'Your session has ended. Sign in again.'  # an act refused because its session ended meanwhile
 REASONS = (IDLE, EXPIRED)
 SIGNED_OUT = {'error': 'signed_out'}  # the 401 the API answers a session the policy ended, with its reason
 PASSWORD_CHANGE_REQUIRED = {'error': 'password_change_required'}  # the 403 the API answers during a forced change
@@ -126,6 +142,44 @@ def waits_on(data, user_id) -> bool:
     factor read it - so a spelling of the id they would accept is never one this misses."""
     account = session_store.account_of(user_id)
     return account is not None and any(linked == account for _, linked in session_store.account_links(data))
+
+
+def act_still_stands(request, user, *also) -> bool:
+    """Inside the transaction of an act that opens a session or changes ``user``'s credentials, as its first statement
+    (repair round 3 of release 1, cap-1, locks-0, locks-1, locks-4, regression-3): take the account's row lock - the
+    account first, studio.session_store's lock order, together with any other account the request's session names, in
+    id order (a sign-in over a session signed in as another account flushes that session, whose delete locks that
+    account) - and answer whether what the act stands on still holds. Every end of the account's sessions (the server's
+    reset, a sign-out everywhere, a password change, an access off) takes the same lock and deletes the row of each
+    session it ends, so once the lock is held the answer cannot change before the act commits:
+      - the request's own session, when its data names ``user`` (signed in as it, or waiting on it: a pending sign-in, a
+        setup under way), still has its row, unexpired (session_store.session_is_live): an end served after the request
+        loaded the session deleted it - and a session that names the account but has no key has no row either;
+      - each of ``also`` - querysets of what the act's admission read before the lock (the key a sign-in verified, a key
+        left on the account, the account still active) - still finds a row.
+    A session whose data does not name ``user`` - the cpt door's anonymous one, or one signed in as another account - is
+    one no end of this account's sessions ends, so only ``also`` is proved for it. When it answers False the act refuses
+    and changes nothing. Outside a transaction it raises: the lock would end with the statement."""
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError('act_still_stands runs inside the transaction of the act it proves.')
+    session = getattr(request, 'session', None)
+    data = dict(session.items()) if session is not None else {}
+    named = {account for _, account in session_store.account_links(data)}
+    session_store.lock_accounts([user.pk, *named])
+    if session_store.account_of(user.pk) in named and not session_store.session_is_live(session.session_key):
+        return False
+    return all(queryset.exists() for queryset in also)
+
+
+@contextmanager
+def session_saved_before_commit(request):
+    """Written after transaction.atomic() in one with statement, so it exits first: when the block it wraps ends without
+    raising, having signed the request in (login() left request.cpt_new_sign_in), the session is saved - with its link -
+    before the transaction commits, so an end of the account's sessions served after the sign-in ends it too. A block
+    that raises saves nothing (its transaction is rolled back)."""
+    yield
+    if getattr(request, 'cpt_new_sign_in', None):
+        request.session.save()
 
 
 def end_sessions(user, keep_session_key=None) -> int:

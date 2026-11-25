@@ -22,6 +22,14 @@ its key_added or key_removed; a recovery code used up, with the sign-in or step-
 record the database refuses raises out of the transaction: nothing of the act is kept, and the request fails (a server
 error, whose answer saves no session, so the browser keeps the state it had and can try again). A challenge is still
 used up before, and outside, the transaction that stores a key: a refused answer has used it all the same.
+
+No act here outlives an end of the account's sessions (repair round 3 of release 1, cap-1, locks-0, locks-1,
+regression-3): the key and recovery-code sign-ins, the recovery-code step-up, setup's key step and a key added or
+removed each begin their transaction with studio.sessions.act_still_stands - the account's lock first, then, under it,
+the request's own session still live and what the act read before the lock still holding (the key it verified; for a
+key added, a key left on the account) - and refuse, changing nothing, when it does not. A refusal because the session
+ended meanwhile is no wrong key or code: it counts no failure. Its answer is the redirect or the page the act's other
+refusals give; when the session's row is gone, Django answers 400 instead (SessionInterrupted, at the answer's save).
 """
 from django.conf import settings
 from django.contrib.auth import login
@@ -95,23 +103,28 @@ def second_factor(request):
         error = factor.too_many(user, request)
         if not error:
             try:
-                factor.verify_key(request, user, request.POST.get('credential', ''), purpose)
+                key = factor.verify_key(request, user, request.POST.get('credential', ''), purpose)
             except factor.Refused as refused:
                 error = str(refused)
                 if factor.note_failure(request, user, state):
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # the pending sign-in was dropped
             else:
                 if purpose == factor.SIGN_IN:
-                    # the account first (studio.session_store's lock order), and the session with its link written
-                    # before the commit, so an end of the account's sessions served after this sign-in - the server's
-                    # reset waiting on the account - ends it too, as the recovery and setup sign-ins do (repair round 2
-                    # of release 1, builder s2's residual); the key check above stays outside
+                    # the account first (studio.session_store's lock order), and under its lock what the sign-in stands
+                    # on proved again before anything changes (sessions.act_still_stands): this pending sign-in's own
+                    # session, which an end of the account's sessions served after this request loaded it - the
+                    # server's reset, a sign-out everywhere - deleted, and the key just verified, which the reset
+                    # removes (repair round 3 of release 1, cap-1, locks-0, regression-3). Then the session with its
+                    # link written before the commit, so an end served after this sign-in ends it too (repair round 2,
+                    # builder s2's residual). The key check above stays outside: no lock is held across its work.
                     with factor.new_sign_in_only_if_kept(request), transaction.atomic():
-                        session_store.lock_accounts([user.pk])
-                        signed_in = factor.complete_sign_in(request, user, state)
-                        request.session.save()
+                        stands = sessions.act_still_stands(request, user, factor.active_keys(user).filter(pk=key.pk))
+                        signed_in = stands and factor.complete_sign_in(request, user, state)
+                        if stands:
+                            request.session.save()
                     if not signed_in:
-                        return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
+                        factor.drop_pending(request)
+                        return redirect(f'{SIGN_IN_PAGE}?reason=key')  # ended, or its attempt settled, meanwhile
                 else:
                     factor.refresh(request)
                 return redirect(next_url)
@@ -149,22 +162,34 @@ def recovery(request):
     if request.method == 'POST':
         error = factor.too_many(user, request)
         if not error:
-            completed = False
-            # the code used up, its record and what it completes: one act
-            with factor.new_sign_in_only_if_kept(request), transaction.atomic():
-                session_store.lock_accounts([user.pk])  # the account first: the lock order (studio.session_store)
-                used = factor.use_recovery_code(user, request.POST.get('code', ''))
-                if used:
-                    security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
-                                           stage=purpose, codes_left=factor.recovery_codes_left(user))
-                    if purpose == factor.SIGN_IN:
-                        completed = factor.complete_sign_in(request, user, state)
-                    else:
-                        factor.refresh(request)
-                        completed = True
-                    # the session and its link written before the commit, so an end of the account's sessions
-                    # served after this act (the server's reset waiting on the account) ends this sign-in too
-                    request.session.save()
+            completed = stands = used = False
+            # the typed code checked first (Argon2, one check per unused code) with no lock held: a wrong code checks
+            # every code, and nothing waits on it meanwhile (repair round 3 of release 1, locks-6)
+            matched = factor.matching_recovery_code(user, request.POST.get('code', ''))
+            if matched is not None:
+                # the code used up, its record and what it completes: one act
+                with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+                    # the account first (the lock order), and under its lock this session's own row proved again
+                    # (sessions.act_still_stands): an end of the account's sessions served after this request loaded
+                    # it - a sign-out everywhere, the server's reset - ended this sign-in or step-up (round 3, locks-0);
+                    # then the matched code used up in one statement, unless it was used or voided since it matched
+                    stands = sessions.act_still_stands(request, user)
+                    used = stands and factor.use_up_recovery_code(user, matched)
+                    if used:
+                        security_events.record('second_factor.recovery_used', actor=user, subject=user,
+                                               request=request, stage=purpose,
+                                               codes_left=factor.recovery_codes_left(user))
+                        if purpose == factor.SIGN_IN:
+                            completed = factor.complete_sign_in(request, user, state)
+                        else:
+                            factor.refresh(request)
+                            completed = True
+                        # the session and its link written before the commit, so an end of the account's sessions
+                        # served after this act (the server's reset waiting on the account) ends this sign-in too
+                        request.session.save()
+                if not stands:
+                    factor.drop_pending(request)
+                    return redirect(f'{SIGN_IN_PAGE}?reason=key')  # ended meanwhile: no code used, no failure counted
             if used:
                 if not completed:
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
@@ -262,7 +287,12 @@ def _finish_enrolment(request, user, claim):
     checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                           request.POST.get('label', ''), factor.ENROL)
     with factor.new_sign_in_only_if_kept(request), transaction.atomic():
-        session_store.lock_accounts([user.pk])  # the account first: the lock order (studio.session_store)
+        # the account first (the lock order), and under its lock this setup session's own row proved again
+        # (sessions.act_still_stands): an end of the account's sessions served after this request loaded it - a
+        # sign-out everywhere, a password change, the server's reset - ended this setup (repair round 3, the class of
+        # cap-1 and locks-0); the claim is read again under the lock too
+        if not sessions.act_still_stands(request, user):
+            raise factor.Refused(SETUP_EXPIRED)
         try:
             claim = OneTimeToken.objects.select_for_update().get(
                 pk=claim.pk, user=user, purpose=factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
@@ -359,16 +389,24 @@ def keys(request):
         if action == 'options':
             return JsonResponse(factor.registration_options(request, user, factor.ADD))
         if action == 'add':
-            # the challenge is used up first, outside the transaction; then the key and its record, together
+            # the challenge is used up first, outside the transaction; then the key and its record, together, after
+            # the account's lock (the lock order) and, under it, what the key stands on proved again
+            # (sessions.act_still_stands): this session's own row, which an end of the account's sessions served after
+            # this request loaded it deleted, and the account's second factor, which the server's reset removes - so a
+            # key added while the reset runs is stored before it (and removed by it) or refused (round 3, locks-1)
             checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                                   request.POST.get('label', ''), factor.ADD)
             with transaction.atomic():
+                if not sessions.act_still_stands(request, user, factor.active_keys(user)):
+                    raise factor.Refused(sessions.SESSION_ENDED)
                 key = factor.store_key(user, checked)
                 security_events.record('second_factor.key_added', actor=user, subject=user, request=request,
                                        key=key.pk, keys=factor.active_keys(user).count())
             return _see_other(f'{KEYS_PAGE}?done=added')
         if action == 'remove':
-            with transaction.atomic():  # the key removed and its record, together
+            with transaction.atomic():  # the key removed and its record, together, by a session that still stands
+                if not sessions.act_still_stands(request, user):  # the account first; this session not ended meanwhile
+                    raise factor.Refused(sessions.SESSION_ENDED)
                 key = factor.remove_key(user, request.POST.get('key', ''))
                 security_events.record('second_factor.key_removed', actor=user, subject=user, request=request,
                                        key=key.pk, keys=factor.active_keys(user).count())

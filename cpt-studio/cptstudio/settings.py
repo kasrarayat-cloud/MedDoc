@@ -170,8 +170,12 @@ SESSION_ACTIVITY_WRITE_SECONDS = 60
 # account's own sign-ins cannot grow the session table without bound, a pending sign-in - made with a password alone -
 # never ends a signed-in session, and one door's sign-ins never end the other door's. A pending sign-in that can still
 # complete (no older than SECOND_FACTOR_PENDING_SECONDS) is never ended by it and still counts toward it (repair round 2,
-# sessions-0): one account's live pending sign-ins are at most this many plus those made in the last
-# SECOND_FACTOR_PENDING_SECONDS, which only the sign-in rate bounds (nginx's cpt_signin zone and the web workers' Argon2).
+# sessions-0). So at each of an account's pending sign-ins - not at all times (repair round 3, cap-0) - its live pending
+# sign-ins are at most this many plus those made in the last SECOND_FACTOR_PENDING_SECONDS. Between two of them nothing
+# ends the ones that can no longer complete: they stay live until their session expires (SESSION_COOKIE_AGE), the
+# account's next pending sign-in ends them, or its sessions are ended. At any moment they are at most this many plus
+# those made in the SECOND_FACTOR_PENDING_SECONDS before its latest pending sign-in, a number only the sign-in rate
+# bounds (nginx's cpt_signin zone and the web workers' Argon2).
 SESSION_LIVE_PER_ACCOUNT = 20
 
 # B1, sign-in slows down instead of locking anyone out (OWNER DECISIONS D6, D23): the window; failures per (username,
