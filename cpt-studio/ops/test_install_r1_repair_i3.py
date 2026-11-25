@@ -545,6 +545,43 @@ class AnsweredLeftoverTests(TemporaryDirectoryTest):
         self.assertEqual((caught.exception.details['exit'], caught.exception.details['setup_code_kept']), (125, False))
         self.assertEqual(world.left, {})
 
+    def test_the_operators_phase_grant_keeps_its_record_too(self):
+        # the third act that keeps its record once it answered: the operators phase's grant, its one-shot the REAL
+        # oneshot answering 125, a SIGTERM landing in the leftover's stop (the bluegreen harness, every other act its own)
+        from test_install_bluegreen import OperatorsPhaseTests
+        harness = OperatorsPhaseTests('test_the_spec_holds_the_human_operator_alone_and_no_agent_login_is_written')
+        harness.setUp()
+        self.addCleanup(harness.tearDown)
+        stood_in, left, calls = harness.oneshot, {}, []
+
+        def run(argv, **kwargs):
+            args = [str(part) for part in argv[1:]]
+            if args[:1] == ['run']:
+                name = args[args.index('--name') + 1]
+                left[name] = {**LEFTOVER, 'Id': f'id-{name}'}
+                return answering(125, b'granted\n')
+            calls.append(args)
+            if args[0] == 'stop':
+                raise install.Interrupted('SIGTERM')
+            if args[:2] == ['rm', '--force']:
+                left.clear()
+            return answering(0, b'')
+
+        def oneshot(image_id, command, env, **kwargs):
+            if command[:2] == ['manage', 'grant_operator']:
+                with mock.patch.object(install, 'run', run), \
+                        mock.patch.object(install, 'inspect', lambda kind, name: left.get(name)):
+                    return REAL_ONESHOT(image_id, command, env, **kwargs)
+            return stood_in(image_id, command, env, **kwargs)
+        harness.oneshot = oneshot
+        with self.assertRaises(install.Interrupted) as caught:
+            harness.run_phase()
+        details = caught.exception.details
+        self.assertEqual((details['exit'], details['grants']['platform-operator']['exit']), (125, 125))
+        self.assertEqual(Path(details['log']).read_bytes(), b'granted\n' + DOCKER_ERROR)
+        self.assertEqual([call[0] for call in calls], ['stop', 'rm'])
+        self.assertEqual(left, {})
+
 
 # --- I3-4: the journal's flush test reads one moment, wherever UTC midnight falls ------------------------------------
 
@@ -616,6 +653,17 @@ class RestoreGuideTests(unittest.TestCase):
             self.assertIn(said, restore)
         self.assertNotIn('with no pair at all it is refused', restore)
         self.assertNotIn('install the revision with `app` before `https-vhost` opens the site, then replay', restore)
+
+    def test_the_known_limits_record_what_round_three_left(self):
+        text = (Path(__file__).resolve().parent / 'INSTALL.md').read_text(encoding='utf-8')
+        limits = ' '.join(text[text.index('## Known limits\n'):].split())
+        for said in ('A restore from a backup older than this revision\'s migrations is migrated only by `app`',
+                     'approves that re-grant (refutation round 3, installer-1): never quote the approval line in a '
+                     'declaration',
+                     'an interrupted one-shot is removed at once, without its own stop',
+                     "the plan's 'committed' DisposalEvent stays the record of what was destroyed",
+                     'a new plan of that scope finishes the run (refutation round 3, installer-4)'):
+            self.assertIn(said, limits)
 
 
 if __name__ == '__main__':
