@@ -4424,3 +4424,15 @@ then wrote:
 > done
 
 Release 1's install is complete, as reported in `docs/deploy-reports/20261125-cpt-studio-816045c7-release-1-install-and-live-check.md`.
+
+### Owner direction, 2026-11-25 (738699b2) — the old copies and the move — DECISIONS D425
+
+> there is no serious data base to move you can delete it if you wnat all that data was test and syntetic
+
+At 20:07:25Z, in reply to the session's list of what stays his after release 1 (the old database copies and the 2026-11-20
+documents). Read as: the new server starts with an empty database, nothing on the live site is moved to it; and the old copies
+of the database may be deleted (class d), on his statement that all that data was test and synthetic. Not read as deleting the
+live database or the live files. Applied narrowly on 2026-11-25: the 40 copies made before 2026-11-19T22:42Z (when the first
+document the record calls real reached live) and the 18 cptg_* test databases restored from them, deleted with a manifest
+(sha256) kept; the ten copies made after that moment kept, because on 2026-11-20 (D352) he wrote "here is the lsit of real pdf
+doc with out name" and those ten may hold those PDFs. They go on his word that those PDFs were made up too, or on counsel's.
