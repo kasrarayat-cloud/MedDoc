@@ -6,6 +6,11 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
         refuses), since nothing serves; close and execute still need a pair with disposal. The restore's one sequence,
         end to end through the installer's real phases: on the serving host the pair stopped, the replay, `app` again;
         on a fresh host the replay with no pair, then `app`.
+  I3-2  installer-2: a reason in words is never refused - a heading, a label, a line of one word, two words, a language
+        written without spaces - and a whole reason, or a line of 12 characters or more, of ids, links and numbers
+        alone still is; what the rule lets through never alters an id, a count or a digest the act prints.
+  I3-3  installer-3: after docker's own failure (125: its --rm removal failed) or a CLI killed by a signal, the one-shot
+        is looked for, stopped and removed; nothing in that check takes the act's answer, or its record, away.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i3 -v
 """
@@ -352,6 +357,190 @@ class ReasonInWordsTests(TemporaryDirectoryTest):
         self.assertTrue(install.reason_holds_a_word('Ticket 4521'))
         self.assertFalse(install.reason_holds_a_word('4521 4522'))
         self.assertFalse(install.reason_holds_a_word(''))  # nothing in it: no word
+
+
+# --- I3-3: a one-shot docker may have left after it answered is looked for and removed; the answer always stands -------
+
+REAL_ONESHOT = install.oneshot
+CERTIFICATE = (b'Destruction certificate\nPlan 2f8fad5b-d9cb-469f-a165-70867728950e: completed\nRun by: Ada Lovelace; '
+               b'approved by: Grace Hopper\nRows destroyed: 12\nFiles remaining: 0\n')
+DOCKER_ERROR = b'Error response from daemon: unable to remove filesystem\n'
+LEFTOVER = {'Id': 'oneshot-1', 'State': {'Running': True},
+            'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'oneshot'}}}
+STOP_LEFTOVER = ('stop', '--time', str(install.ONESHOT_STOP_SECONDS), 'oneshot-1')
+
+
+def answering(code, stdout=CERTIFICATE):
+    return SimpleNamespace(returncode=code, stdout=stdout, stderr=DOCKER_ERROR if code == 125 else b'')
+
+
+class LeftAfterAnswerWorld(r1.ManageWorld):
+    """ManageWorld whose one-shots are the REAL install.oneshot over a stood-in docker CLI (install.run, given to the
+    test's patch): the act prints its certificate, the CLI answers ``code`` (125: its --rm removal failed; -9: it was
+    killed, its container running on) and the container is left; ``interrupt`` names the docker call ('inspect' or
+    'stop') a SIGTERM lands in, once."""
+
+    def __init__(self, tmp, *, code, interrupt=None, **kwargs):
+        super().__init__(tmp, **kwargs)
+        self.code, self.interrupt, self.left, self.calls = code, interrupt, {}, []
+        self.oneshot = REAL_ONESHOT
+
+    def signal_at(self, call):
+        if self.interrupt == call:
+            self.interrupt = None
+            raise install.Interrupted('SIGTERM')
+
+    def docker_run(self, argv, *, input=None, timeout=60, check=True, quiet=False, env=None):
+        args = [str(part) for part in argv[1:]]
+        if args[:1] == ['run']:
+            if 'migrate' in args:
+                return answering(0, b'')
+            name = args[args.index('--name') + 1]
+            self.left[name] = {**LEFTOVER, 'Id': f'id-{name}', 'State': {'Running': self.code < 0}}
+            return answering(self.code)
+        self.calls.append(args)
+        self.signal_at(args[0])
+        if args[:2] == ['rm', '--force']:
+            self.left = {name: c for name, c in self.left.items() if args[2] not in (name, c['Id'])}
+        if args[:1] == ['stop']:
+            for c in self.left.values():
+                if c['Id'] == args[-1]:
+                    c['State'] = {'Running': False}
+        return answering(0, b'')
+
+    def inspect(self, kind, name):
+        if name.startswith('cpt-studio-oneshot-'):
+            self.calls.append(['inspect', name])
+            self.signal_at('inspect')
+            return self.left.get(name)
+        return super().inspect(kind, name)
+
+
+class AnsweredLeftoverTests(TemporaryDirectoryTest):
+    def oneshot(self, answer, *, inspect=None, docker=None):
+        calls = []
+
+        def stand_in(*args, **kwargs):
+            calls.append((args, kwargs))
+            if docker is not None:
+                return docker(*args, **kwargs)
+        with mock.patch.object(install, 'run', return_value=answer), \
+                mock.patch.object(install, 'inspect', inspect or (lambda kind, name: LEFTOVER)), \
+                mock.patch.object(install, 'docker', stand_in):
+            return REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'dispose', '--execute'], b'K=1\n'), calls
+
+    def test_after_dockers_own_failure_or_a_killed_cli_the_one_shot_is_stopped_and_removed(self):
+        # the finding's input: the real oneshot, the CLI answering 125 (its --rm removal failed) or -9 (killed while
+        # the container ran on), the container left labelled oneshot
+        for code in (125, -9, -15):
+            with self.subTest(answer=code):
+                answer = answering(code)
+                result, calls = self.oneshot(answer)
+                self.assertIs(result, answer)
+                self.assertEqual([args for args, _ in calls], [STOP_LEFTOVER, ('rm', '--force', 'oneshot-1')])
+                self.assertTrue(all(kwargs.get('check') is False for _, kwargs in calls))
+        self.assertEqual(install.DOCKER_RUN_FAILED, 125)
+
+    def test_an_act_that_answered_its_own_exit_is_still_never_looked_for(self):
+        # round 2's installer-1 repair, kept: after the act's own exit `docker run --rm` has removed its container
+        for code in (0, 1, 2, 3, 126, 127, 137, 143):
+            with self.subTest(answer=code):
+                looked = []
+                result, calls = self.oneshot(answering(code), inspect=lambda kind, name: looked.append(name))
+                self.assertEqual((result.returncode, looked, calls), (code, [], []))
+
+    def test_nothing_in_that_check_takes_the_answer_away(self):
+        def failing(kind, name):
+            raise install.InstallError('docker container inspect x failed (exit 1).')
+
+        def stop_times_out(*args, **kwargs):
+            if args[0] == 'stop':
+                raise install.InstallError('docker stop did not finish within 40 s.')
+
+        def rm_fails(*args, **kwargs):
+            if args[0] == 'rm':
+                raise install.InstallError('docker rm did not finish within 60 s.')
+        for label, kwargs, expected in (
+                ('a daemon error', {'inspect': failing}, []),
+                ('a stop that does not finish', {'docker': stop_times_out}, [STOP_LEFTOVER, ('rm', '--force', 'oneshot-1')]),
+                ('a removal that does not finish', {'docker': rm_fails}, [STOP_LEFTOVER, ('rm', '--force', 'oneshot-1')])):
+            with self.subTest(label):
+                answer = answering(125)
+                result, calls = self.oneshot(answer, **kwargs)
+                self.assertIs(result, answer)
+                self.assertEqual([args for args, _ in calls], expected)
+        # a SIGTERM or a Ctrl-C in the check: the one-shot removed at once, then the signal raised carrying the answer
+        for label, signal_at, removed_as in (('a SIGTERM in the inspect', 'inspect', 'by its name'),
+                                             ('a SIGTERM in the stop', 'stop', 'by its id'),
+                                             ('a Ctrl-C in the stop', 'ctrl-c', 'by its id')):
+            with self.subTest(label):
+                answer, calls = answering(-9), []
+
+                def inspect(kind, name, signal_at=signal_at):
+                    calls.append(('inspect', name))
+                    if signal_at == 'inspect':
+                        raise install.Interrupted('SIGTERM')
+                    return LEFTOVER
+
+                def docker(*args, signal_at=signal_at, **kwargs):
+                    calls.append(args)
+                    if args[0] == 'stop' and signal_at in ('stop', 'ctrl-c'):
+                        raise KeyboardInterrupt() if signal_at == 'ctrl-c' else install.Interrupted('SIGTERM')
+                with mock.patch.object(install, 'run', return_value=answer), \
+                        mock.patch.object(install, 'inspect', inspect), mock.patch.object(install, 'docker', docker):
+                    try:
+                        REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'dispose', '--execute'], b'K=1\n')
+                    except (install.Interrupted, KeyboardInterrupt) as error:
+                        caught = error
+                    else:
+                        self.fail('the signal was not raised')
+                self.assertIs(install.oneshot_answer_of(caught), answer)
+                name = calls[0][1]
+                self.assertEqual(calls[-1], ('rm', '--force', name if removed_as == 'by its name' else 'oneshot-1'))
+        # the answer is found where a later error was raised over the signal (the RAM folder's wipe failing)
+        signal = install.Interrupted('SIGTERM')
+        signal.oneshot_answer = answer = answering(125)
+        try:
+            try:
+                raise signal
+            except install.Interrupted:
+                raise install.InstallError('Root helper refused: the wipe')
+        except install.InstallError as later:
+            self.assertIs(install.oneshot_answer_of(later), answer)
+        self.assertIsNone(install.oneshot_answer_of(install.InstallError('no answer here')))
+
+    def test_through_the_manage_phase_the_record_is_kept_and_the_leftover_removed(self):
+        import json
+        for code in (125, -9):
+            for interrupt in (None, 'inspect', 'stop'):
+                with self.subTest(answer=code, signal_in=interrupt):
+                    folder = self.tmp / f'{code}-{interrupt}'
+                    folder.mkdir(mode=0o700)
+                    world = LeftAfterAnswerWorld(folder, code=code, interrupt=interrupt)
+                    with mock.patch.object(install, 'run', world.docker_run), \
+                            self.assertRaises((install.InstallError, install.Interrupted)) as caught:
+                        world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by',
+                                  'Ada Lovelace', '--approved-by', 'Grace Hopper')
+                    error = caught.exception
+                    if interrupt is None:
+                        self.assertIsInstance(error, install.InstallError)
+                        self.assertIn(f'manage dispose failed (exit {code})', str(error))
+                    else:
+                        self.assertIsInstance(error, install.Interrupted)
+                    record = error.details
+                    self.assertEqual((record['exit'], record['stdout']), (code, CERTIFICATE.decode()))
+                    self.assertEqual(Path(record['log']).read_bytes(), CERTIFICATE + answering(code).stderr)
+                    self.assertEqual(world.left, {})  # stopped and removed before the receipts' lock is let go
+                    self.assertEqual([call[0] for call in world.calls][-1], 'rm')
+                    json.dumps(record)  # the receipt can hold it
+        # issue-enrolment's act keeps its record too, its setup code never kept
+        (self.tmp / 'enrol').mkdir(mode=0o700)
+        world = LeftAfterAnswerWorld(self.tmp / 'enrol', code=125, interrupt='stop')
+        with mock.patch.object(install, 'run', world.docker_run), self.assertRaises(install.Interrupted) as caught:
+            world.run('--command', 'issue-enrolment', '--username', 'platform-operator', '--reason-file', 'REASON',
+                      '--by', 'Ada Lovelace')
+        self.assertEqual((caught.exception.details['exit'], caught.exception.details['setup_code_kept']), (125, False))
+        self.assertEqual(world.left, {})
 
 
 class RestoreGuideTests(unittest.TestCase):

@@ -3179,11 +3179,15 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
         raise
     finally:
         journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
-        # refutation round 2, installer-1: a leftover is looked for only when the run gave no answer (a timeout, an
-        # interrupt). Once the act answered, `docker run --rm` has removed its container - the CLI waits for the
-        # removal, and answers 125 when it fails - and a daemon error or a signal in this check replaced the return,
-        # so the act's answer, and its whole record, were lost after it ran
-        if result is None:
+        # refutation round 2, installer-1: once the act answered, a daemon error or a signal in this check replaced the
+        # return, so the act's answer, and its whole record, were lost after it ran. A run that gave no answer (a
+        # timeout, an interrupt) is looked for here; one that answered is looked for only when docker may have left
+        # its container (round 3, installer-3: its --rm removal failed, 125, or its CLI died while it ran on), and
+        # nothing there takes the answer away (remove_answered_oneshot)
+        if result is not None:
+            if oneshot_may_be_left(result):
+                remove_answered_oneshot(name, result)
+        else:
             leftover = inspect('container', name)
             if leftover is not None and owned(leftover, 'oneshot'):
                 if timed_out:  # its own SIGTERM first; never after an interrupt, where the door's SIGKILL follows
@@ -3193,6 +3197,62 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
                     except InstallError:  # the stop's own timeout: the removal below forces it
                         pass
                 docker('rm', '--force', leftover['Id'], check=False)
+
+
+# The docker CLI's own failure, as `docker run` answers it: among others, a --rm removal that failed once the container
+# had ended (the act may have answered whole first), and a wait on the daemon that broke while the container ran on.
+DOCKER_RUN_FAILED = 125
+
+
+def oneshot_may_be_left(result) -> bool:
+    """Whether a one-shot that answered ``result`` may have left its container (refutation round 3, installer-3): the
+    CLI's own failure (DOCKER_RUN_FAILED), or a CLI killed by a signal (a negative return code; its container runs on).
+    Every other answer is the act's own exit, after which `docker run --rm` has removed the container."""
+    return result.returncode == DOCKER_RUN_FAILED or result.returncode < 0
+
+
+def remove_answered_oneshot(name, result) -> None:
+    """The one-shot ``name``, which answered ``result`` yet may be left (oneshot_may_be_left): looked for, sent its own
+    SIGTERM with ONESHOT_STOP_SECONDS to record (a disposal still running records its run 'failed'), then removed - so
+    no act runs on outside the receipts' lock, nor keeps the secrets of its --env-file, once the installer has its
+    answer. The act answered, so nothing here takes the answer away (refutation round 2, installer-1): a daemon error or
+    a timeout here is left at that (the answer's own exit says the run failed), and a signal or a Ctrl-C - the one-shot
+    then removed at once, as an interrupted run's is - is raised carrying the answer (oneshot_answer_of)."""
+    found = None
+    try:
+        found = inspect('container', name)
+        if found is not None and owned(found, 'oneshot'):
+            try:
+                docker('stop', '--time', str(ONESHOT_STOP_SECONDS), found['Id'], check=False,
+                       timeout=ONESHOT_STOP_SECONDS + 30)
+            except InstallError:  # the stop's own timeout: the removal below forces it
+                pass
+            docker('rm', '--force', found['Id'], check=False)
+    except Exception:  # noqa: BLE001 — the answer stands (installer-1)
+        pass
+    except BaseException as error:  # a signal or a Ctrl-C: raised once the one-shot is removed, carrying the answer
+        error.oneshot_answer = result
+        if found is None or owned(found, 'oneshot'):  # the name is this run's own (random): never another's container
+            try:
+                with signals_deferred():
+                    docker('rm', '--force', name if found is None else found['Id'], check=False)
+            except BaseException:  # noqa: BLE001 — the signal that stopped the check is the one raised
+                pass
+        raise
+
+
+def oneshot_answer_of(error):
+    """The answer a one-shot gave before a signal or a Ctrl-C reached its leftover check (remove_answered_oneshot),
+    carried by ``error`` or by an error it was raised over (its context: the RAM folder's wipe failing as the signal
+    went by), else None - for the acts that keep their record once they answered."""
+    for _ in range(8):  # a short chain: the act's one-shot, then its RAM folder's wipe or an export's seal
+        if error is None:
+            return None
+        answer = getattr(error, 'oneshot_answer', None)
+        if answer is not None:
+            return answer
+        error = error.__context__
+    return None
 
 
 def oneshot_label(command) -> str:
@@ -8535,6 +8595,8 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
                                  timeout=act_timeout(600), what=f'manage {command}', by=by)
         except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran, a
             if result is None:  # wipe that failed or was interrupted keeps its record; the code is never kept
+                result = oneshot_answer_of(error)  # (round 3: so does a leftover check a signal reached)
+            if result is None:
                 raise
             after_act = error
         hidden = [code, *env_values(env)]
@@ -8643,6 +8705,8 @@ def phase_operators(ctx) -> dict:
                                  by=by)
         except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the grant ran, a
             if result is None:  # wipe that failed or was interrupted keeps its record
+                result = oneshot_answer_of(error)  # (round 3: so does a leftover check a signal reached)
+            if result is None:
                 raise
             after_act = error
         # refutation round 1, phileak-1's class: the grant ran, so its record is kept, the application's secrets redacted
@@ -9163,6 +9227,8 @@ def phase_manage(ctx) -> dict:
                 result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                                  timeout=act_timeout(600), what=f'manage {entry["command"]}', by=args.by)
     except BaseException as error:  # noqa: BLE001 — raised again below, with the act's record when it ran
+        if result is None:  # an answer a signal reached in its one-shot's leftover check is the act's (round 3)
+            result = oneshot_answer_of(error)
         if result is None:  # the act gave no answer, or never ran: there is no record of it to keep
             raise
         after_act = error

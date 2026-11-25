@@ -812,11 +812,15 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   fails, the receipt fails with the act's record (its exit, its log, its
   output) and says what did not finish, and a signal or a Ctrl-C there is
   recorded beside it (a setup code is then not kept). Nor does the one-shot's
-  own leftover check: it runs only when the run gave no answer (a timeout, an
-  interrupt) - once the act answered, `docker run --rm` has removed its
-  container (the CLI waits for the removal, and answers 125 when it cannot), so
-  no daemon error or signal there can take the answer away (refutation round
-  2, installer-1). A one-shot whose run timed out is first sent its own
+  own leftover check. After the act's own exit `docker run --rm` has removed
+  its container (the CLI waits for the removal), and it is not looked for
+  (refutation round 2, installer-1); after the CLI's own failure (125: the
+  removal failed, or its wait on the daemon broke) or a CLI killed by a
+  signal, the container may be left - running on, and holding the secrets of
+  its environment - so it is looked for, sent its own SIGTERM with 10 s to
+  record, and removed (refutation round 3, installer-3). No daemon error or
+  signal in that check takes the answer away: a signal is raised once the
+  one-shot is removed, with the act's record. A one-shot whose run timed out is first sent its own
   SIGTERM, with 10 s to record (a disposal then records its run 'failed'),
   then removed; one interrupted is removed at once, since the door's SIGKILL
   follows its SIGTERM by 15 s, which the RAM folder's wipe and the receipt
