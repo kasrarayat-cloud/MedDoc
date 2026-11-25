@@ -697,8 +697,14 @@ class DailyRecordTests(TransactionTestCase):
                 'typed name, as typed': models.LoginAttempt.objects.filter(username=seed['typed']).exists(),
                 'orphan file': seed['orphan'].exists()}
 
-    def assert_left(self, seed, expected):
-        self.assertEqual(self.left(seed), dict.fromkeys(self.left(seed), expected))
+    def assert_left(self, seed, expected, *, session=None):
+        """Whether each of ``seed``'s rows and its file is left (``expected``) - its expired session by ``session`` when
+        given: sign-in state, not a record, which the daily run removes in a transaction of its own before the recorded
+        one (refutation round 3, repair d3: disposal-2, regression-0, locks-2), so a refused record leaves it removed."""
+        wanted = dict.fromkeys(self.left(seed), expected)
+        if session is not None:
+            wanted['expired session'] = session
+        self.assertEqual(self.left(seed), wanted)
 
     def daily_rows(self):
         return models.SecurityEvent.objects.filter(event=maintenance.DAILY_EVENT)
@@ -717,7 +723,8 @@ class DailyRecordTests(TransactionTestCase):
             with self.assertLogs('studio.jobs', 'ERROR') as logged:
                 self.assertTrue(self.tick(state, clock))
             self.assertEqual([record.getMessage() for record in logged.records], ['the maintenance tick failed'])
-            self.assert_left(seeds[0], True)  # its record refused: nothing it would have deleted is gone
+            # its record refused: nothing of the records it would have deleted is gone (its sign-in state is: round 3)
+            self.assert_left(seeds[0], True, session=False)
             for minute in range(1, 4):  # the next ticks, one sweep apart: the run waits, and nothing is logged
                 clock.now += jobs.STALE_SWEEP_SECONDS
                 seeds.append(self.seed(f'minute {minute}'))
@@ -726,14 +733,15 @@ class DailyRecordTests(TransactionTestCase):
                 self.assert_left(seeds[-1], True)
             self.assertFalse(self.daily_rows().exists())
         self.assertFalse(self.tick(state, clock))  # the refusal lifted: still within the hour
-        self.assert_left(seeds[0], True)
+        self.assert_left(seeds[0], True, session=False)
         clock.now += maintenance.DUE_RETRY_SECONDS
         self.assertTrue(self.tick(state, clock))  # an hour after the failure: run, with its record
         for seed in seeds:
             self.assert_left(seed, False)
         data = self.daily_rows().get().data
+        # three sessions: the first seed's was cleared by the refused run, which committed it before its record
         self.assertEqual((data['sessions_cleared'], data['rate_windows_pruned'], data['signin_names_hashed'],
-                          data['sweep_orphans'], data['failed']), (4, 4, 4, 4, []))
+                          data['sweep_orphans'], data['failed']), (3, 4, 4, 4, []))
         clock.now += jobs.STALE_SWEEP_SECONDS
         self.assertFalse(self.tick(state, clock))  # recorded: not due again for a day
 
@@ -743,7 +751,7 @@ class DailyRecordTests(TransactionTestCase):
             seed = self.seed('all refused')
             with self.assertLogs('studio.jobs', 'ERROR'):
                 self.assertTrue(self.tick(state, clock))
-            self.assert_left(seed, True)
+            self.assert_left(seed, True, session=False)  # every record kept; the sign-in state went (round 3)
             clock.now += jobs.STALE_SWEEP_SECONDS
             self.assertFalse(self.tick(state, clock))
         self.assertFalse(models.SecurityEvent.objects.exists())

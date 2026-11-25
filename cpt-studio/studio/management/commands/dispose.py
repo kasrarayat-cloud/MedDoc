@@ -12,11 +12,12 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
         the same way before the interrupt goes on - a stop signal ends the command with 128 + its number. Before a
         commit a stop signal or Ctrl-C raises where the command is, and nothing is destroyed; from the moment a commit
         begins it is held (studio.disposal.STOP_SIGNAL_HOLD: refutation round 2): the commit and the run's record go to
-        their end, the steps after the commit stop at the next one, and the command acts on it once it has printed what
-        it recorded (a replay, before its next ledger entry). Whatever happens after the commit, the destruction's
-        'committed' DisposalEvent, written in its own transaction, records it. To finish a run, remove what stopped it
-        and plan the same scope again (a destroyed document may be planned again while any of its files remains or its
-        last run did not complete): the new plan takes in what was left.
+        their end, the steps after the commit stop at their next file or statement, and the command acts on it once it
+        has printed what it recorded - a plan once its row is printed, before its manifest is read again; a replay
+        before its next ledger entry (refutation round 3: STOP_SIGNAL_HOLD states the longest hold). Whatever happens
+        after the commit, the destruction's 'committed' DisposalEvent, written in its own transaction, records it. To
+        finish a run, remove what stopped it and plan the same scope again (a destroyed document may be planned again
+        while any of its files remains or its last run did not complete): the new plan takes in what was left.
     dispose --ledger
         every DisposalEvent as a signed ledger line, to keep beside the backups.
     dispose --replay-ledger FILE [--execute --by <name> --approved-by <name> --authorization-ref R]
@@ -67,9 +68,12 @@ class Stopped(KeyboardInterrupt):
     A KeyboardInterrupt itself (refutation dataloss-2), because psycopg cancels the statement in flight - a VACUUM
     waiting for a lock, a count - only for one: after any other exception libpq is left with that statement still
     running, every later statement of the run fails ('another command is already in progress'), and the run's 'failed'
-    DisposalEvent could not be written. Cancelled, the connection answers again, and the run is recorded. Raised only
-    before a commit (refutation round 2): from a commit on, a stop signal is held (_stop), so no interrupt goes through
-    Django's commit or psycopg, and a statement in flight after the commit is cancelled by a cancel request instead."""
+    DisposalEvent could not be written. Cancelled, the connection answers again, and the run is recorded. Raised where
+    the command is only before a commit (refutation round 2): from a commit on, a stop signal is held (_stop), so no
+    interrupt goes through Django's commit or psycopg, and a statement in flight after the commit is cancelled by a
+    cancel request instead; the held one is raised at the command's safe points - in Django's execute wrapper, before a
+    statement after the commit is handed to psycopg (studio.disposal.StopSignalHold.before_statement), so never through
+    psycopg, and once what it recorded is printed (refutation round 3)."""
 
     def __init__(self, signum):
         super().__init__(signal.Signals(signum).name)
@@ -152,9 +156,7 @@ class Command(BaseCommand):
         with stop_signals_raise():
             try:
                 self._act(options)
-                if disposal.STOP_SIGNAL_HOLD.pending is not None:
-                    self.stderr.write(HELD_TEXT)
-                disposal.STOP_SIGNAL_HOLD.safe_point()  # everything recorded and printed: a stop signal held till now
+                self._printed()  # everything recorded and printed: a stop signal held till now ends the command here
             except Stopped as exc:  # a stop signal ends the command with 128 + its number
                 raise SystemExit(128 + exc.signum) from exc
             except KeyboardInterrupt:  # Ctrl-C ends it as Python ends it
@@ -169,6 +171,13 @@ class Command(BaseCommand):
                 self.stderr.write(f'A stop signal came while the command recorded what it did, and it then ended on an '
                                   f'error ({type(exc).__name__}).')
                 raise SystemExit(status) from exc
+
+    def _printed(self):
+        """A safe point of the command's (disposal.STOP_SIGNAL_HOLD.safe_point), once what it recorded is printed: a
+        stop signal held since a commit ends the command here (HELD_TEXT first), and from here one raises at once."""
+        if disposal.STOP_SIGNAL_HOLD.pending is not None:
+            self.stderr.write(HELD_TEXT)
+        disposal.STOP_SIGNAL_HOLD.safe_point()
 
     def _act(self, options):
         try:
@@ -242,6 +251,10 @@ class Command(BaseCommand):
         files = event.files
         self.stdout.write(f'Files in scope: {files["files"]} ({files["bytes"]} bytes; {files["missing"]} missing); '
                           f'manifest sha256 {event.manifest_digest}')
+        # the plan's row committed and is printed, its manifest's digest with it: the hold is over (refutation round 3,
+        # disposal-0). Reading and hashing every file again, for the lines below, is never held: a stop signal ends the
+        # command at once, between two chunks of a file
+        self._printed()
         for entry in disposal.plan_manifest(event):
             self.stdout.write(f'  {entry["sha256"] or "missing":64}  {entry["bytes"] if entry["bytes"] is not None else "-"}'
                               f'  {entry["name"]}')
