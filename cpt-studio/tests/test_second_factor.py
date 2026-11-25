@@ -33,7 +33,7 @@ from django.utils import timezone
 from webauthn.helpers import bytes_to_base64url
 
 from cptstudio import urls as customer_urls
-from studio import models, request_meta, second_factor, second_factor_views, throttle
+from studio import models, rate, request_meta, second_factor, second_factor_views, throttle
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -557,8 +557,12 @@ class ChallengeTests(TestCase):
                  'a character outside base64url': lambda good: {**good, 'id': good['id'] + '='},
                  'an id longer than any credential id': lambda good: {**good, 'id': 'A' * 1401, 'rawId': 'A' * 1401},
                  'an empty id': lambda good: {**good, 'id': ''}}
+        # one moment, never the real clock (refutation round 3, regression-6's side case): the account's attempts are
+        # counted in SECOND_FACTOR_PENDING_SECONDS windows aligned to the epoch, and a boundary between the refusal and
+        # the count read the next window (5 != 4); a second into the next window, the pending sign-ins started on it
+        window = settings.SECOND_FACTOR_PENDING_SECONDS
         for label, bad in cases.items():
-            with self.subTest(label):
+            with self.subTest(label), at(rate.window_start(window) + timedelta(seconds=window + 1)):
                 models.RateWindow.objects.filter(scope__startswith='second_factor.').delete()
                 client = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
                 password_step(client, self.operator)
@@ -1066,14 +1070,20 @@ class EnrolmentTests(TestCase):
             self.assertIn(second_factor_views.SETUP_EXPIRED, late.content.decode())
 
     def test_wrong_codes_are_counted_and_refused_for_the_window(self):
-        client = admin_client()
-        for _ in range(settings.SECOND_FACTOR_ATTEMPTS):
-            self.start(client, code=second_factor.new_code(second_factor.SETUP_CODE_GROUPS))
-        refused = self.start(client)  # the right code, after five wrong ones from this address
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn('Too many attempts', refused.content.decode())
-        self.operator.refresh_from_db()
-        self.assertFalse(self.operator.has_usable_password())
+        # One moment for the whole window, never the real clock (refutation round 3, regression-6): wrong setup codes are
+        # counted in SIGNIN_WINDOW_SECONDS windows aligned to the epoch, so codes sent on the real clock across a
+        # boundary were counted in two windows and the right one was accepted (303). The moment is a second into the
+        # next window - never earlier than setUp's setup code, and well inside its ENROLMENT_CODE_SECONDS.
+        window = settings.SIGNIN_WINDOW_SECONDS
+        with at(rate.window_start(window) + timedelta(seconds=window + 1)):
+            client = admin_client()
+            for _ in range(settings.SECOND_FACTOR_ATTEMPTS):
+                self.start(client, code=second_factor.new_code(second_factor.SETUP_CODE_GROUPS))
+            refused = self.start(client)  # the right code, after five wrong ones from this address
+            self.assertEqual(refused.status_code, 400)
+            self.assertIn('Too many attempts', refused.content.decode())
+            self.operator.refresh_from_db()
+            self.assertFalse(self.operator.has_usable_password())
 
     def test_the_setup_code_never_appears_in_a_response_a_log_line_or_a_record(self):
         models.OneTimeToken.objects.all().delete()

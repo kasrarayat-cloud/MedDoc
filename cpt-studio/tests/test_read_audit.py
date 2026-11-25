@@ -308,28 +308,35 @@ class ConsoleReadTests(ConsoleReadCase):
         self.assertEqual((again.status_code, again.content.decode()), (503, read_audit.NOT_RECORDED))
 
     def test_the_reads_page_lists_rows_by_account_practice_kind_and_day(self):
-        self.member.get('/api/encounters')
-        self.member.get(f'/api/encounters/{self.enc.pk}')
-        member_client(self.outsider).get(f'/api/encounters/{self.enc.pk}')  # refused
-        page = self.ops.get('/ops/activity/reads').content.decode()
-        for text in ('member.list · cpt', 'member.detail · cpt', 'chip bad">Refused', str(self.enc.pk)[:8],
-                     self.reviewer.username, self.outsider.username, REQUEST_ID):
-            with self.subTest(text=text):
-                self.assertIn(text, page)
-        self.assertNotIn(TITLE_MARKER, page)
-        only = self.ops.get(f'/ops/activity/reads?account={self.outsider.pk}').content.decode()
-        self.assertIn('chip bad">Refused', only)
-        self.assertNotIn('member.list · cpt', only)
-        kind = self.ops.get('/ops/activity/reads?kind=member.list').content.decode()
-        self.assertIn('member.list · cpt', kind)
-        self.assertNotIn('chip bad">Refused', kind)
-        today = timezone.now().date().isoformat()
-        self.assertIn(str(self.enc.pk)[:8], self.ops.get(f'/ops/activity/reads?day={today}').content.decode())
-        self.assertNotIn(str(self.enc.pk)[:8], self.ops.get('/ops/activity/reads?day=2001-01-01').content.decode())
-        self.assertEqual(self.ops.get('/ops/activity/reads?day=2001-13-40&kind=x&account=y').status_code, 200)
-        # opening the page is itself recorded, with what it was asked for
-        asked = Record.objects.filter(view=read_audit.OPS_READS, filters__account=str(self.outsider.pk)).get()
-        self.assertEqual(asked.filters['kind'], None)
+        # one moment clear of UTC midnight, never earlier than now (refutation round 3, regression-8's class, as the poll
+        # test above): the reads are filed under their UTC day, so a midnight between them and today's page on the real
+        # clock filed them under yesterday
+        start = timezone.now()
+        if (start + timedelta(minutes=2)).date() != start.date():
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1, seconds=30)
+        with mock.patch.object(timezone, 'now', return_value=start):
+            self.member.get('/api/encounters')
+            self.member.get(f'/api/encounters/{self.enc.pk}')
+            member_client(self.outsider).get(f'/api/encounters/{self.enc.pk}')  # refused
+            page = self.ops.get('/ops/activity/reads').content.decode()
+            for text in ('member.list · cpt', 'member.detail · cpt', 'chip bad">Refused', str(self.enc.pk)[:8],
+                         self.reviewer.username, self.outsider.username, REQUEST_ID):
+                with self.subTest(text=text):
+                    self.assertIn(text, page)
+            self.assertNotIn(TITLE_MARKER, page)
+            only = self.ops.get(f'/ops/activity/reads?account={self.outsider.pk}').content.decode()
+            self.assertIn('chip bad">Refused', only)
+            self.assertNotIn('member.list · cpt', only)
+            kind = self.ops.get('/ops/activity/reads?kind=member.list').content.decode()
+            self.assertIn('member.list · cpt', kind)
+            self.assertNotIn('chip bad">Refused', kind)
+            today = timezone.now().date().isoformat()
+            self.assertIn(str(self.enc.pk)[:8], self.ops.get(f'/ops/activity/reads?day={today}').content.decode())
+            self.assertNotIn(str(self.enc.pk)[:8], self.ops.get('/ops/activity/reads?day=2001-01-01').content.decode())
+            self.assertEqual(self.ops.get('/ops/activity/reads?day=2001-13-40&kind=x&account=y').status_code, 200)
+            # opening the page is itself recorded, with what it was asked for
+            asked = Record.objects.filter(view=read_audit.OPS_READS, filters__account=str(self.outsider.pk)).get()
+            self.assertEqual(asked.filters['kind'], None)
 
 
 class ConsoleFailClosedTests(ConsoleReadCase):

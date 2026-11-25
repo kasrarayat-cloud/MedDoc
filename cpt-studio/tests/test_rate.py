@@ -93,7 +93,9 @@ class KeyTests(TestCase):
     def test_the_four_key_forms_are_counted(self):
         account = uuid.uuid4()
         for key in (KEY, str(account), account, '203.0.113.9', '2001:db8:1:2::/64'):
-            with self.subTest(key=key):
+            # one moment for every hit (refutation round 3, regression-7's side case: on the real clock a minute
+            # boundary between the id's two forms counted the second in a new window, 1 != 2)
+            with self.subTest(key=key), at(MOMENT):
                 self.assertEqual(rate.hit('probe', key, window_seconds=60), 1 if key is not account else 2)
         self.assertEqual(set(models.RateWindow.objects.values_list('key', flat=True)),
                          {KEY, str(account), '203.0.113.9', '2001:db8:1:2::/64'})
