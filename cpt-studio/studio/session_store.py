@@ -50,6 +50,7 @@ end_account_sessions(account, keep_session_key=None)  studio.sessions.end_sessio
     is gone, expired or no longer names it removed. The number ended.
 prune_session_links(now=None)  the daily maintenance (studio.maintenance) and clear_expired: every link whose session is
     gone or expired removed. The number removed.
+session_is_live(session_key, now=None)  whether a session still has its row, unexpired (sessions.act_still_stands).
 
 A link is a plain value, never a foreign key: the revision before release 1 deletes django_session rows (a sign-out) and
 the installer deletes every one of them at a forward from it, and neither may be refused or need to know of this table.
@@ -163,6 +164,14 @@ def lock_accounts(accounts) -> list:
 
 def _live_sessions(now):
     return _session_model().objects.filter(expire_date__gt=now)
+
+
+def session_is_live(session_key, now=None) -> bool:
+    """Whether the session ``session_key`` still has its row, unexpired: an end of an account's sessions deletes the row
+    of each session it ends (studio.sessions.act_still_stands reads this under the account's lock). False for no key."""
+    if not session_key:
+        return False
+    return _live_sessions(now or timezone.now()).filter(session_key=session_key).exists()
 
 
 def sync_links(session_key, links, now=None) -> None:

@@ -12,6 +12,9 @@ Release 1 (RELEASE-1-SPEC 4, B1 to B7):
   waits for the security key (studio.second_factor.begin, B2), every other account gets the same sentence as a wrong
   password. A staff-set password not replaced within STAFF_PASSWORD_UNUSED_SECONDS is refused at both doors exactly
   like a wrong password (B4). Every sign-in writes the session keys of studio.sessions (its user_logged_in receiver).
+  The doctors' door's login() runs under the account's lock with its admission proved again there, and writes its
+  session before its commit (_cpt_door_sign_in; repair round 3, locks-4): a sign-in racing an owner's access off is
+  served wholly before it (and ended by it) or refused (no_access).
 - /account/ (both hosts): a member changes their own password - the current one, the new one twice, the validators;
   this session stays, every other one ends (B4). An operator changes theirs at the admin host only, after the step-up.
   POST /logout/everywhere ends every session of the account, this one included.
@@ -39,7 +42,7 @@ from django.views.decorators.http import require_GET
 from . import audit, rate, request_meta, second_factor, security_events, sessions, throttle
 from .access import SecurityHeadersMiddleware, active_membership
 from .api import UNSTORABLE
-from .models import LoginAttempt
+from .models import LoginAttempt, User
 from .operator import is_operator
 # the client's address: moved to studio.request_meta (release 1, RELEASE-1-SPEC 3.3); the alias keeps every caller
 from .request_meta import client_address as _client  # noqa: F401 (kept: tests pin views._client)
@@ -94,6 +97,40 @@ def _member_door(user):
     return user.memberships.filter(active=True).exists()
 
 
+def _cpt_door_sign_in(request, user, door, next_url, since):
+    """The cpt door's sign-in of ``user``, whom door.check admitted - its password checked (Argon2) and its attempt
+    recorded signed_in, both before any lock: the redirect to ``next_url``, or None when it is refused. Its transaction
+    takes the account's lock first (studio.session_store's lock order) and proves the admission again under it (repair
+    round 3 of release 1, locks-4): sessions.act_still_stands - the account still active and, should the request's
+    session name the account, that session still live - and an active membership (the admission's own line, which the
+    verification tool's contract reads: ops/test_verify_login.py). An owner's access off, or the console's, served
+    between the admission and the lock took the same lock to change it and ended the account's sessions, which this
+    sign-in's was not yet among: the sign-in is then refused like an account with no access, and its attempt says so
+    (_admission_withdrawn). Else login(), and the session with its link written before the commit
+    (sessions.session_saved_before_commit), so an access off served after the sign-in ends it."""
+    with second_factor.new_sign_in_only_if_kept(request):
+        with transaction.atomic(), sessions.session_saved_before_commit(request):
+            if not sessions.act_still_stands(request, user, User.objects.filter(pk=user.pk, is_active=True)):
+                user = None
+            if user is not None and user.memberships.filter(active=True).exists():
+                login(request, user)
+                return redirect(next_url)
+            _admission_withdrawn(door, since)
+    return None
+
+
+def _admission_withdrawn(door, since):
+    """The cpt door's attempt that door.check recorded signed_in at or after ``since``, once the sign-in is refused
+    because its admission no longer held under the account's lock: it says no_access - what door.check records for the
+    right password of an account the door does not admit, as it would have had the access off come first; neither
+    counts toward a delay. One UPDATE of that row alone, found by the name's successful sign-ins of the last minute
+    (the studio_login_name_signed_in index; the minute's margin is for a clock step) and its reference."""
+    LoginAttempt.objects.filter(
+        username=door.username, succeeded=True, created_at__gte=since - timedelta(minutes=1),
+        sign_in_ref=door.sign_in_ref, outcome=LoginAttempt.SIGNED_IN).update(outcome=LoginAttempt.NO_ACCESS,
+                                                                            succeeded=False)
+
+
 @ensure_csrf_cookie
 def login_view(request):
     if request.method not in ('GET', 'POST'):
@@ -112,12 +149,13 @@ def login_view(request):
         door = throttle.Door(request, request_meta.CPT, username)
         error = door.refusal()  # B1: before any password is checked
         if not error:
+            since = timezone.now()  # before the attempt is recorded (_admission_withdrawn finds it from here)
             user = door.check(authenticate(request, username=username, password=password) if username == submitted
                               else None, allowed=_member_door)
             sessions.prepare_sign_in(request, door=request_meta.CPT, sign_in_ref=door.sign_in_ref)
-            if user is not None and user.memberships.filter(active=True).exists():
-                login(request, user)
-                return redirect(next_url)
+            signed_in = None if user is None else _cpt_door_sign_in(request, user, door, next_url, since)
+            if signed_in is not None:
+                return signed_in
             # B3: an account with no active membership - a platform operator's included - is refused as a wrong
             # password (recorded no_access); the console is the admin host's alone
             error = SIGN_IN_REFUSED
@@ -242,7 +280,9 @@ def _change_password(request, user):
     workspace. A record the database refuses raises out of it and changes nothing - the old password still signs in
     and every session stays - and the request fails (a server error, whose answer saves no session). The other
     sessions are ended before this one's key changes, so a store the console cannot end (sessions.Refused) is refused
-    before anything else is touched."""
+    before anything else is touched. The transaction begins with sessions.act_still_stands (the account's lock, then
+    this session still live): a change whose own session an end of the account's sessions ended meanwhile is refused
+    (sessions.SESSION_ENDED) and changes nothing - it never writes that session again under a new key."""
     if not throttle.reserve(ACCOUNT_SCOPE, user.pk, settings.SIGNIN_USER_DELAY_AFTER):
         return TOO_MANY_WRONG.format(wait=throttle.wait_words(settings.SIGNIN_WINDOW_SECONDS))
     if not throttle.reserve(ACCOUNT_CHECKS_SCOPE, user.pk, ACCOUNT_CHECKS_LIMIT):
@@ -263,6 +303,12 @@ def _change_password(request, user):
     except ValidationError as exc:
         return ' '.join(exc.messages)
     with transaction.atomic():
+        # the account first (studio.session_store's lock order), and under its lock this session's own row proved again
+        # (sessions.act_still_stands): an end of the account's sessions served after this request loaded its session -
+        # a sign-out everywhere in another browser - ended it, and the change, whose update_session_auth_hash would
+        # write this session again under a new key, is refused and changes nothing (round 3, the class of locks-0)
+        if not sessions.act_still_stands(request, user):
+            return sessions.SESSION_ENDED
         user.set_password(new)
         user.password_changed_at = timezone.now()
         user.password_change_required_at = None
