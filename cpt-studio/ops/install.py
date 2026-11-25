@@ -2634,9 +2634,18 @@ def cpt_probes() -> dict:
 # --- docker objects ----------------------------------------------------------------
 
 def inspect(kind, name):
+    """What docker inspects ``name`` as (one object), or None when docker answers that there is no such one. An answer
+    that is not one object raises, never read as none (refutation round 3, installer-0: no pair at all is a reading a
+    disposal step acts on)."""
     proc = docker(kind, 'inspect', name, check=False, timeout=30)
     if proc.returncode == 0:
-        return json.loads(proc.stdout)[0]
+        try:
+            found = json.loads(proc.stdout)[0]
+        except (ValueError, LookupError, TypeError):
+            found = None
+        if not isinstance(found, dict):
+            raise InstallError(f'docker {kind} inspect {name} answered something that is not one {kind}.')
+        return found
     if re.search(rb'(?i)no such|not found', proc.stderr):
         return None
     raise InstallError(f'docker {kind} inspect {name} failed (exit {proc.returncode}).')
@@ -3170,11 +3179,15 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
         raise
     finally:
         journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
-        # refutation round 2, installer-1: a leftover is looked for only when the run gave no answer (a timeout, an
-        # interrupt). Once the act answered, `docker run --rm` has removed its container - the CLI waits for the
-        # removal, and answers 125 when it fails - and a daemon error or a signal in this check replaced the return,
-        # so the act's answer, and its whole record, were lost after it ran
-        if result is None:
+        # refutation round 2, installer-1: once the act answered, a daemon error or a signal in this check replaced the
+        # return, so the act's answer, and its whole record, were lost after it ran. A run that gave no answer (a
+        # timeout, an interrupt) is looked for here; one that answered is looked for only when docker may have left
+        # its container (round 3, installer-3: its --rm removal failed, 125, or its CLI died while it ran on), and
+        # nothing there takes the answer away (remove_answered_oneshot)
+        if result is not None:
+            if oneshot_may_be_left(result):
+                remove_answered_oneshot(name, result)
+        else:
             leftover = inspect('container', name)
             if leftover is not None and owned(leftover, 'oneshot'):
                 if timed_out:  # its own SIGTERM first; never after an interrupt, where the door's SIGKILL follows
@@ -3184,6 +3197,62 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
                     except InstallError:  # the stop's own timeout: the removal below forces it
                         pass
                 docker('rm', '--force', leftover['Id'], check=False)
+
+
+# The docker CLI's own failure, as `docker run` answers it: among others, a --rm removal that failed once the container
+# had ended (the act may have answered whole first), and a wait on the daemon that broke while the container ran on.
+DOCKER_RUN_FAILED = 125
+
+
+def oneshot_may_be_left(result) -> bool:
+    """Whether a one-shot that answered ``result`` may have left its container (refutation round 3, installer-3): the
+    CLI's own failure (DOCKER_RUN_FAILED), or a CLI killed by a signal (a negative return code; its container runs on).
+    Every other answer is the act's own exit, after which `docker run --rm` has removed the container."""
+    return result.returncode == DOCKER_RUN_FAILED or result.returncode < 0
+
+
+def remove_answered_oneshot(name, result) -> None:
+    """The one-shot ``name``, which answered ``result`` yet may be left (oneshot_may_be_left): looked for, sent its own
+    SIGTERM with ONESHOT_STOP_SECONDS to record (a disposal still running records its run 'failed'), then removed - so
+    no act runs on outside the receipts' lock, nor keeps the secrets of its --env-file, once the installer has its
+    answer. The act answered, so nothing here takes the answer away (refutation round 2, installer-1): a daemon error or
+    a timeout here is left at that (the answer's own exit says the run failed), and a signal or a Ctrl-C - the one-shot
+    then removed at once, as an interrupted run's is - is raised carrying the answer (oneshot_answer_of)."""
+    found = None
+    try:
+        found = inspect('container', name)
+        if found is not None and owned(found, 'oneshot'):
+            try:
+                docker('stop', '--time', str(ONESHOT_STOP_SECONDS), found['Id'], check=False,
+                       timeout=ONESHOT_STOP_SECONDS + 30)
+            except InstallError:  # the stop's own timeout: the removal below forces it
+                pass
+            docker('rm', '--force', found['Id'], check=False)
+    except Exception:  # noqa: BLE001 — the answer stands (installer-1)
+        pass
+    except BaseException as error:  # a signal or a Ctrl-C: raised once the one-shot is removed, carrying the answer
+        error.oneshot_answer = result
+        if found is None or owned(found, 'oneshot'):  # the name is this run's own (random): never another's container
+            try:
+                with signals_deferred():
+                    docker('rm', '--force', name if found is None else found['Id'], check=False)
+            except BaseException:  # noqa: BLE001 — the signal that stopped the check is the one raised
+                pass
+        raise
+
+
+def oneshot_answer_of(error):
+    """The answer a one-shot gave before a signal or a Ctrl-C reached its leftover check (remove_answered_oneshot),
+    carried by ``error`` or by an error it was raised over (its context: the RAM folder's wipe failing as the signal
+    went by), else None - for the acts that keep their record once they answered."""
+    for _ in range(8):  # a short chain: the act's one-shot, then its RAM folder's wipe or an export's seal
+        if error is None:
+            return None
+        answer = getattr(error, 'oneshot_answer', None)
+        if answer is not None:
+            return answer
+        error = error.__context__
+    return None
 
 
 def oneshot_label(command) -> str:
@@ -8342,24 +8411,47 @@ def reason_values(reason) -> list:
 # characters - a bare ticket number, '4521' - was redacted wherever no letter or digit stood beside it, and '-' bounds
 # every group of an id: it changed a group of the plan id execute needs, which the receipt then no longer showed, and hid
 # a count). Every text redact_output replaces of a reason (reason_values: its whole text, and each of its lines of 12
-# characters or more) must be in words: the whole text REASON_MIN_CHARACTERS characters or more that are not white
-# space and REASON_MIN_WORDS words or more (the release's act script, act_r1.sh, refuses the same), and each such line
-# two words or more - white space, which no id, digest, link or number holds. Anything else is refused before the act.
+# characters or more) is replaced wherever it stands, so each must hold a word: the whole text REASON_MIN_CHARACTERS
+# characters or more that are not white space, and neither it nor any such line made of ids, links and numbers alone
+# (reason_part_is_an_id). Anything else is refused before the act. Refutation round 3, installer-2: round 2 asked for
+# three words and refused every line of one word, so a heading, a label, a specialty, a compound, a sign-off, a reason
+# of two words and one written in a language without spaces were refused as ids; a word is never refused.
 REASON_MIN_CHARACTERS = 12
-REASON_MIN_WORDS = 3
+
+
+def reason_part_is_an_id(part: str) -> bool:
+    """Whether ``part`` - a run of a reason between white space - is an id, a link or a number, so that its redaction
+    could alter one the act prints. Every id, count, digest, date, path and link the act prints is ASCII, so a part
+    holding any other character (a letter of another script: a German compound, a Japanese sentence and a date in it),
+    or no letter or digit at all (a line of dashes), is never one. A part written in ASCII is one when it holds a digit
+    (a number, a date, an id or a digest with digits), a '/', '\\' or '@' (a link, a path, an address), or a '.', '_'
+    or '=' between two letters or digits (a host, a file, a name in the code, a key and its value), or is 12 or more
+    hexadecimal letters and '-' once its punctuation at either end is set aside (an id or a digest without a digit).
+    Any other is a word: letters, with hyphens, apostrophes and punctuation."""
+    if not part.isascii() or not re.search(r'[A-Za-z0-9]', part):
+        return False
+    return bool(re.search(r'[0-9/\\@]|[A-Za-z0-9][._=][A-Za-z0-9]', part)
+                or re.fullmatch(r'[A-Fa-f-]{12,}', re.sub(r'^[^A-Za-z0-9]+|[^A-Za-z0-9]+$', '', part)))
+
+
+def reason_holds_a_word(text: str) -> bool:
+    """Whether one of ``text``'s parts (its runs between white space) is a word (reason_part_is_an_id)."""
+    return any(not reason_part_is_an_id(part) for part in text.split())
 
 
 def reason_words_problem(reason: bytes) -> str:
-    """'' when ``reason`` is in words (above), else the refusal."""
+    """'' when ``reason`` is in words (above), else the refusal - which never repeats the reason."""
     whole, *lines = reason_values(reason)
-    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or len(whole.split()) < REASON_MIN_WORDS:
+    if len(''.join(whole.split())) < REASON_MIN_CHARACTERS or not reason_holds_a_word(whole):
         return (f'--reason-file must give the reason in words - {REASON_MIN_CHARACTERS} characters or more that are not '
-                f'white space, and {REASON_MIN_WORDS} words or more: a shorter or plainer one (a ticket number alone) '
-                "would be redacted from the act's output wherever it stands, inside an id or a count too")
-    if any(len(line.split()) < 2 for line in lines):
-        return ('--reason-file has a line of 12 characters or more that is one word - an id, a link or a number alone: '
-                "each such line is redacted on its own wherever it stands in the act's output, inside an id or a count "
-                'too; put it in a sentence')
+                'white space, a word among them: a shorter one, or one of ids, links and numbers alone (a ticket '
+                "number alone), would be redacted from the act's output wherever it stands, inside an id or a count "
+                'too')
+    if not all(reason_holds_a_word(line) for line in lines):
+        return ('--reason-file has a line of 12 characters or more that is an id, a link or a number alone, with no '
+                'word in it (a part written in ASCII that holds a digit, a /, \\ or @, or a ., _ or = between two '
+                'letters or digits, or is 12 or more hexadecimal letters): each such line is redacted on its own '
+                "wherever it stands in the act's output, inside an id or a count too; put a word beside it")
     return ''
 
 
@@ -8503,6 +8595,8 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
                                  timeout=act_timeout(600), what=f'manage {command}', by=by)
         except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran, a
             if result is None:  # wipe that failed or was interrupted keeps its record; the code is never kept
+                result = oneshot_answer_of(error)  # (round 3: so does a leftover check a signal reached)
+            if result is None:
                 raise
             after_act = error
         hidden = [code, *env_values(env)]
@@ -8611,6 +8705,8 @@ def phase_operators(ctx) -> dict:
                                  by=by)
         except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the grant ran, a
             if result is None:  # wipe that failed or was interrupted keeps its record
+                result = oneshot_answer_of(error)  # (round 3: so does a leftover check a signal reached)
+            if result is None:
                 raise
             after_act = error
         # refutation round 1, phileak-1's class: the grant ran, so its record is kept, the application's secrets redacted
@@ -8871,13 +8967,17 @@ def install_in_progress() -> list:
             if inspect('container', name) is not None]
 
 
-def serving_disposal_problem() -> str:
+def serving_disposal_problem(*, replay=False) -> str:
     """'' when the pair under the canonical names - the one that serves, or serves once started: cpt-studio-web and
     cpt-studio-worker, running or stopped - has release 1's disposal, else why not (refutation round 2, switchback-0: a
     switch-back to a revision without disposal, refused once anything is closed or destroyed, was passed by switching
     back first and then closing and destroying while that revision served). Read as the switch-back's refusal reads a
     revision (has_disposal: its tree's DISPOSAL_FILES). No web there, a container that is not this installer's, or one
-    with no revision label is not known, and never read as one with disposal (fail closed)."""
+    with no revision label is not known, and never read as one with disposal (fail closed) - except, for ``replay``
+    (replay-ledger --execute alone), no pair at all: docker answers that neither container exists (inspect's None; an
+    answer it cannot read raises, and refuses), so nothing serves, and the ledger is replayed before a pair is started
+    (refutation round 3, installer-0: a restore onto a fresh host could not replay before `app` started its worker,
+    whose beat the replay itself refuses)."""
     revisions = {}
     for role in ('web', 'worker'):
         container = inspect('container', SERVICES[role])
@@ -8889,6 +8989,8 @@ def serving_disposal_problem() -> str:
         if not SHA_RE.fullmatch(str(revision or '')):
             return f'{SERVICES[role]} carries no revision label, so what serves is not known'
         revisions[role] = revision
+    if replay and not revisions:
+        return ''
     if 'web' not in revisions:
         return f'there is no {SERVICES["web"]}, so the revision that serves next is not known'
     for role, revision in revisions.items():
@@ -9063,10 +9165,11 @@ def phase_manage(ctx) -> dict:
                                'no row is deleted during one: nothing was disposed of (RELEASE-1-SPEC D1).')
         # refutation round 2, switchback-0: a step that changes a row (close, execute, a replay with --execute: the
         # receipt's mode 'executed') runs only while the serving pair has disposal; the dry runs (plan, a replay
-        # without --execute) and the ledger change no row such a revision reads, and stay open
+        # without --execute) and the ledger change no row such a revision reads, and stay open. Round 3, installer-0:
+        # a replay with --execute also runs with no pair at all (nothing serves: a restore onto a fresh host)
         if dispose_mode(args) == 'executed':
             try:
-                problem = serving_disposal_problem()
+                problem = serving_disposal_problem(replay=args.dispose_step == 'replay-ledger')
             except InstallError as error:
                 raise InstallError(f'{error} Nothing was disposed of.') from error
             if problem:
@@ -9075,7 +9178,8 @@ def phase_manage(ctx) -> dict:
                                    'a document destroyed, only while a revision with disposal (release 1 or later) '
                                    'serves (RELEASE-1-SPEC 6.3): install one (--phase app), then run this step again. '
                                    'The plan, the ledger and a replay without --execute stay open meanwhile: they '
-                                   'change no row an older revision reads.')
+                                   'change no row an older revision reads; a replay with --execute runs too when there '
+                                   'is no pair at all (ops/INSTALL.md, Restoring the database).')
         # only now, the reading above made: Lane 4's dispose refuses unless it is told no switch is in progress (this
         # phase holds the receipts' lock, so no install starts on them while it runs)
         environment = runtime_env('disabled', '') + ['-e', 'CPT_STUDIO_SWITCH_STATE=idle']
@@ -9123,6 +9227,8 @@ def phase_manage(ctx) -> dict:
                 result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                                  timeout=act_timeout(600), what=f'manage {entry["command"]}', by=args.by)
     except BaseException as error:  # noqa: BLE001 — raised again below, with the act's record when it ran
+        if result is None:  # an answer a signal reached in its one-shot's leftover check is the act's (round 3)
+            result = oneshot_answer_of(error)
         if result is None:  # the act gave no answer, or never ran: there is no record of it to keep
             raise
         after_act = error
