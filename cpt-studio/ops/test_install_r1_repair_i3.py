@@ -652,15 +652,21 @@ class RestoreGuideTests(unittest.TestCase):
                      'stop timeout, the one the installer starts the container with',
                      'Wait two minutes after the worker stopped', 'with no pair at all the replay runs too',
                      'rerun `app` with the `--coding-mode`', '`docker start cpt-studio-web cpt-studio-worker`',
-                     'On a fresh server, `app`, and only then `https-vhost`', '`--coding-mode disabled`',
+                     'On a fresh server, `app`, and only then `http-vhost`, `cert` and `ingress`, in that order: '
+                     '`ingress` writes the HTTPS stage, which opens the site', '`--coding-mode disabled`',
                      'must keep the same secret key'):
             self.assertIn(said, restore)
+        # refutation round 4, installer-2: on a fresh server https-vhost refuses (no cert receipt, or the HTTP stage,
+        # which ingress moves admin onto); the guide never names it as the step that opens the site
+        self.assertNotIn('only then `https-vhost`', restore)
         self.assertNotIn('with no pair at all it is refused', restore)
         self.assertNotIn('install the revision with `app` before `https-vhost` opens the site, then replay', restore)
 
     def test_the_known_limits_record_what_round_three_left(self):
         text = (Path(__file__).resolve().parent / 'INSTALL.md').read_text(encoding='utf-8')
         limits = ' '.join(text[text.index('## Known limits\n'):].split())
+        self.assertIn('on a fresh server nothing is served before `ingress`', limits)  # round 4, installer-2
+        self.assertNotIn('nothing is served before `https-vhost`', limits)
         for said in ('A restore from a backup older than this revision\'s migrations is migrated only by `app`',
                      'approves that re-grant (refutation round 3, installer-1): never quote the approval line in a '
                      'declaration',

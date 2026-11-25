@@ -8127,10 +8127,20 @@ def phase_provision(ctx) -> dict:
         command += ['--require-password-change', f'--by={args.by}']
         if reset:
             command.append('--reset-passwords')
-        result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', by=args.by)
+        hidden = [*passwords.values(), *env_values(env)]
+        try:
+            result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', by=args.by)
+        except BaseException as error:  # noqa: BLE001 — refutation round 4, installer-1: a signal or a Ctrl-C that
+            answered = oneshot_answer_of(error)  # reached the leftover check after the act answered keeps its record,
+            if answered is None:  # as the manage acts' and the operators' grant do: the act's output is kept (every
+                raise  # password and secret redacted) and named in the receipt beside the interrupt; nothing is handed
+            out, out_counts = redact_output(answered.stdout, hidden)  # over (the staged credentials are discarded)
+            err, err_counts = redact_output(answered.stderr, hidden)
+            raise_after_act(error, {'log': ctx.log('provision', out + err), **redaction_record(out_counts, err_counts),
+                                    'exit': answered.returncode, 'credentials_handed_over': False, 'by': args.by},
+                            'provision')
         # refutation round 1, phileak-1's class: the act ran, so its output is kept, every password and the
         # application's secrets redacted; a password it printed is never handed over (the staged files are discarded)
-        hidden = [*passwords.values(), *env_values(env)]
         stdout, stdout_counts = redact_output(result.stdout, hidden)
         stderr, stderr_counts = redact_output(result.stderr, hidden)
         log = ctx.log('provision', stdout + stderr)

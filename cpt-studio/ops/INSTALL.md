@@ -2031,7 +2031,10 @@ serves both kinds of host (refutation round 3, installer-0):
    `--authorization-ref`) it was installed with - with its web stopped, `app`
    replaces the pair on the port the vhost names - or start the stopped pair
    as root: `docker start cpt-studio-web cpt-studio-worker`. On a fresh
-   server, `app`, and only then `https-vhost`, which opens the site.
+   server, `app`, and only then `http-vhost`, `cert` and `ingress`, in that
+   order: `ingress` writes the HTTPS stage, which opens the site (the HTTP
+   stage only redirects). `https-vhost` republishes a stage that is already
+   live and refuses on a fresh server (refutation round 4, installer-2).
 
 A backup from before this revision's migrations (the dump taken before an
 install) is replayed onto only once it is migrated, and only `app` migrates:
@@ -2116,7 +2119,7 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   restored copy - the documents the ledger destroyed among them - from that
   `app` until the pair is stopped for the replay (with `--coding-mode
   disabled` nothing is sent), while on a fresh server nothing is served before
-  `https-vhost` (**Restoring the database**).
+  `ingress` (**Restoring the database**).
 - A refusal that quotes the re-grant approval line (`Approved: --regrant
   <name>`) inside a fence or a quote the installer's reader does not take for
   one - a fence of another length or character, a quote's lazy continuation,

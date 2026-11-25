@@ -698,12 +698,15 @@ class DailyRecordTests(TransactionTestCase):
                 'orphan file': seed['orphan'].exists()}
 
     def assert_left(self, seed, expected, *, session=None):
-        """Whether each of ``seed``'s rows and its file is left (``expected``) - its expired session by ``session`` when
-        given: sign-in state, not a record, which the daily run removes in a transaction of its own before the recorded
-        one (refutation round 3, repair d3: disposal-2, regression-0, locks-2), so a refused record leaves it removed."""
+        """Whether each of ``seed``'s rows and its file is left (``expected``) - its sign-in state (the expired session,
+        and since refutation round 4's disposal-0 the old rate window) by ``session`` when given: sign-in state and its
+        counters, not records, which the daily run removes in transactions of their own before the recorded one
+        (round 3, repair d3: disposal-2, regression-0, locks-2; round 4, the lead), so a refused record leaves them
+        removed."""
         wanted = dict.fromkeys(self.left(seed), expected)
         if session is not None:
             wanted['expired session'] = session
+            wanted['old rate window'] = session
         self.assertEqual(self.left(seed), wanted)
 
     def daily_rows(self):
@@ -739,9 +742,10 @@ class DailyRecordTests(TransactionTestCase):
         for seed in seeds:
             self.assert_left(seed, False)
         data = self.daily_rows().get().data
-        # three sessions: the first seed's was cleared by the refused run, which committed it before its record
+        # three sessions and three rate windows: the first seed's were removed by the refused run, which committed its
+        # sign-in state before its record (round 3 for the session, round 4's disposal-0 for the rate window)
         self.assertEqual((data['sessions_cleared'], data['rate_windows_pruned'], data['signin_names_hashed'],
-                          data['sweep_orphans'], data['failed']), (3, 4, 4, 4, []))
+                          data['sweep_orphans'], data['failed']), (3, 3, 4, 4, []))
         clock.now += jobs.STALE_SWEEP_SECONDS
         self.assertFalse(self.tick(state, clock))  # recorded: not due again for a day
 

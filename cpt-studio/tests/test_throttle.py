@@ -21,6 +21,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections as db_connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
 
 from studio import models, rate, throttle, views
 from tests.support import coding as f
@@ -329,32 +330,36 @@ class ConcurrentAttemptTests(TransactionTestCase):
                              settings.SIGNIN_CLIENT_LIMIT)
 
     def test_sixteen_wrong_current_passwords_at_once_get_five_checks_and_then_none(self):
-        member = f.member(self.ws)
-        client = Client(HTTP_HOST=CPT)
-        self.assertEqual(client.post('/login/', {'username': member.username, 'password': PASSWORD}).status_code, 302)
-        cookie = client.cookies[settings.SESSION_COOKIE_NAME].value
-        new = 'a fresh synthetic passphrase only I know'
+        # one moment for the whole test, as the pair-limit and address-limit bursts above are held (refutation round 4,
+        # rows-3: on the real clock a minute boundary inside a burst let it check more passwords than the delay's
+        # count - D414's known limit, which this test does not measure - and left refused places counted)
+        with Clock(timezone.now().replace(microsecond=0)):
+            member = f.member(self.ws)
+            client = Client(HTTP_HOST=CPT)
+            self.assertEqual(client.post('/login/', {'username': member.username, 'password': PASSWORD}).status_code, 302)
+            cookie = client.cookies[settings.SESSION_COOKIE_NAME].value
+            new = 'a fresh synthetic passphrase only I know'
 
-        def guess(current):
-            def post():
-                other = Client(HTTP_HOST=CPT)
-                other.cookies[settings.SESSION_COOKIE_NAME] = cookie
-                answer = other.post('/account/', {'current_password': current, 'new_password': new,
-                                                  'new_password_again': new})
-                body = answer.content.decode()
-                return ('changed' if answer.status_code == 302 else 'wrong' if views.WRONG_CURRENT in body
-                        else 'held' if 'Too many wrong passwords' in body else f'other {answer.status_code}')
-            return post
+            def guess(current):
+                def post():
+                    other = Client(HTTP_HOST=CPT)
+                    other.cookies[settings.SESSION_COOKIE_NAME] = cookie
+                    answer = other.post('/account/', {'current_password': current, 'new_password': new,
+                                                      'new_password_again': new})
+                    body = answer.content.decode()
+                    return ('changed' if answer.status_code == 302 else 'wrong' if views.WRONG_CURRENT in body
+                            else 'held' if 'Too many wrong passwords' in body else f'other {answer.status_code}')
+                return post
 
-        first = self.burst(views, '_change_password', [guess(f'wrong-guess-{index}') for index in range(16)])
-        self.assertEqual(sorted(first), ['held'] * 11 + ['wrong'] * 5)
-        # the right password hidden in a second burst, the window's places already taken: nothing is checked
-        second = self.burst(views, '_change_password', [guess(f'wrong-guess-b{index}') for index in range(15)]
-                            + [guess(PASSWORD)])
-        self.assertEqual(second, ['held'] * 16)
-        member.refresh_from_db()
-        self.assertTrue(member.check_password(PASSWORD))
-        self.assertEqual(views._wrong_passwords(member), settings.SIGNIN_USER_DELAY_AFTER)
+            first = self.burst(views, '_change_password', [guess(f'wrong-guess-{index}') for index in range(16)])
+            self.assertEqual(sorted(first), ['held'] * 11 + ['wrong'] * 5)
+            # the right password hidden in a second burst, the window's places already taken: nothing is checked
+            second = self.burst(views, '_change_password', [guess(f'wrong-guess-b{index}') for index in range(15)]
+                                + [guess(PASSWORD)])
+            self.assertEqual(second, ['held'] * 16)
+            member.refresh_from_db()
+            self.assertTrue(member.check_password(PASSWORD))
+            self.assertEqual(views._wrong_passwords(member), settings.SIGNIN_USER_DELAY_AFTER)
 
 
 class PlaceTests(ThrottleCase):

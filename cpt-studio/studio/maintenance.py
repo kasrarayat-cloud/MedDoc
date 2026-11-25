@@ -226,12 +226,14 @@ def run_daily(now=None) -> dict:
     """The daily maintenance (module docstring): every step runs even when another failed; one SecurityEvent
     maintenance.daily holds every count and the names of the steps that failed (their errors are logged by type).
 
-    Sign-in state first (refutation round 3, disposal-2, regression-0 and locks-2): the session store's dead links and
-    the expired sessions - sign-in state, not records (studio.sessions) - are removed before the recorded transaction
-    begins, each step in a short transaction of its own, so no link or session it removes stays locked while the
-    recorded steps run (a sign-in's cap and the end of an account's sessions delete the same rows: they waited for the
-    whole run's commit). Their counts, or their names when they failed, go in the run's record; a record that cannot be
-    written leaves them removed.
+    Sign-in state first (refutation round 3, disposal-2, regression-0 and locks-2; round 4, disposal-0): the session
+    store's dead links, the expired sessions and the rate windows older than RATE_WINDOW_MAX_AGE - sign-in state and its
+    counters, not records (studio.sessions, studio.rate) - are removed before the recorded transaction begins, each step
+    in a short transaction of its own, so no link, session or counter it removes stays locked while the recorded steps
+    run (a sign-in's cap and the end of an account's sessions delete the same rows, and the console's clear of a sign-in
+    delay deletes the name's rate windows while it holds the account: each waited for the whole run's commit). Their
+    counts, or their names when they failed, go in the run's record; a record that cannot be written leaves them
+    removed.
 
     What it deletes of the records and its record commit together, or neither does (refutation round 2, records-2): the
     rows it removes or rewrites - and the orphan sweep's dry run - in one transaction with that SecurityEvent, each step
@@ -245,7 +247,8 @@ def run_daily(now=None) -> dict:
     now = now or timezone.now()
     counts, failed, orphans, removed, removal_failed = {}, [], [], {}, []
     sign_in_state = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
-                     ('sessions_cleared', lambda: clear_expired_sessions(now)))
+                     ('sessions_cleared', lambda: clear_expired_sessions(now)),
+                     ('rate_windows_pruned', lambda: prune_rate_windows(now)))
     for name, step in sign_in_state:
         try:
             with transaction.atomic():  # its own: committed before the next step, and before the recorded steps
@@ -255,8 +258,7 @@ def run_daily(now=None) -> dict:
             failed.append(name)
             continue
         counts[name] = result  # once its transaction committed
-    steps = (('rate_windows_pruned', lambda: prune_rate_windows(now)),
-             ('signin_names_hashed', lambda: hash_unmatched_signin_names(now)),
+    steps = (('signin_names_hashed', lambda: hash_unmatched_signin_names(now)),
              ('login_attempts_pruned', lambda: prune_login_attempts(now)),
              ('orphan_sweep', lambda: scan_orphan_files(now=now)))
     with transaction.atomic():

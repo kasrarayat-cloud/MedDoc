@@ -485,18 +485,23 @@ class ListRepeatTests(ReadCase):
                 self.assertEqual(len(self.rows(view=kind)), 1 if kind == read_audit.MEMBER_LIST else 3)
 
     def test_a_repeat_whose_count_cannot_be_written_serves_nothing(self):
-        self.assertEqual(self.member.get(LIST).status_code, 200)
+        # its three lists on one UTC day, as its siblings' (refutation round 4, rows-2: on the real clock, a midnight
+        # between the first list and the second made the second a new day's read, served with a row of its own)
+        start = self.start()
+        with self.at(start, 0):
+            self.assertEqual(self.member.get(LIST).status_code, 200)
 
         class CountFails:
             ops = connection.ops
 
             def cursor(self):
                 raise DatabaseError('synthetic count failure')
-        with mock.patch.object(read_audit, 'connection', CountFails()):
+        with self.at(start, 1), mock.patch.object(read_audit, 'connection', CountFails()):
             answer = self.member.get(LIST)
         self.assertEqual((answer.status_code, answer.json()['error']), (503, read_audit.NOT_RECORDED))
         self.assertNotIn(TITLE_MARKER.encode(), answer.content)
-        self.assertEqual(self.member.get(LIST).status_code, 200)  # the control: counted again
+        with self.at(start, 2):
+            self.assertEqual(self.member.get(LIST).status_code, 200)  # the control: counted again
         self.assertEqual(models.AccessRecordRepeat.objects.get().repeats, 1)
 
 

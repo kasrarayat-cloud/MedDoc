@@ -302,6 +302,11 @@ def _change_password(request, user):
         validate_password(new, user)
     except ValidationError as exc:
         return ' '.join(exc.messages)
+    # the new password is hashed (Argon2) before the account's lock is taken, never under it: the lock is held only for
+    # the writes (refutation round 4, regression-0: the hash under the lock doubled its hold, and every act ending or
+    # opening this account's sessions waited on it). The hash is only set on this object; nothing is saved until the
+    # lock is held and this session's row proved again, so a refused change saves nothing.
+    user.set_password(new)
     with transaction.atomic():
         # the account first (studio.session_store's lock order), and under its lock this session's own row proved again
         # (sessions.act_still_stands): an end of the account's sessions served after this request loaded its session -
@@ -309,7 +314,6 @@ def _change_password(request, user):
         # write this session again under a new key, is refused and changes nothing (round 3, the class of locks-0)
         if not sessions.act_still_stands(request, user):
             return sessions.SESSION_ENDED
-        user.set_password(new)
         user.password_changed_at = timezone.now()
         user.password_change_required_at = None
         user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])

@@ -43,6 +43,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
 
 from studio import audit, console, models, rate, second_factor, throttle, views
 from tests.support import coding as f
@@ -644,12 +645,16 @@ class SignedInSecondFactorPagesTimerTests(TestCase):
     def codes_page(self):
         self.operator.set_unusable_password()
         self.operator.save()
-        _token, code = second_factor.issue_setup_code(self.operator, 'Synthetic Person')
-        client = Client(HTTP_HOST=ADMIN)
-        self.assertEqual(setup_first_step(client, code).status_code, 303)
-        page = setup_key_step(client, Authenticator())
-        self.assertEqual(page.status_code, 200)
-        self.assertEqual(client.session.get('_auth_user_id'), str(self.operator.pk))
+        # one moment for the setup and the key step (refutation round 4, rows-5): the sign-in's stamp and the page's
+        # data-idle-seconds are whole seconds read in one request, so on the real clock a second boundary between them
+        # stated 599 - the product's value - where the tests below require the idle limit itself
+        with Clock(timezone.now().replace(microsecond=0)):
+            _token, code = second_factor.issue_setup_code(self.operator, 'Synthetic Person')
+            client = Client(HTTP_HOST=ADMIN)
+            self.assertEqual(setup_first_step(client, code).status_code, 303)
+            page = setup_key_step(client, Authenticator())
+            self.assertEqual(page.status_code, 200)
+            self.assertEqual(client.session.get('_auth_user_id'), str(self.operator.pk))
         return page.content.decode()
 
     def test_the_recovery_codes_page_arms_the_timer(self):
@@ -745,22 +750,26 @@ class UsernameDelayTogetherTests(TransactionTestCase):
         return answers
 
     def test_attempts_sent_together_get_the_checks_attempts_sent_in_turn_get(self):
-        ws = f.workspace('Synthetic practice A5')
-        in_turn, together = f.member(ws), f.member(ws)
-        sequential = [a5_attempt(in_turn.username, index) for index in range(settings.SIGNIN_USER_DELAY_AFTER + 1)]
-        self.assertEqual(models.LoginAttempt.objects.filter(username=in_turn.username).count(),
-                         settings.SIGNIN_USER_DELAY_AFTER, 'in turn: the attempt after the fifth failure waits')
-        self.assertIn('Too many attempts', sequential[-1].content.decode())
-        answers = self.together(together.username)
-        checks = models.LoginAttempt.objects.filter(username=together.username).count()
-        self.assertEqual(checks, settings.SIGNIN_USER_DELAY_AFTER, 'together: no more password checks than in turn')
-        refused = [answer for answer in answers if 'Too many attempts' in answer.content.decode()]
-        self.assertEqual(len(refused), A5_ATTEMPTS - settings.SIGNIN_USER_DELAY_AFTER)
-        self.assertEqual({answer.status_code for answer in answers}, {400})
-        self.assertEqual(throttle.failures_of(together.username)[0], settings.SIGNIN_USER_DELAY_AFTER)
-        self.assertEqual(rate.count(throttle.INFLIGHT_USER, throttle.user_key(together.username),
-                                    since=rate.window_start(throttle.MINUTE) - timedelta(days=1)), 0,
-                         'every place taken was given back')
+        # one moment for both members' attempts and the counts after them (refutation round 4, rows-4: on the real
+        # clock a minute boundary inside the burst checked one more password than in turn - D414's known limit,
+        # which this test does not measure - or left a place a refusal had taken counted in the next minute)
+        with Clock(timezone.now().replace(microsecond=0)):
+            ws = f.workspace('Synthetic practice A5')
+            in_turn, together = f.member(ws), f.member(ws)
+            sequential = [a5_attempt(in_turn.username, index) for index in range(settings.SIGNIN_USER_DELAY_AFTER + 1)]
+            self.assertEqual(models.LoginAttempt.objects.filter(username=in_turn.username).count(),
+                             settings.SIGNIN_USER_DELAY_AFTER, 'in turn: the attempt after the fifth failure waits')
+            self.assertIn('Too many attempts', sequential[-1].content.decode())
+            answers = self.together(together.username)
+            checks = models.LoginAttempt.objects.filter(username=together.username).count()
+            self.assertEqual(checks, settings.SIGNIN_USER_DELAY_AFTER, 'together: no more password checks than in turn')
+            refused = [answer for answer in answers if 'Too many attempts' in answer.content.decode()]
+            self.assertEqual(len(refused), A5_ATTEMPTS - settings.SIGNIN_USER_DELAY_AFTER)
+            self.assertEqual({answer.status_code for answer in answers}, {400})
+            self.assertEqual(throttle.failures_of(together.username)[0], settings.SIGNIN_USER_DELAY_AFTER)
+            self.assertEqual(rate.count(throttle.INFLIGHT_USER, throttle.user_key(together.username),
+                                        since=rate.window_start(throttle.MINUTE) - timedelta(days=1)), 0,
+                             'every place taken was given back')
 
     def test_a_place_left_by_an_attempt_that_never_finished_counts_two_minutes_at_most(self):
         member = f.member(f.workspace('Synthetic practice A5'))
