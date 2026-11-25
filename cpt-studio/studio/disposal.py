@@ -39,9 +39,10 @@ a committed declaration (A6):
                           on as an interrupt: one guard holds the transaction and every step after its commit, and an
                           interrupt before the final event is sent is kept the same way. Under the dispose command a
                           stop signal or Ctrl-C is never raised from the commit on (STOP_SIGNAL_HOLD, refutation round
-                          2): the commit and the run's record go to their end, the steps after the commit stop at the
-                          next one (the statement in flight cancelled, the step's problem recorded), and the command then
-                          ends with the signal's status; each certificate and ledger line names only what committed.
+                          2): the commit and the run's record go to their end, the steps after the commit stop at their
+                          next file or statement (refutation round 3: the statement in flight cancelled, none sent after
+                          the signal, the step's problem recorded), and the command then ends with the signal's status;
+                          each certificate and ledger line names only what committed.
                           Where an interrupt still comes while the final event is written (raised by anything but those
                           signals) the certificate says so as far as it can, and the 'committed' row is the record. A
                           transaction that rolled back writes nothing (NotDestroyed: nothing was destroyed). To finish a
@@ -86,6 +87,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 import unicodedata
 import uuid
 from contextlib import contextmanager
@@ -182,6 +185,7 @@ class Refused(Exception):
 # --- a stop signal held while a commit runs (release 1 refutation round 2, disposal-0 to disposal-4) ----------------------
 
 STOP_CANCEL_SECONDS = 5.0  # how long the cancel request for a statement in flight may take (psycopg's own, on Ctrl-C)
+STOP_WATCH_SECONDS = 0.0005  # how often a statement a stop signal came just before is looked at until it is in flight
 
 
 class StopSignalHold:
@@ -195,13 +199,24 @@ class StopSignalHold:
                         run's record go to their end, until the command's next safe point. Once a run committed, nothing
                         releases it before the command has recorded and printed what the run did.
         cancelling()    after a destruction's commit, while its files are removed, its VACUUM (ANALYZE) runs and its
-                        counts are taken: a stop signal also cancels the statement in flight - a cancel request, so the
-                        statement ends on an error the step records and the connection answers again - and the steps left
-                        are skipped (``pending``), so a stop is never held for long. Never around a statement that writes.
-        safe_point()    one of the command's own: a kept stop signal is raised there, before a replay's next ledger entry
-                        and once the command printed everything; with none, a signal raises where the command is again,
-                        until the next hold().
+                        counts are taken: the steps stop at the next safe point - the next file (_remove_files), the next
+                        statement (before_statement: once a stop signal was kept no statement is sent, refutation round 3,
+                        disposal-1) - and the steps left are skipped (``pending``); a stop signal also cancels the
+                        statement in flight - a cancel request, so the statement ends on an error the step records and the
+                        connection answers again - and one it came just before, as it was handed to psycopg, once it is in
+                        flight (_cancel_once_sent). Never around a statement that writes.
+        safe_point()    one of the command's own: a kept stop signal is raised there - before a replay's next ledger
+                        entry, once a plan's row is printed (before its manifest is read again: refutation round 3,
+                        disposal-0) and once the command printed everything; with none, a signal raises where the command
+                        is again, until the next hold().
         keep()          the command's handler asks it first: whether the signal was kept.
+
+    The longest a stop signal is held (refutation round 3): close's commit, or a plan's row (its INSERT), and the lines
+    that print it - a plan's manifest is read and printed again unheld, so a signal then ends the command between two
+    chunks of a file; a destruction's commit, then the step after it under way up to its next safe point - one file's
+    deletion, or STOP_CANCEL_SECONDS for the cancel of its statement in flight - and then the run's record, whose count
+    of the audit rows kept and whose INSERT run to their end (the record is what the hold is for), and its certificate's
+    print; a replay, its ledger rows' commit, then each entry as a destruction, acted on before the next entry.
 
     Armed by the command alone (reset): a caller of this module that is not the command holds nothing."""
 
@@ -210,6 +225,9 @@ class StopSignalHold:
 
     def reset(self, *, armed):
         self.armed, self.holding, self.cancels, self.pending, self._cancelling = armed, False, False, None, False
+        # the connection a statement of the steps after a commit is being handed to (before_statement), and the thread
+        # that cancels it once it is in flight when a stop signal came just before (_cancel_once_sent)
+        self.sending, self._watcher = None, None
 
     def hold(self) -> bool:
         """From here a stop signal is kept (see the class); True, so a commit's mark can be this very call."""
@@ -219,17 +237,40 @@ class StopSignalHold:
 
     @contextmanager
     def cancelling(self):
-        """While the body runs, a stop signal also cancels the statement in flight (see the class)."""
+        """While the body runs, a stop signal also cancels the statement in flight, and - armed - no statement is sent
+        once one was kept (before_statement; see the class)."""
         before, self.cancels = self.cancels, True
         try:
-            yield
+            if self.armed:
+                with connection.execute_wrapper(self.before_statement):
+                    yield
+            else:
+                yield
         finally:
             self.cancels = before
 
+    def before_statement(self, execute, sql, params, many, context):
+        """cancelling()'s execute wrapper, around each statement of the steps after a commit: a safe point - a stop
+        signal kept already ends the step here (raised), and the statement is never sent (refutation round 3,
+        disposal-1: one landing between two statements no longer lets the next run, a VACUUM or a count waiting on
+        another session's lock with it). While the statement is handed to psycopg, ``sending`` names the connection, so a
+        stop that comes before it is in flight has it cancelled once it is (keep); that thread is waited for before this
+        returns, so no cancel request outlives its statement to reach the next one."""
+        self.sending = connection.connection
+        try:
+            if self.pending is not None:
+                raise self.pending
+            return execute(sql, params, many, context)
+        finally:
+            self.sending = None
+            watcher, self._watcher = self._watcher, None
+            if watcher is not None:
+                watcher.join(STOP_CANCEL_SECONDS + 1)
+
     def keep(self, interrupt) -> bool:
         """The command's handler: True when ``interrupt`` (the stop signal's) is kept - the first one, acted on at the
-        command's next safe point - and the statement in flight cancelled where cancelling() says so; False when the
-        handler raises it where the command is."""
+        command's next safe point - and, where cancelling() says so, the statement in flight cancelled, or the one
+        being handed to psycopg cancelled once it is in flight; False when the handler raises it where the command is."""
         if not (self.armed and self.holding):
             return False
         if self.pending is None:
@@ -237,7 +278,8 @@ class StopSignalHold:
         if self.cancels and not self._cancelling:
             self._cancelling = True
             try:
-                _cancel_statement_in_flight()
+                if not _cancel_statement_in_flight() and self.sending is not None and self._watcher is None:
+                    self._watcher = _cancel_once_sent(self, self.sending)
             finally:
                 self._cancelling = False
         return True
@@ -254,16 +296,44 @@ class StopSignalHold:
 STOP_SIGNAL_HOLD = StopSignalHold()
 
 
-def _cancel_statement_in_flight() -> None:
+def _cancel_statement_in_flight() -> bool:
     """A cancel request for the statement this thread's connection has in flight, if one is (as psycopg sends on
     Ctrl-C): the statement ends on an error result, read as one, so the connection answers again - nothing is raised
-    through psycopg. Never raises: a statement that is not cancelled runs to its end, and the stop waits for it."""
+    through psycopg. Whether a cancel was sent. Never raises: a statement that is not cancelled runs to its end, and the
+    stop waits for it."""
     try:
         raw = connection.connection
         if raw is not None and raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
             raw.cancel_safe(timeout=STOP_CANCEL_SECONDS)
+            return True
     except Exception:  # noqa: BLE001 - see above
         pass
+    return False
+
+
+def _cancel_once_sent(hold, raw):
+    """A thread cancelling the statement the connection ``raw`` was being handed as a stop signal came (keep: not in
+    flight yet, so no cancel could reach it) once it is in flight - as psycopg's cancel requests are made to be sent
+    while the connection is busy - for as long as hold.before_statement still hands that statement over, and
+    STOP_CANCEL_SECONDS at most; None when no thread could be started. before_statement waits for the thread, so no other
+    statement is sent meanwhile. Never raises (it runs in the signal handler): a statement that is not cancelled runs to
+    its end, and the stop waits for it."""
+    def watch():
+        deadline = time.monotonic() + STOP_CANCEL_SECONDS
+        try:
+            while hold.sending is raw and time.monotonic() < deadline:
+                if raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
+                    raw.cancel_safe(timeout=STOP_CANCEL_SECONDS)
+                    return
+                time.sleep(STOP_WATCH_SECONDS)
+        except Exception:  # noqa: BLE001 - see above
+            pass
+    try:
+        thread = threading.Thread(target=watch, name='dispose-stop-cancel', daemon=True)
+        thread.start()
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    return thread
 
 
 # --- who, why and under which authority ------------------------------------------------------------------------------------
@@ -947,8 +1017,9 @@ def _after_commit(scope, outcome) -> None:
     interrupt (Ctrl-C, a stop signal: any BaseException) is not caught here but by destroy's guard, which records it and
     keeps it in ``outcome.interrupted`` for _run to raise again once the run is recorded; one kept already (by
     _count_left) skips the steps left. Either way the run ends 'failed', with what is known. A stop signal destroy holds
-    from its commit on (STOP_SIGNAL_HOLD: it cancelled the statement in flight) is one too, recorded as the problem of the
-    step it came in."""
+    from its commit on (STOP_SIGNAL_HOLD) is one too, recorded as the problem of the step it came in: the step stopped at
+    its next file, or at its next statement, which is then never sent (raised there, it reaches destroy's guard as an
+    interrupt does), or its statement in flight was cancelled."""
     def files():
         _remove_files(scope, outcome)
 
