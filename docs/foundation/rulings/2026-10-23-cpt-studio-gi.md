@@ -4391,3 +4391,14 @@ was not measured). Both are put to him in the session at 16:15:09Z, with the ses
 with no real customer; in the next release such a file is refused with a message instead of losing a part). A draft of the
 declaration had said they were put to him at 15:50Z: that message never reached him, and the sentence was corrected before
 the commit. The act's app phase does not start without his yes; his answer is recorded with the act.
+
+### Owner direction, 2026-11-25 (738699b2) — no further yes; do what the install needs — DECISIONS D422
+
+> Stop asking my Yes just do what ever we need it to have to do
+
+At 17:30:15Z, in reply to the pending question on E2's two Word losses (put by name at 16:15:09Z with the session's
+recommendation, yes for this install, and "if you say no, I hold the install"). Read as: yes to both losses (class b), and a
+direction to run the install at its hour without waiting for a further word from him. The declaration of release 1's install
+is amended before any phase: app does not wait for his presence, and at the window's end no phase up to app starts any more,
+without asking him (the act then ends); issue-enrolment still waits for him, since only he can enrol and the code lives 30 minutes. Not read as permission to delete data, to spend or
+agree anything, or to make or hand out a key.

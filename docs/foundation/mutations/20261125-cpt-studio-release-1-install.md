@@ -11,7 +11,8 @@ paragraph requires (register A28) is its own section below, before the stop cond
 
 Authority: the owner's directions of 2026-11-23 and 2026-11-24 recorded verbatim, with this programme's interpretation,
 in docs/foundation/rulings/2026-10-23-cpt-studio-gi.md (its D399-D415, D417 and D418 sections, landed with PR #1525; its
-D419, D420 and D421 sections and the correction of D412's weekday, with this declaration's PR) and RULINGS.md rows; the build
+D419, D420, D421 and D422 sections and the correction of D412's weekday, with this declaration's PRs, #1527 and the one that
+amends it) and RULINGS.md rows; the build
 specification is /home/claude/cpt-studio-hipaa-20261124/RELEASE-1-SPEC.md (outside the repository; its section 6 is this
 install):
 
@@ -55,20 +56,25 @@ install):
   stop signal never raised between a destroying transaction's commit and its recorded outcome. Recorded, not repaired,
   each low: failclosed-9, rollback-4, rollback-5, coding-0, coding-1, phi-2, secondfactor-0, -2 and -3. D409: this
   install takes no copy of live (below). D410, D414-D416: refutation rounds 3 and 4 and their repairs (below).
-- The owner's answers for this act (D411-D413, D417 and D419): the security official is Kasra Rayat (D411; what he
+- The owner's answers for this act (D411-D413, D417, D419 and D422): the security official is Kasra Rayat (D411; what he
   accepted is D417's eight items and D419's five points, each named under "The residual risk" below, and E2's Word
   refusals and removal only as the owner decisions below record his answer); the two manage
   acts are signed BY "Kasra Rayat" (--by) and run by session 738699b2; the window is Wednesday 2026-11-25, 11:00
-  AM-12:00 PM Pacific (19:00-20:00 UTC), the hour the act starts in with the owner at his computer: the session's
+  AM-12:00 PM Pacific (19:00-20:00 UTC), the hour the act starts in: the session's
   reading of his "tommarrow mortning is perfect ... liek around 11 or 12am pacefic time" ("12am" read as noon; put to
-  him in the session at 2026-11-25T02:42:46Z and not corrected; his word before app, below, is the confirmation D412
-  left open; D412's record and one of the session's messages called that day Tuesday, a slip he was told of in the
+  him in the session at 2026-11-25T02:42:46Z and not corrected; his D422 direction, in reply to messages that named
+  11:00 AM Pacific, is read as the confirmation D412 left open; D412's record and one of the session's messages called that day Tuesday, a slip he was told of in the
   message D419 answers, its correction appended to DECISIONS.md and to the rulings file); the operator's second factor
   is a passkey on the owner's computer (D3 changed), the ten recovery codes its backup; no session reads, shows or
   prints the setup code - the owner reads it himself on the server; and D419 is his "yes", at 2026-11-25 15:27:28Z, to
   five points the session put to him: (1) the install folder's 23 earlier full copies of the live database, (2) no copy
   of live taken before this install, so none to restore if data itself were lost, (3) D10's loss, (4) the Word limits
-  and (5) D22, each below.
+  and (5) D22, each below; and D422 is his direction, at 2026-11-25 17:30:15Z, in reply to the question on E2's two Word
+  losses: "Stop asking my Yes just do what ever we need it to have to do" - read as yes to both, and as the direction to run
+  this act at its hour without waiting for a further word from him; it is not read as permission to delete data, to spend
+  or agree anything, or to make or hand out a key. This declaration, first committed as 2e71431b568c, is amended by it
+  before any phase: what waited for his word no longer does, but his own enrolment and, were one ever found, the removal of a stored
+  file (class d; the stop conditions).
 
 The owner decisions of RELEASE-1-SPEC section 8 stand at their recommended answers until the owner rules, but for what is
 put off: D22's act (below) and, to release 1b, D16's wiring (F1) and D29's workflow (A12) (cptstudio/settings.py says so
@@ -86,8 +92,8 @@ D401; RELEASE-1-SPEC section 9 item 15, the cap against the synthetic acceptance
 was not confirmed - that set stays sealed; E2's refusals and the imported document it takes out (w:altChunk), in the same
 line, also class b, are not among D419's points: put to him in the session at 2026-11-25T16:15:09Z, each in plain words (a file damaged inside or built in a way Word does not
 produce, refused; a document inserted whole into a Word file, left out of the PDF with no notice), with the session's
-recommendation (yes for this install, no real customer; such a file refused with a message in the next release), and not
-answered by this commit: app does not start before his yes is recorded (D421)). Not decided by
+recommendation (yes for this install, no real customer; such a file refused with a message in the next release), and
+answered at 2026-11-25T17:30:15Z with "Stop asking my Yes just do what ever we need it to have to do": read as yes to both, an accepted-capability loss (D422)). Not decided by
 the owner in words: D1 (a: the idle limits), the session's recommended answer, shown to him on 2026-11-24 and not ruled
 (D402's list); D15 (a: owners alone see their team), D20 (a: the recovery codes kept by him, as D411's record reads his
 naming as the security official and as he was told on 2026-11-25, D417 (7); the reset from the server is
@@ -127,7 +133,8 @@ It stands on the standing directions this install keeps:
   package; what LibreOffice 7.4 shows of one was not measured), and a Word file that converts today is refused
   ("The Word file could not be opened.") when a part
   inflates over 32 MiB or the package over 64 MiB (E1, the class-b loss of D419 (4); 6ab8e503a400: 512 MiB in all, no
-  limit per part), or a part is not the size its zip header says (E1, not among D419's points), when a part other than an
+  limit per part), or a part is not the size its zip header says (E1, not among D419's points; put to him with E2's as a file damaged inside,
+  D421 and D422), when a part other than an
   SVG picture declares a DTD, when a part holding field or object markup is not well-formed XML, when a field to be
   removed is not closed, or when what is to be removed declares namespaces of its own or lies in a part that is not UTF-8
   or that cannot be edited safely (E2); a converter that is down
@@ -214,7 +221,9 @@ Phases, in this order:
 13. manage, act_r1.sh's issue-enrolment: `--command issue-enrolment --username platform-operator --reason-file /home/claude/cpt-r1-20261124/release/reasons/issue-enrolment.txt --by "Kasra Rayat"`.
 
 Then, not phases and in this order: the live check (live_check_r1.py), post_check_r1.sh once, and the owner's own
-enrolment on admin.quillmd.com inside the setup code's 30 minutes (below).
+enrolment on admin.quillmd.com inside the setup code's 30 minutes (below). When he is not there, item 13 waits for him, and
+the live check and a first post-check run before it, and post_check_r1.sh again after it (the stop conditions say how each is
+judged).
 <!-- act_r1.sh: its case statement (ARGS per phase; INSTALLER_PHASE=manage for the two acts); post_check_r1.sh's header
 ("after app, verify, the two manage acts and the live check") -->
 
@@ -252,7 +261,7 @@ The installer gives the web and the worker the same coder settings as the live p
 defaults, unchanged by this release (effort max, the 25 US dollar per-document ceiling, 4 documents at once).
 <!-- install.py: runtime_env, CODING_EFFORT, coding_figures; the settings.py diff touches neither figure -->
 
-Run them from a clean, detached checkout of the merge commit that lands this declaration
+Run them from a clean, detached checkout of the merge commit that lands this declaration as amended (the amending PR's, not #1527's c8c8ed3d9ad3)
 (/opt/meddoc-pro/.worktrees/cpt-r1-act-20261125). That commit must be a descendant of the revision that changes
 nothing under cpt-studio/, scripts/run-ruled-mutation.sh, scripts/lib/ or scripts/check-cotenants.sh. Read each receipt
 before the next phase.
@@ -556,7 +565,7 @@ live_check_r1.py 084649de4c13c248, and lead/measure/measure_pre_counts.sh b4cb86
 alone, for the counts read before this commit); release 2's baseline_i.sh fb6ae0e5f0d96fa5 and
 install-judge/live_baseline_j.sh 791ef3b531021b6c, unchanged.
 
-## Baseline (read-only, `2026-11-25T16:27:37Z`; re-read immediately before the commit that lands this declaration; this act's preflight receipt and pre_app_r1.sh are binding)
+## Baseline (read-only, `2026-11-25T17:42:41Z`; re-read immediately before the commit that lands this declaration; this act's preflight receipt and pre_app_r1.sh are binding)
 
 Read with these commands, all read-only (SELECT and SHOW only, in a read-only transaction, through the database
 container's own psql; the container's own cgroup files and docker inspect; counts, names and states only, never a
@@ -584,7 +593,7 @@ postgres:17.11-alpine on 127.0.0.1:55451, no cpt-studio-converter; ingress quill
 1672b98db8cf... behind the link /etc/nginx/sites-available/quillmd-cpt; admin.quillmd.com and cpt.quillmd.com served
 the cpt-studio certificate (exactly those two names), app.quillmd.com QuillMD's. -->
 
-    read_at 2026-11-25T16:27:37Z
+    read_at 2026-11-25T17:42:41Z
     transaction_read_only on
     encounters 101
     revisions 102
@@ -689,7 +698,7 @@ the cpt-studio certificate (exactly those two names), app.quillmd.com QuillMD's.
     job review2 succeeded 2
     runs_unreconciled_unknown 0
     runs_reserved_or_sending 0
-    last_audit operator.password_reset 2026-11-24T22:50:50Z 63407
+    last_audit operator.password_reset 2026-11-24T22:50:50Z 67911
     account demo-reviewer human t reviewer t
     account ops-agent agent t  
     account owner human t owner t
@@ -828,8 +837,8 @@ the cpt-studio certificate (exactly those two names), app.quillmd.com QuillMD's.
     🟢 every judged co-tenant answers its expected status (4 distinct codes — the probe discriminates).
     --- containers
     cpt-studio-db postgres:17.11-alpine Up 10 days 127.0.0.1:55451->5432/tcp
-    cpt-studio-web 6ee79ec888ac Up 45 hours (healthy) 127.0.0.1:9151->8000/tcp
-    cpt-studio-worker 6ee79ec888ac Up 45 hours 8000/tcp
+    cpt-studio-web 6ee79ec888ac Up 46 hours (healthy) 127.0.0.1:9151->8000/tcp
+    cpt-studio-worker 6ee79ec888ac Up 46 hours 8000/tcp
     --- image
     sha256:6ee79ec888ac27e9bf6f9508508bd1bd2b0f0acac185259e4448d0ed2ed27d6c 6ab8e503a40050c08c01c965441fa56583fb5e03
     --- ingress
@@ -1010,8 +1019,8 @@ H_JOURNAL, _LOG_DIRS, LOG_KEEP_DAYS -->
   over an hour old removed; stale conversion folders removed) with its SecurityEvents `maintenance.daily` and
   `maintenance.daily_files_removed`, and the weekly check reading up to 200 stored originals and 200 converted PDFs again
   against their sha256, with `maintenance.originals_verified` and one `storage.original_mismatch` per file missing,
-  changed or unreadable (expected none). The daily run's counts are declared here, read read-only 2026-11-25T16:27:39Z,
-  before this declaration was committed, by lead/measure/measure_pre_counts.sh (its step is pre_app_r1.sh's own step 2;
+  changed or unreadable (expected none). The daily run's counts are declared here, read read-only 2026-11-25T17:42:43Z,
+  before this amended text was committed, by lead/measure/measure_pre_counts.sh (its step is pre_app_r1.sh's own step 2;
   pre_app_r1.sh's log cannot exist earlier, since it needs this declaration and the built image): `orphans=0 unexpected=0 missing=0 past_retention=0` (and names_hashed_rows=0).
   pre_app_r1.sh's reading at the act is the binding one (above). The declared count of orphan files is 0, so the first
   maintenance run removes no stored file; if it were ever more than 0, the owner is asked before any stored file is
@@ -1144,7 +1153,8 @@ stays 0: the live check reads the list once and one document's detail once. -->
 
 ## After the install: the live check (ordinary use, not a phase)
 
-cpt-r1-20261124/release/live_check_r1.py, once, after both manage acts, as
+cpt-r1-20261124/release/live_check_r1.py, once, after both manage acts (after revoke-ops-agent alone while the owner is not
+there: the stop conditions), as
 `python3 -I /home/claude/cpt-r1-20261124/release/live_check_r1.py --tree /opt/meddoc-pro/.worktrees/cpt-r1-act-20261125/cpt-studio --revision 816045c7264481bc6956285e1ca89991b9fcec2f --customer-credentials /home/claude/.cpt-studio/agent-credentials.json --encounter 6c450473-ceb7-4f06-8660-d5794a3cb777 --out /home/claude/cpt-r1-20261124/release/act/live-check-20261125`
 (the walk's own synthetic review agent; the file is the installer's credentials document, and the one account in its
 `accounts` list is read for its username and password - a flat document is read too - and nothing of either is printed;
@@ -1183,11 +1193,12 @@ lost sign-in answer or sign-out, studio_sessionaccountlink), judged by the two r
 give_back, the rows stay), read_audit.record via api.py, session_store.SessionStore.save/delete (_delete_row_and_links).
 The code suggests AccessRecord 2, RateWindow 3 and SessionAccountLink 0; only the rehearsal's measurement is declared. -->
 
-Then post_check_r1.sh once, with the expected-deltas file above.
+Then post_check_r1.sh, with the expected-deltas file above: once, after both manage acts; when the owner is not there, a first
+time after the live check and again after issue-enrolment (the stop conditions).
 
 ## Then: the owner's enrolment (his own act, inside the code's 30 minutes)
 
-Once the post-check has ended, the owner reads the code from /etc/cpt-studio/operator-enrolment.json and enrols at
+Once the post-check that follows issue-enrolment has ended, the owner reads the code from /etc/cpt-studio/operator-enrolment.json and enrols at
 https://admin.quillmd.com/login/enrol (above). It writes, as his own activity and outside the post-check: the setup code
 used, a claim token made and used, and one used webauthn_challenge token for the key's prompt (OneTimeToken +2; one
 more, unused, per prompt cancelled and asked again within 5 minutes; a further key's or a later sign-in's challenge
@@ -1247,7 +1258,8 @@ exit 0 (three files, nothing new); license-note exit 0, updated 0; verify exit 0
 revocation's sentence, by Kasra Rayat, the reason's sha256 73eb23da67ae05ae67df8b8bc23548942fe4f70e1aa53fb7e2efb0950b9c72ed); issue-enrolment exit 0 (setup_code.file
 /etc/cpt-studio/operator-enrolment.json, valid_seconds 1800; the reason's sha256 3ccb66cd5c9ca979d9dbd9f06d418369c8f606fbb30ee448cf512beface01c44); the live check
 25 of 25; post_check_r1.sh with /home/claude/cpt-r1-20261124/release/expected-deltas-20261125.txt: exit 0, 0 unexpected; scripts/check-cotenants.sh. Afterwards,
-the owner's enrolment read as above. post_check_r1.sh runs once, after the live check: run after verify it would report
+the owner's enrolment read as above. post_check_r1.sh runs after the live check, once - or, when the owner was not there, a first time before issue-enrolment
+(then exit 1 on the setup code's two rows: the stop conditions) and again after it: run after verify it would report
 ops-agent's standing grant and the declared rows as findings.
 
 ## Rollback per phase, and its limits
@@ -1509,7 +1521,7 @@ back every weakness release 1 closes for as long as it runs; the console now dep
 
 **The residual risk** is the list above, the spec's section 7 and "What is not claimed". Of it Kasra Rayat (the security
 official, D411) accepted in words only what he was shown: the eight items of D417 and the five points of D419 (E2's Word
-refusals and the imported document it takes out, costs named above, stand as the owner decisions record his answer). D417's
+refusals and the imported document it takes out, costs named above, stand as the owner decisions record his answer, D422). D417's
 were put to him in plain words on 2026-11-25 at 07:08Z and accepted at 07:46Z (his message carries no date; the record
 dates it) as "ia ccept thye risk dont worry we are in test phase we got no real customer keep that gap ill fix it
 later": (1) the shared server until the new one, with no off-site backup and no outside alerts; (2) stored files not
@@ -1580,20 +1592,31 @@ answered (D417, D419) and are not part of his acceptance above.
   container, no build-cache prune), as D329 (5) declined its prune. A QuillMD container it reads unhealthy, or a host it
   reads 502, 503 or 504, is a stop, decided by hand; a yellow flag alone (disk, memory, load, swap) is not.
 - The door's ceiling reached.
-- The owner not having said, in the session on the day, that the hour holds and he is at his computer: app does not
-  start before he has (from S3 the console is closed until he enrols, and the setup code lives 30 minutes), and
-  issue-enrolment is not run before he says he is on the server over SSH with admin.quillmd.com open. His word, and E2's
-  yes, are had before phase 7's preflight; when either comes later, or app has not started within 15 minutes of PRE-APP
-  PASS, preflight and pre_app_r1.sh run again first, each under a new TAG: a co-tenant deploy since the newest preflight
-  spends app's one attempt (the installer compares with it only after migrate).
-- The end of the announced window (Wednesday 2026-11-25, 19:00-20:00Z): no changing phase starts after 20:00Z without
-  his word, but for switch-back and rollback-app, the incident paths, which neither the hour nor his absence holds back.
-  Once app has ended exit 0, the phases after it are completed whatever the hour, never left half done - but
-  issue-enrolment, and with it the live check and the post-check, wait for him as above: one that starts or ends after
-  20:00Z is not a difference.
-- What the security official was shown (D417's eight items and D419's five points, in the evaluation) not accepted by
-    him, on the record, before the commit; or E2's Word refusals and its removal of an imported document (class b, the D358 line) not put to him by
-  name and accepted by him, in words and on the record, before app: app does not start without that yes.
+- The owner is waited for in one place only, his own enrolment (D422; the removal of a stored file stays his, class d, above: the
+  act stops for it): the act runs at its hour, and app starts whether or not
+  he is there (from S3 the console is closed until he enrols). issue-enrolment is run once he says he is ready (told at
+  2026-11-25T17:33:15Z to write "ready"; he needs the server over SSH and admin.quillmd.com open), since the setup code lives
+  30 minutes. While he is not there, the live check runs after
+  revoke-ops-agent, and post_check_r1.sh after it, which then ends exit 1 on exactly the two rows the setup code makes
+  (r1_table studio_onetimetoken 0 where the table reads 1, r1_table studio_securityevent 5 where it reads 6) and is judged
+  by them; any other difference, but a member's own activity (above) and the rows of a second live check (its section), is a finding.
+  post_check_r1.sh runs again after issue-enrolment, before he reads the code: exit 0, unless the worker's next daily run (due 24
+  hours after the first) came before it. Then it exits 1 on the later runs' own records alone - r1_table studio_securityevent 6
+  plus 2 per later daily run and 1 per later weekly check, r1_table studio_ratewindow 0 from the second later daily run (which
+  prunes the live check's three), and the maintenance read, which takes the first run's two records alone - and is judged by
+  them, as a first post-check run that late is. A host daemon-reload since (db_cgroup memory.swap.max max: What is not claimed)
+  is decided under a new declaration, as there. Neither holds back his enrolment. When app has not
+  started within 15 minutes of PRE-APP PASS, preflight and pre_app_r1.sh run again first, each under a new TAG: a co-tenant
+  deploy since the newest preflight spends app's one attempt (the installer compares with it only after migrate).
+- The end of the announced window (Wednesday 2026-11-25, 19:00-20:00Z): no changing phase up to app starts after 20:00Z (the act then
+  ends and a new declaration names another hour), but for switch-back and rollback-app, the incident paths, which neither the
+  hour nor his absence holds back. Once app has ended exit 0, the phases after it are completed whatever the hour, never left
+  half done - issue-enrolment when the owner is there, as above: one that starts or ends after 20:00Z is not a difference. Until
+  he comes the act's report is written on the first post-check as judged, naming issue-enrolment as waiting and the console as
+  closed; it is run under this declaration when he comes, but never after a switch-back (act_r1.sh refuses it).
+- What the security official was shown (D417's eight items and D419's five points, in the evaluation, and E2's two Word losses,
+  class b, the D358 line: D422) not accepted by him, on the record, before the commit of this amended text (E2's at 17:30:15Z,
+  after 2e71431b568c and before any phase).
 - quillmd.com, www.quillmd.com, app.quillmd.com or pro.quillmd.com changing its answer or certificate, or
   app.quillmd.com's health; admin.quillmd.com answering anything but the console's 302 to /login/ with the cpt-studio
   certificate.
