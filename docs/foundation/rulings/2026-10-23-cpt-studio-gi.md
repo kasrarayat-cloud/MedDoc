@@ -4399,6 +4399,6 @@ the commit. The act's app phase does not start without his yes; his answer is re
 At 17:30:15Z, in reply to the pending question on E2's two Word losses (put by name at 16:15:09Z with the session's
 recommendation, yes for this install, and "if you say no, I hold the install"). Read as: yes to both losses (class b), and a
 direction to run the install at its hour without waiting for a further word from him. The declaration of release 1's install
-is amended before any phase: app does not wait for his presence, the window's end does not wait for his word; issue-enrolment
-still waits for him, since only he can enrol and the code lives 30 minutes. Not read as permission to delete data, to spend or
+is amended before any phase: app does not wait for his presence, and at the window's end no phase up to app starts any more,
+without asking him (the act then ends); issue-enrolment still waits for him, since only he can enrol and the code lives 30 minutes. Not read as permission to delete data, to spend or
 agree anything, or to make or hand out a key.
