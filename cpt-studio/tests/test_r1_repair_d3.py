@@ -277,3 +277,132 @@ class StatementSafePointUnitTests(SimpleTestCase):
                                                 None, False, {})
         self.assertEqual((result, seen), ('answer', [fake.connection]))
         self.assertIsNone(self.hold.sending)
+
+
+# --- D3-2: the daily run's session cleanup commits first (disposal-2, regression-0, locks-2) -------------------------------
+
+CPT = 'cpt.quillmd.com'
+PASSWORD = 'synthetic-pass-123!'  # tests.support.coding.user's
+NAMES = 4000  # unmatched names to hash: the recorded transaction stays open for seconds while a sign-in comes
+
+
+@override_settings(STORAGES=d2.PLAIN)
+class DailySignInTests(TransactionTestCase):
+    """A member whose earlier session at the cpt door expired (its link left for the daily run), a backlog of NAMES
+    unmatched sign-in names 35 days old, maintenance.run_daily() - the worker's call - in a thread and a connection of
+    its own, and, once another session sees it hashing those names, the member signs in again through /login/, or the
+    account's sessions are ended (a password change's, sign out everywhere's). At the head each waited on the dead link
+    the run had deleted until the whole run committed."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name) / 'originals'
+        root.mkdir(mode=0o700)
+        work = Path(folder.name) / 'work'
+        work.mkdir(mode=0o700)
+        override = override_settings(ORIGINALS_DIR=root)
+        override.enable()
+        self.addCleanup(override.disable)
+        patcher = mock.patch('tempfile.gettempdir', return_value=str(work))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def sign_in(self, user):
+        client = Client(HTTP_HOST=CPT, REMOTE_ADDR='198.51.100.7')
+        return client.post('/login/', {'username': user.get_username(), 'password': PASSWORD}).status_code, client
+
+    def returning_member(self, *, live=False):
+        """A member whose last session at the cpt door expired yesterday - its link dead, left for the daily run - and
+        with ``live`` one more session signed in before it (first: a later sign-in's cap removes a dead link). (the
+        member, the expired session's key)."""
+        user = f.member(f.workspace('Synthetic practice r1repd3 daily'))
+        if live:
+            self.assertEqual(self.sign_in(user)[0], 302)
+        status, client = self.sign_in(user)
+        self.assertEqual(status, 302)
+        key = client.cookies[settings.SESSION_COOKIE_NAME].value
+        Session.objects.filter(session_key=key).update(expire_date=timezone.now() - timedelta(days=1))
+        self.assertEqual(models.SessionAccountLink.objects.filter(session_key=key).count(), 1)  # the dead link
+        return user, key
+
+    def backlog(self):
+        models.LoginAttempt.objects.bulk_create(
+            [models.LoginAttempt(username=f'r1repd3-typed-{number}@example.invalid', client='192.0.2.10',
+                                 succeeded=False) for number in range(NAMES)], batch_size=2000)
+        models.LoginAttempt.objects.filter(username__startswith='r1repd3-typed-').update(
+            created_at=timezone.now() - timedelta(days=35))
+
+    def during_the_daily_run(self, act):
+        """``act()`` once another session sees the daily run hash names: (its answer, its seconds, how long before the
+        daily run's end it ended, the run's counts)."""
+        times, found = {}, {}
+
+        def daily():
+            try:
+                found['counts'] = maintenance.run_daily()
+            finally:
+                times['daily_end'] = time.monotonic()
+                connections.close_all()
+
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT pg_backend_pid()')
+            own = cursor.fetchone()[0]
+        watcher, worker = other_session(autocommit=True), threading.Thread(target=daily)
+        try:
+            worker.start()
+            deadline, hashing = time.monotonic() + 120, False
+            while worker.is_alive() and time.monotonic() < deadline and not hashing:
+                hashing = watcher.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() "
+                    "AND pid <> %s AND query LIKE 'UPDATE \"studio_loginattempt\"%%'", [own]).fetchone()[0] > 0
+                time.sleep(0.005)
+            self.assertTrue(hashing, 'the daily run was never seen hashing names')
+            started = time.monotonic()
+            answer = act()
+            ended = time.monotonic()
+        finally:
+            worker.join(300)
+            watcher.close()
+        self.assertIn('counts', found)
+        return answer, ended - started, times['daily_end'] - ended, found['counts']
+
+    def assert_not_waiting(self, seconds, before_the_end):
+        self.assertLess(seconds, 3, f'it took {seconds:.2f} s')
+        self.assertGreater(before_the_end, 0.5, 'it ended only as the daily run committed')
+
+    def test_disposal_2_a_returning_members_sign_in_never_waits_for_the_daily_run(self):
+        user, old_key = self.returning_member()
+        self.backlog()
+        status, seconds, before_the_end, counts = self.during_the_daily_run(lambda: self.sign_in(user)[0])
+        self.assertEqual(status, 302)
+        self.assert_not_waiting(seconds, before_the_end)
+        self.assertGreaterEqual(counts['session_links_pruned'], 1)  # the dead link: pruned, and counted in the record
+        self.assertEqual(counts['signin_names_hashed'], NAMES)
+        daily = models.SecurityEvent.objects.get(event=maintenance.DAILY_EVENT).data
+        self.assertEqual((daily['session_links_pruned'], daily['sessions_cleared'], daily['failed']),
+                         (counts['session_links_pruned'], counts['sessions_cleared'], []))
+        self.assertFalse(models.SessionAccountLink.objects.filter(session_key=old_key).exists())
+        self.assertFalse(Session.objects.filter(session_key=old_key).exists())
+
+    def test_regression_0_ending_an_accounts_sessions_never_waits_for_the_daily_run(self):
+        user, _ = self.returning_member(live=True)  # the live session is the one the end of its sessions ends
+        self.backlog()
+        ended, seconds, before_the_end, _ = self.during_the_daily_run(lambda: sessions.end_sessions(user))
+        self.assertEqual(ended, 1)
+        self.assert_not_waiting(seconds, before_the_end)
+        self.assertFalse(models.SessionAccountLink.objects.filter(account_id=user.pk).exists())
+
+    def test_a_failing_session_step_is_named_in_the_record_and_the_others_still_run(self):
+        user, old_key = self.returning_member()
+        with mock.patch.object(maintenance, 'clear_expired_sessions', side_effect=RuntimeError('synthetic')), \
+                self.assertLogs('studio.maintenance', 'ERROR') as logged:
+            counts = maintenance.run_daily()
+        self.assertIn('the daily maintenance step sessions_cleared failed (RuntimeError)',
+                      [record.getMessage() for record in logged.records])
+        daily = models.SecurityEvent.objects.get(event=maintenance.DAILY_EVENT).data
+        self.assertEqual((daily['failed'], counts['failed']), (['sessions_cleared'], ['sessions_cleared']))
+        self.assertNotIn('sessions_cleared', daily)
+        self.assertEqual(daily['session_links_pruned'], 1)  # the step before it committed, and is counted
+        self.assertFalse(models.SessionAccountLink.objects.filter(session_key=old_key).exists())
+        self.assertTrue(Session.objects.filter(session_key=old_key).exists())  # the failed step's: left as it was

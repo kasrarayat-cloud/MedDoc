@@ -13,10 +13,12 @@
                                        conversion folders removed, and LoginAttempt rows older than the retention
                                        removed (OWNER DECISION D25: six years, so in practice none). One SecurityEvent
                                        maintenance.daily holds the counts, and the names of any step that failed: the
-                                       rows go in one transaction with it, and the files once it has committed, so a
-                                       record that cannot be written leaves everything in place (refutation round 2);
-                                       one more, maintenance.daily_files_removed, then holds what the files' removal
-                                       did.
+                                       links and the expired sessions - sign-in state, not records - go first, each
+                                       step committed on its own (refutation round 3: a sign-in never waits for the
+                                       run); the other rows go in one transaction with the record, and the files once
+                                       it has committed, so a record that cannot be written leaves every record in
+                                       place (refutation round 2); one more, maintenance.daily_files_removed, then
+                                       holds what the files' removal did.
     verify_originals()                 the integrity check (164.312(c)(1)): a sample of stored originals and converted
                                        PDFs read again and their sha256 checked; each mismatch, missing or unreadable
                                        file writes a SecurityEvent storage.original_mismatch (ids only), and the run one
@@ -199,20 +201,36 @@ def run_daily(now=None) -> dict:
     """The daily maintenance (module docstring): every step runs even when another failed; one SecurityEvent
     maintenance.daily holds every count and the names of the steps that failed (their errors are logged by type).
 
-    What it deletes and its record commit together, or neither does (refutation round 2, records-2): the rows it removes
-    or rewrites - and the orphan sweep's dry run - in one transaction with that SecurityEvent, each step in a savepoint
-    of its own, so a failing step rolls back alone; a record that cannot be written rolls every one of them back. What
-    cannot be rolled back waits for that commit: the orphans the scan counted (sweep_orphans) are removed once the record
-    has committed, and so are the stale conversion folders (which the worker's tick removes every hour besides). What
-    they removed and what failed - sweep_deleted, sweep_failed, work_dirs_removed and the steps' names - then go in one
-    more SecurityEvent, REMOVED_EVENT, naming the run's record (daily: its id), and in the answer. That record is written
-    after the commit: one that cannot be written is logged by type and never raised, so it neither undoes the committed
-    run nor makes the next tick run it again (the run is not due for a day)."""
+    Sign-in state first (refutation round 3, disposal-2, regression-0 and locks-2): the session store's dead links and
+    the expired sessions - sign-in state, not records (studio.sessions) - are removed before the recorded transaction
+    begins, each step in a short transaction of its own, so no link or session it removes stays locked while the
+    recorded steps run (a sign-in's cap and the end of an account's sessions delete the same rows: they waited for the
+    whole run's commit). Their counts, or their names when they failed, go in the run's record; a record that cannot be
+    written leaves them removed.
+
+    What it deletes of the records and its record commit together, or neither does (refutation round 2, records-2): the
+    rows it removes or rewrites - and the orphan sweep's dry run - in one transaction with that SecurityEvent, each step
+    in a savepoint of its own, so a failing step rolls back alone; a record that cannot be written rolls every one of
+    them back. What cannot be rolled back waits for that commit: the orphans the scan counted (sweep_orphans) are removed
+    once the record has committed, and so are the stale conversion folders (which the worker's tick removes every hour
+    besides). What they removed and what failed - sweep_deleted, sweep_failed, work_dirs_removed and the steps' names -
+    then go in one more SecurityEvent, REMOVED_EVENT, naming the run's record (daily: its id), and in the answer. That
+    record is written after the commit: one that cannot be written is logged by type and never raised, so it neither
+    undoes the committed run nor makes the next tick run it again (the run is not due for a day)."""
     now = now or timezone.now()
     counts, failed, orphans, removed, removal_failed = {}, [], [], {}, []
-    steps = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
-             ('sessions_cleared', lambda: clear_expired_sessions(now)),
-             ('rate_windows_pruned', lambda: prune_rate_windows(now)),
+    sign_in_state = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
+                     ('sessions_cleared', lambda: clear_expired_sessions(now)))
+    for name, step in sign_in_state:
+        try:
+            with transaction.atomic():  # its own: committed before the next step, and before the recorded steps
+                result = step()
+        except Exception as exc:  # noqa: BLE001 - one step's failure never stops the others; logged by type
+            log.error('the daily maintenance step %s failed (%s)', name, type(exc).__name__)
+            failed.append(name)
+            continue
+        counts[name] = result  # once its transaction committed
+    steps = (('rate_windows_pruned', lambda: prune_rate_windows(now)),
              ('signin_names_hashed', lambda: hash_unmatched_signin_names(now)),
              ('login_attempts_pruned', lambda: prune_login_attempts(now)),
              ('orphan_sweep', lambda: scan_orphan_files(now=now)))
