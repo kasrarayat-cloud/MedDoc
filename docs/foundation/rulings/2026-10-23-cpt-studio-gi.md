@@ -4186,3 +4186,132 @@ is: it is a spent one-time act (its precondition, line 26 naming app.quillmd.com
 refuses before any write), and changing its expectation would change nothing that can run. The shared tree's copies of
 these scripts (/opt/meddoc-pro) follow main when QuillMD's deploy surface is next brought to it; until then they report
 admin.quillmd.com against the notice, which the release-2 declaration names.
+
+### Owner request, 2026-11-23 (738699b2) — audit security, speed and scale; the restyle and the orthopedic test set aside — DECISIONS D399
+
+After the admin console moved to admin.quillmd.com, the owner wrote, verbatim:
+
+> ive seen in Gi when i open the doc tabs it open slow and al ittle bit laggy my question is let say we get 1000 customer
+> to use our web site despite of vps is our websitre and admin secure enought against the attacks or any hidding login to
+> intruopt us and also what if 1000 customer uplaod more than 50 per day it would be 50000 fiels per day i want you to
+> audit and check every aspect of this situation i wanna make sure my site is secure and fast to use this is high
+> proirty for me and remove new custoemr design and orothopedic test casue i will take of it alter or i let you know
+> later not improtant
+
+Interpretation (session 738699b2): (a) a report-only audit of cpt.quillmd.com and admin.quillmd.com for security
+(hidden logins included), the GI document tabs' speed, and the load of 1,000 customers at 50 uploads a day; nothing
+fixed without the owner's go; (b) the doctor-app restyle and the Orthopedic Surgery acceptance test are removed from the
+priorities until the owner says otherwise. The report: cpt-studio-audit-20261124/REPORT.md (outside the repository).
+
+### Owner direction, 2026-11-24 (738699b2) — the host items wait for the new server; the code fixes do not — DECISIONS D400
+
+> PErfect ok for back alrtet and other thigns liek for releasing i will switch to the another better vps so we can
+> choose backup over there but after all of this report which one of this we can fix adn take care veen if we want to
+> move for another vps so we wouldnt feel heache and gap security
+
+Interpretation: backups, alerting and the host's own hardening (SSH, firewall, its own disk, no co-tenants) are set up
+on the new server; the code and installer fixes travel with the release and are worth doing now.
+
+### Owner direction, 2026-11-24 (738699b2) — a HIPAA job added before the releases
+
+> ok thats a perfect side also before we strating the jobs i want to also u downlaod the Hippa plugins anything that we
+> need for hippa and we have to make sure our website is Hippa as well what do you say for that i kinda want to add hippa
+> job too
+
+Interpretation: a HIPAA gap check of CPT Studio before the releases, its code items built into release 1 with the
+security fixes (the specification: cpt-studio-hipaa-20261124/RELEASE-1-SPEC.md, outside the repository); the policy and
+contract items drafted as paperwork for the owner or an advisor. CPT Studio stays synthetic-only until the BAA question
+is closed and release 1b's items (F1's wiring, A10, A12, D5, E4) are installed.
+
+### Owner direction, 2026-11-24 (738699b2) — start release 1, in parallel, the site kept online — DECISIONS D401
+
+> i already conatcting with claude for baa so strat the work waht very you needrun as much as any parrlerl or job you
+> need
+
+and, the same day:
+
+> make sure site is online dont turn if the live
+
+Interpretation: (a) the plan the owner approved runs: the HIPAA gap check, then release 1 (the security fixes and the
+HIPAA code items) built in parallel lanes in worktrees and through every gate, then the GI speed release, then growth,
+then the new server, then the paperwork; (b) the live site stays online throughout: every install is blue/green through
+the ruled-act door, the standby switch, never a stop; (c) the BAA with Anthropic is the owner's own contact; no
+agreement, key or payment is made by any session.
+
+### Session record, 2026-11-24 (738699b2) — release 1 built, refuted and repaired — DECISIONS D402-D407
+
+Recorded here at integration, not in the first commit of the work as the receiving-session rule asks (the directions
+above lived in DECISIONS.md, outside the repository, until this commit). Release 1's six lanes: Lane 1 (the foundation,
+#1522), Lane 5 (the Word conversion, #1523) and Lane 4 (data lifecycle, #1524) merged on their own; Lanes 2 (sign-in and
+the second factor), 3 (the console) and 6 (the installer and the nginx template) merged as one integration branch,
+because their halves must land together. Before any install: an integrated refutation of the whole release (nine
+read-only lenses and a verifier per finding: 50 findings, 39 real - one high, eleven medium), five repair builders, and
+a second round of refutation aimed at the repairs; a rehearsal on real components with synthetic data and on a
+restored copy of live (lead/rehearsal/RESULT.md, outside the repository). The lead's decisions on the repairs (D407):
+the Word inflation-ratio refusal removed (generated tables convert; crafted XML ends in the converter's own
+out-of-memory kill, other documents unaffected); a switch-back to a revision without disposal refused while a practice
+is closed or a document destroyed (so the first closure or destruction ends the way back to every revision before
+release 1: an accepted-capability loss the owner takes with the first disposal he orders); 20 live sessions per account
+per kind; 10 password checks per account per 15 minutes on /account/. Recorded, not repaired in release 1, each low:
+failclosed-9 (pre-existing on the coding path), rollback-5 (a password reset on the older console during a switch-back is
+not forced to change under release 1), rollback-4 (after a switch-back the verify tools report fail against the older
+revision: they speak release 1's client version).
+
+### Session record, 2026-11-24 (738699b2) — refutation round 2 and its repairs — DECISIONS D408
+
+Round 2 (nine lenses aimed at round 1's repairs, a verifier per finding) found 31 real findings: five medium, eleven of
+the 31 caused by round 1's repairs. One medium was a regression - the per-account session cap let someone holding only
+the operator's password end the operator's own pending sign-in - so the stopping rule (no high finding, no medium
+regression) was not met and a second repair round ran (four builders). The lead's decisions in it: the cap never ends a
+pending sign-in that can still complete; a signed-in session's link names its door, so the doctors' door never ends a
+console session; every change to one account's sessions takes that account's row lock first (the deadlocks); one
+ledger limit for the ledger and replay steps; no row-changing disposal step while a revision without disposal serves;
+rollback-app back to a revision without the session policy ends every session; the stop signal is never raised between
+a destroying transaction's commit and its recorded outcome. Recorded, not repaired, each low: coding-0 (D407's accepted
+memory cost), coding-1 (a second guard's gap: LibreOffice 7.4, the image's, and 24.2.7 render an INCLUDETEXT field's
+stored result and never read the named file), phi-2, secondfactor-0 (keep the operator account out of practices),
+secondfactor-2 (recovery codes are about 74 bits), secondfactor-3.
+
+### Owner answers, 2026-11-25 (738699b2) — the security officer, the act's signer, the operator's keys — DECISIONS D411
+
+> 1-Its my name Kasra 2- Fullname is Kasra Rayat 3- i didnt get the number 3 explain m,opre  4-two physical key i think
+
+Read as: the security officer is Kasra Rayat (he approves the release's ePHI evaluation and accepts its residual risk,
+and holds the recovery codes); the two operator acts are signed BY "Kasra Rayat"; the operator signs in with two
+physical FIDO2 security keys (OWNER DECISION D3), the first enrolled with the install's setup code and the second added
+on the console's security page. The install window was explained again; his answer is recorded with the act.
+
+### Owner answers, 2026-11-25 (738699b2) — the install window and a passkey — DECISIONS D412
+
+> ok tommarrow mortning is perfect if the jobs done tonight is godo as well liek around 11 or 12am pacefic time for keys
+> i dotn have it i use passkey and my com,puter
+
+Read as: the install runs on Tuesday 2026-11-25 around 11:00 AM-12:00 PM Pacific (19:00-20:00 UTC), the owner at his
+computer for the console's setup; the operator's second factor is a passkey on his computer instead of physical keys
+(OWNER DECISION D3, changed), with the ten recovery codes as its backup and a second passkey recommended.
+
+### Owner answer, 2026-11-25 (738699b2) — the setup code reaches the owner on the server — DECISIONS D413
+
+> A
+
+answering whether he reads the platform operator's setup code himself on the server (`sudo cat
+/etc/cpt-studio/operator-enrolment.json`) or has it shown in the session. Read as: no session reads, shows or prints the
+setup code; the owner reads it himself over SSH within its 30 minutes, and the act's report records only that it was
+issued.
+
+### Session record, 2026-11-25 (738699b2) — no copy of live; refutation rounds 3 and 4 — DECISIONS D409, D410, D414, D415
+
+The lead's decision (D409): release 1's install takes no copy of live. Its pre-app check reads live read-only (the
+applied migrations, table counts, the first maintenance run's expected counts), acceptable because its two migrations
+only add tables, nullable columns and non-unique indexes; the install's mechanics are rehearsed on synthetic data, and
+the live check opens a pinned synthetic walk document only (D361). The rehearsal dump of 2026-11-24 15:15Z
+(lead/rehearsal/live/live-20261124T151549Z.dump, outside the repository, mode 0600) may hold the real documents of
+2026-11-20: it is KEPT and entered in the release's copies register; destroying it is the owner's decision with counsel
+(class d), never a close-out step. Round 3 (D410: six lenses on round 2's repairs, 29 real findings, four medium, one a
+regression - a replay that could not run on a fresh host) and its four repair builders; round 4 (D414, D415: five lenses
+on round 3's repairs) found twelve real findings, all low, two of them regressions of round 3, so the stopping rule (no
+high, no medium regression) held for four of its five lenses; the lead repaired the cheap and exact lows and recorded the
+rest. Recorded, not repaired (low): concurrent attempts across a minute boundary can check one more password than a
+limit (the class of round 2's secondfactor-3); give_back's lost decrement across two minutes (errs strict); a wait
+message read from a second clock read at a boundary millisecond; the orphan sweep's partial record when a removal raises;
+a leftover one-shot whose second removal also fails.
