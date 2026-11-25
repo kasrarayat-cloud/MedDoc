@@ -4315,3 +4315,28 @@ rest. Recorded, not repaired (low): concurrent attempts across a minute boundary
 limit (the class of round 2's secondfactor-3); give_back's lost decrement across two minutes (errs strict); a wait
 message read from a second clock read at a boundary millisecond; the orphan sweep's partial record when a removal raises;
 a leftover one-shot whose second removal also fails.
+
+### Owner acceptance, 2026-11-25 (738699b2) — the residual risk of release 1's install — DECISIONS D417
+
+> ia ccept thye risk dont worry we are in test phase we got no real customer keep that gap ill fix it later
+
+Given in reply to the list of the risks that remain after release 1: the shared server with no off-site backup and no
+outside alerts (until the new server); stored files not encrypted and uploads not scanned until release 1b; doctors
+signing in with a password only; the Anthropic BAA still the owner's; the 2026-11-20 documents and the one kept rehearsal
+copy staying until the owner decides with counsel; a switch-back bringing the old weaknesses back while the older
+revision runs; the console depending on one passkey and its recovery codes; a handful of low findings recorded, not
+repaired. Read as: the security official, Kasra Rayat, accepts the residual risk of release 1's install on 2026-11-25,
+with the service in its test phase, synthetic-only, and no real customer; the gaps are recorded and fixed later on the
+owner's own timing. It asks for no code change.
+
+### Session record, 2026-11-25 (738699b2) — round 4's acts lens, and a stop the rehearsal's own order found — DECISIONS D418
+
+Round 4's acts lens (run alone after an API overload) found four findings, all low, each reproduced by the verifier on
+both trees: one is regression-0, repaired; three are recorded, not repaired - a deadlock of a doctor's sign-in (from a
+browser signed in as another account) with `require_password_change --all` or `provision`, whose account updates do not
+take the accounts in id order, so that ruled act rolls back whole (neither runs in this install); a sign-in whose own
+session another tab ended meanwhile, told the password is wrong and its attempt rewritten to no_access; and three places
+that hash a password under the account lock (setup's key step, about 0.8 s). With the four other lenses the stopping rule
+holds: no high finding and no medium regression. The rehearsal, run in the act's order (the db phase before the pre-app
+check), showed that pre_app_r1.sh stopped at the db phase's own declared changes; the earlier rehearsals ran it before
+that step, so it passed there. The check now requires exactly those declared changes and stops at any other.
