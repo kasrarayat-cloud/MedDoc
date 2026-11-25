@@ -63,14 +63,18 @@ done
 require_ran "$log" 'verification generator tests'
 require_module_passed "$log" test_generate 'The verification generator suite test_generate'
 # node counts a test FILE that registers no tests as one passing test, so a count alone proves nothing:
-# require the TAP summary, a pass floor at the committed count (18), and two named tests: one guards the
-# customer surface's denylist (no vendor or model name reaches a customer), one the operator gate.
+# require the TAP summary, a pass floor at the committed count (18), and three named tests: one guards the
+# customer surface's denylist (no vendor or model name reaches a customer), two the operator gate (release 1: the
+# console lives on the admin host and no operator reads an encounter on the doctors' site, A11 and D10, so the
+# doctors' side and the gate's own control are two tests; the old name, with 'and the operator reads the encounter',
+# is gone with that guarantee).
 node --test --test-reporter=tap ops/test_walk.cjs 2>&1 | tee "$log"
 node_pass=$(sed -nE 's/^# pass ([0-9]+)$/\1/p' "$log" | tail -n 1)
 node_failed=$(sed -nE 's/^# fail ([0-9]+)$/\1/p' "$log" | tail -n 1)
 if [[ -z "$node_pass" || "$node_pass" -lt 18 || "$node_failed" != 0 ]] \
     || ! grep -qE '^ok [0-9]+ - the denylist scan finds exactly what every vector of customer-denylist\.json says, as its other readers do$' "$log" \
-    || ! grep -qE '^ok [0-9]+ - every /ops/ path is 404 to the customer and never 200 to nobody, and the operator reads the encounter$' "$log"; then
+    || ! grep -qE "^ok [0-9]+ - every /ops/ path is 404 to the customer and never 200 to nobody, its POSTs with the session's CSRF token$" "$log" \
+    || ! grep -qE "^ok [0-9]+ - the operator gate's control needs no operator: the admin gate, the doctors' 404, the member refused \(A11\)$" "$log"; then
   echo "Browser-walk tests: passed ${node_pass:-none}, failed ${node_failed:-unknown}, or the named test did not run." >&2
   exit 1
 fi
