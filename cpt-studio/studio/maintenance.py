@@ -70,6 +70,7 @@ REMOVED_EVENT = 'maintenance.daily_files_removed'  # what the daily run removed 
 VERIFIED_EVENT = 'maintenance.originals_verified'
 MISMATCH_EVENT = 'storage.original_mismatch'
 SWEPT_EVENT = 'maintenance.orphans_swept'
+SWEEP_REMOVED_EVENT = 'maintenance.orphans_removed'  # what the sweep command removed once its record committed
 MISMATCH, MISSING, UNREADABLE = 'mismatch', 'missing', 'unreadable'
 
 
@@ -150,6 +151,30 @@ def remove_orphan_files(orphans) -> dict:
     for folder_name in sorted(removed):
         storage.sync_folder(root / folder_name)
     return counts
+
+
+def remove_swept_orphans(orphans, *, swept) -> dict:
+    """The sweep command's removal (sweep_orphan_files --delete), once its SWEPT_EVENT record ``swept`` - what the scan
+    found, recorded first, so a record the database refuses removes nothing (refutation round 2, records-2) - committed:
+    the orphans removed (remove_orphan_files), then what that did in one more SecurityEvent, SWEEP_REMOVED_EVENT, naming
+    the sweep's record (swept: its id) - sweep_deleted and sweep_failed, and in failed the removal's name when it raised
+    (logged by type, and raised again once recorded) - as run_daily writes REMOVED_EVENT (refutation round 3,
+    disposal-3): after the removal, outside the first record's transaction; one that cannot be written is logged by
+    type and never raised, and undoes nothing. Counts only. {'deleted', 'failed'}."""
+    removed, failed, error = {}, [], None
+    try:
+        removed = remove_orphan_files(orphans)
+    except Exception as exc:  # noqa: BLE001 - recorded below, then raised again
+        log.error("the orphan sweep's removal failed (%s)", type(exc).__name__)
+        failed, error = ['orphan_sweep'], exc
+    try:
+        security_events.record(SWEEP_REMOVED_EVENT, swept=swept.pk,
+                               **{f'sweep_{key}': value for key, value in removed.items()}, failed=failed)
+    except Exception as exc:  # noqa: BLE001 - the sweep's record stands, and what went stays gone (see above)
+        log.error("the record of the orphan sweep's removed files could not be written (%s)", type(exc).__name__)
+    if error is not None:
+        raise error
+    return removed
 
 
 # --- old rows ---------------------------------------------------------------------------------------------------------

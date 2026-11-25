@@ -406,3 +406,82 @@ class DailySignInTests(TransactionTestCase):
         self.assertEqual(daily['session_links_pruned'], 1)  # the step before it committed, and is counted
         self.assertFalse(models.SessionAccountLink.objects.filter(session_key=old_key).exists())
         self.assertTrue(Session.objects.filter(session_key=old_key).exists())  # the failed step's: left as it was
+
+
+# --- D3-3: the orphan sweep command records what its removal did (disposal-3) ---------------------------------------------
+
+@override_settings(STORAGES=d2.PLAIN)
+class SweepRemovalRecordTests(TransactionTestCase):
+    """The verifier's input: one orphan file two hours old in a practice's folder - its removal failing (the folder
+    0500, so unlink is refused) or not - and `sweep_orphan_files --delete`."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name) / 'originals'
+        self.root.mkdir(mode=0o700)
+        override = override_settings(ORIGINALS_DIR=self.root)
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def orphan(self, *, removable=True):
+        folder = self.root / str(uuid.uuid4())
+        folder.mkdir(mode=0o700)
+        path = folder / str(uuid.uuid4())
+        path.write_bytes(b'synthetic orphan bytes')
+        past = time.time() - 2 * 3600
+        os.utime(path, (past, past))
+        if not removable:
+            folder.chmod(0o500)
+            self.addCleanup(folder.chmod, 0o700)
+        return path
+
+    def sweep(self):
+        out = io.StringIO()
+        call_command('sweep_orphan_files', '--delete', stdout=out)
+        return out.getvalue()
+
+    def records(self):
+        swept = models.SecurityEvent.objects.get(event=maintenance.SWEPT_EVENT)
+        removed = models.SecurityEvent.objects.get(event=maintenance.SWEEP_REMOVED_EVENT)
+        return swept, removed
+
+    def test_disposal_3_a_removal_that_failed_is_recorded_as_failed(self):
+        path = self.orphan(removable=False)
+        out = self.sweep()
+        swept, removed = self.records()
+        self.assertEqual(swept.data['orphans'], 1)
+        self.assertEqual(removed.data, {'swept': str(swept.pk), 'sweep_deleted': 0, 'sweep_failed': 1, 'failed': []})
+        self.assertGreaterEqual(removed.created_at, swept.created_at)
+        self.assertTrue(path.exists())
+        self.assertIn('deleted 0', out)
+        self.assertIn('failed 1', out)
+        self.assertNotIn(path.name, out)
+
+    def test_a_removal_that_succeeded_is_recorded_as_done_and_reads_otherwise(self):
+        path = self.orphan()
+        self.sweep()
+        swept, removed = self.records()
+        self.assertEqual(removed.data, {'swept': str(swept.pk), 'sweep_deleted': 1, 'sweep_failed': 0, 'failed': []})
+        self.assertFalse(path.exists())
+
+    def test_a_removal_record_the_database_refuses_is_logged_and_undoes_nothing(self):
+        path = self.orphan()
+        with d2.security_events_refused(f"NEW.event = '{maintenance.SWEEP_REMOVED_EVENT}'"):
+            with self.assertLogs('studio.maintenance', 'ERROR') as logged:
+                out = self.sweep()
+        self.assertIn("the record of the orphan sweep's removed files could not be written (ProgrammingError)",
+                      [record.getMessage() for record in logged.records])
+        self.assertFalse(path.exists())
+        self.assertIn('deleted 1', out)
+        self.assertEqual(models.SecurityEvent.objects.get(event=maintenance.SWEPT_EVENT).data['orphans'], 1)
+        self.assertFalse(models.SecurityEvent.objects.filter(event=maintenance.SWEEP_REMOVED_EVENT).exists())
+
+    def test_a_removal_that_raised_is_recorded_by_name_and_raised_again(self):
+        self.orphan()
+        with mock.patch.object(storage, 'sync_folder', side_effect=OSError('synthetic')), \
+                self.assertLogs('studio.maintenance', 'ERROR') as logged, self.assertRaises(OSError):
+            self.sweep()
+        self.assertIn("the orphan sweep's removal failed (OSError)", [record.getMessage() for record in logged.records])
+        swept, removed = self.records()
+        self.assertEqual(removed.data, {'swept': str(swept.pk), 'failed': ['orphan_sweep']})
