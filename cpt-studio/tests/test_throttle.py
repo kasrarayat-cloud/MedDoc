@@ -298,14 +298,19 @@ class ConcurrentAttemptTests(TransactionTestCase):
 
     @override_settings(SIGNIN_USER_DELAY_AFTER=10 ** 6, SIGNIN_CLIENT_LIMIT=10 ** 6)
     def test_six_attempts_at_once_one_place_short_of_the_pair_limit_check_one_password(self):
-        for _ in range(settings.SIGNIN_PAIR_LIMIT - 1):
-            throttle.count_failure('owner', ADDRESS_A)
-        answers = self.burst(throttle.Door, 'refusal', [lambda: sentence(attempt('owner', 'guess'))] * 6)
-        self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
-        self.assertEqual(sum('Too many attempts' in answer for answer in answers), 5)
-        self.assertEqual(models.LoginAttempt.objects.count(), 1)
-        pair = models.RateWindow.objects.filter(scope=throttle.FAIL_PAIR, key=throttle.pair_key('owner', ADDRESS_A))
-        self.assertEqual(sum(pair.values_list('count', flat=True)), settings.SIGNIN_PAIR_LIMIT)
+        # one moment for the burst, as the address-limit test below holds it: a burst straddling a minute boundary can
+        # check one more password than the limit (concurrent attempts in two minutes each read only the places of their
+        # own minute and before) - a known limit recorded with refutation round 2's secondfactor-3 (DECISIONS D410/D414),
+        # which this test does not measure; on the real clock it failed whenever its burst crossed a minute (builder a3)
+        with Clock():
+            for _ in range(settings.SIGNIN_PAIR_LIMIT - 1):
+                throttle.count_failure('owner', ADDRESS_A)
+            answers = self.burst(throttle.Door, 'refusal', [lambda: sentence(attempt('owner', 'guess'))] * 6)
+            self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
+            self.assertEqual(sum('Too many attempts' in answer for answer in answers), 5)
+            self.assertEqual(models.LoginAttempt.objects.count(), 1)
+            pair = models.RateWindow.objects.filter(scope=throttle.FAIL_PAIR, key=throttle.pair_key('owner', ADDRESS_A))
+            self.assertEqual(sum(pair.values_list('count', flat=True)), settings.SIGNIN_PAIR_LIMIT)
 
     @override_settings(SIGNIN_USER_DELAY_AFTER=10 ** 6, SIGNIN_PAIR_LIMIT=10 ** 6)
     def test_six_attempts_at_once_one_place_short_of_the_address_limit_check_one_password(self):

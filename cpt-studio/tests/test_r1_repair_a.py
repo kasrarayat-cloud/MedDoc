@@ -783,43 +783,48 @@ class SetupCodesTogetherTests(TransactionTestCase):
 
     def test_wrong_codes_sent_together_get_no_more_lookups_than_codes_sent_in_turn(self):
         setup_operator('a5-operator-setup')
-        barrier = threading.Barrier(A5_ATTEMPTS, timeout=3)
-        looked_up = []
-        lookup = second_factor.setup_token
+        # one moment for the codes and the count of their window, never the real clock (refutation round 3,
+        # regression-6: a SIGNIN_WINDOW_SECONDS boundary between the codes and the count read the next window, 0 != 5);
+        # a second into the next window - never earlier than the setup code, well inside its ENROLMENT_CODE_SECONDS
+        window = settings.SIGNIN_WINDOW_SECONDS
+        with Clock(rate.window_start(window) + timedelta(seconds=window + 1)):
+            barrier = threading.Barrier(A5_ATTEMPTS, timeout=3)
+            looked_up = []
+            lookup = second_factor.setup_token
 
-        def lookup_when_all_are_here(typed):
-            looked_up.append(1)
-            try:
-                barrier.wait()
-            except threading.BrokenBarrierError:
-                pass
-            return lookup(typed)
+            def lookup_when_all_are_here(typed):
+                looked_up.append(1)
+                try:
+                    barrier.wait()
+                except threading.BrokenBarrierError:
+                    pass
+                return lookup(typed)
 
-        answers = []
+            answers = []
 
-        def attempt(index):
-            try:
-                answers.append(setup_first_step(Client(HTTP_HOST=ADMIN, REMOTE_ADDR='203.0.113.40'),
-                                                second_factor.new_code(second_factor.SETUP_CODE_GROUPS)))
-            finally:
-                connection.close()
+            def attempt(index):
+                try:
+                    answers.append(setup_first_step(Client(HTTP_HOST=ADMIN, REMOTE_ADDR='203.0.113.40'),
+                                                    second_factor.new_code(second_factor.SETUP_CODE_GROUPS)))
+                finally:
+                    connection.close()
 
-        with mock.patch.object(second_factor, 'setup_token', lookup_when_all_are_here):
-            threads = [threading.Thread(target=attempt, args=(index,)) for index in range(A5_ATTEMPTS)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join(90)
-        self.assertEqual(len(answers), A5_ATTEMPTS, 'every attempt was answered')
-        self.assertEqual(len(looked_up), settings.SECOND_FACTOR_ATTEMPTS, 'no more lookups than in turn')
-        texts = [answer.content.decode() for answer in answers]
-        self.assertEqual(sum('This setup code cannot be used' in text for text in texts),
-                         settings.SECOND_FACTOR_ATTEMPTS)
-        self.assertEqual(sum('Too many attempts' in text for text in texts),
-                         A5_ATTEMPTS - settings.SECOND_FACTOR_ATTEMPTS)
-        self.assertEqual(rate.count(second_factor.SETUP_CODE_SCOPE, '203.0.113.40',
-                                    since=rate.window_start(settings.SIGNIN_WINDOW_SECONDS)),
-                         settings.SECOND_FACTOR_ATTEMPTS, 'each wrong code counted once, no refusal counted')
+            with mock.patch.object(second_factor, 'setup_token', lookup_when_all_are_here):
+                threads = [threading.Thread(target=attempt, args=(index,)) for index in range(A5_ATTEMPTS)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(90)
+            self.assertEqual(len(answers), A5_ATTEMPTS, 'every attempt was answered')
+            self.assertEqual(len(looked_up), settings.SECOND_FACTOR_ATTEMPTS, 'no more lookups than in turn')
+            texts = [answer.content.decode() for answer in answers]
+            self.assertEqual(sum('This setup code cannot be used' in text for text in texts),
+                             settings.SECOND_FACTOR_ATTEMPTS)
+            self.assertEqual(sum('Too many attempts' in text for text in texts),
+                             A5_ATTEMPTS - settings.SECOND_FACTOR_ATTEMPTS)
+            self.assertEqual(rate.count(second_factor.SETUP_CODE_SCOPE, '203.0.113.40',
+                                        since=rate.window_start(settings.SIGNIN_WINDOW_SECONDS)),
+                             settings.SECOND_FACTOR_ATTEMPTS, 'each wrong code counted once, no refusal counted')
 
 
 # --- A6: the account page's hashing, limited per account (avail-1) ----------------------------------------------------

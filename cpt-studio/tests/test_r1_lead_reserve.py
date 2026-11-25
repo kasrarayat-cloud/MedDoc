@@ -4,7 +4,7 @@ two hid the window's earlier failures from that reservation - a burst straddling
 password checks (the sign-in doors' FAIL_CLIENT and FAIL_PAIR places and the account page's checks use reserve). The
 reservation's hit now lands in the window its own reading names. Synthetic key; only the clock is patched."""
 import uuid
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest import mock
 
 from django.test import TransactionTestCase
@@ -35,3 +35,22 @@ class ReserveAcrossAMinuteTests(TransactionTestCase):
             self.assertEqual(rate.hit(SCOPE, key, window_seconds=60), 1)  # no moment given: the clock's window
         self.assertEqual(rate.count(SCOPE, key, since=rate.window_start(60, BEFORE)), 2)
         self.assertEqual(rate.count(SCOPE, key, since=rate.window_start(60, AFTER)), 1)
+
+
+class InflightPlaceAcrossAMinuteTests(TransactionTestCase):
+    """The same class in Door._take_inflight_place (builder a3's probe 9): the earlier windows' sum was taken against
+    refusal()'s moment and the place in rate.hit's own window, so with one attempt in flight a boundary between the two
+    counted none ahead - and a name one failure short of the username delay reached the password check."""
+
+    def test_an_attempt_whose_place_crosses_a_minute_still_counts_the_one_in_flight(self):
+        from django.test import RequestFactory
+        from studio import request_meta
+        boundary = datetime(2026, 11, 26, 12, 0, tzinfo=dt_timezone.utc)
+        name = 'synthetic-owner-lead'
+        with mock.patch('django.utils.timezone.now', return_value=boundary - timedelta(seconds=10)):
+            rate.hit(throttle.INFLIGHT_USER, throttle.user_key(name), window_seconds=throttle.MINUTE)  # one in flight
+        door = throttle.Door(RequestFactory().post('/login/', REMOTE_ADDR='198.51.100.7'), request_meta.CPT, name)
+        later = boundary + timedelta(milliseconds=1)
+        with mock.patch('django.utils.timezone.now', return_value=later):  # every reading after the moment: the next minute
+            ahead = door._take_inflight_place(boundary - timedelta(milliseconds=1))
+        self.assertEqual(ahead, 1, 'one attempt of the name is in flight')

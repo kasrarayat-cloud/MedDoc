@@ -337,7 +337,8 @@ class Door:
         earlier = sum(count for window, count in _rows(INFLIGHT_USER, self.user_key,
                                                        start - timedelta(seconds=INFLIGHT_SECONDS - MINUTE))
                       if window < start)
-        place = rate.hit(INFLIGHT_USER, self.user_key, window_seconds=MINUTE)
+        # the place in the window ``start`` names, as reserve takes its own (repair round 3, builder a3's probe 9)
+        place = rate.hit(INFLIGHT_USER, self.user_key, window_seconds=MINUTE, now=now)
         self.reserved.append((INFLIGHT_USER, self.user_key))
         return earlier + place - 1
 
