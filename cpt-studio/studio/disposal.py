@@ -315,15 +315,19 @@ def _cancel_once_sent(hold, raw):
     """A thread cancelling the statement the connection ``raw`` was being handed as a stop signal came (keep: not in
     flight yet, so no cancel could reach it) once it is in flight - as psycopg's cancel requests are made to be sent
     while the connection is busy - for as long as hold.before_statement still hands that statement over, and
-    STOP_CANCEL_SECONDS at most; None when no thread could be started. before_statement waits for the thread, so no other
-    statement is sent meanwhile. Never raises (it runs in the signal handler): a statement that is not cancelled runs to
-    its end, and the stop waits for it."""
+    STOP_CANCEL_SECONDS at most, its cancel request included; None when no thread could be started. before_statement
+    waits for the thread longer than that, so no other statement is sent meanwhile and no cancel request outlives it.
+    Never raises (it runs in the signal handler): a statement that is not cancelled runs to its end, and the stop waits
+    for it."""
     def watch():
         deadline = time.monotonic() + STOP_CANCEL_SECONDS
         try:
-            while hold.sending is raw and time.monotonic() < deadline:
+            while hold.sending is raw:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return
                 if raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
-                    raw.cancel_safe(timeout=STOP_CANCEL_SECONDS)
+                    raw.cancel_safe(timeout=left)
                     return
                 time.sleep(STOP_WATCH_SECONDS)
         except Exception:  # noqa: BLE001 - see above
