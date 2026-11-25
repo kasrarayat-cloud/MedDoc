@@ -2634,9 +2634,18 @@ def cpt_probes() -> dict:
 # --- docker objects ----------------------------------------------------------------
 
 def inspect(kind, name):
+    """What docker inspects ``name`` as (one object), or None when docker answers that there is no such one. An answer
+    that is not one object raises, never read as none (refutation round 3, installer-0: no pair at all is a reading a
+    disposal step acts on)."""
     proc = docker(kind, 'inspect', name, check=False, timeout=30)
     if proc.returncode == 0:
-        return json.loads(proc.stdout)[0]
+        try:
+            found = json.loads(proc.stdout)[0]
+        except (ValueError, LookupError, TypeError):
+            found = None
+        if not isinstance(found, dict):
+            raise InstallError(f'docker {kind} inspect {name} answered something that is not one {kind}.')
+        return found
     if re.search(rb'(?i)no such|not found', proc.stderr):
         return None
     raise InstallError(f'docker {kind} inspect {name} failed (exit {proc.returncode}).')
@@ -8871,13 +8880,17 @@ def install_in_progress() -> list:
             if inspect('container', name) is not None]
 
 
-def serving_disposal_problem() -> str:
+def serving_disposal_problem(*, replay=False) -> str:
     """'' when the pair under the canonical names - the one that serves, or serves once started: cpt-studio-web and
     cpt-studio-worker, running or stopped - has release 1's disposal, else why not (refutation round 2, switchback-0: a
     switch-back to a revision without disposal, refused once anything is closed or destroyed, was passed by switching
     back first and then closing and destroying while that revision served). Read as the switch-back's refusal reads a
     revision (has_disposal: its tree's DISPOSAL_FILES). No web there, a container that is not this installer's, or one
-    with no revision label is not known, and never read as one with disposal (fail closed)."""
+    with no revision label is not known, and never read as one with disposal (fail closed) - except, for ``replay``
+    (replay-ledger --execute alone), no pair at all: docker answers that neither container exists (inspect's None; an
+    answer it cannot read raises, and refuses), so nothing serves, and the ledger is replayed before a pair is started
+    (refutation round 3, installer-0: a restore onto a fresh host could not replay before `app` started its worker,
+    whose beat the replay itself refuses)."""
     revisions = {}
     for role in ('web', 'worker'):
         container = inspect('container', SERVICES[role])
@@ -8889,6 +8902,8 @@ def serving_disposal_problem() -> str:
         if not SHA_RE.fullmatch(str(revision or '')):
             return f'{SERVICES[role]} carries no revision label, so what serves is not known'
         revisions[role] = revision
+    if replay and not revisions:
+        return ''
     if 'web' not in revisions:
         return f'there is no {SERVICES["web"]}, so the revision that serves next is not known'
     for role, revision in revisions.items():
@@ -9063,10 +9078,11 @@ def phase_manage(ctx) -> dict:
                                'no row is deleted during one: nothing was disposed of (RELEASE-1-SPEC D1).')
         # refutation round 2, switchback-0: a step that changes a row (close, execute, a replay with --execute: the
         # receipt's mode 'executed') runs only while the serving pair has disposal; the dry runs (plan, a replay
-        # without --execute) and the ledger change no row such a revision reads, and stay open
+        # without --execute) and the ledger change no row such a revision reads, and stay open. Round 3, installer-0:
+        # a replay with --execute also runs with no pair at all (nothing serves: a restore onto a fresh host)
         if dispose_mode(args) == 'executed':
             try:
-                problem = serving_disposal_problem()
+                problem = serving_disposal_problem(replay=args.dispose_step == 'replay-ledger')
             except InstallError as error:
                 raise InstallError(f'{error} Nothing was disposed of.') from error
             if problem:
@@ -9075,7 +9091,8 @@ def phase_manage(ctx) -> dict:
                                    'a document destroyed, only while a revision with disposal (release 1 or later) '
                                    'serves (RELEASE-1-SPEC 6.3): install one (--phase app), then run this step again. '
                                    'The plan, the ledger and a replay without --execute stay open meanwhile: they '
-                                   'change no row an older revision reads.')
+                                   'change no row an older revision reads; a replay with --execute runs too when there '
+                                   'is no pair at all (ops/INSTALL.md, Restoring the database).')
         # only now, the reading above made: Lane 4's dispose refuses unless it is told no switch is in progress (this
         # phase holds the receipts' lock, so no install starts on them while it runs)
         environment = runtime_env('disabled', '') + ['-e', 'CPT_STUDIO_SWITCH_STATE=idle']

@@ -1936,7 +1936,8 @@ release 1), run only through `--phase manage`, never over HTTP:
   restore holds the digest, so keep the reason files if their words must
   outlive a restore.
   **After a database restore, replay the ledger BEFORE the site is opened**
-  (web and worker stopped): a whole practice's replay destroys again everything
+  (web and worker stopped, or no pair at all: **Restoring the database**,
+  below): a whole practice's replay destroys again everything
   of that practice, including anything a member added to the restored copy, and
   the replay's report counts such documents. A signal (SIGTERM, SIGHUP) or
   Ctrl-C before a destruction's commit stops it with nothing destroyed. From the
@@ -1945,7 +1946,9 @@ release 1), run only through `--phase manage`, never over HTTP:
   running is cancelled; the run is recorded 'failed', the signal named as the
   problem of the step it stopped), a signal that comes once those steps are done
   leaves the record as it stands, and the command, once it has printed its
-  record, ends with 143 (SIGTERM), 129 (SIGHUP) or 130 (Ctrl-C). A replay stops
+  record, ends with 143 (SIGTERM), 129 (SIGHUP) or 130 (Ctrl-C) - though under
+  the door's ceiling the installer removes its one-shot before that record can
+  be finished (**Known limits**). A replay stops
   the same way before its next ledger entry and prints its record. Every
   certificate and ledger line it prints names only what the database committed.
 
@@ -1966,7 +1969,12 @@ a closure and a destruction while the revision before release 1 served, handed
 that revision the very rows the switch-back refuses to hand it). No web there,
 a container this installer did not start, one with no revision label, or a
 revision this checkout cannot read refuses too. Install a revision with
-disposal (`--phase app`), then run the step again. The dry runs (`plan`, and
+disposal (`--phase app`), then run the step again. One exception, for
+`replay-ledger --execute` alone: with no pair at all - docker answers that
+neither `cpt-studio-web` nor `cpt-studio-worker` exists; an answer it cannot
+read refuses - nothing serves, so the replay runs, before `app` starts a pair
+(refutation round 3, installer-0: **Restoring the database**, below); `close`
+and `execute` still need a pair with disposal. The dry runs (`plan`, and
 `replay-ledger` without `--execute`) and `ledger` stay open: they change no
 row an older revision reads (a plan writes only its own `planned`
 DisposalEvent, a release-1 table), and the step that would carry a plan out is
@@ -1988,12 +1996,39 @@ may remain; remove that folder by hand, as root, without reading it.
 Delivery to the practice is the termination runbook's step.
 
 **Restoring the database.** After any restore from a backup older than a
-disposal, replay the ledger before the site serves again
-(`--dispose-step replay-ledger --execute --approved-by <another person>`,
-after a dry run without `--execute`), with the pair stopped, never removed:
-the replay reads the stopped pair's revision (above), and with no pair at all
-it is refused. On a host with no pair (a fresh server), install the revision
-with `app` before `https-vhost` opens the site, then replay. The ledger's MAC is keyed by the
+disposal, replay the ledger before the site serves again: a dry run
+(`--dispose-step replay-ledger --ledger-file <the kept ledger log>`), then the
+same with `--execute --approved-by <another person>`. The command refuses the
+replay while the worker runs or stopped less than two minutes ago - it reads
+the worker's last beat in the database, since a restored copy's queued coding
+would send documents the ledger destroyed - and, as every manage act, it needs
+this revision's migrations applied (`manage migrate --check`). One sequence
+serves both kinds of host (refutation round 3, installer-0):
+
+1. Stop the pair, never remove it, before the restore, so nothing runs on the
+   restored copy: as root, `docker stop --time 3600 cpt-studio-worker`, then
+   `docker stop --time 30 cpt-studio-web` - the worker first, with the bounds
+   the installer stops them with (the worker finishes the stage it is in and
+   claims nothing new). A fresh server has no pair (neither
+   `cpt-studio-web` nor `cpt-studio-worker`) and nothing to stop.
+2. Restore the database, and the files volume from the same backup.
+3. Wait two minutes after the worker stopped (on a fresh server, after the
+   backup was taken): the restored database holds the worker's last beat.
+4. Replay: the dry run, then `--execute`. A stopped pair is read as above (its
+   revision must have disposal); with no pair at all the replay runs too,
+   since nothing serves.
+5. Start a pair. On the serving host rerun `app` with the `--coding-mode` (and
+   `--authorization-ref`) it was installed with - with its web stopped, `app`
+   replaces the pair on the port the vhost names - or start the stopped pair
+   as root: `docker start cpt-studio-web cpt-studio-worker`. On a fresh
+   server, `app`, and only then `https-vhost`, which opens the site.
+
+A backup from before this revision's migrations (the dump taken before an
+install) is replayed onto only once it is migrated, and only `app` migrates:
+`migrate --check` refuses the replay until then. Run that `app` with
+`--coding-mode disabled`, so its worker sends nothing, then stop the pair at
+once as in step 1 and go on from step 3; on the serving host its web serves
+the restored copy in between (**Known limits**). The ledger's MAC is keyed by the
 application's `CPT_STUDIO_SECRET_KEY` (`/etc/cpt-studio/app.env`), so a restore
 must keep the same secret key: with another key the ledger cannot be verified,
 and destroyed data could come back.
@@ -2066,6 +2101,22 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   the new server's). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
 - The database has no scheduled backup in this release.
+- A restore from a backup older than this revision's migrations is migrated
+  only by `app`, which starts the pair: on the serving host its web serves the
+  restored copy - the documents the ledger destroyed among them - from that
+  `app` until the pair is stopped for the replay (with `--coding-mode
+  disabled` nothing is sent), while on a fresh server nothing is served before
+  `https-vhost` (**Restoring the database**).
+- A refusal that quotes the re-grant approval line (`Approved: --regrant
+  <name>`) inside a fence or a quote the installer's reader does not take for
+  one - a fence of another length or character, a quote's lazy continuation,
+  an HTML `<pre>` block - approves that re-grant (refutation round 3,
+  installer-1): never quote the approval line in a declaration.
+- Under the door's ceiling an interrupted one-shot is removed at once, without
+  its own stop, so a destruction's held stop may not finish its record: the
+  plan's 'committed' DisposalEvent stays the record of what was destroyed (the
+  ledger and a replay read it so), and a new plan of that scope finishes the
+  run (refutation round 3, installer-4).
 - A ruled act's reason in words is still redacted wherever the act's output
   repeats it, as any echo of it is: one written as the act's own printed words
   around an id or a count (a reason line such as `Files in scope: 1`) is
