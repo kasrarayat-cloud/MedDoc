@@ -309,15 +309,19 @@ class ConcurrentAttemptTests(TransactionTestCase):
 
     @override_settings(SIGNIN_USER_DELAY_AFTER=10 ** 6, SIGNIN_PAIR_LIMIT=10 ** 6)
     def test_six_attempts_at_once_one_place_short_of_the_address_limit_check_one_password(self):
-        for index in range(settings.SIGNIN_CLIENT_LIMIT - 1):
-            throttle.count_failure(f'colleague-{index}', ADDRESS_A)
-        names = [f'guess-{index}' for index in range(6)]
-        answers = self.burst(throttle.Door, 'refusal', [lambda name=name: sentence(attempt(name, 'guess')) for name in names])
-        self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
-        self.assertEqual(sum('from this network' in answer for answer in answers), 5)
-        self.assertEqual(models.LoginAttempt.objects.count(), 1)
-        self.assertEqual(rate.count(throttle.FAIL_CLIENT, ADDRESS_A, since=rate.window_start(60)),
-                         settings.SIGNIN_CLIENT_LIMIT)
+        # the patched clock, one moment for the attempts and the count of their minute (refutation round 3,
+        # regression-7: on the real clock a minute boundary inside the test left the count of the minute after it)
+        with Clock():
+            for index in range(settings.SIGNIN_CLIENT_LIMIT - 1):
+                throttle.count_failure(f'colleague-{index}', ADDRESS_A)
+            names = [f'guess-{index}' for index in range(6)]
+            answers = self.burst(throttle.Door, 'refusal',
+                                 [lambda name=name: sentence(attempt(name, 'guess')) for name in names])
+            self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
+            self.assertEqual(sum('from this network' in answer for answer in answers), 5)
+            self.assertEqual(models.LoginAttempt.objects.count(), 1)
+            self.assertEqual(rate.count(throttle.FAIL_CLIENT, ADDRESS_A, since=rate.window_start(60)),
+                             settings.SIGNIN_CLIENT_LIMIT)
 
     def test_sixteen_wrong_current_passwords_at_once_get_five_checks_and_then_none(self):
         member = f.member(self.ws)
@@ -352,21 +356,24 @@ class PlaceTests(ThrottleCase):
     """A place taken before the password check is the attempt's failure when it fails, and given back otherwise."""
 
     def test_a_right_password_and_a_refusal_give_their_places_back(self):
-        for _ in range(3):
-            attempt('owner', WRONG, address=ADDRESS_A)
-        counted = lambda scope, key: rate.count(scope, key, since=rate.window_start(60))  # noqa: E731
-        pair = throttle.pair_key('owner', ADDRESS_A)
-        self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
-        self.assertEqual(attempt('owner', address=ADDRESS_A).status_code, 302)  # signed in: no failure
-        attempt('owner', host=ADMIN, address=ADDRESS_A)  # no_access at the admin door: no failure either
-        self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
-        for _ in range(2):
-            attempt('owner', WRONG, address=ADDRESS_A)
-        refused = attempt('owner', address=ADDRESS_B)  # the username delay: refused, its places given back
-        self.assertIn('Too many attempts', sentence(refused))
-        self.assertEqual(counted(throttle.FAIL_CLIENT, ADDRESS_B), 0)
-        self.assertEqual(counted(throttle.FAIL_PAIR, throttle.pair_key('owner', ADDRESS_B)), 0)
-        self.assertEqual(counted(throttle.FAIL_PAIR, pair), 5)
+        # the patched clock, one moment for the attempts and the counts of their minute (refutation round 3,
+        # regression-7: on the real clock a minute boundary inside the test left the counts of the minute after it)
+        with Clock():
+            for _ in range(3):
+                attempt('owner', WRONG, address=ADDRESS_A)
+            counted = lambda scope, key: rate.count(scope, key, since=rate.window_start(60))  # noqa: E731
+            pair = throttle.pair_key('owner', ADDRESS_A)
+            self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
+            self.assertEqual(attempt('owner', address=ADDRESS_A).status_code, 302)  # signed in: no failure
+            attempt('owner', host=ADMIN, address=ADDRESS_A)  # no_access at the admin door: no failure either
+            self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
+            for _ in range(2):
+                attempt('owner', WRONG, address=ADDRESS_A)
+            refused = attempt('owner', address=ADDRESS_B)  # the username delay: refused, its places given back
+            self.assertIn('Too many attempts', sentence(refused))
+            self.assertEqual(counted(throttle.FAIL_CLIENT, ADDRESS_B), 0)
+            self.assertEqual(counted(throttle.FAIL_PAIR, throttle.pair_key('owner', ADDRESS_B)), 0)
+            self.assertEqual(counted(throttle.FAIL_PAIR, pair), 5)
 
 
 class CrossDoorTests(ThrottleCase):

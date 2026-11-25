@@ -454,21 +454,29 @@ class LimitTests(ExportCase):
 
     @override_settings(EXPORT_LIMIT_PER_WORKSPACE=(3, 3600))
     def test_the_practice_limit_counts_every_member(self):
-        made = [(self.client, self.enc), (self.client, self.ready(1)), (self.client_for(self.viewer), self.ready(2))]
-        for client, enc in made:
-            self.assertEqual(self.make(client, enc).status_code, 201)
-        self.assert_limited(self.make(self.client_for(self.agent), self.ready(3)))
-        self.assertEqual(models.SecurityEvent.objects.get(event='export.rate_limited').data['scope'], 'export.workspace')
-        self.assert_limited(self.make(self.client, self.ready(4)))  # another document of the same practice: refused
+        # One moment for the whole test, as for the eleventh report (refutation round 3, regression-4): the practice's
+        # window (3600 s) is aligned to the epoch too, so reports made on the real clock across a boundary were counted
+        # in two windows and the limited one was made (201). A second into the next 600 s window is a second after an
+        # hour's boundary or ten minutes before the next one.
+        with mock.patch.object(timezone, 'now', return_value=rate.window_start(600) + timedelta(seconds=601)):
+            made = [(self.client, self.enc), (self.client, self.ready(1)), (self.client_for(self.viewer), self.ready(2))]
+            for client, enc in made:
+                self.assertEqual(self.make(client, enc).status_code, 201)
+            self.assert_limited(self.make(self.client_for(self.agent), self.ready(3)))
+            self.assertEqual(models.SecurityEvent.objects.get(event='export.rate_limited').data['scope'],
+                             'export.workspace')
+            self.assert_limited(self.make(self.client, self.ready(4)))  # another document of the same practice: refused
 
     @override_settings(EXPORT_LIMIT_PER_MEMBER=(1, 600))
     def test_the_stored_copy_answered_again_counts_toward_no_limit(self):
-        self.assertEqual(self.make(self.client).status_code, 201)  # the one report this member may make
-        for number in range(12):
-            self.assertEqual(self.make(self.client).status_code, 200, number)  # the stored copy, never refused
-        self.assertEqual(models.AuditEvent.objects.filter(event='export.reused').count(), 12)
-        self.assertFalse(models.SecurityEvent.objects.filter(event='export.rate_limited').exists())
-        self.assert_limited(self.make(self.client, self.ready(1)))  # the second report made is the one refused
+        # one moment for the whole window, as for the eleventh report (refutation round 3, regression-4)
+        with mock.patch.object(timezone, 'now', return_value=rate.window_start(600) + timedelta(seconds=601)):
+            self.assertEqual(self.make(self.client).status_code, 201)  # the one report this member may make
+            for number in range(12):
+                self.assertEqual(self.make(self.client).status_code, 200, number)  # the stored copy, never refused
+            self.assertEqual(models.AuditEvent.objects.filter(event='export.reused').count(), 12)
+            self.assertFalse(models.SecurityEvent.objects.filter(event='export.rate_limited').exists())
+            self.assert_limited(self.make(self.client, self.ready(1)))  # the second report made is the one refused
 
     @override_settings(EXPORT_LIMIT_PER_MEMBER=(1, 600))
     def test_a_refused_request_counts_toward_no_limit(self):
@@ -486,11 +494,13 @@ class LimitTests(ExportCase):
 
     def test_the_thirty_first_upload_of_a_member_in_ten_minutes_is_refused(self):
         self.assertEqual(settings.UPLOAD_LIMIT_PER_MEMBER, (30, 600))
-        for number in range(30):
-            self.assertEqual(self.upload(self.client, number).status_code, 201, number)
-        before = models.Encounter.objects.count()
-        self.assert_limited(self.upload(self.client, 30))
-        self.assertEqual(models.Encounter.objects.count(), before)  # nothing stored or queued
-        self.assertEqual(models.SecurityEvent.objects.get(event='upload.rate_limited').data,
-                         {'scope': 'upload.member', 'limit': 30, 'window_seconds': 600})
-        self.assertEqual(self.upload(self.client_for(self.agent), 31).status_code, 201)  # another member
+        # one moment for the whole window, as for the eleventh report (refutation round 3, regression-4)
+        with mock.patch.object(timezone, 'now', return_value=rate.window_start(600) + timedelta(seconds=601)):
+            for number in range(30):
+                self.assertEqual(self.upload(self.client, number).status_code, 201, number)
+            before = models.Encounter.objects.count()
+            self.assert_limited(self.upload(self.client, 30))
+            self.assertEqual(models.Encounter.objects.count(), before)  # nothing stored or queued
+            self.assertEqual(models.SecurityEvent.objects.get(event='upload.rate_limited').data,
+                             {'scope': 'upload.member', 'limit': 30, 'window_seconds': 600})
+            self.assertEqual(self.upload(self.client_for(self.agent), 31).status_code, 201)  # another member

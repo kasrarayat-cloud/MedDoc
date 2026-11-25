@@ -20,6 +20,7 @@ import stat
 import tempfile
 import uuid
 import zipfile
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -197,7 +198,13 @@ class BundleRefusalTests(BundleCase, TestCase):
     def test_the_eleventh_bundle_in_ten_minutes_is_refused_per_member(self):
         enc = self.coded()
         limit, window = (10, 600)
-        with override_settings(BUNDLE_LIMIT_PER_MEMBER=(limit, window)):
+        # One moment for the whole window, never the real clock (refutation round 3, regression-5): a member's window is
+        # aligned to multiples of 600 s since the epoch, so bundles made on the real clock across a boundary were counted
+        # in two windows and the eleventh was served (200). The moment is a second into the next window - never earlier
+        # than the session's own stamps, and within its idle limit (as tests.test_exports' eleventh report).
+        moment = rate.window_start(window) + timedelta(seconds=window + 1)
+        with mock.patch.object(timezone, 'now', return_value=moment), \
+                override_settings(BUNDLE_LIMIT_PER_MEMBER=(limit, window)):
             for _ in range(limit):
                 self.assertEqual(self.get_bundle(enc).status_code, 200)
             for _ in range(2):
@@ -209,12 +216,12 @@ class BundleRefusalTests(BundleCase, TestCase):
                 self.assertEqual(refused['Retry-After'], str(refused.json()['retry_after']))
             other = f.member(self.ws)
             self.assertEqual(self.get_bundle(enc, other).status_code, 200)  # per member
-        (event,) = models.SecurityEvent.objects.filter(event=bundle_api.LIMITED_EVENT)  # the first refusal only
-        self.assertEqual((event.actor_id, event.workspace_id, event.data), (self.reviewer.pk, self.ws.pk,
-                                                                            {'limit': limit, 'window_seconds': window}))
-        self.assertEqual(rate.count(bundle_api.RATE_SCOPE, str(self.reviewer.pk),
-                                    since=rate.window_start(window)), limit + 2)
-        self.assertEqual(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).count(), limit + 1)
+            (event,) = models.SecurityEvent.objects.filter(event=bundle_api.LIMITED_EVENT)  # the first refusal only
+            self.assertEqual((event.actor_id, event.workspace_id, event.data),
+                             (self.reviewer.pk, self.ws.pk, {'limit': limit, 'window_seconds': window}))
+            self.assertEqual(rate.count(bundle_api.RATE_SCOPE, str(self.reviewer.pk),
+                                        since=rate.window_start(window)), limit + 2)
+            self.assertEqual(Access.objects.filter(view=read_audit.MEMBER_BUNDLE_DOWNLOAD).count(), limit + 1)
 
     def test_a_read_that_cannot_be_recorded_serves_nothing(self):
         enc = self.coded()
