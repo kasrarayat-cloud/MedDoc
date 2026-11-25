@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timezone as dt_timezone
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from pypdf import PdfReader
 
 from studio import customer, exports, models, state
@@ -29,6 +29,7 @@ def flat(data: bytes) -> str:
     return ' '.join(' '.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(data)).pages).split())
 
 
+@override_settings(EXPORT_LIMIT_PER_MEMBER=(10_000, 600), EXPORT_LIMIT_PER_WORKSPACE=(10_000, 3600))  # C5: layout cases, not limits
 class PhysicianReportScanCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
@@ -41,7 +42,7 @@ class PhysicianReportScanCase(r.CustomerCase, TestCase):
         shown = client.get(f'/api/encounters/{enc.pk}').json()['round']['number']
         made = client.post(f'/api/encounters/{enc.pk}/reports', content_type='application/json',
                            data=json.dumps({'kind': kind, 'fmt': 'pdf', 'round': shown}))
-        self.assertEqual(made.status_code, 201, made.content)
+        self.assertIn(made.status_code, (200, 201), made.content)  # release 1, C5: a current report is the stored copy
         got = client.get(made.json()['download_url'])
         self.assertEqual((got.status_code, got['Content-Type']), (200, 'application/pdf'))
         return got.content, got, made.json()
@@ -229,8 +230,11 @@ class ViewerTests(PhysicianReportScanCase):
         for kind in ('draft', 'approved'):
             with self.subTest(kind=kind):
                 with mock.patch.object(exports, 'timezone', clock):
-                    reviewers, _, _ = self.made(enc, kind)
                     viewers, response, report = self.made(enc, kind, user=self.viewer)  # any member may export
+                # release 1, C5: asked again, a current report is the stored copy, so the reviewer's is rendered here
+                round_ = state.latest_round(enc)
+                reviewers = exports.render_pdf(exports.snapshot(enc, round_, state.current_decisions(round_), kind,
+                                                                self.reviewer, moment), enc, round_)
                 self.assertEqual(self.scanned(enc, viewers, response, f'{kind}.pdf')[1], [])
                 self.assertIn(prepared.format(self.viewer.label()), flat(viewers))
                 # the same saved state gives the same report; only who prepared it differs

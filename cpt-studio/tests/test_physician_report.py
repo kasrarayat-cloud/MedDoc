@@ -14,7 +14,7 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from pypdf import PdfReader
 
 from studio import exports, models, physician_pdf, state
@@ -34,6 +34,7 @@ def flat(pages) -> str:
     return ' '.join(' '.join(pages).split())
 
 
+@override_settings(EXPORT_LIMIT_PER_MEMBER=(10_000, 600), EXPORT_LIMIT_PER_WORKSPACE=(10_000, 3600))  # C5: layout cases, not limits
 class PhysicianReportCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
@@ -51,7 +52,7 @@ class PhysicianReportCase(r.CustomerCase, TestCase):
 
     def pdf(self, enc, kind, *, client=None, name=None):
         made = self.make(enc, kind, client=client)
-        self.assertEqual(made.status_code, 201, made.content)
+        self.assertIn(made.status_code, (200, 201), made.content)  # release 1, C5: a current report is the stored copy
         body = made.json()
         self.assertEqual(body['fmt'], 'pdf')
         self.assertTrue(body['filename'].endswith('.pdf'))
@@ -291,19 +292,22 @@ class PhysicianReportCase(r.CustomerCase, TestCase):
     def test_the_same_saved_state_gives_the_same_document(self):
         enc = self.encounter()
         self.mixed_round(enc)
+        round_ = state.latest_round(enc)
+        current = state.current_decisions(round_)
+
+        def render(moment):
+            # release 1, C5: asked again through the API, a current report is the stored copy, so the same saved state
+            # is rendered here as exports.create renders it
+            return exports.render_pdf(exports.snapshot(enc, round_, current, 'draft', self.reviewer, moment), enc, round_)
         moment = datetime(2026, 11, 21, 14, 2, 9, tzinfo=dt_timezone.utc)
-        clock = mock.Mock(now=mock.Mock(return_value=moment))  # exports' clock only, not the session's
-        with mock.patch.object(exports, 'timezone', clock):
-            first, _ = self.pdf(enc, 'draft')
-            second, _ = self.pdf(enc, 'draft')
+        first, second = render(moment), render(moment)
         self.assertEqual(first, second)
-        later = datetime(2026, 11, 22, 9, 30, 0, tzinfo=dt_timezone.utc)
-        clock.now.return_value = later
-        with mock.patch.object(exports, 'timezone', clock):
-            third, _ = self.pdf(enc, 'draft')
+        third = render(datetime(2026, 11, 22, 9, 30, 0, tzinfo=dt_timezone.utc))
         a, b = flat(text_of(first)), flat(text_of(third))
         self.assertNotEqual(a, b)  # the Prepared line names when it was made
         self.assertEqual(a.replace('21 Nov 2026, 14:02 UTC', 'T'), b.replace('22 Nov 2026, 09:30 UTC', 'T'))
+        made, again = self.make(enc, 'draft'), self.make(enc, 'draft')
+        self.assertEqual((made.status_code, again.status_code, again.json()['id']), (201, 200, made.json()['id']))
 
     def test_a_pdf_that_cannot_be_made_stores_nothing_and_says_so(self):
         enc = self.encounter()
@@ -334,7 +338,7 @@ class PhysicianReportCase(r.CustomerCase, TestCase):
         self.assertEqual(self.make(enc, 'draft', client=anonymous).status_code, 401)
         self.assertEqual(self.make(enc, 'draft', round_number=state.latest_round(enc).number + 1).status_code, 409)
         viewer = self.client_for(self.viewer)  # any member may make an export (exports.create)
-        self.assertEqual(self.make(enc, 'draft', client=viewer).status_code, 201)
+        self.assertIn(self.make(enc, 'draft', client=viewer).status_code, (200, 201))  # C5: perhaps the stored copy
 
     def test_an_earlier_pdf_stays_listed_and_served_as_stored(self):
         enc = self.encounter()

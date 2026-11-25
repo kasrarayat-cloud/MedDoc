@@ -187,13 +187,15 @@ class ServiceTests(SimpleTestCase):
     def test_each_conversion_has_the_parents_limit_and_a_stop_allows_one_to_finish(self):
         seen = {}
 
-        def converting(data, *, runner=None, seconds=None, memory_bytes=None):
+        def converting(data, *, runner=None, seconds=None, memory_bytes=None, watch=None):
             seen['seconds'] = seconds
+            seen['watch'] = watch  # repair round 1, C2: the client's connection, so a client that leaves stops it
             return CONVERTED
         with mock.patch.object(docx_package, 'convert_in_child', converting), Running(fake_runner) as running, \
                 self.assertLogs('studio.converter_server', 'INFO'):
             self.assertEqual(converter_server.request(running.path, PLAIN_PACKAGE, total_seconds=60), CONVERTED)
         self.assertEqual(seen['seconds'], docx_package.CONVERT_SECONDS)
+        self.assertIsInstance(seen['watch'], socket.socket)
         # what docker stop must allow the converter (A7): the conversion running, killing what it started, a margin
         self.assertEqual(converter_server.MIN_STOP_SECONDS, docx_package.CONVERT_SECONDS + bounded.GROUP_GONE_SECONDS
                          + converter_server.STOP_MARGIN_SECONDS)
@@ -242,7 +244,7 @@ class ServiceTests(SimpleTestCase):
 
     def test_a_client_that_disconnects_halfway_leaves_the_server_serving(self):
         with Running(fake_runner) as running:
-            with self.assertLogs('studio.converter_server', 'WARNING') as logged:
+            with self.assertLogs('studio.converter_server', 'INFO') as logged:  # repair round 1, C2: see below
                 sock = raw(running.path)
                 sock.sendall(frame({'op': 'convert', 'size': 1000, 'sha256': hashlib.sha256(b'x' * 1000).hexdigest()},
                                    b'x' * 500))
@@ -255,11 +257,17 @@ class ServiceTests(SimpleTestCase):
                 wrong.sendall(frame({'op': 'convert', 'size': 3, 'sha256': '0' * 64}, b'abc'))
                 self.assertEqual(answer_of(wrong)['kind'], 'refused')  # the bytes do not match their digest
                 wrong.close()
-            self.assertIn('ended before its Word file arrived', '\n'.join(logged.output))
+            # repair round 1, C2: a request is queued on its header and its Word bytes read at its turn, so a client
+            # gone halfway is met there - as one that left before its turn, or one whose bytes ended, as the race goes
+            said = '\n'.join(logged.output)
+            self.assertTrue('ended before its Word file arrived' in said or 'client left before its turn' in said,
+                            said)
             self.assertEqual(converter_server.request(running.path, PLAIN_PACKAGE, total_seconds=60),
                              CONVERTED + b'PK\x03\x04')
 
-    def test_conversions_take_turns_and_a_ping_meanwhile_finds_it_busy(self):
+    def test_conversions_take_turns_and_a_ping_meanwhile_is_answered_at_once(self):
+        # repair round 1, C2 (coding-1): a ping during a conversion was 'busy' (it waited behind the conversion); it is
+        # answered at once now, while the conversions still take turns (tests/test_r1_repair_c.py)
         with Running(slow_runner) as running:
             self.assertEqual(converter_server.ping(running.path), 'ok')
             answers = []
@@ -271,7 +279,9 @@ class ServiceTests(SimpleTestCase):
             first.start()
             time.sleep(0.5)
             second.start()
-            self.assertEqual(converter_server.ping(running.path, seconds=1), 'busy')  # taken, waiting its turn
+            pinged = time.monotonic()
+            self.assertEqual(converter_server.ping(running.path, seconds=1), 'ok')  # while one converts, one waits
+            self.assertLess(time.monotonic() - pinged, 0.5)
             first.join(30)
             second.join(30)
             self.assertEqual(answers, [CONVERTED, CONVERTED])

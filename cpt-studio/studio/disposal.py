@@ -35,12 +35,19 @@ a committed declaration (A6):
                           rows_destroyed 'yes' (committed; a file, the folder or a count afterwards failed - every error
                           after the commit ends here, never as an escape) or 'unknown' (the commit's own answer was lost),
                           and files['remaining_names'] lists what was left. An interrupt after the commit (Ctrl-C, or a
-                          stop signal, which the dispose command makes raise) ends the same way - recorded 'failed' and
-                          its certificate printed, as far as that can be done - and then goes on as an interrupt; where
-                          even that cannot be done, the 'committed' row is the record. A transaction that rolled back
-                          writes nothing
-                          (NotDestroyed: nothing was destroyed). To finish a failed or interrupted disposal, remove what
-                          stopped it and plan the same scope again: the new plan takes in the files a run of the document
+                          stop signal) ends the same way - recorded 'failed' and its certificate printed - and then goes
+                          on as an interrupt: one guard holds the transaction and every step after its commit, and an
+                          interrupt before the final event is sent is kept the same way. Under the dispose command a
+                          stop signal or Ctrl-C is never raised from the commit on (STOP_SIGNAL_HOLD, refutation round
+                          2): the commit and the run's record go to their end, the steps after the commit stop at their
+                          next file or statement (refutation round 3: the statement in flight cancelled, none sent after
+                          the signal, the step's problem recorded), and the command then ends with the signal's status;
+                          each certificate and ledger line names only what committed.
+                          Where an interrupt still comes while the final event is written (raised by anything but those
+                          signals) the certificate says so as far as it can, and the 'committed' row is the record. A
+                          transaction that rolled back writes nothing (NotDestroyed: nothing was destroyed). To finish a
+                          failed or interrupted disposal, remove what stopped it and plan the same scope again: the new
+                          plan takes in the files a run of the document
                           left (leftover_names: those its failed run recorded, and those its plan named), and a destroyed
                           document may be planned again while any of its files remains or its last run did not complete.
     replay(ledger)        after a restore from a backup older than a disposal - run BEFORE the site is opened - the
@@ -57,7 +64,10 @@ a committed declaration (A6):
                           anything is destroyed, so a replay either refuses having changed nothing or goes on; one that
                           stops partway reports, entry by entry, what it destroyed. The ledger is what
                           ledger_lines() prints: one signed line per DisposalEvent, so a line that was changed, or not
-                          written by this installation, is refused before anything is touched.
+                          written by this installation, is refused before anything is touched; it is read line by line
+                          on the newline alone. A ledger line - so a certificate, which ends with one, and a receipt -
+                          holds a reason only as its digest (reason_digest), never its words: the DisposalEvent rows
+                          keep the text, a replay's own events and the rows it writes back hold the digest.
 
 What a disposal keeps (OWNER DECISION D25, a question for counsel, and named in every certificate): the audit trail
 (AuditEvent) of each destroyed document still holds its decisions' code and line values and the sha256 of its original
@@ -77,8 +87,11 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 import unicodedata
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as dt_timezone
 
@@ -87,8 +100,9 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
+from psycopg import pq
 
-from . import console, jobs, models, sessions, storage
+from . import console, jobs, models, session_store, sessions, storage
 from .maintenance import hashed_signin_name
 
 log = logging.getLogger(__name__)
@@ -166,6 +180,164 @@ class Refused(Exception):
     def __init__(self, *reasons):
         super().__init__(' '.join(reasons))
         self.reasons = list(reasons)
+
+
+# --- a stop signal held while a commit runs (release 1 refutation round 2, disposal-0 to disposal-4) ----------------------
+
+STOP_CANCEL_SECONDS = 5.0  # how long the cancel request for a statement in flight may take (psycopg's own, on Ctrl-C)
+STOP_WATCH_SECONDS = 0.0005  # how often a statement a stop signal came just before is looked at until it is in flight
+
+
+class StopSignalHold:
+    """The dispose command's stop signals - SIGTERM, SIGHUP and Ctrl-C (studio.management.commands.dispose) - held where
+    raising one left a record naming what never committed, or none: raised inside Django's Atomic.__exit__ or psycopg's
+    commit, an interrupt became another error, left the transaction open under the records written next, or left libpq
+    busy for every later statement (refutation round 2, disposal-0 to disposal-4).
+
+        hold()          a transaction that destroys or records begins to commit - destroy's, close's, a plan's row, a
+                        replay's ledger rows: from here the first stop signal is kept, not raised, so the commit and the
+                        run's record go to their end, until the command's next safe point. Once a run committed, nothing
+                        releases it before the command has recorded and printed what the run did.
+        cancelling()    after a destruction's commit, while its files are removed, its VACUUM (ANALYZE) runs and its
+                        counts are taken: the steps stop at the next safe point - the next file (_remove_files), the next
+                        statement (before_statement: once a stop signal was kept no statement is sent, refutation round 3,
+                        disposal-1) - and the steps left are skipped (``pending``); a stop signal also cancels the
+                        statement in flight - a cancel request, so the statement ends on an error the step records and the
+                        connection answers again - and one it came just before, as it was handed to psycopg, once it is in
+                        flight (_cancel_once_sent). Never around a statement that writes.
+        safe_point()    one of the command's own: a kept stop signal is raised there - before a replay's next ledger
+                        entry, once a plan's row is printed (before its manifest is read again: refutation round 3,
+                        disposal-0) and once the command printed everything; with none, a signal raises where the command
+                        is again, until the next hold().
+        keep()          the command's handler asks it first: whether the signal was kept.
+
+    The longest a stop signal is held (refutation round 3): close's commit, or a plan's row (its INSERT), and the lines
+    that print it - a plan's manifest is read and printed again unheld, so a signal then ends the command between two
+    chunks of a file; a destruction's commit, then the step after it under way up to its next safe point - one file's
+    deletion, or STOP_CANCEL_SECONDS for the cancel of its statement in flight - and then the run's record, whose count
+    of the audit rows kept and whose INSERT run to their end (the record is what the hold is for), and its certificate's
+    print; a replay, its ledger rows' commit, then each entry as a destruction, acted on before the next entry.
+
+    Armed by the command alone (reset): a caller of this module that is not the command holds nothing."""
+
+    def __init__(self):
+        self.reset(armed=False)
+
+    def reset(self, *, armed):
+        self.armed, self.holding, self.cancels, self.pending, self._cancelling = armed, False, False, None, False
+        # the connection a statement of the steps after a commit is being handed to (before_statement), and the thread
+        # that cancels it once it is in flight when a stop signal came just before (_cancel_once_sent)
+        self.sending, self._watcher = None, None
+
+    def hold(self) -> bool:
+        """From here a stop signal is kept (see the class); True, so a commit's mark can be this very call."""
+        if self.armed:
+            self.holding = True
+        return True
+
+    @contextmanager
+    def cancelling(self):
+        """While the body runs, a stop signal also cancels the statement in flight, and - armed - no statement is sent
+        once one was kept (before_statement; see the class)."""
+        before, self.cancels = self.cancels, True
+        try:
+            if self.armed:
+                with connection.execute_wrapper(self.before_statement):
+                    yield
+            else:
+                yield
+        finally:
+            self.cancels = before
+
+    def before_statement(self, execute, sql, params, many, context):
+        """cancelling()'s execute wrapper, around each statement of the steps after a commit: a safe point - a stop
+        signal kept already ends the step here (raised), and the statement is never sent (refutation round 3,
+        disposal-1: one landing between two statements no longer lets the next run, a VACUUM or a count waiting on
+        another session's lock with it). While the statement is handed to psycopg, ``sending`` names the connection, so a
+        stop that comes before it is in flight has it cancelled once it is (keep); that thread is waited for before this
+        returns, so no cancel request outlives its statement to reach the next one."""
+        self.sending = connection.connection
+        try:
+            if self.pending is not None:
+                raise self.pending
+            return execute(sql, params, many, context)
+        finally:
+            self.sending = None
+            watcher, self._watcher = self._watcher, None
+            if watcher is not None:
+                watcher.join(STOP_CANCEL_SECONDS + 1)
+
+    def keep(self, interrupt) -> bool:
+        """The command's handler: True when ``interrupt`` (the stop signal's) is kept - the first one, acted on at the
+        command's next safe point - and, where cancelling() says so, the statement in flight cancelled, or the one
+        being handed to psycopg cancelled once it is in flight; False when the handler raises it where the command is."""
+        if not (self.armed and self.holding):
+            return False
+        if self.pending is None:
+            self.pending = interrupt
+        if self.cancels and not self._cancelling:
+            self._cancelling = True
+            try:
+                if not _cancel_statement_in_flight() and self.sending is not None and self._watcher is None:
+                    self._watcher = _cancel_once_sent(self, self.sending)
+            finally:
+                self._cancelling = False
+        return True
+
+    def safe_point(self) -> None:
+        """One of the command's safe points: a stop signal kept since the last hold() is raised here; with none, from here
+        a signal raises where the command is."""
+        self.holding = False
+        interrupt, self.pending = self.pending, None
+        if interrupt is not None:
+            raise interrupt
+
+
+STOP_SIGNAL_HOLD = StopSignalHold()
+
+
+def _cancel_statement_in_flight() -> bool:
+    """A cancel request for the statement this thread's connection has in flight, if one is (as psycopg sends on
+    Ctrl-C): the statement ends on an error result, read as one, so the connection answers again - nothing is raised
+    through psycopg. Whether a cancel was sent. Never raises: a statement that is not cancelled runs to its end, and the
+    stop waits for it."""
+    try:
+        raw = connection.connection
+        if raw is not None and raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
+            raw.cancel_safe(timeout=STOP_CANCEL_SECONDS)
+            return True
+    except Exception:  # noqa: BLE001 - see above
+        pass
+    return False
+
+
+def _cancel_once_sent(hold, raw):
+    """A thread cancelling the statement the connection ``raw`` was being handed as a stop signal came (keep: not in
+    flight yet, so no cancel could reach it) once it is in flight - as psycopg's cancel requests are made to be sent
+    while the connection is busy - for as long as hold.before_statement still hands that statement over, and
+    STOP_CANCEL_SECONDS at most, its cancel request included; None when no thread could be started. before_statement
+    waits for the thread longer than that, so no other statement is sent meanwhile and no cancel request outlives it.
+    Never raises (it runs in the signal handler): a statement that is not cancelled runs to its end, and the stop waits
+    for it."""
+    def watch():
+        deadline = time.monotonic() + STOP_CANCEL_SECONDS
+        try:
+            while hold.sending is raw:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return
+                if raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
+                    raw.cancel_safe(timeout=left)
+                    return
+                time.sleep(STOP_WATCH_SECONDS)
+        except Exception:  # noqa: BLE001 - see above
+            pass
+    try:
+        thread = threading.Thread(target=watch, name='dispose-stop-cancel', daemon=True)
+        thread.start()
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    return thread
 
 
 # --- who, why and under which authority ------------------------------------------------------------------------------------
@@ -249,10 +421,20 @@ def comparison_key(value) -> str:
     return ' '.join(text.casefold().replace('\u0131', 'i').split())
 
 
+def breaks_a_line(ch) -> bool:
+    """Whether Python reads ``ch`` as the end of a line, as str.splitlines does: the newline and carriage return, the
+    vertical tab and form feed, the file, group and record separators, U+0085, U+2028 and U+2029."""
+    return len(f'x{ch}x'.splitlines()) > 1
+
+
 def person(value, label='--by') -> str:
-    """A named person (a ruled act's --by or --approved-by) as recorded (name_as_recorded): refused when nothing visible
+    """A named person (a ruled act's --by or --approved-by) as recorded (name_as_recorded): refused when it holds a line
+    break (breaks_a_line: a name is one line - recorded, a break would only have become a space), when nothing visible
     is left of it, when it is longer than NAME_CHARS, or when its letters mix two of the Latin, Cyrillic and Greek
     scripts, whose look-alike letters let one name read as another."""
+    given = str(value or '')
+    if any(breaks_a_line(ch) for ch in {*given, *unicodedata.normalize('NFKC', given)}):
+        raise Refused(f'{label} is one line: it holds a line break (a newline, U+0085, U+2028, U+2029 or the like).')
     name = name_as_recorded(value)
     if not name:
         raise Refused(f'{label} is required: a person\'s name, with at least one visible character.')
@@ -272,6 +454,23 @@ def reason_text(value) -> str:
     if len(text) > REASON_CHARS or UNSTORABLE.search(text):
         raise Refused(f'The reason can be at most {REASON_CHARS} characters, with no NUL character.')
     return text
+
+
+REASON_DIGEST_FORM = re.compile(r'sha256:[0-9a-f]{64}')
+
+
+def reason_digest(reason) -> str:
+    """How a disposal's reason leaves the database (release 1 refutation phileak-0): 'sha256:<hex>' of the text a
+    DisposalEvent row holds (reason_text: the reason file's text, its leading and trailing white space removed - so not
+    the sha256 of the file's bytes that a receipt records). Every ledger entry and certificate carries this, never the
+    words: an operator writes the reason freely (a misfiled document's reason can name its patient), and a certificate
+    and the ledger go into receipts and logs and beside the backups. A reason that is such a digest already - the reason
+    of a replay's own events, and of a ledger row the replay wrote back: neither knows the text - is kept as it is, so a
+    row's ledger line is the same before and after a restore; no reason is ''."""
+    text = str(reason or '')
+    if not text or REASON_DIGEST_FORM.fullmatch(text):
+        return text
+    return 'sha256:' + hashlib.sha256(text.encode('utf-8', 'surrogatepass')).hexdigest()
 
 
 def authorization(value, *, required) -> str:
@@ -532,10 +731,12 @@ def close(workspace_id, *, by, reason, authorization_ref='') -> DisposalEvent:
             raise Refused(f'The practice was already closed at {iso_time(workspace.closed_at)}; nothing was recorded.')
         now = timezone.now()
         models.Workspace.objects.filter(pk=workspace.pk).update(closed_at=now)
-        return DisposalEvent.objects.create(
+        event = DisposalEvent.objects.create(
             stage=DisposalEvent.CLOSED, scope=WORKSPACE, workspace_id=workspace.pk, reason=reason, run_by=by,
             authorization_ref=authorization_ref,
             counts={'documents': Encounter._base_manager.filter(workspace_id=workspace.pk).count()})
+        STOP_SIGNAL_HOLD.hold()  # it begins to commit: a stop signal from here waits until the command printed it
+    return event
 
 
 def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
@@ -554,6 +755,7 @@ def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
     if reasons:
         raise Refused(*reasons)
     entries = manifest(names)
+    STOP_SIGNAL_HOLD.hold()  # its row is written (and commits): a stop signal from here waits until the command printed it
     return DisposalEvent.objects.create(
         stage=DisposalEvent.PLANNED, scope=scope.kind, workspace_id=scope.workspace_id,
         encounter_ids=[str(pk) for pk in scope.encounter_ids],
@@ -593,8 +795,8 @@ YES, UNKNOWN = 'yes', 'unknown'  # counts['rows_destroyed'] of a run whose commi
 DECIDE, DECIDED, INTERRUPTED = 'needs a person\'s decision', 'decided', 'interrupted'
 # the DisposalEvent each destruction writes INSIDE its own transaction, before the commit: the commit proves the
 # deletion and its record together, or neither. 'completed' and 'failed' describe the file phase after it.
-COMMITTED = 'committed'
-LEDGER_STAGES = (*DisposalEvent.STAGES, COMMITTED)
+COMMITTED = DisposalEvent.COMMITTED
+LEDGER_STAGES = DisposalEvent.STAGES  # every stage, the committed one included
 
 
 @dataclass
@@ -617,6 +819,9 @@ class Outcome:
     committed: str = ''  # the id of the run's 'committed' DisposalEvent, written with the deletion
     step: str = 'files'  # the step after the commit under way
     encounter_ids: tuple = ()  # the documents the transaction destroyed (a whole practice: those it locked)
+    # the run's final DisposalEvent was sent to be written (_record): whether it was is then not known, and _run never
+    # sends it twice
+    recording: bool = False
 
     @property
     def complete(self) -> bool:
@@ -742,10 +947,13 @@ def _remove_files(scope, outcome) -> None:
     """After the commit: delete every file of the manifest - each on its own, so one that cannot be removed never keeps
     the others - sync each folder, check that none remains, and for a whole practice that its folder is empty, then
     remove it. What is left is counted and named in ``outcome``. An error of any step but a file's own deletion goes on
-    to the one guard in _after_commit."""
+    to the one guard in _after_commit. A stop signal held (STOP_SIGNAL_HOLD) stops the deletions at the next file: the
+    files not deleted are counted as left, for a new plan of the scope to take in."""
     names = [entry['name'] for entry in outcome.entries]
     folders = set()
     for name in names:
+        if STOP_SIGNAL_HOLD.pending is not None:
+            break
         folders.add(storage.stored_path(name).parent)
         try:
             if storage.delete_stored(name):
@@ -812,7 +1020,10 @@ def _after_commit(scope, outcome) -> None:
     rows are gone, so nothing here escapes the record: an error is recorded in ``outcome`` and the next step goes on; an
     interrupt (Ctrl-C, a stop signal: any BaseException) is not caught here but by destroy's guard, which records it and
     keeps it in ``outcome.interrupted`` for _run to raise again once the run is recorded; one kept already (by
-    _count_left) skips the steps left. Either way the run ends 'failed', with what is known."""
+    _count_left) skips the steps left. Either way the run ends 'failed', with what is known. A stop signal destroy holds
+    from its commit on (STOP_SIGNAL_HOLD) is one too, recorded as the problem of the step it came in: the step stopped at
+    its next file, or at its next statement, which is then never sent (raised there, it reaches destroy's guard as an
+    interrupt does), or its statement in flight was cancelled."""
     def files():
         _remove_files(scope, outcome)
 
@@ -832,6 +1043,10 @@ def _after_commit(scope, outcome) -> None:
             _problem(outcome, step, exc)
             if step == 'files':
                 _count_left(scope, outcome)
+        stop = STOP_SIGNAL_HOLD.pending
+        if stop is not None and outcome.interrupted is None:
+            outcome.interrupted = stop
+            _problem(outcome, step, stop)
 
 
 def _committed_fields(scope, deleted, tombstones, accounts, entries, record) -> dict:
@@ -855,13 +1070,22 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
     approved_by, authorization_ref and notes, for its 'committed' DisposalEvent - written in the same transaction, so
     nothing is destroyed without it. The caller checks the install. Once the commit is attempted: an Outcome (whatever
     failed afterwards is in it, an interrupt included), or CommitUnknown when the commit's own answer was lost; an error
-    before it rolls the transaction back and goes on as it is."""
-    marks = {'committing': False}
+    before it rolls the transaction back and goes on as it is. One guard holds the transaction, its commit and every
+    step after it, and the Outcome is made inside the transaction: from the commit's return to the guard nothing runs
+    (refutation dataloss-4), while an interrupt before the commit still rolls back and destroys nothing - one at the
+    very start of the block's __exit__ too, before its body began the commit: the guard closes the block itself. Under
+    the dispose command no stop signal comes there: the block's last statement holds them (STOP_SIGNAL_HOLD, refutation
+    round 2), so the commit, its Outcome and the run's record go to their end, and the steps after the commit stop at
+    the next one, the statement in flight cancelled."""
+    marks = {'committing': False, 'committed': False}
+    block, depth = transaction.atomic(), len(connection.atomic_blocks)
     try:
-        with transaction.atomic():
+        with block:
             with connection.cursor() as cursor:  # whatever this session set before: the deletes rely on deferral
                 cursor.execute('SET CONSTRAINTS ALL DEFERRED')
             if scope.kind == WORKSPACE:
+                session_store.lock_accounts(  # the practice's accounts first: the session store's lock order
+                    models.Membership.objects.filter(workspace_id=scope.workspace_id).values_list('user_id', flat=True))
                 models.Workspace.objects.select_for_update().filter(pk=scope.workspace_id).first()
                 if close:
                     models.Workspace.objects.filter(pk=scope.workspace_id, closed_at__isnull=True).update(
@@ -891,12 +1115,33 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
                 raise Refused('Rows in scope remained after the deletes; nothing was destroyed.')
             committed = DisposalEvent.objects.create(**_committed_fields(scope, deleted, tombstones, accounts, entries,
                                                                          record or {}))
-            marks['committing'] = True  # the block's last statement: whatever raises from here on is the commit
-    except (Refused, IntegrityError):
-        raise  # refused, or refused by the database inside the block or at its commit: rolled back, nothing destroyed
-    except BaseException as exc:  # noqa: BLE001 - an error or an interrupt at the commit: its answer was lost
-        if not marks['committing']:
-            raise  # before the commit: rolled back, nothing destroyed - an error or an interrupt goes on as it is
+            outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
+                              committed=str(committed.pk), encounter_ids=scope.encounter_ids)
+            # the block's last statement: whatever raises from here on is the commit, and no stop signal does
+            marks['committing'] = STOP_SIGNAL_HOLD.hold()
+        marks['committed'] = True  # the commit returned: the rows are destroyed
+        with STOP_SIGNAL_HOLD.cancelling():
+            _after_commit(scope, outcome)
+        return outcome
+    except BaseException as exc:  # noqa: BLE001 - one guard: before the commit, at it, and after it
+        if len(connection.atomic_blocks) > depth:
+            # the block is still open: its __exit__ never ran - a stop signal or Ctrl-C handled as it was entered,
+            # before its first line - so nothing was committed. It rolls back now, as the with statement would have,
+            # and the run ends as before the commit (otherwise the records written next would land in that open
+            # transaction and vanish with the connection, and the certificate would name them)
+            block.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+        if not marks['committing'] or (not marks['committed'] and isinstance(exc, (Refused, IntegrityError))):
+            # before the commit, or refused by the database at it: rolled back, nothing destroyed - a refusal, an error
+            # or an interrupt goes on as it is
+            raise
+        if marks['committed']:  # after the commit: _after_commit keeps every error, so an interrupt - kept for _run
+            if outcome.interrupted is None:
+                outcome.interrupted = exc
+            _problem(outcome, outcome.step, exc)
+            _count_left(scope, outcome)
+            return outcome
+        # an error or an interrupt at the commit: its answer was lost
         log.error('the commit of a disposal failed (%s): whether its rows were destroyed is not known',
                   type(exc).__name__)
         left = sorted(entry['name'] for entry in entries if entry['bytes'] is not None)  # no file was touched
@@ -905,16 +1150,6 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
                                     remaining_names=left, files_remaining=len(left),
                                     interrupted=None if isinstance(exc, Exception) else exc,
                                     committed=str(committed.pk), encounter_ids=scope.encounter_ids)) from exc
-    outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
-                      committed=str(committed.pk), encounter_ids=scope.encounter_ids)
-    try:
-        _after_commit(scope, outcome)
-    except BaseException as exc:  # noqa: BLE001 - the one guard after the commit for an interrupt: kept for _run
-        if outcome.interrupted is None:
-            outcome.interrupted = exc
-        _problem(outcome, outcome.step, exc)
-        _count_left(scope, outcome)
-    return outcome
 
 
 def _attempt(scope, **options) -> Outcome:
@@ -937,19 +1172,36 @@ def _run(scope, record, **options):
     An interrupt after the commit (outcome.interrupted) is raised again once the run is recorded, carrying the run's
     certificate as ``disposal_certificate`` - the event's, or Unrecorded's text - for the command to print first.
     ``record`` goes to destroy too, for the 'committed' DisposalEvent it writes with the deletion: the record that
-    stands when the final event cannot be."""
-    outcome = _attempt(scope, record=record, **options)
+    stands when the final event cannot be. An interrupt that comes after the commit and before the final event was sent
+    to be written (refutation dataloss-4: _record's own first lines, outside its guard) is kept the same way, and the
+    event written then; one while it is written goes on with its certificate, never written twice (outcome.recording).
+    However the run ends, stop signals are held again (STOP_SIGNAL_HOLD, refutation round 2) - destroy holds them from
+    its commit on - so the record's certificate and a replay's report are printed whole; a signal that came after the
+    run's steps changes nothing in its record and is acted on at the command's next safe point."""
+    outcome = None
     try:
-        event = _record(scope, outcome, **record)
-    except Unrecorded as exc:
+        try:
+            try:
+                outcome = _attempt(scope, record=record, **options)
+                event = _record(scope, outcome, **record)
+            except BaseException as exc:  # noqa: BLE001 - an interrupt between the commit and the final event is kept
+                if outcome is None or isinstance(exc, Exception) or outcome.recording:
+                    raise  # nothing committed; Unrecorded or an error; or an interrupt while the event was written
+                if outcome.interrupted is None:
+                    outcome.interrupted = exc
+                _problem(outcome, 'record', exc)
+                event = _record(scope, outcome, **record)
+        except Unrecorded as exc:
+            if outcome.interrupted is not None:
+                outcome.interrupted.disposal_certificate = exc.text
+                raise outcome.interrupted
+            raise
         if outcome.interrupted is not None:
-            outcome.interrupted.disposal_certificate = exc.text
+            outcome.interrupted.disposal_certificate = certificate(event)
             raise outcome.interrupted
-        raise
-    if outcome.interrupted is not None:
-        outcome.interrupted.disposal_certificate = certificate(event)
-        raise outcome.interrupted
-    return event, outcome
+        return event, outcome
+    finally:
+        STOP_SIGNAL_HOLD.hold()
 
 
 def _event_fields(scope, outcome, *, reason, by, approved_by, authorization_ref, notes) -> dict:
@@ -986,9 +1238,11 @@ def _event_fields(scope, outcome, *, reason, by, approved_by, authorization_ref,
 def _record(scope, outcome, **fields) -> DisposalEvent:
     """Write the run's final DisposalEvent; when it cannot be written, Unrecorded carries the certificate it would have
     had. An interrupt while it is written goes on carrying that certificate (``disposal_certificate``). Either way the
-    run's 'committed' DisposalEvent, written with the deletion, records the destruction."""
+    run's 'committed' DisposalEvent, written with the deletion, records the destruction. An interrupt before the event
+    is sent (outcome.recording) is _run's to keep."""
     values = _event_fields(scope, outcome, **fields)
     try:
+        outcome.recording = True  # from here whether the event is written is not known: _run never sends it twice
         return DisposalEvent.objects.create(**values)
     except Exception as exc:  # noqa: BLE001 - the destruction ran: its certificate is printed instead of lost
         log.error('the DisposalEvent of a disposal could not be written (%s)', type(exc).__name__)
@@ -1040,9 +1294,10 @@ def certificate(event) -> str:
 
 def certificate_text(values, *, ledger='', unrecorded='could not be written') -> str:
     """A destruction certificate (FLOW-19 (f)) from a DisposalEvent's fields - ``id`` None for one that could not be
-    written: ids, counts, digests, who ran and approved it, the authorization, whether its rows were destroyed, what is
-    left and how to finish, and what the command cannot reach. It holds no PHI: no title, no file's own name, no
-    document text, no answer (a storage name is a random id)."""
+    written: ids, counts, digests, who ran and approved it, the authorization, the reason's digest (reason_digest: never
+    its words), whether its rows were destroyed, what is left and how to finish, and what the command cannot reach. It
+    holds no PHI: no title, no file's own name, no document text, no answer, no reason text (a storage name is a random
+    id)."""
     counts, files = values.get('counts') or {}, values.get('files') or {}
     stage, destroyed = values['stage'], counts.get('rows_destroyed', YES)
     if stage == DisposalEvent.COMPLETED:
@@ -1087,7 +1342,9 @@ def certificate_text(values, *, ledger='', unrecorded='could not be written') ->
         lines.append(f'To finish it: remove what stopped it, then plan the same scope again (dispose --plan {target}) and '
                      'carry that plan out; the new plan takes in what this run left.')
     lines += [f'Run by: {values.get("run_by", "")}; approved by: {values.get("approved_by", "")}; authorization: '
-              f'{values.get("authorization_ref", "")}', 'What this command cannot reach:']
+              f'{values.get("authorization_ref", "")}',
+              f'Reason: {reason_digest(values.get("reason")) or "none recorded"} (the sha256 of its text, which no '
+              'certificate, ledger or receipt holds)', 'What this command cannot reach:']
     lines += [f'- {text}' for text in CANNOT_REACH]
     if values['scope'] == DOCUMENT:
         lines.append(MISFILED_REMINDER)
@@ -1102,10 +1359,12 @@ LEDGER_FIELDS = ('id', 'created_at', 'stage', 'scope', 'workspace_id', 'encounte
 
 
 def _entry(event) -> dict:
+    """A DisposalEvent's ledger entry: its fields as the row holds them, but its reason, which goes as its digest
+    (reason_digest) - a ledger, and so a certificate, a receipt or a log, never holds the reason's words."""
     return {'id': str(event.pk), 'created_at': event.created_at.astimezone(dt_timezone.utc).isoformat(),
             'stage': event.stage, 'scope': event.scope, 'workspace_id': str(event.workspace_id),
             'encounter_ids': list(event.encounter_ids), 'counts': event.counts, 'files': event.files,
-            'manifest_digest': event.manifest_digest, 'reason': event.reason, 'run_by': event.run_by,
+            'manifest_digest': event.manifest_digest, 'reason': reason_digest(event.reason), 'run_by': event.run_by,
             'approved_by': event.approved_by, 'authorization_ref': event.authorization_ref, 'notes': event.notes}
 
 
@@ -1150,8 +1409,11 @@ def read_ledger(lines) -> list:
 
 
 def _insert_entry(entry) -> bool:
-    """Write a ledger row the database lacks back exactly as it was (its own id and time) - an insert, never an update:
-    the ledger stays append-only. True when it was missing."""
+    """Write a ledger row the database lacks back exactly as the ledger holds it (its own id and time) - an insert,
+    never an update: the ledger stays append-only. True when it was missing. Its reason is the ledger's: the digest
+    (reason_digest), since no ledger holds a reason's words - so a row written back after a restore holds the sha256
+    of the text its original held, and its ledger line, MAC included, is the original's (a ledger written before
+    release 1's refutation repair holds the text itself, and its rows are written back with it)."""
     if DisposalEvent.objects.filter(pk=entry['id']).exists():
         return False
     quote = connection.ops.quote_name
@@ -1251,7 +1513,8 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
     switch-back, and while the worker beats (a restored database's queued coding would send what was destroyed); two
     different people; then every entry's refusals are checked BEFORE anything is written, so a refused replay changed
     nothing; then every ledger row the database lacks is written back, and each entry whose scope holds anything again
-    is destroyed again (a practice closed in the same transaction), with a DisposalEvent naming the entry it replays.
+    is destroyed again (a practice closed in the same transaction), with a DisposalEvent naming the entry it replays
+    (notes replay=<id>) and the entry's reason as its digest (reason_digest: a ledger holds no reason's words).
     An error on one entry stops the replay there - the entries before it stay done, each with its event - and the
     report says so entry by entry: {'ledger_rows_restored' or 'ledger_rows_missing', 'items', 'stopped'}, each item
     {entry, scope, remains, status, event, outcome, error, certificate, decided_by, covered, added}. A run's
@@ -1261,7 +1524,9 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
     commit did happen), by a later entry that carried out its scope, or when nothing of it remains. A whole-practice
     entry destroys the practice again AS A WHOLE - any document added to the restored copy after the disposal too,
     counted as ``added`` - so after a restore the replay must run before the site is opened. An interrupt stops the
-    replay too, and goes on carrying the report as ``disposal_report``."""
+    replay too, and goes on carrying the report as ``disposal_report``: under the dispose command a stop signal is held
+    from the commit of the ledger's rows and of each entry's destruction (STOP_SIGNAL_HOLD, refutation round 2) and acted
+    on before the next entry begins, which is then 'interrupted' with nothing of it destroyed."""
     entries = read_ledger(lines)
     if execute_it:
         runner, approver = two_people(by, approved_by)
@@ -1279,7 +1544,7 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
             continue
         scope = _replay_scope(entry)
         remains = _what_remains(scope) if scope is not None else None
-        item = {'entry': entry['id'], 'reason': entry['reason'], 'scope': scope, 'remains': remains,
+        item = {'entry': entry['id'], 'reason': reason_digest(entry['reason']), 'scope': scope, 'remains': remains,
                 'needed': _needed(remains), 'status': 'nothing to do', 'event': None, 'outcome': None, 'error': '',
                 'certificate': '', 'decided_by': '', 'covered': list(entry['encounter_ids']), 'added': 0}
         if scope is not None and entry['scope'] == WORKSPACE:
@@ -1308,11 +1573,13 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
         raise Refused(*reasons)
     with transaction.atomic():
         restored = sum(_insert_entry(entry) for entry in entries)
+        STOP_SIGNAL_HOLD.hold()  # the ledger's rows begin to commit: a stop signal from here waits for the next entry
     report = {'ledger_rows_restored': restored, 'items': items, 'stopped': None}
     for index, item in enumerate(items):
         if not item['needed']:
             continue
         try:
+            STOP_SIGNAL_HOLD.safe_point()  # a stop signal held since the last commit stops the replay here
             item['event'], item['outcome'] = _run(item['scope'], dict(
                 reason=item['reason'], by=runner, approved_by=approver, authorization_ref=authorization_ref,
                 notes=f'replay={item["entry"]}'), holds_only=True, close=True)

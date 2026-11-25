@@ -1,0 +1,41 @@
+{% extends "studio/ops_base.html" %}{% load static %}
+{% block title %}{% if mode == 'recovery' %}Recovery code{% else %}Security key{% endif %}{% endblock %}
+{% block head_extra %}<link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">
+  <script src="/static/studio/ops_second_factor.js" defer></script>{% endblock %}
+{% block topbar_links %}<span class="meta">Synthetic data only</span>
+    {# signed in (the recovery codes setup ends on, a step-up): the sign-out form ops_session.js arms its idle #}
+    {# timer on, as on every console page (release 1 repair round 1, auth-1) #}
+    {% if user.is_authenticated %}<form method="post" action="/logout/">{% csrf_token %}<button class="signout" type="submit">Sign out</button></form>{% endif %}{% endblock %}
+{% block content %}
+<section class="card signin" aria-labelledby="factor-title">
+{% if mode == 'recovery' %}
+  <h1 id="factor-title">Use a recovery code</h1>
+  <p class="lead">A recovery code stands in for your security key, once. {% if codes_left %}You have {{ codes_left }} left.{% else %}You have none left: ask for a reset of your keys on the server.{% endif %}</p>
+  <form method="post" action="/login/recovery">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="fields single">
+      <label>Recovery code <input type="text" name="code" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" maxlength="40" required autofocus></label>
+    </div>
+    <button type="submit">Continue</button>
+  </form>
+  <p><a href="/login/second-factor{% if step_up %}?next={{ next|urlencode }}{% endif %}">Use your security key instead</a></p>
+{% else %}
+  <h1 id="factor-title">{% if step_up %}Confirm with your security key{% else %}Your security key{% endif %}</h1>
+  <p class="lead">{% if step_up %}This change asks for your key again: it changes who can see what.{% else %}Your password was right. Now use your security key or passkey to open the console.{% endif %}</p>
+  {% if has_keys %}
+  <form method="post" action="/login/second-factor" data-ceremony="get" data-options="/login/second-factor/options">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="hidden" name="credential" value="">
+    <button type="submit">Use security key</button>
+  </form>
+  <p class="muted" data-status role="status"></p>
+  <noscript><p class="notice warn">The key is asked for by this page's script, which this browser does not run. Use a recovery code instead.</p></noscript>
+  {% else %}
+  <p class="notice warn" role="status">{{ no_keys }}</p>
+  <p><a class="button" href="/login/enrol">Set up with a setup code</a></p>
+  {% endif %}
+  {% if codes_left %}<p><a href="/login/recovery{% if step_up %}?next={{ next|urlencode }}{% endif %}">Use a recovery code instead</a> ({{ codes_left }} left)</p>{% endif %}
+{% endif %}
+  <p class="muted">{{ attempts_left }} attempt{{ attempts_left|pluralize }} left in these few minutes.</p>
+</section>
+{% endblock %}

@@ -200,7 +200,7 @@ class OperatorListTests(r.CustomerCase, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.ops = ops.client(r.f.user('platform-operator'))
+        self.ops = ops.admin_client(r.f.user('platform-operator'))  # release 1, B3: the admin host, 2FA
 
     def test_the_console_lists_every_review_that_belongs_to_no_line_in_full(self):
         enc = self.started()
@@ -208,6 +208,7 @@ class OperatorListTests(r.CustomerCase, TestCase):
                         checker=f.checker_result([r.review('L2', '45380'),
                                                   unplaced_review('2', '45380-59', reason='Separately reported?'),
                                                   r.review('L7', '45385', 'disagree', reason='Same polyp.')]))
+        self.ops.post(f'/ops/encounters/{enc.pk}/content', {'reason': 'support_request', 'reference': 'SR-1'})  # release 1, C2
         page = self.ops.get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
         start = page.index('Reviews that belong to no line')
         listed = page[start:page.index('Citations by line', start)]

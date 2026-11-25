@@ -89,11 +89,13 @@ def window_start(window_seconds, moment=None) -> datetime:
     return datetime.fromtimestamp(epoch - epoch % _window_seconds(window_seconds), tz=dt_timezone.utc)
 
 
-def hit(scope, key, *, window_seconds) -> int:
-    """Count one hit of ``key`` under ``scope`` in the current window of ``window_seconds``; the window's count after it.
-    One statement inserts the window's row or adds one to it, so two hits at the same moment are both counted."""
+def hit(scope, key, *, window_seconds, now=None) -> int:
+    """Count one hit of ``key`` under ``scope`` in the window of ``window_seconds`` that holds ``now`` (the current one by
+    default); the window's count after it. One statement inserts the window's row or adds one to it, so two hits at the
+    same moment are both counted. A caller that read its own moment first passes it, so the hit lands in the window that
+    caller counted (repair round 3: throttle.reserve)."""
     scope, key = _scope(scope), _key(key)
-    now = timezone.now()
+    now = now or timezone.now()
     start = window_start(window_seconds, now)
     quote = connection.ops.quote_name
     table = quote(RateWindow._meta.db_table)

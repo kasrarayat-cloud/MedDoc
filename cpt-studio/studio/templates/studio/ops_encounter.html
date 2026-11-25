@@ -1,8 +1,9 @@
 {% extends "studio/ops_base.html" %}
-{% block title %}{{ encounter.title }}{% endblock %}
+{# Release 1, C2 (ORG-19 (4)-(6)): the page opens on the document's metadata; its content - the title, the file name, the practice's values, the codes, the answers, the whole coding answers and the original - shows only while it is open in this session, after a reason and a reference. The tab never names the document. #}
+{% block title %}Encounter {{ reference }}{% endblock %}
 {% block content %}
 <a class="back" href="/ops/">&larr; Every encounter</a>
-<h1>{{ encounter.title }}</h1>
+<h1>Encounter <span class="mono">{{ reference }}</span></h1>
 <section class="card"><div class="scroll"><table class="kv">
   <tbody>
     <tr><th>Workspace</th><td>{{ encounter.workspace.name }} <span class="muted mono">{{ encounter.workspace_id }}</span></td></tr>
@@ -10,19 +11,61 @@
     <tr><th>State</th><td>{{ state_label }} <span class="muted mono">({{ encounter.state }})</span>{% if encounter.stopped_at %} · <span class="flag warn">stopped {{ encounter.stopped_at|date:"Y-m-d H:i:s" }}</span>{% endif %}</td></tr>
     <tr><th>Created</th><td>{{ encounter.created_at|date:"Y-m-d H:i:s" }} by {{ encounter.created_by.label }}</td></tr>
     <tr><th>Updated</th><td>{{ encounter.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
-    <tr><th>Practice values</th><td class="mono">{{ encounter.user_values }}</td></tr>
     <tr><th>Original</th><td>
       {% if source %}
-        <a href="/ops/encounters/{{ encounter.pk }}/original">{{ source.original_name }}</a> · {{ source.media_type }} · {{ source.size }} bytes<br>
-        <span class="mono">sha256 {{ source.sha256 }}</span>
+        {{ source.media_type }} · {{ source.size }} bytes<br><span class="mono">sha256 {{ source.sha256 }}</span>
       {% elif pasted_chars is not None %}
         Pasted text, {{ pasted_chars }} characters (revision {{ revision.number }})
       {% else %}
         <span class="muted">None recorded.</span>
       {% endif %}
     </td></tr>
+    <tr><th>Decisions</th><td>{{ decision_total }}{% for action, count in decision_counts %} · {{ action }} {{ count }}{% endfor %}</td></tr>
+    <tr><th>Answers given</th><td>{{ answer_total }}</td></tr>
   </tbody>
 </table></div></section>
+
+{% if content %}
+<section class="card" aria-labelledby="content-title">
+  <h2 id="content-title">Content</h2>
+  <p class="notice done">Open in this session until {{ open_until_at|date:"Y-m-d H:i:s" }} UTC. Every view of this page and of the original is recorded.</p>
+  <div class="scroll"><table class="kv">
+    <tbody>
+      <tr><th>Title</th><td>{{ encounter.title }}</td></tr>
+      <tr><th>Practice values</th><td class="mono">{{ encounter.user_values }}</td></tr>
+      {% if source %}<tr><th>File name</th><td>{{ source.original_name }}</td></tr>{% endif %}
+      {% if source %}<tr><th>Download</th><td>
+        {% if word %}
+          {% if converted %}<a href="/ops/encounters/{{ encounter.pk }}/original">The converted PDF the coding review read</a><br>{% endif %}
+          <a href="/ops/encounters/{{ encounter.pk }}/original?format=original">The original Word file</a> <span class="muted">It can contain links and embedded content: open it with care.</span>
+        {% else %}
+          <a href="/ops/encounters/{{ encounter.pk }}/original">The original</a>
+        {% endif %}
+        <br><span class="muted">Saved as encounter-{{ reference }}, never under its file name.</span>
+      </td></tr>{% endif %}
+    </tbody>
+  </table></div>
+</section>
+{% else %}
+<section class="card" aria-labelledby="open-title">
+  <h2 id="open-title">Open the content</h2>
+  <p class="muted">The title, the file name, the practice's values, the codes, the answers, the coding review's whole answers and the original stay closed until you say why you need them. They open for {{ grant_minutes }} minutes, in this session only, and the opening is recorded with its reason. Retry, reconcile and the holds need no content.</p>
+  <form method="post" action="/ops/encounters/{{ encounter.pk }}/content">{% csrf_token %}
+    <div class="fields">
+      <label>Reason
+        <select name="reason" required>
+          <option value="">Choose a reason</option>
+          {% for value, label in reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Reference <span class="hint">The ticket or request number. No patient details.</span>
+        <input type="text" name="reference" required maxlength="{{ reference_chars }}" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+    <button type="submit">Open the content</button>
+  </form>
+</section>
+{% endif %}
 
 {% if can_retry %}
 <form class="inline" method="post" action="/ops/encounters/{{ encounter.pk }}/retry">{% csrf_token %}
@@ -41,12 +84,13 @@
     {% if item.round.error %}<tr><th>Customer sentence</th><td>{{ item.round.error }}</td></tr>{% endif %}
     <tr><th>Queued / started / finished</th><td>{{ item.round.created_at|date:"Y-m-d H:i:s" }} / {{ item.round.started_at|date:"Y-m-d H:i:s"|default:"-" }} / {{ item.round.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td></tr>
     <tr><th>Cost (USD, estimated)</th><td class="mono">{{ item.cost }}{% if item.unpriced %} <span class="flag warn">{{ item.unpriced }} run(s) with no known cost yet</span>{% endif %}</td></tr>
-    <tr><th>Context</th><td>date of service {{ item.service_date|default:"not given" }} · insurance {{ item.insurance|default:"unknown" }} · {{ item.answers|length }} answer(s)</td></tr>
+    <tr><th>Context</th><td>{% if content %}date of service {{ item.service_date|default:"not given" }} · insurance {{ item.insurance|default:"unknown" }} · {% endif %}{{ item.answer_count }} answer(s)</td></tr>
+    <tr><th>Codes and questions</th><td>{{ item.code_count }} code line(s) · {{ item.question_count }} question(s)</td></tr>
     <tr><th>Revision</th><td class="mono">{{ item.round.revision_id }}</td></tr>
     {% if item.round.view_pdf_sha256 %}<tr><th>Converted PDF read</th><td class="mono">sha256 {{ item.round.view_pdf_sha256 }}</td></tr>{% endif %}
   </tbody>
 </table></div>
-{% if item.answers %}
+{% if content and item.answers %}
 <h3>Answers in this round's context</h3>
 <ol>{% for answer in item.answers %}<li><strong>Q:</strong> {{ answer.question }}<br><strong>A:</strong> {{ answer.answer }}</li>{% endfor %}</ol>
 {% endif %}
@@ -66,7 +110,7 @@
       <tr><th>Request id / response id</th><td class="mono">{{ view.run.provider_request_id|default:"-" }} / {{ view.run.response_id|default:"-" }}</td></tr>
       <tr><th>Request sha256</th><td class="mono">{{ view.run.request_sha256 }}</td></tr>
       <tr><th>Started / finished</th><td>{{ view.run.started_at|date:"Y-m-d H:i:s"|default:"-" }} / {{ view.run.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td></tr>
-      {% if view.run.error %}<tr><th>Error</th><td>{{ view.run.error }}</td></tr>{% endif %}
+      {% if content and view.error %}<tr><th>Error</th><td>{{ view.error }}</td></tr>{% endif %}
       {% if view.run.reconciled_at %}<tr><th>Reconciled</th><td>{{ view.run.reconciled_at|date:"Y-m-d H:i:s" }} by {{ view.run.reconciled_by.label }}: {{ view.run.reconciliation_note }}</td></tr>{% endif %}
     </tbody>
   </table></div>
@@ -77,14 +121,17 @@
     <button type="submit">Record the reconciliation</button>
   </form>
   {% endif %}
+  {% if content %}
   {% if view.answer %}<details><summary>The {{ view.role }}'s whole answer</summary><pre>{{ view.answer }}</pre></details>{% endif %}
   <details><summary>The request as stored</summary><pre>{{ view.request }}</pre></details>
+  {% endif %}
 </div>
 {% empty %}
 <p class="muted">No run was recorded for this round.</p>
 {% endfor %}
 </div>
 
+{% if content %}
 <h3>Final codes</h3>
 {% if item.codes %}
 <div class="scroll"><table>
@@ -124,6 +171,7 @@
 <details><summary>Citations by line</summary><pre>{{ item.citations }}</pre></details>
 <details><summary>The reader's final JSON</summary><pre>{{ item.reader_result }}</pre></details>
 <details><summary>The checker's final JSON</summary><pre>{{ item.checker_result }}</pre></details>
+{% endif %}
 </section>
 {% empty %}
 <section class="card">
@@ -132,6 +180,7 @@
 </section>
 {% endfor %}
 
+{% if content %}
 <section class="card">
 <h2>Decisions</h2>
 {% if decisions %}
@@ -162,16 +211,17 @@
 </table></div>
 {% else %}<p class="muted">No answer given.</p>{% endif %}
 </section>
+{% endif %}
 
 <section class="card">
 <h2>Audit events</h2>
 <div class="scroll"><table>
-  <thead><tr><th>At</th><th>Event</th><th>Actor</th><th>Data</th></tr></thead>
+  <thead><tr><th>At</th><th>Event</th><th>Actor</th>{% if content %}<th>Data</th>{% endif %}</tr></thead>
   <tbody>
   {% for item in events %}
     <tr><td>{{ item.event.created_at|date:"Y-m-d H:i:s" }}</td><td class="mono">{{ item.event.event }}</td>
         <td>{% if item.event.actor %}{{ item.event.actor.label }}{% else %}system{% endif %} <span class="muted">({{ item.event.actor_kind }})</span></td>
-        <td><pre>{{ item.data }}</pre></td></tr>
+        {% if content %}<td><pre>{{ item.data }}</pre></td>{% endif %}</tr>
   {% endfor %}
   </tbody>
 </table></div>

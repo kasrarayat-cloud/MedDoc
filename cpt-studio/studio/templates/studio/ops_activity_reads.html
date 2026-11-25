@@ -1,0 +1,53 @@
+{% extends "studio/ops_base.html" %}
+{# Release 1, C1 item 9: every recorded read of PHI, for the activity review (ADM-5, ADM-11). Ids, counts and fixed words only: a document by its short reference, never its title. Opening this page is itself recorded. #}
+{% block title %}Reads{% endblock %}
+{% block content %}
+<h1>Activity</h1>
+<p class="lead">Everything recorded, newest first. Read-only: nothing here can be changed or deleted.</p>
+<nav class="tabs" aria-label="Activity">
+  <a href="/ops/activity"{% if tab == "actions" %} aria-current="page"{% endif %}>Actions</a>
+  <a href="/ops/activity/sign-ins"{% if tab == "sign-ins" %} aria-current="page"{% endif %}>Sign-ins</a>
+  <a href="/ops/activity/reads"{% if tab == "reads" %} aria-current="page"{% endif %}>Reads</a>
+</nav>
+
+<p class="muted">Every view and download of a document, by doctors and in this console, each recorded before it was served: who, which practice and documents, when, from which address and sign-in. A read of another practice's document is listed as refused. A document is named by its short reference.</p>
+<form class="inline" method="get" action="/ops/activity/reads">
+  <label>Account
+    <select name="account"><option value="">Every account</option>{% for person in accounts %}<option value="{{ person.pk }}"{% if chosen_account and person.pk == chosen_account.pk %} selected{% endif %}>{{ person.username }}</option>{% endfor %}</select>
+  </label>
+  <label>Workspace
+    <select name="workspace"><option value="">Every workspace</option>{% for item in workspaces %}<option value="{{ item.pk }}"{% if chosen_workspace and item.pk == chosen_workspace.pk %} selected{% endif %}>{{ item.name }}</option>{% endfor %}</select>
+  </label>
+  <label>Kind
+    <select name="kind"><option value="">Every kind</option>{% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </label>
+  <label>Day (UTC)
+    <input type="date" name="day" value="{{ day }}">
+  </label>
+  <button type="submit" class="secondary">Show</button>
+</form>
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>When (UTC)</th><th>Who</th><th>Read</th><th>Workspace</th><th>Documents</th><th>Outcome</th><th>From</th></tr></thead>
+  <tbody>
+  {% for item in rows %}
+    <tr><td class="mono">{{ item.row.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td>{% if item.person %}{{ item.person.label }}<br><span class="muted mono">{{ item.person.username }}</span>{% else %}<span class="muted mono">{{ item.row.actor_id }}</span>{% endif %}<br><span class="muted">{{ item.row.actor_kind }}{% if item.row.actor_role %} · {{ item.row.actor_role }}{% endif %}</span></td>
+        <td>{{ item.kind }}<br><span class="muted mono">{{ item.row.view }} · {{ item.row.host }}</span>{% if item.row.reason %}<br><span class="muted">reason {{ item.row.reason }}</span>{% endif %}{% if item.row.filters %}<br><span class="muted mono">{% for name, value in item.row.filters.items %}{% if value is not None %}{{ name }} {{ value }} {% endif %}{% endfor %}</span>{% endif %}</td>
+        <td>{% if item.practice %}{{ item.practice }}{% elif item.row.workspace_id %}<span class="muted mono">{{ item.row.workspace_id }}</span>{% else %}<span class="muted">every workspace</span>{% endif %}</td>
+        <td class="mono">{% for document, reference in item.documents %}<a href="/ops/encounters/{{ document }}">{{ reference }}</a> {% endfor %}{% if item.more %}<span class="muted">and {{ item.more }} more</span>{% endif %}{% if item.row.count is not None %}<br><span class="muted">{{ item.row.count }} shown</span>{% endif %}{% if item.repeat %}<br><span class="muted">read again {{ item.repeat.repeats }} time{{ item.repeat.repeats|pluralize }} by this sign-in, the last at {{ item.repeat.last_at|date:"Y-m-d H:i:s" }}</span>{% endif %}{% if item.row.export_id %}<br><span class="muted">report {{ item.row.export_id }}</span>{% endif %}</td>
+        <td>{% if item.row.outcome == "served" %}<span class="chip ok">Served</span>{% else %}<span class="chip bad">Refused</span>{% endif %}</td>
+        <td class="mono">{{ item.row.client }}{% if item.row.sign_in_ref %}<br><span class="muted">sign-in {{ item.row.sign_in_ref }}</span>{% endif %}{% if item.row.request_id %}<br><span class="muted">request {{ item.row.request_id }}</span>{% endif %}</td></tr>
+  {% empty %}
+    <tr><td colspan="7" class="muted">No read recorded{% if chosen_account or chosen_workspace or kind or day %} for this choice{% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if unreadable %}<p class="notice warn">That page address could not be read. The newest entries are shown from the start link below.</p>{% endif %}
+<div class="pager">
+  <span>{% if earlier or unreadable %}<a href="?{{ query }}">&larr; Newest</a>{% endif %}</span>
+  <span>{% if older %}<a href="?{% if query %}{{ query }}&amp;{% endif %}before={{ older|urlencode }}">Older &rarr;</a>{% endif %}</span>
+</div>
+{% endblock %}

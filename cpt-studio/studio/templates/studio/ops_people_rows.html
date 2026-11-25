@@ -1,14 +1,14 @@
-{# One row per workspace membership, with the acts on that person (studio.console). back: the workspace page to return to, or empty for People. #}
+{# One row per workspace membership, with the acts on that person (studio.console). back: the workspace page to return to, or empty for People. Release 1: every act that changes access asks who at the practice requested it (C3), access is this workspace's by default and "everywhere" apart (C4), and each act asks for the security key again when the last one is more than five minutes old (B2). #}
 <div class="table-card scroll">
 <table>
   <thead><tr><th>Person</th>{% if not hide_workspace %}<th>Workspace</th>{% endif %}<th>Role</th><th>Access</th><th>Last sign-in</th><th>Manage</th></tr></thead>
   <tbody>
   {% for row in rows %}
     <tr>
-      <td><strong>{{ row.person.label }}</strong><br><span class="muted mono">{{ row.person.username }}</span></td>
-      {% if not hide_workspace %}<td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a><br><span class="muted">{{ row.workspace.category.name }}</span></td>{% endif %}
-      <td>{{ row.role_label }}{% if not row.membership.active %} <span class="flag">membership inactive</span>{% endif %}</td>
-      <td>{% if row.person.is_active %}<span class="chip ok">On</span>{% else %}<span class="chip bad">Off</span>{% endif %}</td>
+      <td><strong>{{ row.person.label }}</strong><br><span class="muted mono">{{ row.person.username }}</span>{% if row.person.password_change_required_at %}<br><span class="flag warn">must choose a new password</span>{% endif %}</td>
+      {% if not hide_workspace %}<td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a><br><span class="muted">{{ row.workspace.category.name }}</span>{% if row.workspace.closed_at %} <span class="flag">closed</span>{% endif %}</td>{% endif %}
+      <td>{{ row.role_label }}</td>
+      <td>{% if row.membership.active %}<span class="chip ok">On here</span>{% else %}<span class="chip bad">Off here</span>{% endif %}{% if not row.person.is_active %}<br><span class="chip bad">Off everywhere</span>{% endif %}</td>
       <td class="mono">{% if row.person.last_login %}{{ row.person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td>
       <td>
         {% if row.operator %}
@@ -16,6 +16,7 @@
         {% else %}
         <details>
           <summary>Manage</summary>
+          <p class="muted">Requested by: the practice's contact or a ticket reference. No patient details.</p>
           <div class="actions">
             <form method="post" action="/ops/people/{{ row.person.pk }}/role">{% csrf_token %}
               <input type="hidden" name="membership" value="{{ row.membership.pk }}">
@@ -23,19 +24,39 @@
               <label>Role
                 <select name="role">{% for value, label in row.roles %}<option value="{{ value }}"{% if value == row.membership.role %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
               </label>
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
               <button type="submit" class="secondary">Change role</button>
             </form>
             <form method="post" action="/ops/people/{{ row.person.pk }}/password">{% csrf_token %}
               <input type="hidden" name="back" value="{{ back }}">
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
               <button type="submit" class="secondary">Reset password</button>
             </form>
             <form method="post" action="/ops/people/{{ row.person.pk }}/access">{% csrf_token %}
               <input type="hidden" name="back" value="{{ back }}">
-              {% if row.person.is_active %}
-              <input type="hidden" name="access" value="off"><button type="submit" class="danger">Turn access off</button>
+              <input type="hidden" name="membership" value="{{ row.membership.pk }}">
+              <input type="hidden" name="scope" value="practice">
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
+              {% if row.membership.active %}
+              <input type="hidden" name="access" value="off"><button type="submit" class="danger">Turn access off in this workspace</button>
               {% else %}
-              <input type="hidden" name="access" value="on"><button type="submit" class="secondary">Turn access on</button>
+              <input type="hidden" name="access" value="on"><button type="submit" class="secondary">Turn access on in this workspace</button>
               {% endif %}
+            </form>
+            <form method="post" action="/ops/people/{{ row.person.pk }}/access">{% csrf_token %}
+              <input type="hidden" name="back" value="{{ back }}">
+              <input type="hidden" name="scope" value="everywhere">
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
+              {% if row.person.is_active %}
+              <input type="hidden" name="access" value="off"><button type="submit" class="danger">Turn off everywhere</button>
+              {% else %}
+              <input type="hidden" name="access" value="on"><button type="submit" class="secondary">Turn on everywhere</button>
+              {% endif %}
+            </form>
+            <form method="post" action="/ops/people/{{ row.person.pk }}/unlock">{% csrf_token %}
+              <input type="hidden" name="back" value="{{ back }}">
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
+              <button type="submit" class="secondary">Clear sign-in delay</button>
             </form>
           </div>
         </details>

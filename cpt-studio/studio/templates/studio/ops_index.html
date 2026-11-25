@@ -32,22 +32,24 @@
 {% endif %}
 
 <h2>Encounters</h2>
+<p class="muted">Each document is named by its short reference, never its title or file name: its page opens on its metadata, and its content opens with a reason.{% if closed %} The documents of {{ closed }} closed workspace{{ closed|pluralize }} are left out.{% endif %}</p>
 <div class="table-card scroll">
 <table>
-  <thead><tr><th>Title</th><th>Workspace</th><th>State</th><th class="num">Rounds</th><th>Latest round</th><th class="num">Latest round cost (USD)</th><th>Updated</th></tr></thead>
+  <thead><tr><th>Reference</th><th>Workspace</th><th>State</th><th class="num">Rounds</th><th>Latest round</th><th class="num">Latest round cost (USD)</th><th>Created</th><th>Updated</th></tr></thead>
   <tbody>
   {% for row in rows %}
     <tr>
-      <td><a href="/ops/encounters/{{ row.encounter.pk }}">{{ row.encounter.title }}</a></td>
+      <td class="mono"><a href="/ops/encounters/{{ row.encounter.pk }}">{{ row.reference }}</a></td>
       <td>{{ row.encounter.workspace.name }}</td>
       <td>{{ row.state_label }} <span class="muted mono">({{ row.encounter.state }})</span></td>
       <td class="num">{{ row.encounter.rounds_count }}</td>
       <td>{% if row.latest %}#{{ row.latest.number }} {{ row.latest.trigger }} · {{ row.latest.state }}{% if row.latest.failure_kind %} · <span class="flag bad">{{ row.latest.failure_kind }}</span>{% endif %}{% else %}<span class="muted">none (earlier review)</span>{% endif %}</td>
       <td class="num mono">{{ row.cost|default:"" }}{% if row.unpriced %} <span class="flag warn">{{ row.unpriced }} with no known cost yet</span>{% endif %}</td>
+      <td class="mono">{{ row.encounter.created_at|date:"Y-m-d H:i:s" }}</td>
       <td class="mono">{{ row.encounter.updated_at|date:"Y-m-d H:i:s" }}</td>
     </tr>
   {% empty %}
-    <tr><td colspan="7" class="muted">No encounters yet.</td></tr>
+    <tr><td colspan="8" class="muted">No encounters yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

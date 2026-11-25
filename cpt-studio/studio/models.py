@@ -9,7 +9,8 @@ import uuid
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
+from django.db.models.functions import Upper
 
 
 DECISION_SEQUENCE = 'studio_decision_sequence'
@@ -867,6 +868,88 @@ class ReferencePassage(models.Model):
         indexes = [models.Index(fields=['topic', 'topic_value'])]
 
 
+class LoginAttemptQuerySet(models.QuerySet):
+    """The bounded reads of sign-in rows (refutation round 1 of release 1, avail-5; B1 item 6: every read stops at its
+    limit), each served by an index of migration 0018 however many rows one name holds.
+
+    Each is a LIMIT 1 statement ORDER BY its index's own columns, in an order only that index - or only indexes that
+    lead with the name - gives (refutation round 3 of release 1, rows-0): the planner multiplies a name's share of the
+    table by an address's as if they were independent (or, for a name it is given row by row, takes the table's rows
+    over the names' count), so where one name holds most rows a lookup looked like thousands of matches, and a scan that
+    stops at the first - of the whole table, or of an index read by time - looked cheaper than the index; when nothing
+    matched, that scan read every row. A plan that does not read the index in its order must now sort every matching
+    row before its first, so the index serves the read whatever the rows' distribution. A value the order must not be
+    a constant for is written as a one-value array (= ANY), which the planner does not fold into a constant. These
+    statements read the table, not ``self``'s filters."""
+
+    def latest_sign_ins(self, usernames) -> dict:
+        """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
+        succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
+        by aggregating every succeeded row of each name. Every name in ONE statement (refutation round 2 of release 1,
+        phi-0: a query a name cost a round trip each), so the read costs one statement whatever the number of names
+        and whatever the rows one name holds. Each name's lookup is ORDER BY the name, then the time (rows-0: ordered by
+        time alone, a backward scan of studio_login_time read every row for a member who never signed in where one name
+        held the rows), an order only an index that leads with the name gives."""
+        from django.db import connections  # here: the one read in this module that names its connection
+        names = sorted({str(name) for name in usernames})
+        if not names:
+            return {}
+        database = connections[self.db]
+        quote, meta = database.ops.quote_name, self.model._meta
+        table = quote(meta.db_table)
+        username, created_at, succeeded = (quote(meta.get_field(field).column)
+                                           for field in ('username', 'created_at', 'succeeded'))
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT wanted.name, (SELECT attempt.{created_at} FROM {table} AS attempt '
+                           f'WHERE attempt.{succeeded} AND attempt.{username} = ANY(ARRAY[wanted.name]) '
+                           f'ORDER BY attempt.{username} DESC, attempt.{created_at} DESC LIMIT 1) '
+                           f'FROM unnest(%s::text[]) AS wanted(name)', [names])
+            return {name: last for name, last in cursor.fetchall() if last is not None}
+
+    def signed_in_from(self, username, client_key, since, *, client='') -> bool:
+        """Whether ``username`` signed in successfully from the client key ``client_key`` - an IPv4 address, or an IPv6
+        address's /64 (studio.request_meta.client_key) - at or after ``since`` (``client``: the address the key was read
+        from). However many times the name signed in (refutation round 2 of release 1, regression-1: a read of the
+        name's newest 1,000 sign-ins left an older address out), each read is one LIMIT 1 statement whose first row in
+        its partial index's order answers, so neither its cost nor its answer depends on how many rows the name holds or
+        how the table's rows are spread (refutation round 3, rows-0: see the class):
+        - a row release 1 writes carries its client's key (LoginAttempt.client_key): any address of the key - every
+          address of an IPv6 /64 - is found (studio_login_name_key_ok). The name is one value and the key an array,
+          ORDER BY the key, then the time: no other index gives that order;
+        - a row an older revision wrote carries none, and is found by the texts the key is stored as (spellings_of):
+          ``client`` itself, and an IPv4 key as nginx writes it, plain or IPv4-mapped - all of an IPv4 key's texts
+          (studio_login_name_keyless, which holds those rows alone: no row release 1 writes enters it). The name is an
+          array too, ORDER BY the name, the address, the time: an index that leads with the address
+          (studio_login_client_time) gives no part of that order, and each that does leads with the name and holds every
+          row studio_login_name_keyless holds. An IPv6 /64's other addresses are no list of texts, so an older
+          revision's row is found by its own address only."""
+        if not client_key:
+            return False
+        from django.db import connections  # here: as latest_sign_ins
+        database = connections[self.db]
+        quote, meta = database.ops.quote_name, self.model._meta
+        table = quote(meta.db_table)
+        column = {field: quote(meta.get_field(field).column)
+                  for field in ('username', 'client', 'client_key', 'succeeded', 'created_at')}
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT 1 FROM {table} WHERE {column["username"]} = %s AND {column["client_key"]} = '
+                           f'ANY(%s::text[]) AND {column["client_key"]} IS NOT NULL AND {column["succeeded"]} AND '
+                           f'{column["created_at"]} >= %s ORDER BY {column["client_key"]}, {column["created_at"]} '
+                           f'LIMIT 1', [str(username), [str(client_key)], since])
+            if cursor.fetchone() is not None:
+                return True
+        spellings = [text for text in dict.fromkeys(self.model.spellings_of(client_key, client))
+                     if self.model.key_of(text) == client_key]
+        if not spellings:
+            return False
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT 1 FROM {table} WHERE {column["username"]} = ANY(%s::text[]) AND {column["client"]} '
+                           f'= ANY(%s::text[]) AND {column["client_key"]} IS NULL AND {column["succeeded"]} AND '
+                           f'{column["created_at"]} >= %s ORDER BY {column["username"]}, {column["client"]}, '
+                           f'{column["created_at"]} LIMIT 1', [[str(username)], spellings, since])
+            return cursor.fetchone() is not None
+
+
 class LoginAttempt(models.Model):
     # Release 1, B1: the door an attempt was made at (studio.request_meta.CPT or ADMIN) and its outcome. ``outcome`` is
     # a plain column with no choices, so a new outcome needs no migration (the installer's gate refuses AlterField).
@@ -886,11 +969,71 @@ class LoginAttempt(models.Model):
     door = models.CharField(max_length=8, null=True, blank=True)
     outcome = models.CharField(max_length=24, null=True, blank=True)
     sign_in_ref = models.UUIDField(null=True, blank=True)  # the session's reference (request_meta.sign_in_ref)
+    # The client's key (key_of: an IPv4 address, an IPv6 address's /64, an IPv4-mapped address as its IPv4 address,
+    # anything else its keyed hash), written with every row by save(), so a name's sign-ins from one client key are one
+    # index lookup however many the name made (refutation round 2 of release 1, regression-1). Nullable with no database
+    # default (migration 0018): the rows an older revision inserts leave it NULL, and are read by their client
+    # (LoginAttemptQuerySet.signed_in_from).
+    client_key = models.CharField(max_length=64, null=True, blank=True)
+
+    objects = LoginAttemptQuerySet.as_manager()
+
+    @staticmethod
+    def key_of(client) -> str:
+        """The client key of a stored ``client``: studio.request_meta.client_key's reading of it, as
+        throttle.key_of_address reads one."""
+        from types import SimpleNamespace
+
+        from . import request_meta  # here: request_meta needs no model, and this module loads first
+        return request_meta.client_key(SimpleNamespace(META={'REMOTE_ADDR': str(client or '')}))
+
+    @staticmethod
+    def spellings_of(client_key, client='') -> list:
+        """Texts a stored client is read from for ``client_key``: ``client`` itself and its canonical spelling, and for
+        an IPv4 key the address as nginx's $remote_addr writes it - plain, or IPv4-mapped on a dual-stack listener
+        (::ffff:a.b.c.d) - and as Python's ipaddress writes the mapped address. The caller keeps those whose key is
+        ``client_key``."""
+        import ipaddress
+        texts = [str(client or '')]
+        try:
+            texts.append(str(ipaddress.ip_address(texts[0])))
+        except ValueError:
+            pass
+        try:
+            address = ipaddress.IPv4Address(str(client_key or ''))
+        except ValueError:
+            return texts
+        return texts + [str(address), f'::ffff:{address}', str(ipaddress.IPv6Address(f'::ffff:{address}'))]
+
+    def save(self, *args, **kwargs):
+        if self.client_key is None:  # every row release 1 writes carries its client's key
+            self.client_key = self.key_of(self.client)
+        super().save(*args, **kwargs)
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at']),
                    # release 1 (AUTH-6): the per-address count reads this, not the whole table
-                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time')]
+                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time'),
+                   # refutation round 1 (avail-5), however many rows one name holds: the console's sign-ins page newest
+                   # first and page by page, and by result; clear_failures' case-insensitive name (username__iexact is
+                   # UPPER(username)); and a name's newest successful sign-ins (LoginAttemptQuerySet)
+                   models.Index(fields=['created_at', 'id'], name='studio_login_time'),
+                   models.Index(fields=['succeeded', 'created_at', 'id'], name='studio_login_result_time'),
+                   models.Index(Upper('username'), F('created_at'), name='studio_login_upper_name_time'),
+                   models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True),
+                                name='studio_login_name_signed_in'),
+                   # refutation round 2 (phi-1): the admin door's key step reads and settles its attempt by the sign-in
+                   # reference while it is second_factor_pending (throttle.settle_second_factor); only pending rows are
+                   # held, so no other attempt's insert writes to it
+                   models.Index(fields=['sign_in_ref'], condition=Q(outcome='second_factor_pending'),
+                                name='studio_login_pending_ref'),
+                   # refutation round 2 (regression-1): a name's sign-ins from one client key, one lookup however many
+                   # the name made; and those an older revision wrote, which carry no key, by their address
+                   # (LoginAttemptQuerySet.signed_in_from). No row release 1 writes is held by the second.
+                   models.Index(fields=['username', 'client_key', 'created_at'],
+                                condition=Q(succeeded=True, client_key__isnull=False), name='studio_login_name_key_ok'),
+                   models.Index(fields=['username', 'client', 'created_at'],
+                                condition=Q(succeeded=True, client_key__isnull=True), name='studio_login_name_keyless')]
 
 
 class WorkerBeat(models.Model):
@@ -1051,7 +1194,24 @@ class AccessRecord(ImmutableModel):
     class Meta:
         ordering = ['created_at']
         indexes = [models.Index(fields=['workspace_id', 'created_at'], name='studio_access_ws_time'),
-                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time')]
+                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time'),
+                   # refutation round 1 (avail-3): the console's reads page, newest first - unfiltered, by day and by
+                   # page (studio_access_time), and by kind, a rare kind included (studio_access_view_time)
+                   models.Index(fields=['created_at', 'id'], name='studio_access_time'),
+                   models.Index(fields=['view', 'created_at', 'id'], name='studio_access_view_time')]
+
+
+class AccessRecordRepeat(models.Model):
+    """How many more times one member's list read was made again (refutation round 1 of release 1, avail-3; migration
+    0018): a served member.list read that repeats one of the same sign-in, account, address, practice, count and filters,
+    written within READ_AUDIT_LIST_REPEAT_SECONDS, writes no AccessRecord of its own - it adds one to ``repeats`` here and
+    moves ``last_at`` (studio.read_audit.record), so one session listing again and again grows the trail by at most one
+    record a window. AccessRecord stays append-only: its count of repeats lives here, keyed by the record's id - a plain
+    value, as every id of the record tables is. Counts and times only."""
+    id = models.BigAutoField(primary_key=True)
+    record_id = models.UUIDField(unique=True)  # the member.list AccessRecord this counts for
+    repeats = models.PositiveIntegerField(default=0)
+    last_at = models.DateTimeField()  # the latest repeat
 
 
 class SecurityEvent(ImmutableModel):
@@ -1143,7 +1303,10 @@ class DisposalEvent(ImmutableModel):
     completed, failed, closed or exported, with counts per table, file counts, the manifest's digest, who ran and who
     approved it, and the authorization. The ledger that is re-applied after a restore (D1, item 10)."""
     PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED = 'planned', 'completed', 'failed', 'closed', 'exported'
-    STAGES = (PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED)
+    # written inside a destruction's own transaction, before its commit (Lane 4, round 3): the commit proves both or
+    # neither, and a replay treats the run as destroyed whatever follows it
+    COMMITTED = 'committed'
+    STAGES = (PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED, COMMITTED)
     DOCUMENT, WORKSPACE = 'document', 'workspace'  # its scope: one document, or a whole practice
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1174,3 +1337,26 @@ class FileKey(models.Model):
     wrapped_key = models.BinaryField()
     created_at = models.DateTimeField(auto_now_add=True)
     destroyed_at = models.DateTimeField(null=True, blank=True)
+
+
+class SessionAccountLink(models.Model):
+    """One way a session names an account (refutation round 1 of release 1, avail-0; migration 0018): signed in as it, or
+    waiting on it - a checked password waiting for its key at the admin door, a setup under way. Written by the site's
+    session store (studio.session_store) in the transaction that saves the session, and removed in the one that deletes
+    it, so ending one account's sessions reads that account's rows and never the whole django_session table. The session
+    key and the account are plain values, never foreign keys: the revision before release 1 deletes django_session rows
+    and the installer deletes all of them at a forward, and neither may be refused or need to know of this table; a row
+    either leaves behind names a session that is gone, which every reader re-checks, and the daily maintenance removes.
+    A signed-in session's kind names the door it was opened at (repair round 2 of release 1, sessions-1): SIGNED_IN at the
+    cpt door (or at none), SIGNED_IN_ADMIN at the admin door, so the cap of one door's sign-ins never ends the other's."""
+    SIGNED_IN, SIGNED_IN_ADMIN, PENDING, SETUP = 'signed_in', 'signed_admin', 'pending', 'setup'
+    id = models.BigAutoField(primary_key=True)
+    session_key = models.CharField(max_length=40)  # django_session.session_key
+    account_id = models.UUIDField()
+    kind = models.CharField(max_length=12)  # SIGNED_IN | SIGNED_IN_ADMIN | PENDING | SETUP (no choices: no migration)
+    created_at = models.DateTimeField()  # when the session first named the account this way: the cap ends the oldest
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['session_key', 'account_id', 'kind'],
+                                               name='one_session_account_kind')]
+        indexes = [models.Index(fields=['account_id', 'kind', 'created_at'], name='studio_session_link_account')]

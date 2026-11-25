@@ -156,29 +156,38 @@ class PollTests(ReadAuditCase):
         return read_audit.record(request, view=view, workspace_id=self.ws.pk, encounter_ids=[(enc or self.enc).pk],
                                  outcome=outcome)
 
+    def one_moment(self):
+        """timezone.now held at one moment clear of UTC midnight - tomorrow at noon, never earlier than setUp's rows -
+        for a read and the poll that asks after it (refutation round 3, regression-8: a poll is a read's repeat only on
+        the read's own UTC day, so a midnight between the two on the real clock was a new day's read)."""
+        moment = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        return mock.patch.object(timezone, 'now', return_value=moment)
+
     def test_a_served_detail_of_this_sign_in_is_seen_for_a_minute(self):
-        request = self.request_for(self.reviewer)
-        self.assertFalse(read_audit.detail_seen_recently(request, self.enc.pk))
-        self.detail(request)
-        self.assertTrue(read_audit.detail_seen_recently(request, self.enc.pk))
-        self.assertTrue(read_audit.detail_seen_recently(request, str(self.enc.pk)))
-        later = timezone.now() + timedelta(seconds=settings.READ_AUDIT_DETAIL_DEDUPE_SECONDS + 1)
-        with mock.patch.object(timezone, 'now', return_value=later):
+        with self.one_moment():
+            request = self.request_for(self.reviewer)
             self.assertFalse(read_audit.detail_seen_recently(request, self.enc.pk))
+            self.detail(request)
+            self.assertTrue(read_audit.detail_seen_recently(request, self.enc.pk))
+            self.assertTrue(read_audit.detail_seen_recently(request, str(self.enc.pk)))
+            later = timezone.now() + timedelta(seconds=settings.READ_AUDIT_DETAIL_DEDUPE_SECONDS + 1)
+            with mock.patch.object(timezone, 'now', return_value=later):
+                self.assertFalse(read_audit.detail_seen_recently(request, self.enc.pk))
 
     def test_only_this_sign_in_s_served_detail_of_this_document_counts(self):
-        request = self.request_for(self.reviewer)
-        other_document = f.encounter(self.ws, self.reviewer, title='Another synthetic note')
-        self.detail(request, outcome=read_audit.REFUSED)
-        self.detail(request, view=read_audit.MEMBER_INLINE)
-        self.detail(request, enc=other_document)
-        self.detail(self.request_for(self.reviewer, ref=uuid.uuid4()))  # another sign-in of the same account
-        self.detail(self.request_for(f.member(self.ws)))  # another account
-        self.assertFalse(read_audit.detail_seen_recently(request, self.enc.pk))
-        self.assertTrue(read_audit.detail_seen_recently(request, other_document.pk))
-        anonymous = self.request_for(self.reviewer)
-        anonymous.user = AnonymousUser()
-        self.assertFalse(read_audit.detail_seen_recently(anonymous, other_document.pk))
+        with self.one_moment():
+            request = self.request_for(self.reviewer)
+            other_document = f.encounter(self.ws, self.reviewer, title='Another synthetic note')
+            self.detail(request, outcome=read_audit.REFUSED)
+            self.detail(request, view=read_audit.MEMBER_INLINE)
+            self.detail(request, enc=other_document)
+            self.detail(self.request_for(self.reviewer, ref=uuid.uuid4()))  # another sign-in of the same account
+            self.detail(self.request_for(f.member(self.ws)))  # another account
+            self.assertFalse(read_audit.detail_seen_recently(request, self.enc.pk))
+            self.assertTrue(read_audit.detail_seen_recently(request, other_document.pk))
+            anonymous = self.request_for(self.reviewer)
+            anonymous.user = AnonymousUser()
+            self.assertFalse(read_audit.detail_seen_recently(anonymous, other_document.pk))
 
 
 class MarkTests(TestCase):

@@ -2,6 +2,8 @@
 # CPT Studio container roles. Anything not listed here is refused.
 #   web               gunicorn on 0.0.0.0:8000
 #   worker            the DB-backed job worker
+#   converter         the Word converter's socket server (release 1, A7/E3): no Django settings,
+#                     no secret, no network; its container is started by --phase converter
 #   migrate           apply migrations, non-interactively
 #   manage <cmd> ...  one Django management command
 set -eu
@@ -9,7 +11,7 @@ cd /app
 
 refuse() {
     echo "cpt-studio entrypoint: $1" >&2
-    echo "usage: web | worker | migrate | manage <command> [args...]" >&2
+    echo "usage: web | worker | converter | migrate | manage <command> [args...]" >&2
     exit 64
 }
 
@@ -26,6 +28,10 @@ case "$role" in
     worker)
         [ "$#" -eq 0 ] || refuse "'worker' takes no arguments."
         exec python manage.py run_worker
+        ;;
+    converter)
+        [ "$#" -eq 0 ] || refuse "'converter' takes no arguments."
+        exec python -m studio.converter_server
         ;;
     migrate)
         [ "$#" -eq 0 ] || refuse "'migrate' takes no arguments."

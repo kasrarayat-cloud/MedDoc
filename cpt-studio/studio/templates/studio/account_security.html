@@ -1,0 +1,39 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183d35">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Account and password — CPT Studio</title>
+  <link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'studio/styles.css' %}">
+</head>
+<body class="login-body">
+  <main class="login-card" id="main">
+    <div class="brand"><span class="brand-symbol" aria-hidden="true"><span></span></span><span>cpt<span class="brand-light">studio</span></span></div>
+    <span class="eyebrow">ACCOUNT AND PASSWORD</span>
+    <h1>{% if required %}Choose your own password.{% else %}Your password.{% endif %}</h1>
+    {% if required %}<p class="dialog-copy" id="requiredNotice">The password you were given was set by staff. Choose a new one only you know to continue: until you do, nothing else opens, and the password you were given stops working 72 hours after it was set.</p>
+    {% else %}<p class="dialog-copy">Change your password here at any time. Every other place this account is signed in is signed out when you do.</p>{% endif %}
+    {% if done %}<p class="upload-status" role="status">{{ done }}</p>{% endif %}
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if can_change %}
+    <form class="login-form" method="post" action="/account/" id="passwordForm">{% csrf_token %}
+      <label class="field-label">Current password<input name="current_password" type="password" autocomplete="current-password" required></label>
+      <label class="field-label">New password <span>(at least {{ min_length }} characters)</span><input name="new_password" type="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      <label class="field-label">New password again<input name="new_password_again" type="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      {% if on_console %}<p class="upload-status">The console asks for your security key again before the change.</p>{% endif %}
+      <button class="button primary" type="submit">Change password</button>
+    </form>
+    {% elif not error %}
+    <p class="form-error" role="status">{{ operator_on_console }}</p>
+    {% endif %}
+    <form class="login-form" method="post" action="/logout/everywhere" id="everywhereForm">{% csrf_token %}
+      <p class="dialog-copy">Signed in somewhere you no longer are? Sign out everywhere ends every session of this account, this one included.</p>
+      <button class="button secondary" type="submit">Sign out everywhere</button>
+    </form>
+    <p class="login-footnote">{% if not required %}<a class="meta-link" href="{{ home }}">Back</a> · {% endif %}You are signed out after {{ idle_minutes }} minutes without activity. <span class="preview-badge"><span></span>Synthetic demonstration · Authorized users only</span></p>
+  </main>
+</body>
+</html>

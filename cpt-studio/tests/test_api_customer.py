@@ -16,14 +16,15 @@ from unittest import mock
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 
-from studio import api, client_contract, customer, decisions, exports, jobs, models, state
+from studio import api, client_contract, customer, decisions, exports, jobs, models, state, storage
 from studio.fable import document as fable_document
 from tests.support import coding as f
 from tests.support import rounds as r
 
 Round = models.CodingRound
-SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts'}
+SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
 ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'}
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',
@@ -525,7 +526,12 @@ class ViewTests(ApiCase):
             view = self.client.get(payload['document']['view_url'])
             self.assertEqual((view.status_code, view.content, view['Content-Type']), (200, CONVERTED, 'application/pdf'))
             self.assertEqual(view['Content-Disposition'], 'inline; filename="synthetic-note.pdf"')
-            self.assertEqual(self.client.get(f'/api/encounters/{enc.pk}/original').content, DOCX_BYTES)
+            # release 1, C6: the download is the PDF the coding review read; the Word file only when asked for by name
+            download = self.client.get(f'/api/encounters/{enc.pk}/original')
+            self.assertEqual((download.status_code, download.content, download['Content-Type']),
+                             (200, CONVERTED, 'application/pdf'))
+            self.assertEqual(download['Content-Disposition'], 'attachment; filename="synthetic-note.pdf"')
+            self.assertEqual(self.client.get(f'/api/encounters/{enc.pk}/original?format=original').content, DOCX_BYTES)
             # the next round of the same revision reads the stored conversion again: the same pages, one conversion
             question = payload['questions'][0]['id']
             self.post_json(f'/api/encounters/{enc.pk}/answers', {'answers': [{'question_id': question,
@@ -570,6 +576,104 @@ class EarlierReviewTests(ApiCase):
         self.assertIn(f'{self.reviewer.label()} asked for the coding review again.',
                       [item['text'] for item in payload['activity']])
 
+
+
+class WordDownloadTests(ApiCase):
+    """Release 1, C6: a Word document downloads as the PDF its coding review read - the file the in-page view shows -
+    and the Word file itself only when asked for by name (format=original, after the page's warning: Lane 2), recorded
+    with the format it served; a PDF or text original downloads as before."""
+    WORD = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+    def word(self, converted=True):
+        enc = f.encounter(self.ws, self.reviewer, title='Synthetic Word note')
+        f.upload(enc, self.reviewer, data=DOCX_BYTES, filename='synthetic-note.docx', media_type=self.WORD)
+        if converted:
+            storage_name, digest, _ = storage.store_original(self.ws.pk, CONVERTED, 'synthetic-note.pdf')
+            r.write_round(enc)
+            Round.objects.filter(encounter=enc).update(view_pdf_storage_name=storage_name, view_pdf_sha256=digest)
+        return enc
+
+    def formats(self, enc):
+        return [row.filters.get('format') for row in models.AccessRecord.objects.filter(
+            view='member.download', encounter_ids__contains=[str(enc.pk)]).order_by('created_at')]
+
+    def test_a_word_document_downloads_as_its_converted_pdf(self):
+        enc = self.word()
+        answer = self.client.get(f'/api/encounters/{enc.pk}/original')
+        self.assertEqual((answer.status_code, answer['Content-Type'], answer.content), (200, 'application/pdf', CONVERTED))
+        self.assertEqual(answer['Content-Disposition'], 'attachment; filename="synthetic-note.pdf"')
+        self.assertEqual(self.formats(enc), ['converted_pdf'])
+
+    def test_the_word_file_comes_only_with_format_original_and_is_recorded_so(self):
+        enc = self.word()
+        answer = self.client.get(f'/api/encounters/{enc.pk}/original?format=original')
+        self.assertEqual((answer.status_code, answer['Content-Type'], answer.content), (200, self.WORD, DOCX_BYTES))
+        self.assertEqual(answer['Content-Disposition'], 'attachment; filename="synthetic-note.docx"')
+        for other in ('pdf', 'ORIGINAL', 'original ', 'docx'):  # only the one word asks for the Word file
+            with self.subTest(format=other):
+                self.assertEqual(self.client.get(f'/api/encounters/{enc.pk}/original', {'format': other}).content,
+                                 CONVERTED)
+        self.assertEqual(self.formats(enc), ['original', 'converted_pdf', 'converted_pdf', 'converted_pdf',
+                                             'converted_pdf'])
+
+    def test_with_no_converted_pdf_yet_the_download_offers_the_original_and_serves_nothing(self):
+        enc = self.word(converted=False)
+        answer = self.client.get(f'/api/encounters/{enc.pk}/original')
+        self.assertEqual(answer.status_code, 409)
+        self.assertEqual(answer.json(), {'error': customer.ORIGINAL_ONLY, 'details': {
+            'original_url': f'/api/encounters/{enc.pk}/original?format=original'}})
+        self.assertNotIn(DOCX_BYTES, answer.content)
+        self.assertEqual(self.formats(enc), [])  # nothing served, nothing recorded
+        self.assertEqual(self.client.get(f'/api/encounters/{enc.pk}/original?format=original').content, DOCX_BYTES)
+        self.assertEqual(self.formats(enc), ['original'])
+
+    def test_a_pdf_original_downloads_as_before(self):
+        enc = self.encounter(title='Synthetic PDF note')
+        for query in ('', '?format=original'):
+            with self.subTest(query=query):
+                answer = self.client.get(f'/api/encounters/{enc.pk}/original{query}')
+                self.assertEqual((answer.status_code, answer['Content-Type'], answer.content),
+                                 (200, 'application/pdf', f.PDF_BYTES))
+                self.assertEqual(answer['Content-Disposition'], 'attachment; filename="synthetic-note.pdf"')
+        self.assertEqual(self.formats(enc), ['original', 'original'])
+
+
+class TombstoneTests(ApiCase):
+    """Release 1, D1 (Lane 4's disposal): a destroyed document stays as a tombstone row with no PHI - never listed or
+    counted, and every read of it answers 404. Lane 4's refusal sentences for a closed practice and a destroyed document
+    reach the member as they are."""
+
+    def tombstone(self):
+        enc = self.encounter(title='Synthetic note that was destroyed')
+        models.Encounter.objects.filter(pk=enc.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        return enc
+
+    def test_a_tombstone_is_not_listed_or_counted_and_its_reads_answer_404(self):
+        kept = self.encounter(title='Synthetic note that stays')
+        gone = self.tombstone()
+        listed = [row['id'] for row in self.get_json('/api/encounters')['encounters']]
+        self.assertEqual(listed, [str(kept.pk)])
+        self.assertEqual(self.get_json('/api/session')['counts'], {'documents': 1, 'queue': 0})
+        for url in (f'/api/encounters/{gone.pk}', f'/api/encounters/{gone.pk}/original',
+                    f'/api/encounters/{gone.pk}/original?view=1'):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertFalse(models.AccessRecord.objects.filter(encounter_ids__contains=[str(gone.pk)]).exists())
+
+    def test_lane_4s_refusal_sentences_are_read_by_name(self):
+        self.assertEqual(api.JOB_REFUSAL_NAMES[-2:], ('CLOSED_MESSAGE', 'DESTROYED_MESSAGE'))
+        for name in ('CLOSED_MESSAGE', 'DESTROYED_MESSAGE'):
+            if isinstance(getattr(jobs, name, None), str):  # once Lane 4's studio/jobs.py is in the tree
+                self.assertIn(getattr(jobs, name), api.job_refusals())
+        enc = self.encounter(title='Synthetic note in a closed practice')
+        closed = 'This workspace is closed: synthetic sentence.'
+        with mock.patch.object(jobs, 'CLOSED_MESSAGE', closed, create=True), \
+                mock.patch.object(decisions, 'retry', side_effect=jobs.Refused(closed)):
+            answer = self.post_json(f'/api/encounters/{enc.pk}/retry')
+        self.assertEqual((answer.status_code, answer.json()['error']), (409, closed))
+        with mock.patch.object(decisions, 'retry', side_effect=jobs.Refused('A sentence jobs never defined.')):
+            answer = self.post_json(f'/api/encounters/{enc.pk}/retry')
+        self.assertEqual(answer.json()['error'], api.NOT_SAVED)
 
 class ImportGraphTests(TestCase):
     def test_the_url_conf_loads_no_module_of_the_earlier_pipeline(self):

@@ -84,7 +84,7 @@ class ReconcileFirstTests(r.CustomerCase, TestCase):
 
     def test_the_operator_console_offers_no_retry_until_the_run_is_reconciled(self):
         self.failed_unknown()
-        console = ops.client(r.f.user('console-operator'))
+        console = ops.admin_client(r.f.user('console-operator'))  # release 1, B3: the admin host, 2FA
         page = console.get(f'/ops/encounters/{self.enc.pk}').content.decode('utf-8')
         self.assertNotIn('Retry the failed round', page)
         self.assertIn('Record the reconciliation', page)

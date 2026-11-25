@@ -350,14 +350,18 @@ class PracticeDisposalTests(PracticeCase, TestCase):
             .values_list('pk', flat=True)}
         sessions = {('django_session', session.session_key) for session in Session.objects.all()
                     if str(session.get_decoded().get('_auth_user_id')) in {str(user.pk) for user in closing}}
-        self.assertTrue(logins and sessions)
+        # the site's session store keeps which accounts each session names (refutation round 1 of release 1, avail-0):
+        # a session's links end with it
+        links = {(models.SessionAccountLink._meta.db_table, pk) for pk in models.SessionAccountLink.objects.filter(
+            session_key__in=[key for _, key in sessions]).values_list('pk', flat=True)}
+        self.assertTrue(logins and sessions and links)
         b_files, before, names = folder_digests(self.other_ws.pk), snapshot(), disposal.scope_files(scope)
         output = self.execute(plan)
         after = snapshot()
         completed = Event.objects.get(stage=Event.COMPLETED)
         committed = Event.objects.get(stage=disposal.COMMITTED)
-        expected = (in_scope | logins | sessions | {(models.DisposalEvent._meta.db_table, completed.pk),
-                                                    (models.DisposalEvent._meta.db_table, committed.pk)}
+        expected = (in_scope | logins | sessions | links | {(models.DisposalEvent._meta.db_table, completed.pk),
+                                                            (models.DisposalEvent._meta.db_table, committed.pk)}
                     | {(models.Encounter._meta.db_table, pk) for pk in scope.encounter_ids}
                     | {(models.Membership._meta.db_table, pk) for pk in models.Membership.objects.filter(
                         workspace=self.ws).values_list('pk', flat=True)}
@@ -576,7 +580,7 @@ class DocumentDisposalTests(PracticeCase, TestCase):
 
 # --- real commits: the files after the commit, and the vacuum ---------------------------------------------------------------
 
-@override_settings(SESSION_ENGINE='django.contrib.sessions.backends.db')
+@override_settings(SESSION_ENGINE='studio.session_store')  # the site's store (refutation round 1, avail-0)
 class CommittedDisposalTests(TransactionTestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()

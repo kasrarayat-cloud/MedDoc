@@ -22,6 +22,14 @@ from tests.support import operator as ops
 from tests.support import questions as q
 from tests.support import rounds as r
 
+
+def console_page(username, encounter):
+    """The operator console's page of ``encounter``, its content opened (release 1: the console answers on the admin
+    host after the second factor, B3; a document's content opens with a reason and a reference, C2)."""
+    client = ops.admin_client(f.user(username))
+    client.post(f'/ops/encounters/{encounter.pk}/content', {'reason': 'support_request', 'reference': 'SR-1'})
+    return client.get(f'/ops/encounters/{encounter.pk}').content.decode('utf-8')
+
 Round = models.CodingRound
 
 
@@ -397,7 +405,7 @@ class QuestionIdPipelineTests(r.CustomerCase, TestCase):
         enc = self.started()
         reader = f.reader_result([q.coded('45385', ids=['Q9'])], questions=[q.asked('Q1', 'Which site?')])
         self.code_round(enc, reader=reader, checker=f.checker_result([q.reviewed('L1', '45385', ids=[{'id': 'Q1'}])]))
-        page = ops.client(f.user('platform-operator')).get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
+        page = console_page('platform-operator', enc)
         self.assertIn('<h3>Question ids that name no question</h3>', page)
         self.assertIn('<li>L1 <span class="mono">45385</span> names <span class="mono">&quot;Q9&quot;</span></li>',
                       page)
@@ -405,7 +413,7 @@ class QuestionIdPipelineTests(r.CustomerCase, TestCase):
                       '&quot;Q1&quot;}</span></li>', page)
         clean = self.started(title='Synthetic note whose ids all name questions')
         self.code_round(clean, reader=q.READER, checker=q.CHECKER)
-        page = ops.client(f.user('platform-operator-2')).get(f'/ops/encounters/{clean.pk}').content.decode('utf-8')
+        page = console_page('platform-operator-2', clean)
         self.assertNotIn('Question ids that name no question', page)
         self.assertIn(q.BIOPSY, page)
 
@@ -892,14 +900,14 @@ class OperatorConsoleRoundTwoTests(r.CustomerCase, TestCase):
         checker = f.checker_result([q.reviewed('L1', '20610', ids=['Q1'], status='needs_answer')],
                                    questions=[q.asked('q1', 'How many milligrams were injected?')])
         self.code_round(enc, reader=reader, checker=checker)
-        page = ops.client(f.user('platform-operator')).get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
+        page = console_page('platform-operator', enc)
         self.assertIn('<li>L1 <span class="mono">20610</span> names <span class="mono">7</span></li>', page)
         self.assertIn('<h3>Question ids both the reader and the checker defined</h3>', page)
         self.assertIn(SHARED_SENTENCE, page)
         self.assertIn('<li><span class="mono">&quot;Q1&quot;</span></li>', page)
         clean = self.started(title='Synthetic note whose ids are its own')
         self.code_round(clean, reader=q.READER, checker=q.CHECKER)
-        page = ops.client(f.user('platform-operator-2')).get(f'/ops/encounters/{clean.pk}').content.decode('utf-8')
+        page = console_page('platform-operator-2', clean)
         self.assertNotIn('both the reader and the checker defined', page)
 
 
@@ -956,7 +964,7 @@ class SharedIdWordingTests(r.CustomerCase, TestCase):
         self.assertEqual([(item['text'], item['lines'], item['codes'], item['source']) for item in round_.questions],
                          [(KNEE, ['L1', 'M1'], ['20610', 'J1030'], 'reader')])
         self.assertEqual(result.shared_ids(round_.reader_result, round_.checker_result), ['Q1'])
-        page = ops.client(f.user('platform-operator')).get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
+        page = console_page('platform-operator', enc)
         # the console's questions: one, naming both lines
         self.assertEqual(page.split('<h3>Questions</h3><ol>', 1)[1].split('</ol>', 1)[0],
                          f'<li>{KNEE} <span class="muted">(reader; lines L1, M1; codes 20610, J1030)</span></li>')

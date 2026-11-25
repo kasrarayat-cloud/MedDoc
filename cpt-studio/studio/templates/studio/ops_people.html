@@ -2,7 +2,7 @@
 {% block title %}People{% endblock %}
 {% block content %}
 <h1>People</h1>
-<p class="lead">Everyone who can sign in to a workspace, with their role and access. Turning access off stops sign-in and ends any open session; nothing is deleted, and it can be turned on again.</p>
+<p class="lead">Everyone who can sign in to a workspace, with their role and access. Turning access off in a workspace closes that workspace to the person, and ends their open sessions when it was their only one; turning it off everywhere stops sign-in. Nothing is deleted, and either can be turned on again. Each change records who at the practice asked for it.</p>
 
 <h2>Workspace members</h2>
 {% include "studio/ops_people_rows.html" with back="" hide_workspace=False %}
@@ -11,14 +11,16 @@
 
 <section class="card" aria-labelledby="operators-title">
   <h2 id="operators-title">Operators</h2>
-  <p class="muted">Operator accounts open this console. They are granted and ended on the server only, never here.</p>
+  <p class="muted">Operator accounts open this console. They are granted and ended on the server only, never here, each on a recorded approval with a date by which it is reviewed. A grant past its review date, or with none, is flagged for the periodic access review.</p>
   {% if operators %}
   <div class="scroll"><table>
-    <thead><tr><th>Person</th><th>Operator since</th><th>Access</th><th>Last sign-in</th></tr></thead>
+    <thead><tr><th>Person</th><th>Operator since</th><th>Approval</th><th>Review by</th><th>Access</th><th>Last sign-in</th></tr></thead>
     <tbody>
     {% for item in operators %}
-      <tr><td><strong>{{ item.person.label }}</strong><br><span class="muted mono">{{ item.person.username }}</span></td>
-          <td class="mono">{{ item.since|date:"Y-m-d H:i" }} UTC</td>
+      <tr><td><strong>{{ item.person.label }}</strong><br><span class="muted mono">{{ item.person.username }}</span>{% if item.automated %}<br><span class="flag bad">automated account: holds no operator power</span>{% endif %}</td>
+          <td class="mono">{{ item.since|date:"Y-m-d H:i" }} UTC<br><span class="muted">by {{ item.granted_by }}</span></td>
+          <td class="mono">{% if item.authorization_ref %}{{ item.authorization_ref }}{% else %}<span class="flag warn">none recorded</span>{% endif %}</td>
+          <td class="mono">{% if item.review_by %}{{ item.review_by|date:"Y-m-d" }}{% if item.overdue %} <span class="flag bad">overdue</span>{% endif %}{% else %}<span class="flag warn">none recorded</span>{% endif %}</td>
           <td>{% if item.person.is_active %}<span class="chip ok">On</span>{% else %}<span class="chip bad">Off</span>{% endif %}</td>
           <td class="mono">{% if item.person.last_login %}{{ item.person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td></tr>
     {% endfor %}

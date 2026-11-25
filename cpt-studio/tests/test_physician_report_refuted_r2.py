@@ -11,7 +11,7 @@ document. A long quotation's locator never ends a page with one line under it, a
 notes to a new page. Characters are built with chr() so no invisible or look-alike character sits in this file."""
 import json
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import physician_pdf, state
 from tests.support import rounds as r
@@ -36,6 +36,7 @@ def squared(text):
 VENDORS = ('claude', 'gemini', 'gpt', 'opus', 'fable', 'anthropic', 'openai')
 
 
+@override_settings(EXPORT_LIMIT_PER_MEMBER=(10_000, 600), EXPORT_LIMIT_PER_WORKSPACE=(10_000, 3600))  # C5: layout cases, not limits
 class RoundTwoCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
@@ -49,7 +50,7 @@ class RoundTwoCase(r.CustomerCase, TestCase):
 
     def pdf(self, enc, kind='draft') -> bytes:
         made = self.make(enc, kind)
-        self.assertEqual(made.status_code, 201, made.content)
+        self.assertIn(made.status_code, (200, 201), made.content)  # release 1, C5: a current report is the stored copy
         return self.client.get(made.json()['download_url']).content
 
     def scan(self, enc, data):

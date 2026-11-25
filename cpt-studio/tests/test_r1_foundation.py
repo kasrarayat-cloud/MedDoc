@@ -292,7 +292,9 @@ class OperatorHelperTests(TestCase):
         return request
 
     def test_the_admin_door_carries_the_second_factor_and_the_cpt_door_none(self):
-        moment = datetime(2026, 11, 24, 12, 0, tzinfo=dt_timezone.utc)
+        # a moment of now, never a fixed date: the sessions it opens are read back on the real clock, and a session lasts
+        # SESSION_COOKIE_AGE (8 hours), so a fixed 2026-11-24 12:00 began failing at 20:00 that day (repair round 2, a2)
+        moment = timezone.now().replace(microsecond=0)
         with mock.patch.object(timezone, 'now', return_value=moment):
             admin = ops.admin_client(f.user('operator-admin'))
             cpt = ops.client(f.user('operator-cpt'))

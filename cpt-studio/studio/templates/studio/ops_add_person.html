@@ -1,7 +1,7 @@
 {# The add-a-person form (POST /ops/people/add): a fixed workspace (its page) or a choice of every workspace (People). #}
 <section class="card" aria-labelledby="add-title">
   <h2 id="add-title">Add a person</h2>
-  <p class="muted">They sign in with this username and a password the site makes and shows you once. Give it to them yourself: CPT Studio sends no email. One login opens one workspace.</p>
+  <p class="muted">They sign in with this username and a password the site makes and shows you once. Give it to them yourself: CPT Studio sends no email. They must choose their own password when they first sign in. One login opens one workspace.</p>
   <form method="post" action="/ops/people/add">{% csrf_token %}
     <div class="fields">
       {% if workspace %}
@@ -20,6 +20,9 @@
       </label>
       <label>Name <span class="hint">Optional, as the doctor app shows it, e.g. Dr. Maya Rivera</span>
         <input type="text" name="name" maxlength="120" autocomplete="off">
+      </label>
+      <label>Requested by <span class="hint">The practice's contact or a ticket reference. No patient details.</span>
+        <input type="text" name="requested_by" required maxlength="120" autocomplete="off">
       </label>
       <label>Role
         <select name="role" required>

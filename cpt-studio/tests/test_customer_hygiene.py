@@ -126,7 +126,7 @@ class OperatorActTests(r.CustomerCase, TestCase):
         r.write_round(enc, state_=Round.FAILED, failure_kind='busy', error='The coding service is busy.')
         operator_user = r.f.user('platform-operator')
         models.User.objects.filter(pk=operator_user.pk).update(display_name='Dana Opsperson')
-        response = ops.client(operator_user).post(f'/ops/encounters/{enc.pk}/retry')
+        response = ops.admin_client(operator_user).post(f'/ops/encounters/{enc.pk}/retry')  # release 1, B3
         self.assertEqual(response.status_code, 303)
         texts = [item['text'] for item in
                  self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()['activity']]

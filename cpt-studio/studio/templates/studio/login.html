@@ -15,6 +15,7 @@
     <span class="eyebrow">SYNTHETIC DEMONSTRATION</span>
     <h1>Sign in to continue.</h1>
     <p class="dialog-copy">Review CPT proposals beside the original documentation.</p>
+    {% if notice %}<p class="upload-status" role="status">{{ notice }}</p>{% endif %}
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     <form class="login-form" method="post" action="">{% csrf_token %}
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
