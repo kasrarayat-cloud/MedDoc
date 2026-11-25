@@ -9,10 +9,9 @@ checkout `/opt/meddoc-pro/.worktrees/cpt-r1-act-20261125` (8c1751f2deb4); every 
 Receipts: `/home/claude/cpt-studio-install-20261023/`. The act's logs, the readings and the live check's evidence:
 `cpt-r1-20261124/release/act/`.
 
-**Result: installed and serving; the operator's enrolment waits for the owner. Every row of the declaration matched, the site
-served throughout the switch (310 availability samples, all 200), nothing was deleted, the live check passed 25 of 25, and the
-first post-check read every declared row but exactly the two the setup code makes, as the declaration says while the owner is
-not there.**
+**Result: installed, verified and complete. Every row of the declaration matched, the site served throughout the switch (310
+availability samples, all 200), nothing was deleted, the live check passed 25 of 25, the post-check ended exit 0 with 0 unexpected
+differences after issue-enrolment, and the owner enrolled his passkey and opened the console (19:57-20:01Z).**
 
 ## The revision
 
@@ -51,6 +50,8 @@ Citations:
 | manage revoke-operator ops-agent | 19:06:59-19:07:16 | exit 0, "Revoked operator access from ops-agent (1 grant); every session of the account has ended." | by Kasra Rayat, reason sha256 73eb23da67ae |
 | live check | 19:07:20-19:07:21 | 25 of 25 | below |
 | post-check, first | 19:07:27 | exit 1 on two rows, judged | below |
+| manage issue-enrolment platform-operator | 19:57:00-19:57:16 | exit 0, the code kept root-only in /etc/cpt-studio/operator-enrolment.json, valid 1800 s (to 20:27:11Z) | by Kasra Rayat, reason sha256 3ccb66cd5c9c; run when the owner wrote "Ready"; the command's output names the account, the token and the expiry, never the code |
+| post-check, second | 19:57:22 | exit 0, unexpected differences 0 | every declared row, the setup code's included |
 
 The worker's first maintenance run (19:04:14Z): maintenance.daily and maintenance.daily_files_removed each once, 0 removed, 0
 names hashed, 0 rows pruned, no step failed; maintenance.originals_verified 95 of 95, nothing missing, changed or unreadable.
@@ -70,16 +71,24 @@ migrations 16 to 18, the two statement-logging settings, the database's swap, re
 windows, the rest 0), one revocation, ops-agent's grant ended - and exactly the two rows the setup code makes, as the declaration's
 stop condition says: `r1_table studio_onetimetoken: absent -> 0` and `r1_table studio_securityevent: absent -> 5`. Health, the
 co-tenants, the ingress, the database's limits, the converter's seal, ops-agent, the maintenance run and nginx's logs (372 lines,
-each with a request id, none holding a '?', nothing buffered to a temporary file) all as declared. It runs again after
-issue-enrolment.
+each with a request id, none holding a '?', nothing buffered to a temporary file) all as declared. It ran again after
+issue-enrolment (19:57:22Z): exit 0, unexpected differences 0, the setup code's two rows as declared (onetimetoken absent to 1,
+securityevent absent to 6).
 
-## Waiting for the owner
+## The owner's enrolment (his own act, after the second post-check)
 
-- issue-enrolment once he writes "ready" (D422: nothing else waits for him), then the second post-check, then his own enrolment on
-  admin.quillmd.com with his passkey, his 10 recovery codes and one page of the console opened by him. Until then the console is
-  closed: cpt.quillmd.com/ops/ answers 404 and admin.quillmd.com admits no session that has not passed a key.
-- D22 (a new password for the existing accounts), the 23 earlier copies of the live database and the rehearsal copy, and the
-  2026-11-20 documents stay his, as declared.
+He read the code himself on the server, set a new password at 19:58:43Z, registered one passkey at 19:59:14Z (10 recovery codes
+issued, SecurityEvents password.changed and second_factor.enrolled, one admin-door sign-in) and opened the console's list twice
+and its activity page (20:01:31Z to 20:01:38Z, three AccessRecords, ops.list and ops.activity). Read by counts, events and times
+alone, as declared: OneTimeToken +2 for the enrolment, and then five unused webauthn challenges (20:00:10Z to 20:01:02Z), key prompts
+that were cancelled or not finished, each declared as "one more, unused, per prompt cancelled" (no second key was stored and no
+further sign-in recorded); SecurityEvent 8, AccessRecord 2 to 5, a
+rate window for the setup code's place, one session and its link, the password-hash digest changed. A second passkey on another
+device stays recommended.
+
+Left with the owner, as declared: D22 (a new password for the existing accounts) when he says; the 23 earlier copies of the live
+database, the rehearsal copy and the 2026-11-20 documents, with counsel; today's operator password file (D12) and ops-agent's login
+file (D11), deletions he orders.
 
 ## The package and its reviews
 

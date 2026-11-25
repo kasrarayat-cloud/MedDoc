@@ -4411,3 +4411,16 @@ migrations 0017 and 0018 applied exactly, every session ended once, nothing dele
 25 of 25, and the first post-check every declared row but the two the setup code makes. ops-agent's operator grant is revoked.
 The operator's enrolment (issue-enrolment, the second post-check, his passkey) waits for the owner; report
 `docs/deploy-reports/20261125-cpt-studio-816045c7-release-1-install-and-live-check.md`.
+
+### Session record, 2026-11-25 (738699b2) — the owner's enrolment, and release 1 complete — DECISIONS D424
+
+> Ready
+
+At about 19:56Z, in reply to the session's "write ready": issue-enrolment ran (19:57:00Z, exit 0, the code kept root-only), the
+second post-check ended exit 0 with 0 unexpected differences (19:57:22Z), and the owner read the code himself, set a new
+password, registered one passkey (19:59:14Z, 10 recovery codes) and opened the console's list and activity page (20:01Z). He
+then wrote:
+
+> done
+
+Release 1's install is complete, as reported in `docs/deploy-reports/20261125-cpt-studio-816045c7-release-1-install-and-live-check.md`.
