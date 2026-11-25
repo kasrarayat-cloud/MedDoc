@@ -850,3 +850,77 @@ class ConsoleLockStatementTests(TestCase):
                 for sql in locks:
                     self.assertIn('FOR NO KEY UPDATE', sql)
                     self.assertIn(f"'{person.pk}'".replace('-', ''), sql.replace('-', ''))
+
+
+# --- S3-4: the stated bound on an account's pending sign-ins ----------------------------------------------------------
+
+@override_settings(STORAGES=PLAIN_STATIC, SESSION_LIVE_PER_ACCOUNT=4)
+class PendingSignInBoundTests(TestCase):
+    """cap-0: after a burst of pending sign-ins (password-only, at the admin door), the rows stay live for up to
+    SESSION_COOKIE_AGE once none can complete; the bound stated in settings, studio.sessions and studio.session_store
+    held only at the account's next pending sign-in. The code is unchanged; the statements are corrected, and this pins
+    what they now say, on a clock that moves only when the test moves it."""
+
+    def test_what_bounds_an_accounts_pending_sign_ins_between_two_of_them(self):
+        from tests.support import operator as ops
+        from tests.test_r1_repair_s2 import OTHER, live_pending_keys
+        from tests.test_second_factor import Clock
+        operator = f.user('s3-bounded-operator')
+        ops.grant(operator)
+        limit, window = settings.SESSION_LIVE_PER_ACCOUNT, settings.SECOND_FACTOR_PENDING_SECONDS
+
+        def made(count):
+            keys = []
+            for _ in range(count):
+                door = Client(HTTP_HOST=ADMIN, REMOTE_ADDR=OTHER)
+                self.assertEqual(password_step(door, operator).status_code, 302)
+                keys.append(door)
+            return keys
+
+        with Clock() as clock:
+            burst = made(9)  # at one moment: each can still complete, so the cap ends none (9 > the limit of 4)
+            self.assertEqual(len(live_pending_keys(operator)), 9)
+            for later in (window + 1, 3 * 60 * 60):  # none can complete any more, and nothing ends them meanwhile
+                clock.advance(later)
+                with self.subTest(after=later):
+                    self.assertEqual(len(live_pending_keys(operator)), 9)
+                    self.assertLessEqual(len(live_pending_keys(operator)), limit + 9)  # the bound at any moment
+            self.assertEqual(burst[-1].get('/login/second-factor')['Location'], '/login/')  # dead: it cannot complete
+            last = made(1)  # the account's next pending sign-in: its cap ends those beyond the limit that cannot
+            self.assertEqual(len(live_pending_keys(operator)), limit)  # complete - the limit, as the newest four
+            clock.advance(settings.SESSION_COOKIE_AGE - 3 * 60 * 60 - window)  # the burst's own expiry
+            self.assertEqual(live_pending_keys(operator),
+                             {last[0].cookies[settings.SESSION_COOKIE_NAME].value})  # expired, all but the newest
+            sessions.end_sessions(operator)  # and an end of the account's sessions ends every one
+            self.assertEqual(live_pending_keys(operator), set())
+
+    def test_the_bound_is_stated_as_it_holds_in_each_of_its_three_places(self):
+        """Each statement says the bound holds at each pending sign-in, not at all times, and what bounds the rows
+        meanwhile (their expiry, and the sign-in rate: nginx's cpt_signin zone); none says it holds at all times."""
+        import inspect
+        from pathlib import Path
+
+        def plain(text):
+            return ' '.join(text.replace('#', ' ').split())
+        root = Path(settings.BASE_DIR)
+        settings_text = (root / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
+        comment = settings_text[:settings_text.index('SESSION_LIVE_PER_ACCOUNT = ')].rsplit('\n\n', 1)[-1]
+        statements = {'settings': plain(comment), 'sessions': plain(inspect.getdoc(sessions)),
+                      'session_store': plain(inspect.getdoc(session_store))}
+        said = {'settings': ('not at all times', 'SESSION_COOKIE_AGE', 'cpt_signin',
+                             'before its latest pending sign-in'),
+                'sessions': ('of its pending sign-ins, at each of them, that many plus those made in the last '
+                             'SECOND_FACTOR_PENDING_SECONDS', 'SESSION_COOKIE_AGE', 'the next pending sign-in'),
+                'session_store': ('holds at each of its pending sign-ins, when the cap runs - not at all times',
+                                  'SESSION_COOKIE_AGE', 'cpt_signin', 'before its latest pending sign-in')}
+        unsaid = {'settings': "one account's live pending sign-ins are at most this many plus those made in the last "
+                              'SECOND_FACTOR_PENDING_SECONDS, which only the sign-in rate bounds',
+                  'sessions': 'at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind - each door\'s sign-ins, '
+                              'the pending sign-ins, the setups - besides the pending sign-ins that can still complete',
+                  'session_store': "The bound this leaves on one account's live pending sessions: the limit, plus "
+                                   'those'}
+        for place, text in statements.items():
+            with self.subTest(place=place):
+                for phrase in said[place]:
+                    self.assertIn(phrase, text)
+                self.assertNotIn(unsaid[place], text)

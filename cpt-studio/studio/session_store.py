@@ -31,11 +31,16 @@ SessionStore, set as SESSION_ENGINE (cptstudio/settings.py):
             read as studio.second_factor.pending reads it) is never ended by the cap: it is kept and still counts toward
             the limit (repair round 2, sessions-0, secondfactor-1, regression-0), so someone holding the password alone
             never ends the operator's own sign-in between the password and the key. The bound this leaves on one
-            account's live pending sessions: the limit, plus those made in the last SECOND_FACTOR_PENDING_SECONDS - each
+            account's live pending sessions holds at each of its pending sign-ins, when the cap runs - not at all times
+            (repair round 3, cap-0): the limit, plus those made in the last SECOND_FACTOR_PENDING_SECONDS. Between two
+            of them nothing ends a pending sign-in that can no longer complete - the cap runs only when a session gains
+            a link, and the daily maintenance removes expired rows only - so it stays live until its session expires
+            (SESSION_COOKIE_AGE, 8 hours), the account's next pending sign-in's cap ends it, or the account's sessions
+            are ended (end_account_sessions ends every one). At any moment the account's live pending sessions are at
+            most the limit plus those made in the SECOND_FACTOR_PENDING_SECONDS before its latest pending sign-in - each
             a right password at the admin door, which B1 never slows, so their number is bounded by nginx's cpt_signin
             zone (60 a minute and a burst of 40 per IPv4 address or IPv6 /64) and by what the web workers can hash in
-            that time; the first cap after one can no longer complete ends it (and ending the account's sessions ends
-            every one).
+            that time.
   the async methods run the synchronous ones (one implementation; this site's web is synchronous).
 
 The lock order (repair round 2, records-0 and records-1): every store write that adds a link for an account, every delete

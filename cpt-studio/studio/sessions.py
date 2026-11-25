@@ -10,11 +10,14 @@ end_sessions(user, keep_session_key=None)
     account it ends the anonymous ones waiting on it - a pending sign-in at the admin door, a setup under way - so a
     password change or a sign-out everywhere drops a sign-in made with the old password (refutation r2, finding 11).
     It reads the account's own sessions from the site's session store's links (studio.session_store, refutation round 1
-    of release 1, avail-0): its cost is that account's sessions, never every session of the site, and one account holds
-    at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind - each door's sign-ins, the pending sign-ins, the setups -
-    besides the pending sign-ins that can still complete, which the cap never ends (repair round 2, sessions-0). It
-    takes the account's row lock before it deletes any session, and deletes them in session key order (repair round 2,
-    records-0 and -1: see the session store's lock order).
+    of release 1, avail-0): its cost is that account's sessions, never every session of the site. One account holds at
+    most SESSION_LIVE_PER_ACCOUNT live sessions of each door's sign-ins and of its setups; of its pending sign-ins, at
+    each of them, that many plus those made in the last SECOND_FACTOR_PENDING_SECONDS, which the cap never ends while
+    they can still complete (repair round 2, sessions-0) - and between two of them those that can no longer complete
+    stay live until they expire (SESSION_COOKIE_AGE), the next pending sign-in or an end of the account's sessions
+    (repair round 3, cap-0; the session store says what bounds them). It takes the account's row lock before it deletes
+    any session, and deletes them in session key order (repair round 2, records-0 and -1: see the session store's lock
+    order).
 
 act_still_stands(request, user, *also)
     an act in flight never outlives an end of the account's sessions (repair round 3, cap-1, locks-0, locks-1, locks-4,
