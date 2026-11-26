@@ -642,6 +642,69 @@ class ObjectAndControlTests(ReleaseOneCase):
                 self.assertEqual(removed['objects'], 1)
                 self.assert_release_1_package(data)
 
+    def test_a_picture_inside_what_a_removal_takes_stands_in_nothing(self):
+        # refutation round 3, loss[4]: a picture counts for an object or a control only when it survives the removal -
+        # one inside the w:control, the w:movie or the o:OLEObject a removal takes, or in the v:shapetype the drawing
+        # branch drops, left nothing in the object's place (the control's caption lost); Word's own forms keep theirs
+        imagedata = '<v:imagedata r:id="rIdPrev" o:title=""/>'
+        empty_shape = vshape(sid='_x0000_i1031', inner='')
+        full_shape = vshape(sid='_x0000_i1031')
+        control = '<w:control r:id="rIdCtl" w:name="CheckBox1" w:shapeid="_x0000_i1031">{}</w:control>'
+        empty_control = control.format('')
+        bag = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<ax:ocx '
+               f'xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" xmlns:r="{R}" '
+               'ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}" ax:persistence="persistPropertyBag">'
+               '<ax:ocxPr ax:name="Caption" ax:value="CTLCAPTION consent given"/></ax:ocx>')
+        no_picture_drawing = drawing('rIdNoSuch')
+
+        def with_control(holder):
+            return package(BEFORE + p('<w:r>' + holder + '</w:r>') + AFTER,
+                           (rel('rIdCtl', 'control', 'activeX/activeX1.xml'),
+                            rel('rIdPrev', 'image', 'media/image1.emf')),
+                           (('word/activeX/activeX1.xml', bag), ('word/media/image1.emf', EMF)),
+                           (override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml'),))
+
+        def with_embedding(holder):
+            return package(BEFORE + p('<w:r>' + holder + '</w:r>') + AFTER, DOCX_RELS, DOCX_PARTS)
+        shapetype_with_picture = SHAPETYPE.replace('</v:shapetype>', imagedata + '</v:shapetype>')
+        refused = {
+            'inside the control (a w:object)': (with_control(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + SHAPETYPE + empty_shape + control.format(imagedata)
+                + '</w:object>'), CONTROLS),
+            'inside the control (a w:pict)': (with_control(
+                '<w:pict>' + SHAPETYPE + empty_shape + control.format(imagedata) + '</w:pict>'), CONTROLS),
+            'inside a w:movie beside an empty control': (with_control(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + SHAPETYPE + empty_shape + empty_control + '<w:movie>'
+                + imagedata + '</w:movie></w:object>'), CONTROLS),
+            'inside the o:OLEObject': (with_embedding(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + SHAPETYPE + empty_shape
+                + ole('Word.Document.12', sid='_x0000_i1031', more=imagedata) + '</w:object>'), OBJECTS),
+            'in the v:shapetype the drawing branch drops': (with_control(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + no_picture_drawing + shapetype_with_picture
+                + empty_control + '</w:object>'), CONTROLS),
+        }
+        for label, (data, kind) in refused.items():
+            with self.subTest(f'refused: {label}'):
+                with self.assertRaises(docx_package.ContentNotShown) as caught:
+                    docx_package._safe_package(data)
+                self.assertEqual(caught.exception.counts[kind], 1)
+                self.release_1()._safe_package(data)  # the bad shape: release 1 coded it
+        kept = {
+            'Word\'s form: the picture in the v:shape, the control empty': with_control(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + SHAPETYPE + full_shape + empty_control
+                + '</w:object>'),
+            'the OLE form: the picture in the v:shape': with_embedding(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + SHAPETYPE + full_shape
+                + ole('Word.Document.12', sid='_x0000_i1031') + '</w:object>'),
+            'the VML branch, the picture in the v:shapetype (kept with it)': with_control(
+                '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + shapetype_with_picture + empty_shape + empty_control
+                + '</w:object>'),
+        }
+        for label, data in kept.items():
+            with self.subTest(f'kept: {label}'):
+                docx_package._safe_package(data)
+                self.assert_release_1_package(data)
+
     def test_a_control_whose_preview_target_holds_a_dot_segment_is_refused_and_so_is_its_stored_conversion(self):
         # refutation round 2, refuse[0]: a check box control (C08's) whose WMF preview is named './media/image1.wmf' -
         # LibreOffice draws nothing, and the base shows the control's value - is refused, fresh and before a stored

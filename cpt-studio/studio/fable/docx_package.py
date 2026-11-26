@@ -1057,9 +1057,11 @@ class _PartReader:
                     self.lost['documents'] += 1
                 else:  # it holds nothing: removed as release 1 removes it
                     self._remove(element)
+                    self._take_pictures(element)
                     self.removed['chunks'] += 1
             else:
                 self._remove(element)
+                self._take_pictures(element)
                 if role == _CONTROL:
                     self.removed['controls'] += 1
                 elif not any(ancestor[_NAME] in _OBJECTS for ancestor in self.stack):
@@ -1117,6 +1119,16 @@ class _PartReader:
         return (bisect.bisect_left(self.pictured, element[_END])
                 - bisect.bisect_left(self.pictured, element[_AT]))
 
+    def _take_pictures(self, element, keep=()):
+        """R2-29: the pictures in ``element`` - just ended, and removed but for its children ``keep`` - leave the
+        count, so no holder counts a picture a removal takes (refutation round 3, loss[4]: a picture inside the
+        w:control, w:movie or o:OLEObject a removal takes was counted as standing in the object's place)."""
+        first, kept = bisect.bisect_left(self.pictured, element[_AT]), []
+        for child in keep:  # in document order, so what is kept stays in order
+            kept += self.pictured[bisect.bisect_left(self.pictured, child[_AT], first):
+                                  bisect.bisect_left(self.pictured, child[_END], first)]
+        self.pictured[first:] = kept
+
     def _end_object(self, element, holder):
         """R2-29 step 3: a w:object is lost - under 'controls' when it held a control, else 'objects' - when its
         pictures are fewer than its pointers, when it holds anything but VML, w:drawing and pointers, when it has both a
@@ -1128,6 +1140,8 @@ class _PartReader:
         shapes = [child for child in children if child[_NAME].startswith(_VML_PREFIX) and child[_NAME] != _SHAPETYPE]
         beside = [child for child in children if child[_NAME] not in _DRAWINGS and child[_NAME] not in _OBJECT_POINTERS
                   and not child[_NAME].startswith(_VML_PREFIX)]
+        self._take_pictures(element, keep=drawings or [child for child in children
+                                                       if child[_NAME].startswith(_VML_PREFIX)])
         if self._pictures_in(element) < pointers or beside or (drawings and shapes) \
                 or (pointers and not drawings and len(shapes) != 1):
             self.lost[kind or 'objects'] += 1
