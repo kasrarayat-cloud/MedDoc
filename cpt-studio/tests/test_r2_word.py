@@ -41,7 +41,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import jobs, models, storage
-from studio.fable import CONVERT, DOCUMENT, docx_package
+from studio.fable import BUSY, CONVERT, DOCUMENT, docx_package
 from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from tests.support import coding as f
@@ -2147,6 +2147,36 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                 checked.assert_called_once_with(data)
                 convert.assert_called_once_with(data)  # the converter decided
                 self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)  # nothing more sent
+
+    def test_an_own_view_whose_check_cannot_decide_is_never_read_again_while_the_converter_is_busy(self):
+        # refutation round 3, rounds[0]: the BUSY half - a busy converter (the service unreachable, or required with no
+        # socket) has not accepted the file: the round fails BUSY, nothing more is sent, and its own view (release 1's
+        # conversion, without the import or the object) is never read again
+        cases = [(data, paid, failure)
+                 for data in (IMPORTING_WORD, BARE_OBJECT_WORD)
+                 for paid in ('nothing', 'the reader')
+                 for failure in (docx_package.ConversionBusy('synthetic: out of time'),
+                                 docx_package.ConversionFailed('synthetic: the child failed'))]
+        cases += [(COLLIDING_NAMES_WORD, paid, None) for paid in ('nothing', 'the reader')]
+        for data, paid, failure in cases:
+            for converter in ('the service, unreachable', 'required, no socket'):
+                with self.subTest(paid=paid, check=type(failure).__name__ if failure else 'the real check',
+                                  converter=converter):
+                    enc, _, round_, _, _, runs = self.begun_on_release_1(data, paid)
+                    self.use(self.answering())  # a regression shows as DONE, not as a coder's complaint
+                    check = {'side_effect': failure} if failure else {'wraps': docx_package.check_in_child}
+                    nowhere = str(Path(tempfile.gettempdir()) / 'nothing-listens-here.sock')
+                    busy = (override_settings(CONVERTER_SOCKET=nowhere) if converter.startswith('the service')
+                            else override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=True))
+                    with mock.patch.object(docx_package, 'check_in_child', **check), busy, \
+                            mock.patch.object(fable_document, 'convert_docx',
+                                              wraps=fable_document.convert_docx) as convert:
+                        self.run_next()
+                    round_.refresh_from_db()
+                    self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                     (Round.FAILED, BUSY, fable_document.BUSY_TEXT))
+                    convert.assert_called_once_with(data)
+                    self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)
 
     def test_a_later_round_of_an_r2_30_revision_still_converts_afresh(self):
         enc, rev, _ = self.word(SHELLED_WORD)
