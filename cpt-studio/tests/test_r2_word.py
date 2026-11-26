@@ -11,8 +11,10 @@
 - R2-31: a refused Word upload through the shipped job path - its sentence, its three audit rows with the code and
   counts, nothing counted or sent, retry offered and refused the same way; the two sentences against the customer
   denylist.
-- R2-28 step 7 (C8): the package check of a stored original (docx_package.check_in_child, and its worker side
-  fable_document.needs_fresh_conversion), in the bounded child under a conversion's limits, converting nothing.
+- R2-28 step 7 (C8): a round that would read a conversion an earlier round stored runs the package check on the stored
+  original first - a stored conversion of a file the check refuses is refused at its next round (an answers round and a
+  retry) with no coder and no converter call; a clean one is reused byte-identically, with no converter call; one
+  R2-30's QUOTE applies to converts afresh, with one.
 
 Synthetic bytes only, every package built here; no LibreOffice, no network, no provider."""
 import hashlib
@@ -1060,3 +1062,108 @@ class RefusedWordUploadTests(r.CustomerCase, TestCase):
                 self.assertEqual(scan.scan_text(sentence, scan.scan_context(), 'json'), [])
                 self.assertEqual(scan.scan_text(code, scan.scan_context(), 'json'), [])
         self.assertEqual(set(fable_document.REFUSED_PACKAGE_TEXT), set(docx_package.REFUSAL_CODES))
+
+
+@override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
+class StoredConversionTests(r.CustomerCase, TestCase):
+    """C8: a later round of a revision (an answers round, a retry) that would read the conversion an earlier round
+    stored - here one release 1 stored before the install - runs the package check on the stored original first."""
+
+    def setUp(self):
+        super().setUp()
+        private_tempdir(self)
+
+    def stored(self, data):
+        """A Word document whose round 1 release 1 coded, its conversion stored in the practice's own folder."""
+        enc = f.encounter(self.ws, self.reviewer, service_date='2026-11-02', insurance='medicare',
+                          title='Synthetic Word note')
+        rev = f.upload(enc, self.reviewer, data=data, filename='synthetic-note.docx', media_type=DOCX)
+        first = r.write_round(enc)
+        name, digest, _ = storage.store_original(self.ws.pk, STORED_PDF, 'converted.pdf')
+        Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+        return enc, rev, name, digest
+
+    def next_round(self, enc, rev, trigger, coder, converted=None):
+        """The round of ``trigger`` run through the shipped stage, the converter a stand-in that fails the test unless
+        ``converted`` is given (what it then answers), and the check spied on."""
+        if trigger == Round.RETRY:
+            jobs.retry(enc, self.reviewer)
+        else:
+            jobs.start_round(enc, rev, trigger, self.reviewer)
+        self.use(coder)
+        effect = {'return_value': converted} if converted else {'side_effect': AssertionError('no conversion here')}
+        with mock.patch.object(fable_document, 'convert_docx', **effect) as convert, \
+                mock.patch.object(docx_package, 'check_in_child', wraps=docx_package.check_in_child) as check:
+            self.run_next()
+        return jobs.latest_round(enc), convert, check
+
+    def answering(self):
+        return f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
+                           checker=f.succeeded(r.checker_message(r.CHECKER)))
+
+    def sent(self, coder):
+        return {request.stored['messages'][0]['content'][0]['source']['data']['$original_sha256']
+                for _, request in coder.calls}
+
+    def test_a_stored_conversion_of_a_file_the_check_refuses_is_refused_at_its_next_round(self):
+        for data, code, counts in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS),
+                                   (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)):
+            with self.subTest(code=code):
+                enc, rev, _, _ = self.stored(data)
+                before = AuditEvent.objects.filter(encounter=enc).count()
+                for trigger, number in ((Round.ANSWERS, 2), (Round.RETRY, 3)):
+                    coder = f.FakeCoder()  # it fails the test if anything is sent
+                    round_, convert, check = self.next_round(enc, rev, trigger, coder)
+                    self.assertEqual((round_.number, round_.trigger, round_.state, round_.failure_kind, round_.error),
+                                     (number, trigger, Round.FAILED, CONVERT,
+                                      fable_document.REFUSED_PACKAGE_TEXT[code]))
+                    self.assertEqual((coder.counts, coder.calls), ([], []))  # nothing counted, nothing sent
+                    convert.assert_not_called()  # no converter call, no conversion
+                    check.assert_called_once_with(data)  # the stored original, checked
+                    self.assertFalse(Run.objects.filter(encounter=enc).exists())
+                    self.assertIsNone(round_.view_pdf_storage_name)
+                    added = list(AuditEvent.objects.filter(encounter=enc).order_by('created_at', 'pk')
+                                 .values_list('event', 'data'))[before:]
+                    self.assertEqual([event for event, _ in added], ['coding.round_queued', 'coding.round_failed'])
+                    self.assertEqual(added[1][1], {'round': str(round_.pk), 'failure_kind': CONVERT, 'refused': code,
+                                                   'inserted': counts})
+                    before += 2
+
+    def test_a_clean_stored_conversion_is_reused_byte_identically_with_no_converter_call(self):
+        enc, rev, name, digest = self.stored(CLEAN_WORD)
+        coder = self.answering()
+        round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, coder)
+        self.assertEqual(round_.state, Round.DONE)
+        convert.assert_not_called()
+        check.assert_called_once_with(CLEAN_WORD)
+        self.assertEqual((round_.view_pdf_storage_name, round_.view_pdf_sha256), (name, digest))  # the same file
+        self.assertEqual(self.sent(coder), {digest})  # both sends carried the stored PDF
+        self.assertEqual(len(coder.calls), 2)
+
+    def test_a_stored_conversion_whose_original_holds_r2_30s_shape_converts_afresh(self):
+        enc, rev, name, digest = self.stored(SHELLED_WORD)
+        coder = self.answering()
+        round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, coder, converted=FRESH_PDF)
+        self.assertEqual(round_.state, Round.DONE)
+        convert.assert_called_once_with(SHELLED_WORD)  # one converter call, so the QUOTE applies
+        fresh = hashlib.sha256(FRESH_PDF).hexdigest()
+        self.assertEqual(round_.view_pdf_sha256, fresh)
+        self.assertNotEqual(round_.view_pdf_storage_name, name)
+        self.assertEqual(self.sent(coder), {fresh})
+
+    def test_a_stored_original_that_is_no_word_package_is_reused_as_release_1_reused_it(self):
+        # no conversion of such a file was ever made by either release's checks (refused before any part is read):
+        # nothing release 2 added applies to it, so its stored view is read again as before
+        enc, rev, name, digest = self.stored(NOT_A_PACKAGE)
+        coder = self.answering()
+        round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, coder)
+        self.assertEqual((round_.state, round_.view_pdf_sha256), (Round.DONE, digest))
+        convert.assert_not_called()
+        check.assert_called_once_with(NOT_A_PACKAGE)
+
+    def test_a_stored_original_refused_once_its_parts_are_read_converts_afresh(self):
+        # the converter then gives its refusal, as for any fresh conversion (here a stand-in converts it)
+        enc, rev, name, digest = self.stored(UNREADABLE_PART_WORD)
+        round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
+        convert.assert_called_once_with(UNREADABLE_PART_WORD)
+        self.assertEqual(round_.view_pdf_sha256, hashlib.sha256(FRESH_PDF).hexdigest())

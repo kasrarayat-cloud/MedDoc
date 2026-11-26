@@ -491,7 +491,13 @@ def _stored_conversion(round_):
     newest), so a resumed round, and every later round of the revision, reads - and the customer's viewer shows - the
     same pages; it converts afresh when that file can no longer be read back unchanged, or lies outside the document's
     own practice's folder (storage.read_own_original: never read). None (convert) when no round of the revision stored
-    one."""
+    one.
+
+    Release 2, R2-28 step 7 (C8): before the stored PDF is read again, release 2's package check runs on the stored
+    original's bytes (fable_document.needs_fresh_conversion, in this worker, with no converter call), so a conversion
+    stored before a refusal existed is never reused for it: a file the check refuses ends the round as a fresh
+    conversion of it would - the same sentence and record, nothing counted or sent, nothing converted -, and one R2-30's
+    QUOTE applies to converts afresh, so the edit applies."""
     stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
               .exclude(view_pdf_storage_name='').order_by('-number').first())
     if stored is None:
@@ -499,6 +505,8 @@ def _stored_conversion(round_):
     workspace_id = round_.encounter.workspace_id
 
     def reuse(data):
+        if fable_document.needs_fresh_conversion(data):
+            return fable_document.convert_docx(data)
         try:
             return read_own_original(workspace_id, SimpleNamespace(storage_name=stored.view_pdf_storage_name,
                                                                    sha256=stored.view_pdf_sha256))
