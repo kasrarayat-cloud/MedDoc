@@ -17,27 +17,41 @@ told to reload on every list call, and release 1's build is named nowhere in thi
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import uuid
 from pathlib import Path
 
+from django.conf import settings
+from django.db import connection
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 
-from studio import client_contract
+from studio import client_contract, jobs, models, request_meta
 from tests.support import coding as f
+from tests.support import rounds as r
 
 ROOT = Path(__file__).resolve().parents[1]
 # release 2 (RELEASE-2-SPEC R2-24, D-R2-3): the build every copy names
 CURRENT_BUILD = 'customer-2026-11-26'
 # release 1's build (RELEASE-1-SPEC 3.6): what a page left open across release 2's switch sends. This module is the only
-# file of the tree that names it (OneValueTests.test_the_build_before_this_one_is_named_nowhere_else).
+# file of the tree that names it (OneValueTests.test_the_build_before_this_one_is_named_nowhere_else): another lane's
+# test or tool that must name it (a search refused to release 1's page, a bench of release 1) imports RELEASE_1_BUILD
+# from here, or reads the measured tree's own client_contract.VERSION.
 RELEASE_1_BUILD = 'customer-2026-11-24'
 # A later page's cursor as a list's `next` gives it (RELEASE-2-SPEC R2-19: the console's format, a UTC time to the
 # microsecond and an id, studio.console.CURSOR_RE)
 LATER_PAGE_CURSOR = '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17'
-# Generated or installed trees inside cpt-studio/ that are not the tree's own files
-NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv'}
+# Generated or installed trees inside cpt-studio/ that are not the tree's own files (cpt-studio/.gitignore and
+# deploy/.dockerignore list .runtime too)
+NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv', '.runtime'}
+# The sealed acceptance material (docs/gemini-migration/acceptance-a1), which this release's tooling never reads
+SEALED_FOLDERS = {'acceptance-a1'}
+# Records that name release 1's build because they record it, never a copy of the value: the decisions log, synced from
+# the working log, which names release 1's build where it was decided (refutation round 1, compat[1]); as release 1's
+# install declaration, outside this tree, is left as written.
+RECORDS = {'docs/gemini-migration/DECISIONS.md'}
 # RELEASE-2-SPEC section 7: every file that holds a copy of the value
 VERSION_COPIES = (
     'studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
@@ -100,6 +114,101 @@ class ContractTests(TestCase):
         self.assertEqual(without_contract(self.signed_in()).get('/ops/').status_code, 404)
 
 
+class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
+    """Refutation round 1, item B: every customer API call a release-1 page makes (816045c72 app.js, api()) - the
+    session, every list, a later page, a document, a paste, an answer, a decision, a stop, a resume, a retry, an export,
+    the team and a member's access - is answered 409 client_outdated before its view runs, so it reads and writes
+    nothing: no INSERT, UPDATE or DELETE, and the rows that record or change anything stay as they were. Each call that
+    would record or change anything is one its view would act on (a document with questions, a coded document to
+    decide, one being coded to stop, a stopped one to resume, a failed round to retry, a whole paste, another coded
+    document to export, an owner turning a member's access off), so a guard moved after the view shows. The last five
+    were added in refutation round 2 (gates[0]). The page's POST /session/activity (views.activity_ping) is not an API
+    call: it is outside the contract by design and answers 200.
+
+    Refutation round 2, gates[2]: before each call, the activity stamp of each signed-in page is made one write window
+    (SESSION_ACTIVITY_WRITE_SECONDS) old. Signed in moments before, a call counted as the person's activity would have
+    nothing to write (note_activity writes at most once a window), so a session write let through for a refused call
+    could not show; with the stamp aged it would be an UPDATE the write check sees. A control at the end shows a call
+    the contract lets through does write the aged stamp, so the aging cannot quietly stop working."""
+    WATCHED = (models.AccessRecord, models.AccessRecordRepeat, models.Encounter, models.SourceRevision,
+               models.CodingRound, models.Job, models.RateWindow, models.AuditEvent, models.SecurityEvent,
+               models.CodeDecision)
+    WRITES = ('INSERT', 'UPDATE', 'DELETE')
+
+    @staticmethod
+    def age_activity_stamps(*pages):
+        """Each page's activity stamp one write window old: a call counted as activity would write it."""
+        one_window_ago = request_meta.epoch_seconds() - settings.SESSION_ACTIVITY_WRITE_SECONDS
+        for signed_in in pages:
+            stamp = signed_in.session
+            stamp[request_meta.SESSION_LAST_ACTIVE] = one_window_ago
+            stamp.save()
+
+    def test_every_call_of_a_release_1_page_is_refused_and_writes_nothing(self):
+        coded = self.done()
+        exported = self.done(title='Synthetic note to export')
+        decided = self.done(title='Synthetic note to decide')
+        running = self.started(title='Synthetic note being coded')  # after every done(): run_next claims the next job
+        stopped = self.started(title='Synthetic note that was stopped')
+        self.assertEqual(self.client_for(self.reviewer).post(f'/api/encounters/{stopped.pk}/stop', data='{}',
+                                                             content_type='application/json').status_code, 200)
+        owner = f.member(self.ws, role=models.Membership.OWNER)
+        failed = self.encounter(title='Synthetic note that could not be coded')
+        r.write_round(failed, state_=models.CodingRound.FAILED, failure_kind='busy', error=jobs.FAILURE_TEXT['busy'])
+        question = self.client_for(self.reviewer).get(f'/api/encounters/{coded.pk}').json()['questions'][0]['id']
+        page = self.client_for(self.reviewer, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
+        owners_page = self.client_for(owner, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
+        answer = {'answers': [{'question_id': question, 'text': 'Yes, from the rectum.'}]}
+        decision = {'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve', 'note': '',
+                    'acknowledgement': r.ACKNOWLEDGEMENTS['human']}
+        calls = {
+            'session': lambda: page.get('/api/session'),
+            'list': lambda: page.get('/api/encounters'),
+            'documents': lambda: page.get('/api/encounters?list=documents'),
+            'queue': lambda: page.get('/api/encounters?list=queue'),
+            'recent': lambda: page.get('/api/encounters?list=recent'),
+            'a later page': lambda: page.get(f'/api/encounters?list=documents&before={LATER_PAGE_CURSOR}'),
+            'a document': lambda: page.get(f'/api/encounters/{coded.pk}'),
+            'a paste': lambda: page.post('/api/encounters', {'text': f.NOTE, 'synthetic_attestation': 'yes',
+                                                             'insurance': 'medicare', 'client_key': str(uuid.uuid4())}),
+            'an answer': lambda: page.post(f'/api/encounters/{coded.pk}/answers', data=json.dumps(answer),
+                                           content_type='application/json'),
+            'a retry': lambda: page.post(f'/api/encounters/{failed.pk}/retry', data='{}',
+                                         content_type='application/json'),
+            'an export': lambda: page.post(f'/api/encounters/{exported.pk}/reports', data=json.dumps(
+                {'kind': 'draft', 'fmt': 'pdf', 'round': 1}), content_type='application/json'),
+            'a decision': lambda: page.post(f'/api/encounters/{decided.pk}/decisions', data=json.dumps(decision),
+                                            content_type='application/json'),
+            'a stop': lambda: page.post(f'/api/encounters/{running.pk}/stop', data='{}',
+                                        content_type='application/json'),
+            'a resume': lambda: page.post(f'/api/encounters/{stopped.pk}/resume', data='{}',
+                                          content_type='application/json'),
+            'the team': lambda: owners_page.get('/api/members'),
+            "a member's access": lambda: owners_page.post(f'/api/members/{self.viewer.pk}/access',
+                                                          data=json.dumps({'active': False}),
+                                                          content_type='application/json'),
+        }
+        for name, call in calls.items():
+            with self.subTest(call=name):
+                self.age_activity_stamps(page, owners_page)
+                before = {model.__name__: model.objects.count() for model in self.WATCHED}
+                with CaptureQueriesContext(connection) as ran:
+                    response = call()
+                self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
+                self.assertEqual([query['sql'] for query in ran.captured_queries
+                                  if query['sql'].lstrip().upper().startswith(self.WRITES)], [])
+                self.assertEqual({model.__name__: model.objects.count() for model in self.WATCHED}, before)
+        # the control: with the stamp aged the same way, a call the contract lets through writes it
+        for label, signed_in in (('reviewer', page), ('owner', owners_page)):
+            with self.subTest(control=label):
+                self.age_activity_stamps(signed_in)
+                with CaptureQueriesContext(connection) as ran:
+                    response = signed_in.get('/api/session', **{client_contract.WSGI_KEY: client_contract.VERSION})
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(any(query['sql'].lstrip().startswith('UPDATE "django_session"')
+                                    for query in ran.captured_queries))
+
+
 class OneValueTests(SimpleTestCase):
     def test_the_build_is_the_second_fix_pass_build(self):
         self.assertEqual(client_contract.VERSION, CURRENT_BUILD)
@@ -150,12 +259,13 @@ class OneValueTests(SimpleTestCase):
         needle = RELEASE_1_BUILD.encode('ascii')
         found, seen = [], set()
         for folder, dirs, files in os.walk(ROOT):
-            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREES_OWN_FILES)
+            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREES_OWN_FILES | SEALED_FOLDERS)
             for name in files:
                 path = Path(folder) / name
-                seen.add(path.relative_to(ROOT).as_posix())
-                if path.resolve() != here and needle in path.read_bytes():
-                    found.append(path.relative_to(ROOT).as_posix())
+                relative = path.relative_to(ROOT).as_posix()
+                seen.add(relative)
+                if relative not in RECORDS and path.resolve() != here and needle in path.read_bytes():
+                    found.append(relative)
         # the walk read the tree (the page and the server among it), so an empty list is the tree's
         self.assertLessEqual({'studio/static/studio/app.js', 'studio/client_contract.py', 'API.md'}, seen)
         self.assertEqual(found, [])

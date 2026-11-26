@@ -13,8 +13,8 @@ run the next. Nothing here was executed by the session that wrote it.
 | object | value |
 |---|---|
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
-| database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg`; release 1 (A3, A5): 512m of memory and no swap (memory and memory + swap equal, its own cgroup's `memory.swap.max` 0), core dumps off, and a log that never holds statement text (`log_min_error_statement` panic, `log_error_verbosity` terse) |
-| web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
+| database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg`; release 1 (A3, A5): 512m of memory and no swap (memory and memory + swap equal, its own cgroup's `memory.swap.max` 0), core dumps off, and a log that never holds statement text (`log_min_error_statement` panic, `log_error_verbosity` terse); release 2's search needs PostgreSQL 17 or newer (**Known limits**) |
+| web | container `cpt-studio-web`, gunicorn: four sync processes forked from one master that has loaded and warmed the application, in 1 GiB of memory without swap (memory and memory + swap equal), each keeping its own database connection (release 2, R2-5 to R2-7; **Known limits**); read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
 | worker | container `cpt-studio-worker`, read-only root, stop timeout 3,600 s (the Fable coding build: one coding stage prepares the document - a Word file converted in a bounded child of at most 60 s - then streams the reader's send and the checker's, each up to 96,000 output tokens at effort max, about 1,000 s each at the slowest rate measured, so a round can pass 2,000 s; the bound is `studio.jobs.CODE_STALE_SECONDS`, the age at which the stale sweep takes a running coding job for a dead worker's; a deploy may wait up to 60 minutes for it; round r3's question stage had 1,800 s before it), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
@@ -2229,6 +2229,48 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   those seconds stays valid there until its own 8-hour limit. So does one under
   an older revision that its own installer puts back over release 1 without
   `rollback-app` (it predates the policy).
+- Release 2's web (R2-5 to R2-8) is four sync processes forked from one
+  master that loads and warms the application before its first fork. Each
+  process keeps one database connection, checked at the first query of each
+  request, until `CONN_MAX_AGE` in `cptstudio/settings.py` has it replaced: the
+  database shows four idle sessions of the web (up to eight while a switch runs
+  two webs), and a changed database setting that needs a new session reaches
+  the web only as its connections are replaced. The worker and the one-shots
+  keep release 1's short-lived connections, with no check: only the web's own
+  entry point (`cptstudio/wsgi.py`) sets `CPT_STUDIO_WEB`, and the installer
+  gives it to no container.
+- A worker that hangs before its first heartbeat - while it opens its
+  connection at start, against a database that accepts the connection and
+  never answers - is not timed out by gunicorn 23, which times a worker out
+  only after its first heartbeat; the web's own connect timeout
+  (`cptstudio/settings.py`) ends the wait, and the worker then serves while
+  `/health/` reports the database.
+  A database that refuses the connection, or is gone, fails it at once.
+- A database that goes silent without closing its connections (no FIN or
+  RST) holds each web process that queries it on a kept connection until
+  gunicorn's own request timeout (`deploy/gunicorn.conf.py`) ends that worker,
+  as release 1's web was held on a connection younger than its own, shorter
+  age. On this host the database is a container on the same bridge, so it
+  takes a host fault.
+- Release 2's web loads the application in gunicorn's master before gunicorn
+  writes its first line (R2-5). A web whose application cannot load - a
+  setting its environment refuses, a part of the warm-up that cannot load -
+  writes one fixed line the installer keeps, `CPT Studio web: the application
+  could not be loaded.`, and exits; why is in the error's text, which is never
+  kept. To read it, start the image by hand with the same environment.
+- Release 2's search (`POST /api/encounters/search`, R2-20) matches text in
+  PostgreSQL's builtin `pg_c_utf8` collation, which PostgreSQL 17 introduced:
+  the database must stay PostgreSQL 17 or newer - on this host (17.11) and on
+  the new server - and CI runs its tests on `postgres:17`.
+- Release 2's front door (R2-27): the documents' search
+  (`POST /api/encounters/search`) is a read sent as a POST, so its words stay
+  out of every address and log; it counts in the every-request zone alone,
+  never in the writes', so an office searching at once no longer spends the
+  write zone its decisions and answers need. Every request from one address
+  still shares the every-request zone (A1, above), so searching that outruns
+  it can still get a decision or answer refused. No zone's name, size or rate
+  changed. The vhost is republished by `cert` and `https-vhost` before `app`,
+  as any change under `deploy/nginx/` is (blue/green residual 10).
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:

@@ -13,7 +13,7 @@ import unicodedata
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import decisions, models, state
 from studio.fable import prompts, result
@@ -21,6 +21,7 @@ from tests.support import coding as f
 from tests.support import operator as ops
 from tests.support import questions as q
 from tests.support import rounds as r
+from tests.test_frontend import PLAIN_STATIC
 
 
 def console_page(username, encounter):
@@ -373,6 +374,7 @@ class InstructionTests(SimpleTestCase):
                           {'id': None, 'question': 'Which payer?', 'affects': []}]})
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class QuestionIdPipelineTests(r.CustomerCase, TestCase):
     def test_a_round_in_the_new_shape_asks_each_question_once_and_one_answer_covers_its_lines(self):
         enc = self.started(service_date=q.SERVICE_DATE, insurance=q.INSURANCE)
@@ -892,6 +894,7 @@ class DanglingAsWrittenTests(SimpleTestCase):
                           {'item': 'L1', 'code': '20610', 'reference': ' q9 '}])
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class OperatorConsoleRoundTwoTests(r.CustomerCase, TestCase):
     def test_the_console_shows_a_dangling_integer_as_written_and_the_ids_both_answers_defined(self):
         enc = self.started()
@@ -944,6 +947,7 @@ KNEE = 'Which knee received the injection?'  # the Q2R-1 checker's synthetic inp
 GUIDANCE = 'Was the needle placed under ultrasound guidance?'
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class SharedIdWordingTests(r.CustomerCase, TestCase):
     """G1: the ids both answers define are listed whether their definitions stayed two questions or merged into one (a
     partial merge can still give a reference more than one), under a sentence that is true in either case."""
