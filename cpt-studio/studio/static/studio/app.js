@@ -1250,10 +1250,12 @@ const state = {
   // release 1: what the confirmation dialog runs on Continue (askConfirm), and the object addresses the page made, which
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
+  // release 2: when the session was last read (R2-17)
+  sessionReadAt: 0,
 };
 
 function uiState(overrides = {}) {
-  return { open: state.open, answers: state.answers, ack: state.ack, reconnecting: state.reconnecting, nowMs: Date.now(), clock: state.clock, entrance: false, ...overrides };
+  return { open: state.open, answers: state.answers, ack: state.ack, reconnecting: state.reconnecting, nowMs: Date.now(), clock: state.clock, ...overrides };
 }
 
 function badge(tone, label, iconName = '', attributes = '') {
@@ -1611,9 +1613,10 @@ function reviewColumn(doc, ui = {}) {
 }
 
 // The whole review page. The right column, the heading and the quoted passages are redrawn on their own after a read
-// that changes them (renderDocument), so the original document's viewer is never reloaded under the member.
+// that changes them (renderDocument), so the original document's viewer is never reloaded under the member. It never
+// fades in (R2-14): the entrance fade is a page load's first view's alone.
 function reviewView(doc, ui = {}) {
-  return `<section class="${ui.entrance ? 'view-entrance ' : ''}review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
+  return `<section class="review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
     + `<div id="reviewHead">${reviewHeading(doc)}</div>`
     + `<div class="review-layout"><div class="review-column" id="reviewColumn">${reviewColumn(doc, ui)}</div><div class="viewer-column">${viewerPanel(doc)}<div id="quotesBox">${quotesPanel(doc)}</div></div></div></section>`;
 }
@@ -1912,11 +1915,52 @@ function renderSession(session) {
 async function loadSession() {
   try {
     state.session = await api('/api/session');
+    state.sessionReadAt = Date.now();
     renderSession(state.session);
   } catch (error) {
     if (error.status !== 401) toast(`The workspace could not be loaded. ${error.message}`);
   }
   return state.session;
+}
+
+// R2-17: the session the page shell carries (data-session-json on <body>: exactly what GET /api/session answers), or
+// null where it carries none, or none this page can read; the page then reads it, as release 1 did.
+function shellSession() {
+  try {
+    const data = JSON.parse(text(document.body?.dataset?.sessionJson) || 'null');
+    const part = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+    return part(data) && part(data.user) && part(data.workspace) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+const SESSION_FRESH_MS = 60000;
+
+// A document's route reads the session again only where the page has none, or read it SESSION_FRESH_MS ago or more: the
+// review heading's specialty and the sidebar's numbers follow it within a minute (R2-17).
+function refreshSession() {
+  if (!state.session || Math.abs(Date.now() - state.sessionReadAt) >= SESSION_FRESH_MS) {
+    loadSession();  // the review heading's specialty follows the session (refutation N2-2-2), at most once a minute
+  }
+}
+
+// R2-14: the entrance fade (styles.css: main[data-entrance]) is a page load's first view's alone; every later view shows
+// at once.
+function endEntrance() {
+  $('#main')?.removeAttribute('data-entrance');
+}
+
+// The page's first route (boot): from the session its shell carries, drawn at once with no request before it (R2-17);
+// where it carries none it can read, the session is read first, as in release 1.
+function firstRoute() {
+  const carried = shellSession();
+  if (!carried) return loadSession().then(route);
+  state.session = carried;
+  state.sessionReadAt = Date.now();
+  renderSession(carried);
+  route();
+  return Promise.resolve();
 }
 
 function setActiveNav(name) {
@@ -1941,6 +1985,8 @@ function stopTicker() {
 function route() {
   const next = parseRoute(location.hash);
   const serial = ++state.routeSerial;
+  const before = state.route;
+  if (before) endEntrance();
   stopPolling();
   stopTicker();
   closeDocumentDialogs();
@@ -1958,11 +2004,11 @@ function route() {
   $('#breadcrumbCurrent').textContent = ROUTE_TITLES[next.name];
   setActiveNav(next.name);
   closeNavigation();
-  window.scrollTo({ top: 0, behavior: 'instant' });
   if (next.name === 'doc') {
-    loadSession();  // the review heading's specialty follows the session (refutation N2-2-2)
-    return showDocument(next.id, serial);
+    refreshSession();
+    return showDocument(next.id, serial, Boolean(before) && LIST_ROUTES.has(before.name));
   }
+  window.scrollTo({ top: 0, behavior: 'instant' });
   if (next.name === 'how-it-works') {
     $('#main').innerHTML = howItWorksView();
     return undefined;
@@ -2076,13 +2122,28 @@ function applySearch() {
   }
 }
 
-function showDocument(id, serial) {
+// How long the list a document was chosen in stays shown while the document is read; then the loading line (R2-14).
+const LOADING_AFTER_MS = 150;
+const LIST_ROUTES = new Set(['workspace', 'documents', 'queue']);
+
+// R2-14: chosen in a list (`fromList`), the document is read with the list still in view and the window unscrolled, until
+// the review is drawn or LOADING_AFTER_MS has passed, when the loading line shows; from another document, a deep link or
+// an upload, the loading line (or the upload's acknowledgement) shows at once, as before.
+function showDocument(id, serial, fromList = false) {
   if (!UUID.test(id)) {
+    window.scrollTo({ top: 0, behavior: 'instant' });
     $('#main').innerHTML = messageView('This document is not available.', 'The address does not name a document in this workspace.');
     return undefined;
   }
-  $('#main').innerHTML = state.ack?.id === id ? ackView(state.ack) : '<section class="view-entrance"><p class="empty-state">Loading the review…</p></section>';
-  return loadDocument(id, serial, false);
+  const loading = () => {
+    if (serial !== state.routeSerial) return;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    $('#main').innerHTML = state.ack?.id === id ? ackView(state.ack) : '<section class="view-entrance"><p class="empty-state">Loading the review…</p></section>';
+  };
+  const wait = fromList && state.ack?.id !== id;
+  if (!wait) loading();
+  const timer = wait ? setTimeout(loading, LOADING_AFTER_MS) : 0;
+  return loadDocument(id, serial, false).finally(() => clearTimeout(timer));
 }
 
 function setReconnecting(on) {
@@ -2113,6 +2174,7 @@ async function loadDocument(id, serial, silent, poll = false) {
       }
       return;
     }
+    window.scrollTo({ top: 0, behavior: 'instant' });
     $('#main').innerHTML = error.status === 404
       ? messageView('This document is not available.', 'It does not exist, or it is not in your workspace.')
       : messageView('The review could not be loaded.', error.message, true);
@@ -2215,7 +2277,7 @@ function renderDocument(doc, fresh, force = false) {
   if (another) state.selectedQuote = '';
   state.doc = doc;
   state.docKey = key;
-  const ui = uiState({ entrance: fresh });
+  const ui = uiState();
   if (partial) {
     $('#reviewHead').innerHTML = reviewHeading(doc);
     $('#quotesBox').innerHTML = quotesPanel(doc);
@@ -2226,7 +2288,9 @@ function renderDocument(doc, fresh, force = false) {
     state.selectedQuote = '';
     closeViewer();
     state.framePassage = null;
+    endEntrance();
     $('#main').innerHTML = reviewView(doc, ui);
+    if (!keep) window.scrollTo({ top: 0, behavior: 'instant' });
     mountViewer(doc);
   }
   if (keep) {
@@ -4514,7 +4578,7 @@ function boot() {
   document.addEventListener('visibilitychange', refreshIfWaiting);
   window.matchMedia('(max-width:760px)').addEventListener('change', closeNavigation);
   startIdleWatch();
-  loadSession().then(route);
+  firstRoute();
 }
 
 if (typeof module === 'object' && module.exports) {
@@ -4547,6 +4611,8 @@ if (typeof module === 'object' && module.exports) {
     showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,
     idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, ACTIVITY_INPUTS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
     refreshIfWaiting, renderSession,
+    // release 2
+    route, showDocument, shellSession, refreshSession, endEntrance, firstRoute, loadSession, SESSION_FRESH_MS, LOADING_AFTER_MS,
   };
 }
 if (typeof document !== 'undefined') boot();

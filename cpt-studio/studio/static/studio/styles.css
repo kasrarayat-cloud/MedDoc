@@ -517,3 +517,6 @@
 .export-group+.export-group{margin-top:22px}
 @media (prefers-reduced-motion: reduce){.export-pdf[aria-busy="true"]>svg{animation:none}
 }
+
+/* Release 2 (R2-14): the entrance fade plays on a page load's first view only. */
+main:not([data-entrance])>.view-entrance{animation:none}

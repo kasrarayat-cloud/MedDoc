@@ -265,7 +265,7 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter'];
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
   try {
@@ -5597,4 +5597,148 @@ test('The framed viewer of a PDF says when the server refused the document it wa
   } finally {
     global.document = saved;
   }
+});
+
+// --- release 2: the page's speed (RELEASE-2-SPEC R2-10 to R2-18 and R2-22), on release 1's server answers too ------------
+
+test('R2 V6: the entrance fade is a page load\'s first view\'s alone: the approved rule stands, the appended rule ends it after that view, and the review never fades', async () => {
+  const css = fs.readFileSync(STYLES, 'utf8');
+  assert.ok(css.slice(0, 32785).includes('.view-entrance{animation:enter .35s ease both}'), 'the approved rule, in the pinned prefix');
+  assert.ok(css.slice(32785).includes('main:not([data-entrance])>.view-entrance{animation:none}'), 'the appended rule');
+  assert.match(fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8'), /<main id="main" tabindex="-1" data-entrance>/);
+  for (const name of ENCOUNTERS) assert.ok(!render(fixture(name)).includes('view-entrance'), `${name}: the review never fades`);
+  // the page load's first route keeps the entrance; every route after it ends it
+  const main = fakeElement({ attributes: { 'data-entrance': '' } });
+  await withPage({ elements: { main } }, async () => {
+    global.location.hash = '#how-it-works';
+    app.state.route = null;
+    app.route();
+    assert.ok('data-entrance' in main.attributes, 'the first view fades in');
+    assert.match(main.innerHTML, /^<section class="view-entrance">/);
+    app.route();
+    assert.ok(!('data-entrance' in main.attributes), 'a later view does not');
+  });
+  // a document the first route opened (its loading line was the first view): the review drawn ends the entrance too
+  const first = fakeElement({ attributes: { 'data-entrance': '' } });
+  await withPage({ elements: { main: first } }, async () => {
+    const doc = fixture('encounter-ready.json');
+    Object.assign(app.state, { route: { name: 'doc', id: doc.id }, routeSerial: 3 });
+    app.renderDocument(doc, true);
+    assert.ok(!('data-entrance' in first.attributes));
+    assert.match(first.innerHTML, /^<section class="review-view">/);
+  });
+});
+
+test('R2 V8: the page starts from the session its shell carries; it reads the session only where that is missing or unreadable, and on a document at most once a minute', async () => {
+  const session = fixture('session.json');
+  await withPage({}, async () => {
+    for (const [value, expected] of [[JSON.stringify(session), session], [` ${JSON.stringify(session)} `, session], ['', null], ['null', null], ['{', null],
+      ['[]', null], ['"x"', null], ['7', null], ['{"user":1}', null], ['{"user":{}}', null], ['{"user":{},"workspace":[]}', null], [undefined, null], [7, null]]) {
+      global.document.body.dataset = { sessionJson: value };
+      assert.deepEqual(app.shellSession(), expected, String(value));
+    }
+    global.document.body.dataset = undefined;
+    assert.equal(app.shellSession(), null, 'no attribute at all');
+  });
+  // carried: drawn at once, with no session read before the first view
+  await withPage({}, async ({ calls, element }) => {
+    global.document.body.dataset = { sessionJson: JSON.stringify(session) };
+    global.location.hash = '#how-it-works';
+    Object.assign(app.state, { route: null, session: null, sessionReadAt: 0 });
+    const routed = app.firstRoute();
+    assert.equal(element('#breadcrumbCurrent').textContent, 'How it works', 'routed at once');
+    await routed;
+    assert.equal(calls.filter(call => call.url === '/api/session').length, 0, 'no session read');
+    assert.deepEqual(app.state.session, session);
+    assert.equal(element('#workspaceName').textContent, 'Gastroenterology', 'the carried session is drawn');
+    assert.ok(Math.abs(Date.now() - app.state.sessionReadAt) < 5000, 'and its time noted');
+  });
+  // none the page can read (release 1's shell renders the attribute empty): the session is read first, then the route
+  await withPage({}, async ({ calls, element }) => {
+    global.document.body.dataset = { sessionJson: '' };
+    global.location.hash = '#how-it-works';
+    Object.assign(app.state, { route: null, session: null, sessionReadAt: 0 });
+    const routed = app.firstRoute();
+    assert.equal(element('#breadcrumbCurrent').textContent, '', 'not routed before the session is read');
+    await routed;
+    assert.equal(calls.filter(call => call.url === '/api/session').length, 1);
+    assert.equal(element('#breadcrumbCurrent').textContent, 'How it works');
+  });
+  // a document's route reads it again only once it is a minute old, or missing
+  await withPage({}, async ({ calls }) => {
+    const reads = () => calls.filter(call => call.url === '/api/session').length;
+    Object.assign(app.state, { session, sessionReadAt: Date.now() });
+    app.refreshSession();
+    app.state.sessionReadAt = Date.now() - app.SESSION_FRESH_MS + 2000;
+    app.refreshSession();
+    await settle(() => false);
+    assert.equal(reads(), 0, 'read a moment ago, and 58 s ago: not again');
+    app.state.sessionReadAt = Date.now() - app.SESSION_FRESH_MS;
+    app.refreshSession();
+    await settle(() => reads() === 1 && Math.abs(Date.now() - app.state.sessionReadAt) < 5000);
+    assert.equal(reads(), 1, 'a minute ago: read again');
+    assert.ok(Math.abs(Date.now() - app.state.sessionReadAt) < 5000, 'the new read is noted');
+    app.state.session = null;
+    app.refreshSession();
+    await settle(() => reads() === 2);
+    app.state.sessionReadAt = Date.now() + 3600000;  // the clock moved back an hour
+    app.refreshSession();
+    await settle(() => reads() === 3);
+    assert.equal(reads(), 3, 'none held, or a read time the clock has moved away from: read');
+  });
+});
+
+test('R2-14, R2-17: a document chosen in a list keeps the list in view until its review is drawn or 150 ms have passed; from anywhere else the loading line shows at once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const doc = fixture('encounter-ready.json');
+  const address = `/api/encounters/${doc.id}`;
+  const LIST = '<section class="view-entrance">THE LIST</section>';
+  for (const [before, keeps] of [[{ name: 'documents' }, true], [{ name: 'queue' }, true], [{ name: 'workspace' }, true],
+    [{ name: 'doc', id: UUID }, false], [null, false], [{ name: 'how-it-works' }, false], [{ name: 'team' }, false]]) {
+    const main = fakeElement({ innerHTML: LIST });
+    await withPage({ elements: { main }, answers: [{ match: (method, url) => url === address, status: 200, body: clone(doc) }] }, async ({ calls }) => {
+      const scrolls = [];
+      global.window.scrollTo = options => scrolls.push(options.top);
+      const holds = holdReads(address);
+      global.location.hash = `#doc/${doc.id}`;
+      Object.assign(app.state, { route: before, session: fixture('session.json'), sessionReadAt: Date.now() });
+      app.route();
+      const from = JSON.stringify(before);
+      if (keeps) {
+        assert.equal(main.innerHTML, LIST, `${from}: the list stays`);
+        assert.deepEqual(scrolls, [], `${from}: the window is not scrolled`);
+        t.mock.timers.tick(app.LOADING_AFTER_MS - 1);
+        assert.equal(main.innerHTML, LIST);
+        t.mock.timers.tick(1);
+      }
+      assert.match(main.innerHTML, /Loading the review…/, from);
+      assert.deepEqual(scrolls, [0], `${from}: scrolled with the loading line`);
+      holds[0]();
+      await settle(() => app.state.doc?.id === doc.id);
+      assert.match(main.innerHTML, /^<section class="review-view">/, from);
+      assert.equal(calls.filter(call => call.url === '/api/session').length, 0, `${from}: the session, read a moment ago, is not read again`);
+    });
+  }
+  // the review answering within the 150 ms replaces the list directly: no loading line, no blank page between
+  const main = fakeElement({ innerHTML: LIST });
+  await withPage({ elements: { main }, answers: [{ match: (method, url) => url === address, status: 200, body: clone(doc) }] }, async () => {
+    const shown = [];
+    let html = LIST;
+    Object.defineProperty(main, 'innerHTML', { get: () => html, set: value => { html = value; shown.push(value.startsWith('<section class="review-view">') ? 'the review' : value); } });
+    global.location.hash = `#doc/${doc.id}`;
+    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now() });
+    app.route();
+    await settle(() => app.state.doc?.id === doc.id);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(shown, ['the review'], 'the list, then the review');
+  });
+  // an upload's acknowledgement shows at once, wherever it came from
+  const acked = fakeElement({ innerHTML: LIST });
+  await withPage({ elements: { main: acked } }, async () => {
+    holdReads(address);
+    global.location.hash = `#doc/${doc.id}`;
+    Object.assign(app.state, { route: { name: 'documents' }, ack: { id: doc.id, at: Date.parse('2026-11-26T10:00:00Z') }, session: fixture('session.json'), sessionReadAt: Date.now() });
+    app.route();
+    assert.match(acked.innerHTML, /Uploaded\. The coding review starts shortly\./);
+  });
 });
