@@ -2906,13 +2906,13 @@ async function downloadDocument(view, signal, moved) {
     dropView(view, held);
     throw error;
   }
-  // a copy wiped or replaced meanwhile is never drawn
-  if (held && response.status === 304 && state.keptViews.get(view) === held) {
+  if (held && response.status === 304) {
     try {
       await response.arrayBuffer?.();  // its empty body read, so the browser counts the request done, not cancelled
     } catch {
       // nothing to read
     }
+    // a copy wiped or replaced while its answer came, or while that answer's empty body was read, is never drawn
     if (state.keptViews.get(view) !== held) throw new Error('The copy was let go of.');
     moved();
     keepView(view, held.tag, held.data);

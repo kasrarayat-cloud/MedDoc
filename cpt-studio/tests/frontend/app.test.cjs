@@ -6142,7 +6142,7 @@ test('R2 V3: a re-open asks with the tag it holds and draws the kept bytes on a 
   }
 });
 
-test('R2 V3: a document that does not open is never kept, and a copy wiped while its re-open is answered is never drawn', async () => {
+test('R2 V3: a document that does not open is never kept, and a copy wiped while its re-open is answered, or while that answer\'s empty body is read, is never drawn', async () => {
   const word = fixture('encounter-word.json');
   const view = word.document.view_url;
   app.state.keptViews.clear();
@@ -6169,6 +6169,21 @@ test('R2 V3: a document that does not open is never kept, and a copy wiped while
         await settle(() => viewer.mode === 'frame');
         assert.deepEqual([viewer.mode, viewer.fallback, opened.length], ['frame', 'download', 0]);
       }, () => new Promise(resolve => { release = () => resolve(taggedView(304, [], VIEW_TAG_A)); }));
+    // ... or while that 304's empty body is read: the copy is checked after the read, not before it
+    let reading = false;
+    let releaseBody;
+    await withPdfPage(() => Promise.resolve(fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } }).library),
+      async ({ element: find }) => {
+        app.keepView(view, '0f0e0d0c-0b0a-4908-8706-050403020100', Uint8Array.from([37, 80, 68, 70]));
+        const viewer = await mount(word, find, () => reading);
+        app.state.keptViews.clear();  // wiped while the body is read
+        releaseBody();
+        await settle(() => viewer.mode === 'frame');
+        assert.deepEqual([viewer.mode, viewer.fallback, opened.length, app.state.keptViews.size], ['frame', 'download', 0, 0]);
+      }, () => taggedView(304, [], VIEW_TAG_A).then(response => ({ ...response, arrayBuffer: () => {
+        reading = true;
+        return new Promise(resolve => { releaseBody = () => resolve(new ArrayBuffer(0)); });
+      } })));
   } finally {
     app.forgetMemory();
   }
