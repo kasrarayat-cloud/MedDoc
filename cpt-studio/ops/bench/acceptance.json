@@ -1,0 +1,2169 @@
+{
+ "about": "RELEASE-2-SPEC section 8, \"The acceptance table\", as rows the bench judge (judge.py) reads. Written by lane M unchanged from the specification; a gate is moved only in the open, in the specification, with its reason, never at run time. floor_factor = 1 + 2 x the metric's A/A spread (C5), recorded from release 1 measured twice, interleaved, on this host, before any B was measured.",
+ "spec": "RELEASE-2-SPEC.md, amended 2026-11-26 (C1-C10); section 8",
+ "a_tree": "816045c7264481bc6956285e1ca89991b9fcec2f (release 1, live; cpt-studio tree bc0729bb9596, as 9ee0c85be)",
+ "rules": {
+  "invalid_load_average": 8,
+  "a_tolerance": 0.2,
+  "gain_over_spread": 2,
+  "profiles": {
+   "P0": "unthrottled",
+   "P1": "CDP CPU 4x, 40 ms RTT, 10/5 Mbps",
+   "P2": "+200 ms per request only",
+   "P3": "Chromium on two cores (taskset)"
+  },
+  "order": "A B A B A B, three rounds each, one part group at a time (bench_run.py --order)"
+ },
+ "controls": [
+  "nomarker",
+  "planted_delay",
+  "planted_fetch",
+  "planted_detail",
+  "reduced_motion",
+  "heap_probe"
+ ],
+ "office_model": {
+  "members": 20,
+  "typists": 5,
+  "signin_window_ms": 2000,
+  "cold_caches": 5,
+  "minutes": 1,
+  "open_every_ms": 15000,
+  "read_ms": 10000,
+  "typing_at_ms": 4000,
+  "note": "20 members at natural pace (an open every 15 s, back to the list after 10 s of reading), 5 typing 30 characters at 350 ms spacing, 20 sign-ins within 2 s, all from one non-exempt office address; hashed static files cached except the standby's two for 5 members"
+ },
+ "spread": null,
+ "rows": [
+  {
+   "id": "later-open-P0",
+   "table": "opening",
+   "section8": "later open, first page drawn: <= 180 / 480 / 400 / 215 ms, and <= 0.65 A (P0, P3), <= 0.80 A (P1), <= 0.70 A (P2)",
+   "metric": "open.later.first_page.P0",
+   "min_samples": 18,
+   "a_section8": 298,
+   "gate": [
+    {
+     "abs_max": 180
+    },
+    {
+     "rel_max": 0.65
+    }
+   ],
+   "gain": true
+  },
+  {
+   "id": "later-open-P1",
+   "table": "opening",
+   "section8": "later open, first page drawn: <= 180 / 480 / 400 / 215 ms, and <= 0.65 A (P0, P3), <= 0.80 A (P1), <= 0.70 A (P2)",
+   "metric": "open.later.first_page.P1",
+   "min_samples": 18,
+   "a_section8": 647,
+   "gate": [
+    {
+     "abs_max": 480
+    },
+    {
+     "rel_max": 0.8
+    }
+   ],
+   "gain": true
+  },
+  {
+   "id": "later-open-P2",
+   "table": "opening",
+   "section8": "later open, first page drawn: <= 180 / 480 / 400 / 215 ms, and <= 0.65 A (P0, P3), <= 0.80 A (P1), <= 0.70 A (P2)",
+   "metric": "open.later.first_page.P2",
+   "min_samples": 18,
+   "a_section8": 645,
+   "gate": [
+    {
+     "abs_max": 400
+    },
+    {
+     "rel_max": 0.7
+    }
+   ],
+   "gain": true
+  },
+  {
+   "id": "later-open-P3",
+   "table": "opening",
+   "section8": "later open, first page drawn: <= 180 / 480 / 400 / 215 ms, and <= 0.65 A (P0, P3), <= 0.80 A (P1), <= 0.70 A (P2)",
+   "metric": "open.later.first_page.P3",
+   "min_samples": 18,
+   "a_section8": 342,
+   "gate": [
+    {
+     "abs_max": 215
+    },
+    {
+     "rel_max": 0.65
+    }
+   ],
+   "gain": true
+  },
+  {
+   "id": "first-open-P0",
+   "table": "opening",
+   "section8": "first open after a page load (>= 2 s after load): <= 240 / 850 / 600 / 260 ms",
+   "metric": "open.first.first_page.P0",
+   "min_samples": 9,
+   "a_section8": 395,
+   "gate": [
+    {
+     "abs_max": 240
+    }
+   ]
+  },
+  {
+   "id": "first-open-P1",
+   "table": "opening",
+   "section8": "first open after a page load (>= 2 s after load): <= 240 / 850 / 600 / 260 ms",
+   "metric": "open.first.first_page.P1",
+   "min_samples": 9,
+   "a_section8": 1101,
+   "gate": [
+    {
+     "abs_max": 850
+    }
+   ]
+  },
+  {
+   "id": "first-open-P2",
+   "table": "opening",
+   "section8": "first open after a page load (>= 2 s after load): <= 240 / 850 / 600 / 260 ms",
+   "metric": "open.first.first_page.P2",
+   "min_samples": 9,
+   "a_section8": 942,
+   "gate": [
+    {
+     "abs_max": 600
+    }
+   ]
+  },
+  {
+   "id": "first-open-P3",
+   "table": "opening",
+   "section8": "first open after a page load (>= 2 s after load): <= 240 / 850 / 600 / 260 ms",
+   "metric": "open.first.first_page.P3",
+   "min_samples": 9,
+   "a_section8": 482,
+   "gate": [
+    {
+     "abs_max": 260
+    }
+   ]
+  },
+  {
+   "id": "opaque-P0",
+   "table": "opening",
+   "section8": "review fully opaque: <= 120 / 200 / 270 / 120 ms",
+   "metric": "open.later.opaque.P0",
+   "min_samples": 18,
+   "a_section8": 414,
+   "gate": [
+    {
+     "abs_max": 120
+    }
+   ]
+  },
+  {
+   "id": "opaque-P1",
+   "table": "opening",
+   "section8": "review fully opaque: <= 120 / 200 / 270 / 120 ms",
+   "metric": "open.later.opaque.P1",
+   "min_samples": 18,
+   "a_section8": 607,
+   "gate": [
+    {
+     "abs_max": 200
+    }
+   ]
+  },
+  {
+   "id": "opaque-P2",
+   "table": "opening",
+   "section8": "review fully opaque: <= 120 / 200 / 270 / 120 ms",
+   "metric": "open.later.opaque.P2",
+   "min_samples": 18,
+   "a_section8": 562,
+   "gate": [
+    {
+     "abs_max": 270
+    }
+   ]
+  },
+  {
+   "id": "opaque-P3",
+   "table": "opening",
+   "section8": "review fully opaque: <= 120 / 200 / 270 / 120 ms",
+   "metric": "open.later.opaque.P3",
+   "min_samples": 18,
+   "a_section8": 423,
+   "gate": [
+    {
+     "abs_max": 120
+    }
+   ]
+  },
+  {
+   "id": "enter-per-open-P0",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per open (A: 2)",
+   "metric": "open.enter.per_open.P0",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 2,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-tab-P0",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per tab change (A: 1)",
+   "metric": "open.enter.per_tab.P0",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-open-P1",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per open (A: 2)",
+   "metric": "open.enter.per_open.P1",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 2,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-tab-P1",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per tab change (A: 1)",
+   "metric": "open.enter.per_tab.P1",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-open-P2",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per open (A: 2)",
+   "metric": "open.enter.per_open.P2",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 2,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-tab-P2",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per tab change (A: 1)",
+   "metric": "open.enter.per_tab.P2",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-open-P3",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per open (A: 2)",
+   "metric": "open.enter.per_open.P3",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 2,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-per-tab-P3",
+   "table": "opening",
+   "section8": "`enter` animations: 0 per tab change (A: 1)",
+   "metric": "open.enter.per_tab.P3",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "enter-first-view-max",
+   "table": "opening",
+   "section8": "`enter` animations: exactly 1 (the approved 350 ms) on a page load's first view",
+   "metric": "open.enter.first_view.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 1
+    }
+   ]
+  },
+  {
+   "id": "enter-first-view-min",
+   "table": "opening",
+   "section8": "`enter` animations: exactly 1 on a page load's first view (never 0)",
+   "metric": "open.enter.first_view.P0",
+   "stat": "min",
+   "min_samples": 3,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 1
+    }
+   ]
+  },
+  {
+   "id": "scan3-P0",
+   "table": "opening",
+   "section8": "3-page 1.67 MB scan, first page: P0 <= 270 ms",
+   "metric": "open.scan3.first_page.P0",
+   "min_samples": 9,
+   "a_section8": 349,
+   "gate": [
+    {
+     "abs_max": 270
+    }
+   ]
+  },
+  {
+   "id": "scan3-P1",
+   "table": "opening",
+   "section8": "3-page 1.67 MB scan, first page: P1 <= 1.02 A (C5 floor)",
+   "metric": "open.scan3.first_page.P1",
+   "min_samples": 9,
+   "a_section8": 1992,
+   "gate": [
+    {
+     "rel_max": 1.02
+    }
+   ]
+  },
+  {
+   "id": "scan20-P0",
+   "table": "opening",
+   "section8": "20-page 11.1 MB scan, first page: P0 <= 400 ms",
+   "metric": "open.scan20.first_page.P0",
+   "min_samples": 9,
+   "a_section8": 481,
+   "gate": [
+    {
+     "abs_max": 400
+    }
+   ]
+  },
+  {
+   "id": "reopen-P0",
+   "table": "opening",
+   "section8": "re-open in the same page: P0 <= 160 ms",
+   "metric": "open.reopen.first_page.P0",
+   "min_samples": 18,
+   "a_section8": 294,
+   "gate": [
+    {
+     "abs_max": 160
+    }
+   ]
+  },
+  {
+   "id": "reopen-P1",
+   "table": "opening",
+   "section8": "re-open in the same page: P1 <= 430 ms",
+   "metric": "open.reopen.first_page.P1",
+   "min_samples": 18,
+   "a_section8": 655,
+   "gate": [
+    {
+     "abs_max": 430
+    }
+   ]
+  },
+  {
+   "id": "reopen-body-P0",
+   "table": "opening",
+   "section8": "re-open: 0 view body bytes (a 304)",
+   "metric": "open.reopen.view_body_bytes.P0",
+   "stat": "max",
+   "min_samples": 6,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "reopen-body-P1",
+   "table": "opening",
+   "section8": "re-open: 0 view body bytes (a 304)",
+   "metric": "open.reopen.view_body_bytes.P1",
+   "stat": "max",
+   "min_samples": 6,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "reopen-scan20-P1",
+   "table": "opening",
+   "section8": "the 11.1 MB re-open: P1 <= 1,000 ms (A 9,600)",
+   "metric": "open.reopen_scan20.first_page.P1",
+   "min_samples": 3,
+   "a_section8": 9600,
+   "gate": [
+    {
+     "abs_max": 1000
+    }
+   ]
+  },
+  {
+   "id": "long-tasks-total-P1",
+   "table": "opening",
+   "section8": "long tasks per open (P1): total <= 1.36 A, or A x (1 + 2 x spread), the larger (C5)",
+   "metric": "open.later.long_tasks_total.P1",
+   "min_samples": 18,
+   "a_section8": [
+    288,
+    493
+   ],
+   "gate": [
+    {
+     "rel_max": 1.36,
+     "no_worse": true
+    }
+   ]
+  },
+  {
+   "id": "long-tasks-max-P1",
+   "table": "opening",
+   "section8": "long tasks per open (P1): max <= 160 ms",
+   "metric": "open.later.long_tasks_max.P1",
+   "min_samples": 18,
+   "a_section8": 142,
+   "gate": [
+    {
+     "abs_max": 160
+    }
+   ]
+  },
+  {
+   "id": "quote-mark-P0",
+   "table": "opening",
+   "section8": "a quote's click to its mark: <= 1.1 A + 15 ms (P0; A 18-31)",
+   "metric": "open.quote_mark.P0",
+   "min_samples": 18,
+   "a_section8": [
+    18,
+    31
+   ],
+   "gate": [
+    {
+     "rel_max": 1.1,
+     "rel_plus": 15
+    }
+   ]
+  },
+  {
+   "id": "quote-mark-P1",
+   "table": "opening",
+   "section8": "a quote's click to its mark: <= 1.1 A + 15 ms (P1; A 146-381)",
+   "metric": "open.quote_mark.P1",
+   "min_samples": 18,
+   "a_section8": [
+    146,
+    381
+   ],
+   "gate": [
+    {
+     "rel_max": 1.1,
+     "rel_plus": 15
+    }
+   ]
+  },
+  {
+   "id": "text-open-P0",
+   "table": "opening",
+   "section8": "a text document's open: <= A + 15 ms (A measured in the run)",
+   "metric": "open.text.frame.P0",
+   "min_samples": 9,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "rel_plus": 15
+    }
+   ]
+  },
+  {
+   "id": "text-open-P1",
+   "table": "opening",
+   "section8": "a text document's open: <= A + 15 ms (A measured in the run)",
+   "metric": "open.text.frame.P1",
+   "min_samples": 9,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "rel_plus": 15
+    }
+   ]
+  },
+  {
+   "id": "text-open-P2",
+   "table": "opening",
+   "section8": "a text document's open (reported for this profile)",
+   "kind": "report",
+   "metric": "open.text.frame.P2"
+  },
+  {
+   "id": "text-open-P3",
+   "table": "opening",
+   "section8": "a text document's open (reported for this profile)",
+   "kind": "report",
+   "metric": "open.text.frame.P3"
+  },
+  {
+   "id": "word-later-P0",
+   "table": "opening",
+   "section8": "a Word document's later open, first page drawn: reported in a row of its own, not a gate (C6, D-R2-31)",
+   "kind": "report",
+   "metric": "open.word.first_page.P0"
+  },
+  {
+   "id": "word-later-P1",
+   "table": "opening",
+   "section8": "a Word document's later open, first page drawn: reported in a row of its own, not a gate (C6, D-R2-31)",
+   "kind": "report",
+   "metric": "open.word.first_page.P1"
+  },
+  {
+   "id": "quick-leave-P0",
+   "table": "opening",
+   "section8": "after a quick leave (R2-11), the next document's first text: <= 300 ms",
+   "metric": "open.quick_leave.first_text.P0",
+   "min_samples": 3,
+   "a_section8": 877,
+   "gate": [
+    {
+     "abs_max": 300
+    }
+   ]
+  },
+  {
+   "id": "quick-leave-attempt-P0",
+   "table": "opening",
+   "section8": "after a quick leave: no `?attempt=` request",
+   "metric": "open.quick_leave.attempt_requests.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-P0",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque: <= 130 / 280 / 280 ms (the returns to the 100-row Documents list and the nav tab changes of the open part, as section 8's A was measured)",
+   "metric": "open.tab.opaque.P0",
+   "min_samples": 27,
+   "a_section8": 345,
+   "gate": [
+    {
+     "abs_max": 130
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-P1",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque: <= 130 / 280 / 280 ms (the returns to the 100-row Documents list and the nav tab changes of the open part, as section 8's A was measured)",
+   "metric": "open.tab.opaque.P1",
+   "min_samples": 27,
+   "a_section8": 467,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-P2",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque: <= 130 / 280 / 280 ms (the returns to the 100-row Documents list and the nav tab changes of the open part, as section 8's A was measured)",
+   "metric": "open.tab.opaque.P2",
+   "min_samples": 27,
+   "a_section8": 360,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-100-P0",
+   "table": "lists",
+   "section8": "Documents usable: P0 <= 160 ms at each size",
+   "metric": "lists.documents.usable.100.P0",
+   "min_samples": 9,
+   "a_section8": 341,
+   "gate": [
+    {
+     "abs_max": 160
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-1500-P0",
+   "table": "lists",
+   "section8": "Documents usable: P0 <= 160 ms at each size",
+   "metric": "lists.documents.usable.1500.P0",
+   "min_samples": 9,
+   "a_section8": 800,
+   "gate": [
+    {
+     "abs_max": 160
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-18000-P0",
+   "table": "lists",
+   "section8": "Documents usable: P0 <= 160 ms at each size",
+   "metric": "lists.documents.usable.18000.P0",
+   "min_samples": 9,
+   "a_section8": [
+    11000,
+    11400
+   ],
+   "gate": [
+    {
+     "abs_max": 160
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-100-P1",
+   "table": "lists",
+   "section8": "Documents usable: P1 <= 0.6 A at 100 (a gain at the live size; C5)",
+   "metric": "lists.documents.usable.100.P1",
+   "min_samples": 9,
+   "a_section8": 370,
+   "gate": [
+    {
+     "rel_max": 0.6
+    }
+   ],
+   "gain": true
+  },
+  {
+   "id": "documents-usable-1500-P1",
+   "table": "lists",
+   "section8": "Documents usable: P1 <= 380 ms at 1,500",
+   "metric": "lists.documents.usable.1500.P1",
+   "min_samples": 9,
+   "a_section8": [
+    4200,
+    4500
+   ],
+   "gate": [
+    {
+     "abs_max": 380
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-18000-P1",
+   "table": "lists",
+   "section8": "Documents usable: P1 <= 380 ms at 18,000 (A unfinished in 420 s)",
+   "metric": "lists.documents.usable.18000.P1",
+   "min_samples": 3,
+   "a_section8": null,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 380
+    }
+   ]
+  },
+  {
+   "id": "documents-usable-ratio-P0",
+   "table": "lists",
+   "section8": "Documents usable: largest / smallest <= 1.25 (P0, across 100, 1,500, 18,000)",
+   "kind": "max_ratio",
+   "metrics": [
+    "lists.documents.usable.100.P0",
+    "lists.documents.usable.1500.P0",
+    "lists.documents.usable.18000.P0"
+   ],
+   "max": 1.25
+  },
+  {
+   "id": "documents-long-task-100-P0",
+   "table": "lists",
+   "section8": "Documents: no long task > 100 ms in P0",
+   "metric": "lists.documents.long_task_max.100.P0",
+   "stat": "max",
+   "min_samples": 9,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 100
+    }
+   ]
+  },
+  {
+   "id": "documents-long-task-1500-P0",
+   "table": "lists",
+   "section8": "Documents: no long task > 100 ms in P0",
+   "metric": "lists.documents.long_task_max.1500.P0",
+   "stat": "max",
+   "min_samples": 9,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 100
+    }
+   ]
+  },
+  {
+   "id": "documents-long-task-18000-P0",
+   "table": "lists",
+   "section8": "Documents: no long task > 100 ms in P0",
+   "metric": "lists.documents.long_task_max.18000.P0",
+   "stat": "max",
+   "min_samples": 9,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 100
+    }
+   ]
+  },
+  {
+   "id": "overview-100-P0",
+   "table": "lists",
+   "section8": "Overview click: <= 150 ms at each size",
+   "metric": "lists.overview.usable.100.P0",
+   "min_samples": 9,
+   "a_section8": 343,
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "overview-1500-P0",
+   "table": "lists",
+   "section8": "Overview click: <= 150 ms at each size",
+   "metric": "lists.overview.usable.1500.P0",
+   "min_samples": 9,
+   "a_section8": 401,
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "overview-18000-P0",
+   "table": "lists",
+   "section8": "Overview click: <= 150 ms at each size",
+   "metric": "lists.overview.usable.18000.P0",
+   "min_samples": 9,
+   "a_section8": 2364,
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "key-event-100-P0",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 64 ms P0",
+   "metric": "lists.search.key_event.100.P0",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": 40,
+   "gate": [
+    {
+     "abs_max": 64
+    }
+   ]
+  },
+  {
+   "id": "key-event-100-P1",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 120 ms P1, including at 18,000",
+   "metric": "lists.search.key_event.100.P1",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": 80,
+   "needs_a": true,
+   "gate": [
+    {
+     "abs_max": 120
+    }
+   ]
+  },
+  {
+   "id": "key-event-1500-P0",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 64 ms P0",
+   "metric": "lists.search.key_event.1500.P0",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": 168,
+   "gate": [
+    {
+     "abs_max": 64
+    }
+   ]
+  },
+  {
+   "id": "key-event-1500-P1",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 120 ms P1, including at 18,000",
+   "metric": "lists.search.key_event.1500.P1",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": 848,
+   "needs_a": true,
+   "gate": [
+    {
+     "abs_max": 120
+    }
+   ]
+  },
+  {
+   "id": "key-event-18000-P0",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 64 ms P0",
+   "metric": "lists.search.key_event.18000.P0",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": 1416,
+   "gate": [
+    {
+     "abs_max": 64
+    }
+   ]
+  },
+  {
+   "id": "key-event-18000-P1",
+   "table": "lists",
+   "section8": "a search keystroke (Event Timing): worst <= 120 ms P1, including at 18,000",
+   "metric": "lists.search.key_event.18000.P1",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": null,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 120
+    }
+   ]
+  },
+  {
+   "id": "results-last-key-100-P0",
+   "table": "lists",
+   "section8": "search results after the last key, at 100 documents, in the page, keys timed after the remaining pages loaded: no worse than A by the judge's rule (C2, C5)",
+   "metric": "lists.search.after_last_key.100.P0",
+   "min_samples": 3,
+   "a_section8": [
+    0,
+    40
+   ],
+   "gate": [
+    {
+     "rel_max": 1.0
+    }
+   ]
+  },
+  {
+   "id": "first-key-100-P0",
+   "table": "lists",
+   "section8": "search results after the first key at 100 documents, the remaining page's load included: no worse than A plus one page load (the median later-page load of the same run), by the judge's rule",
+   "metric": "lists.search.first_key.100.P0",
+   "min_samples": 3,
+   "a_section8": [
+    0,
+    40
+   ],
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "plus_metric": "lists.later_page.100.P0"
+    }
+   ]
+  },
+  {
+   "id": "results-last-key-100-P1",
+   "table": "lists",
+   "section8": "search results after the last key, at 100 documents, in the page, keys timed after the remaining pages loaded: no worse than A by the judge's rule (C2, C5)",
+   "metric": "lists.search.after_last_key.100.P1",
+   "min_samples": 3,
+   "a_section8": [
+    0,
+    80
+   ],
+   "gate": [
+    {
+     "rel_max": 1.0
+    }
+   ]
+  },
+  {
+   "id": "first-key-100-P1",
+   "table": "lists",
+   "section8": "search results after the first key at 100 documents, the remaining page's load included: no worse than A plus one page load (the median later-page load of the same run), by the judge's rule",
+   "metric": "lists.search.first_key.100.P1",
+   "min_samples": 3,
+   "a_section8": [
+    0,
+    80
+   ],
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "plus_metric": "lists.later_page.100.P1"
+    }
+   ]
+  },
+  {
+   "id": "results-last-key-1500-P0",
+   "table": "lists",
+   "section8": "search results after the last key above 200 documents, on the server: <= 600 ms (C2)",
+   "metric": "lists.search.after_last_key.1500.P0",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 600
+    }
+   ]
+  },
+  {
+   "id": "results-last-key-1500-P1",
+   "table": "lists",
+   "section8": "search results after the last key above 200 documents (P1, reported)",
+   "kind": "report",
+   "metric": "lists.search.after_last_key.1500.P1"
+  },
+  {
+   "id": "results-last-key-18000-P0",
+   "table": "lists",
+   "section8": "search results after the last key above 200 documents, on the server: <= 600 ms (C2)",
+   "metric": "lists.search.after_last_key.18000.P0",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 600
+    }
+   ]
+  },
+  {
+   "id": "results-last-key-18000-P1",
+   "table": "lists",
+   "section8": "search results after the last key above 200 documents (P1, reported)",
+   "kind": "report",
+   "metric": "lists.search.after_last_key.18000.P1"
+  },
+  {
+   "id": "server-list-100",
+   "table": "lists",
+   "section8": "server list page: median <= 30 ms at each size",
+   "metric": "server.list.ms.100",
+   "min_samples": 15,
+   "a_section8": 39.2,
+   "gate": [
+    {
+     "abs_max": 30
+    }
+   ]
+  },
+  {
+   "id": "server-list-1500",
+   "table": "lists",
+   "section8": "server list page: median <= 30 ms at each size",
+   "metric": "server.list.ms.1500",
+   "min_samples": 15,
+   "a_section8": 162,
+   "gate": [
+    {
+     "abs_max": 30
+    }
+   ]
+  },
+  {
+   "id": "server-list-18000",
+   "table": "lists",
+   "section8": "server list page: median <= 30 ms at each size",
+   "metric": "server.list.ms.18000",
+   "min_samples": 15,
+   "a_section8": 2503,
+   "gate": [
+    {
+     "abs_max": 30
+    }
+   ]
+  },
+  {
+   "id": "server-list-body-100",
+   "table": "lists",
+   "section8": "server list page: body <= 16 KB",
+   "metric": "server.list.bytes.100",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 26652,
+   "gate": [
+    {
+     "abs_max": 16384
+    }
+   ]
+  },
+  {
+   "id": "server-list-body-1500",
+   "table": "lists",
+   "section8": "server list page: body <= 16 KB",
+   "metric": "server.list.bytes.1500",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 402067,
+   "gate": [
+    {
+     "abs_max": 16384
+    }
+   ]
+  },
+  {
+   "id": "server-list-body-18000",
+   "table": "lists",
+   "section8": "server list page: body <= 16 KB",
+   "metric": "server.list.bytes.18000",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 4824245,
+   "gate": [
+    {
+     "abs_max": 16384
+    }
+   ]
+  },
+  {
+   "id": "server-list-ratio",
+   "table": "lists",
+   "section8": "server list page: 18,000 / 100 <= 1.5",
+   "kind": "ratio",
+   "metric": "server.list.ms.18000",
+   "over": "server.list.ms.100",
+   "max": 1.5
+  },
+  {
+   "id": "statements-list_first-50",
+   "table": "lists",
+   "section8": "statements per request: a list first <= 13 (C1)",
+   "metric": "queries.list_first.50",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 13
+    }
+   ]
+  },
+  {
+   "id": "statements-list_first-50-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.list_first.50.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-list_first-5000",
+   "table": "lists",
+   "section8": "statements per request: a list first <= 13 (C1)",
+   "metric": "queries.list_first.5000",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 13
+    }
+   ]
+  },
+  {
+   "id": "statements-list_first-5000-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.list_first.5000.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-list_first-equal",
+   "table": "lists",
+   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "kind": "equal",
+   "metrics": [
+    "queries.list_first.50",
+    "queries.list_first.5000"
+   ]
+  },
+  {
+   "id": "statements-list_later-50",
+   "table": "lists",
+   "section8": "statements per request: a list later <= 13 (C1)",
+   "metric": "queries.list_later.50",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 13
+    }
+   ]
+  },
+  {
+   "id": "statements-list_later-50-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.list_later.50.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-list_later-5000",
+   "table": "lists",
+   "section8": "statements per request: a list later <= 13 (C1)",
+   "metric": "queries.list_later.5000",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 13
+    }
+   ]
+  },
+  {
+   "id": "statements-list_later-5000-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.list_later.5000.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-list_later-equal",
+   "table": "lists",
+   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "kind": "equal",
+   "metrics": [
+    "queries.list_later.50",
+    "queries.list_later.5000"
+   ]
+  },
+  {
+   "id": "statements-search-50",
+   "table": "lists",
+   "section8": "statements per request: a search <= 14 (C1)",
+   "metric": "queries.search.50",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 14
+    }
+   ]
+  },
+  {
+   "id": "statements-search-50-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.search.50.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-search-5000",
+   "table": "lists",
+   "section8": "statements per request: a search <= 14 (C1)",
+   "metric": "queries.search.5000",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 14
+    }
+   ]
+  },
+  {
+   "id": "statements-search-5000-builder",
+   "table": "lists",
+   "section8": "the list builder's own statements <= 4 (C1)",
+   "metric": "queries.search.5000.builder",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 4
+    }
+   ]
+  },
+  {
+   "id": "statements-search-equal",
+   "table": "lists",
+   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "kind": "equal",
+   "metrics": [
+    "queries.search.50",
+    "queries.search.5000"
+   ]
+  },
+  {
+   "id": "server-search",
+   "table": "lists",
+   "section8": "server search: <= 25 ms typical, at 18,000 documents (used above 200; C2)",
+   "metric": "server.search.ms.18000",
+   "min_samples": 9,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 25
+    }
+   ]
+  },
+  {
+   "id": "server-search-nomatch",
+   "table": "lists",
+   "section8": "server search: <= 250 ms for no match, at 18,000 documents",
+   "metric": "server.search_nomatch.ms.18000",
+   "min_samples": 5,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 250
+    }
+   ]
+  },
+  {
+   "id": "session-18000",
+   "table": "lists",
+   "section8": "`GET /api/session` at 18,000 documents: <= 20 ms",
+   "metric": "server.session.ms.18000",
+   "min_samples": 9,
+   "a_section8": 33.2,
+   "gate": [
+    {
+     "abs_max": 20
+    }
+   ]
+  },
+  {
+   "id": "cold-first-request",
+   "table": "cold",
+   "section8": "first request of a fresh worker, recycled one at a time: <= 100 ms max over >= 12 lifetimes",
+   "metric": "cold.first_request.ms",
+   "stat": "max",
+   "min_samples": 12,
+   "a_section8": [
+    1837,
+    1997
+   ],
+   "gate": [
+    {
+     "abs_max": 100
+    }
+   ]
+  },
+  {
+   "id": "cold-four-at-once",
+   "table": "cold",
+   "section8": "four first requests at once after a container start: <= 150 ms each",
+   "metric": "cold.four_at_once.ms",
+   "stat": "max",
+   "min_samples": 4,
+   "a_section8": [
+    2003,
+    2109
+   ],
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "cold-closed-loop",
+   "table": "cold",
+   "section8": "two closed-loop clients, recycling every 200 requests: slowest of 2,000 <= 150 ms",
+   "metric": "cold.closed_loop.slowest_ms",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "cold-closed-loop-errors",
+   "table": "cold",
+   "section8": "two closed-loop clients: 0 errors",
+   "metric": "cold.closed_loop.errors",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "pause-detail",
+   "table": "cold",
+   "section8": "detail 62 s after the last click (median of 7 rounds): <= 50 ms",
+   "metric": "pause.detail.ms",
+   "min_samples": 7,
+   "a_section8": 98.5,
+   "gate": [
+    {
+     "abs_max": 50
+    }
+   ]
+  },
+  {
+   "id": "gc-pause",
+   "table": "cold",
+   "section8": "longest garbage-collection pause in 600 mixed requests: <= 5 ms",
+   "metric": "cold.gc.max_pause_ms",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": [
+    194,
+    199
+   ],
+   "gate": [
+    {
+     "abs_max": 5
+    }
+   ]
+  },
+  {
+   "id": "db-end",
+   "table": "cold",
+   "section8": "database ends every web connection: 0 errors (A: 500 once per worker)",
+   "metric": "cold.db_end.errors",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": null,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "worker-pss",
+   "table": "cold",
+   "section8": "per worker after the standard flow: PSS <= 80 MB",
+   "metric": "cold.memory.worker_pss",
+   "stat": "max",
+   "min_samples": 2,
+   "a_section8": [
+    109,
+    112
+   ],
+   "gate": [
+    {
+     "abs_max": 80
+    }
+   ]
+  },
+  {
+   "id": "worker-rss",
+   "table": "cold",
+   "section8": "per worker after the standard flow: RSS <= 105 MB",
+   "metric": "cold.memory.worker_rss",
+   "stat": "max",
+   "min_samples": 2,
+   "a_section8": 135,
+   "gate": [
+    {
+     "abs_max": 105
+    }
+   ]
+  },
+  {
+   "id": "worker-retained",
+   "table": "cold",
+   "section8": "per worker: <= +5 MB retained after the 18,000-row practice",
+   "metric": "server.worker.retained_after_18000",
+   "stat": "max",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 5
+    }
+   ]
+  },
+  {
+   "id": "all-processes-pss",
+   "table": "cold",
+   "section8": "all processes after the standard flow: <= 60% of the container limit (614 MiB of 1 GiB)",
+   "metric": "cold.memory.total_pss",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 234,
+   "gate": [
+    {
+     "abs_max": 614
+    }
+   ]
+  },
+  {
+   "id": "image-peak",
+   "table": "cold",
+   "section8": "the built image under its real 1 GiB limit: memory.peak <= 768 MiB (the rehearsal)",
+   "kind": "external",
+   "where": "the rehearsal (section 9.1), not the bench"
+  },
+  {
+   "id": "memory-list",
+   "table": "cold",
+   "section8": "the page after 30 opens, on the list: renderer private <= A + 25 MB + the kept bytes (C3)",
+   "metric": "open.memory.renderer_private_list.P0",
+   "min_samples": 3,
+   "a_section8": 114,
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "rel_plus": 25.05
+    }
+   ]
+  },
+  {
+   "id": "memory-heap",
+   "table": "cold",
+   "section8": "the page after 30 opens: heap <= 24 MiB (kept) + 15 MB",
+   "metric": "open.memory.heap_list_mb.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 40.2
+    }
+   ]
+  },
+  {
+   "id": "memory-workers-viewing",
+   "table": "cold",
+   "section8": "the page after 30 opens: <= 2 PDF workers alive while viewing",
+   "metric": "open.memory.workers_viewing.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 2
+    }
+   ]
+  },
+  {
+   "id": "memory-signed-out",
+   "table": "cold",
+   "section8": "after sign-out (0 workers, 0 kept copies): renderer private <= A (C3)",
+   "metric": "open.memory.renderer_private_signed_out.P0",
+   "min_samples": 3,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0
+    }
+   ]
+  },
+  {
+   "id": "memory-workers-signed-out",
+   "table": "cold",
+   "section8": "after sign-out: 0 PDF workers",
+   "metric": "open.memory.workers_signed_out.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
+    }
+   ]
+  },
+  {
+   "id": "detail-10-rps",
+   "table": "cold",
+   "section8": "detail, 10 in flight: >= 100 req/s and >= 1.8 A",
+   "metric": "load.detail10.rps",
+   "min_samples": 1,
+   "a_section8": 55.2,
+   "gate": [
+    {
+     "abs_min": 100
+    },
+    {
+     "rel_min": 1.8
+    }
+   ],
+   "gain": true,
+   "gain_direction": "up"
+  },
+  {
+   "id": "detail-10-p95",
+   "table": "cold",
+   "section8": "detail, 10 in flight: p95 <= 150 ms",
+   "metric": "load.detail10.p95",
+   "min_samples": 1,
+   "a_section8": 194,
+   "gate": [
+    {
+     "abs_max": 150
+    }
+   ]
+  },
+  {
+   "id": "detail-20-p95",
+   "table": "cold",
+   "section8": "detail, 20 in flight: p95 <= 300 ms",
+   "metric": "load.detail20.p95",
+   "min_samples": 1,
+   "a_section8": 486,
+   "gate": [
+    {
+     "abs_max": 300
+    }
+   ]
+  },
+  {
+   "id": "session-behind",
+   "table": "cold",
+   "section8": "a session read behind two sign-ins and one report PDF: p95 <= 100 ms",
+   "metric": "load.session_behind.ms",
+   "stat": "p95",
+   "min_samples": 8,
+   "a_section8": null,
+   "gate": [
+    {
+     "abs_max": 100
+    }
+   ]
+  },
+  {
+   "id": "statements-detail",
+   "table": "cold",
+   "section8": "statements per request: detail <= 19 (A 21)",
+   "metric": "queries.detail",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 21,
+   "gate": [
+    {
+     "abs_max": 19
+    }
+   ]
+  },
+  {
+   "id": "statements-poll",
+   "table": "cold",
+   "section8": "statements per request: poll <= 17 (A 18)",
+   "metric": "queries.poll",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 18,
+   "gate": [
+    {
+     "abs_max": 17
+    }
+   ]
+  },
+  {
+   "id": "statements-view",
+   "table": "cold",
+   "section8": "statements per request: view <= A",
+   "metric": "queries.view",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0
+    }
+   ]
+  },
+  {
+   "id": "statements-session",
+   "table": "cold",
+   "section8": "statements per request: session <= A",
+   "metric": "queries.session",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0
+    }
+   ]
+  },
+  {
+   "id": "statements-shell",
+   "table": "cold",
+   "section8": "statements per request: the shell <= A + 3 (it carries the session's counts)",
+   "metric": "queries.shell",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": null,
+   "gate": [
+    {
+     "rel_max": 1.0,
+     "rel_plus": 3
+    }
+   ]
+  },
+  {
+   "id": "static-app-js",
+   "table": "cold",
+   "section8": "static weight (WhiteNoise's .gz): app.js <= 80,000 B",
+   "metric": "static.app_js_gz",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 71394,
+   "gate": [
+    {
+     "abs_max": 80000
+    }
+   ]
+  },
+  {
+   "id": "static-styles",
+   "table": "cold",
+   "section8": "static weight (WhiteNoise's .gz): styles.css <= 16,000 B",
+   "metric": "static.styles_gz",
+   "stat": "max",
+   "min_samples": 1,
+   "a_section8": 15569,
+   "gate": [
+    {
+     "abs_max": 16000
+    }
+   ]
+  },
+  {
+   "id": "requests-later",
+   "table": "front_door",
+   "section8": "later open: 2 requests (detail and view; A 3)",
+   "metric": "open.requests.later.P0",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 3,
+   "gate": [
+    {
+     "eq": 2
+    }
+   ]
+  },
+  {
+   "id": "requests-reopen",
+   "table": "front_door",
+   "section8": "re-open: 2 requests (A 3)",
+   "metric": "open.requests.reopen.P0",
+   "stat": "max",
+   "min_samples": 6,
+   "a_section8": 3,
+   "gate": [
+    {
+     "eq": 2
+    }
+   ]
+  },
+  {
+   "id": "requests-reopen-304",
+   "table": "front_door",
+   "section8": "re-open: the view a 304",
+   "metric": "open.reopen.view_304.P0",
+   "stat": "min",
+   "min_samples": 6,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 1
+    }
+   ]
+  },
+  {
+   "id": "requests-first",
+   "table": "front_door",
+   "section8": "first open in a page: <= 5 requests (2 once the standby worker is ready)",
+   "metric": "open.requests.first.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 5,
+   "gate": [
+    {
+     "abs_max": 5
+    }
+   ]
+  },
+  {
+   "id": "requests-first-median",
+   "table": "front_door",
+   "section8": "first open in a page, the standby worker ready (P0, >= 2 s after load): reported (the spec says 2 once it is ready)",
+   "kind": "report",
+   "metric": "open.requests.first.P0"
+  },
+  {
+   "id": "requests-tab",
+   "table": "front_door",
+   "section8": "tab change: 1 request",
+   "metric": "open.requests.tab.P0",
+   "stat": "max",
+   "min_samples": 9,
+   "a_section8": 1,
+   "gate": [
+    {
+     "eq": 1
+    }
+   ]
+  },
+  {
+   "id": "requests-text",
+   "table": "front_door",
+   "section8": "text document: 2 requests (A 3)",
+   "metric": "open.requests.text.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 3,
+   "gate": [
+    {
+     "eq": 2
+    }
+   ]
+  },
+  {
+   "id": "requests-signin",
+   "table": "front_door",
+   "section8": "sign-in to the Overview in its first 2 s from the click on a fresh profile: <= 7 requests, the standby's two files included when they fall inside the 2 s (A 6; C4)",
+   "metric": "open.signin.requests_2s.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 6,
+   "gate": [
+    {
+     "abs_max": 7
+    }
+   ]
+  },
+  {
+   "id": "standby-requests",
+   "table": "front_door",
+   "section8": "the standby worker's files: <= 2 requests before the first open (cold cache)",
+   "metric": "open.standby.requests_before_open.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_max": 2
+    }
+   ]
+  },
+  {
+   "id": "standby-delay",
+   "table": "front_door",
+   "section8": "the standby worker's files: >= 500 ms after the first route",
+   "metric": "open.standby.after_route_ms.P0",
+   "stat": "min",
+   "min_samples": 1,
+   "needs_a": false,
+   "gate": [
+    {
+     "abs_min": 500
+    }
+   ]
+  },
+  {
+   "id": "inflight-P0",
+   "table": "front_door",
+   "section8": "in flight per member: <= 3 (A 2)",
+   "metric": "open.inflight.max.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 2,
+   "gate": [
+    {
+     "abs_max": 3
+    }
+   ]
+  },
+  {
+   "id": "inflight-P1",
+   "table": "front_door",
+   "section8": "in flight per member: <= 3 (A 2)",
+   "metric": "open.inflight.max.P1",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 2,
+   "gate": [
+    {
+     "abs_max": 3
+    }
+   ]
+  },
+  {
+   "id": "inflight-P2",
+   "table": "front_door",
+   "section8": "in flight per member: <= 3 (A 2)",
+   "metric": "open.inflight.max.P2",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 2,
+   "gate": [
+    {
+     "abs_max": 3
+    }
+   ]
+  },
+  {
+   "id": "inflight-P3",
+   "table": "front_door",
+   "section8": "in flight per member: <= 3 (A 2)",
+   "metric": "open.inflight.max.P3",
+   "stat": "max",
+   "min_samples": 3,
+   "a_section8": 2,
+   "gate": [
+    {
+     "abs_max": 3
+    }
+   ]
+  },
+  {
+   "id": "round-trips",
+   "table": "front_door",
+   "section8": "round trips per later open, (P2 - P0) / 200: <= 1.3",
+   "kind": "round_trips",
+   "metric": "open.later.first_page.P2",
+   "over": "open.later.first_page.P0",
+   "per_ms": 200,
+   "max": 1.3
+  },
+  {
+   "id": "office-101",
+   "table": "front_door",
+   "section8": "the office model at 101 documents: 0 answers of 429 (arithmetic against the vhost's zones; and in the rehearsal)",
+   "kind": "office",
+   "size": 101
+  },
+  {
+   "id": "office-5000",
+   "table": "front_door",
+   "section8": "the office model at 5000 documents: 0 answers of 429 (arithmetic against the vhost's zones; and in the rehearsal)",
+   "kind": "office",
+   "size": 5000
+  },
+  {
+   "id": "records.equation",
+   "table": "records",
+   "section8": "record equation: the 200 and 304 answers per kind equal the rows plus the counted repeats",
+   "kind": "check",
+   "check": "records.equation"
+  },
+  {
+   "id": "records.polls",
+   "table": "records",
+   "section8": "polls write at most one detail row per minute per sign-in and document",
+   "kind": "check",
+   "check": "records.polls"
+  },
+  {
+   "id": "records.openings",
+   "table": "records",
+   "section8": "every opening writes exactly one member.detail and one member.inline (two when the library fails)",
+   "kind": "check",
+   "check": "records.openings"
+  },
+  {
+   "id": "records.hover",
+   "table": "records",
+   "section8": "hover writes nothing",
+   "kind": "check",
+   "check": "records.hover"
+  },
+  {
+   "id": "records.list_ids",
+   "table": "records",
+   "section8": "each list page or search writes one row naming exactly its ids",
+   "kind": "check",
+   "check": "records.list_ids"
+  },
+  {
+   "id": "records.inline_before_pixels",
+   "table": "records",
+   "section8": "an inline row's created_at is not later than its first pixels",
+   "kind": "check",
+   "check": "records.inline_before_pixels"
+  },
+  {
+   "id": "records.fail_closed",
+   "table": "records",
+   "section8": "fail closed: a row that cannot be written means 0 bytes drawn",
+   "kind": "check",
+   "check": "records.fail_closed"
+  },
+  {
+   "id": "records.marker",
+   "table": "records",
+   "section8": "a marker word appears in no URL, header, log line or record",
+   "kind": "check",
+   "check": "records.marker"
+  },
+  {
+   "id": "correct.barcode_every_open",
+   "table": "correct",
+   "section8": "the barcode is equal on every open and re-open",
+   "kind": "check",
+   "check": "correct.barcode_every_open"
+  },
+  {
+   "id": "correct.rapid_switching",
+   "table": "correct",
+   "section8": "rapid switching ends on the right document, with <= 2 workers",
+   "kind": "check",
+   "check": "correct.rapid_switching"
+  },
+  {
+   "id": "correct.word_reconvert",
+   "table": "correct",
+   "section8": "a stale Word conversion is never drawn",
+   "kind": "check",
+   "check": "correct.word_reconvert"
+  },
+  {
+   "id": "correct.access_ended",
+   "table": "correct",
+   "section8": "access ended means nothing drawn",
+   "kind": "check",
+   "check": "correct.access_ended"
+  },
+  {
+   "id": "correct.two_tabs",
+   "table": "correct",
+   "section8": "another practice's sign-in shows none of the kept documents",
+   "kind": "check",
+   "check": "correct.two_tabs"
+  },
+  {
+   "id": "correct.hung_pdf",
+   "table": "correct",
+   "section8": "after a hung PDF, the 20 s note appears and the next document opens",
+   "kind": "check",
+   "check": "correct.hung_pdf"
+  },
+  {
+   "id": "walk.passes",
+   "table": "walk",
+   "section8": "the walk's judge passes 46 of 46 (at least), on A first and then on B",
+   "kind": "check",
+   "check": "walk.passes"
+  },
+  {
+   "id": "left.heap_after_end",
+   "table": "left",
+   "section8": "no document-sized buffer and no marker string after an end",
+   "kind": "check",
+   "check": "left.heap_after_end"
+  },
+  {
+   "id": "left.storage",
+   "table": "left",
+   "section8": "storage holds only the broadcast fallback key",
+   "kind": "check",
+   "check": "left.storage"
+  },
+  {
+   "id": "left.no_store",
+   "table": "left",
+   "section8": "every non-static answer is no-store",
+   "kind": "check",
+   "check": "left.no_store"
+  },
+  {
+   "id": "left.no_hash_header",
+   "table": "left",
+   "section8": "no ETag is a hash; no header holds a body's sha256 or 16 characters of one",
+   "kind": "check",
+   "check": "left.no_hash_header"
+  },
+  {
+   "id": "left.back_after_signout",
+   "table": "left",
+   "section8": "Back after sign-out shows no document",
+   "kind": "check",
+   "check": "left.back_after_signout"
+  },
+  {
+   "id": "bluegreen.x1",
+   "table": "bluegreen",
+   "section8": "X1: release 1's page, then release 2's web",
+   "kind": "check",
+   "check": "bluegreen.x1"
+  },
+  {
+   "id": "bluegreen.x2",
+   "table": "bluegreen",
+   "section8": "X2: release 2's page, then release 1's web",
+   "kind": "check",
+   "check": "bluegreen.x2"
+  },
+  {
+   "id": "bluegreen.x3",
+   "table": "bluegreen",
+   "section8": "X3: release 1's web on a database carrying 0019-0021",
+   "kind": "check",
+   "check": "bluegreen.x3"
+  },
+  {
+   "id": "plans.no_seq_scan",
+   "table": "plans",
+   "section8": "plans at 18,000 documents and 36,000 runs: no Seq Scan on the three tables for the changed reads",
+   "kind": "check",
+   "check": "plans.no_seq_scan"
+  },
+  {
+   "id": "plans.reads_20ms",
+   "table": "plans",
+   "section8": "plans: each changed read <= 20 ms",
+   "kind": "check",
+   "check": "plans.reads_20ms"
+  },
+  {
+   "id": "plans.index_build",
+   "table": "plans",
+   "section8": "each new index builds in <= 2 s at that size and <= 100 ms at live's",
+   "kind": "check",
+   "check": "plans.index_build"
+  },
+  {
+   "id": "plans.insert_wait",
+   "table": "plans",
+   "section8": "an insert during a build waits <= the build + 100 ms",
+   "kind": "check",
+   "check": "plans.insert_wait"
+  },
+  {
+   "id": "coder-requests",
+   "table": "coder",
+   "section8": "the coder: 8 request hashes equal to A (and every round equal)",
+   "kind": "same_as_a"
+  },
+  {
+   "id": "coder-blobs",
+   "table": "external",
+   "section8": "the coder: 7 blob ids identical; the pinned test is green (R2-3, CI)",
+   "kind": "external",
+   "where": "the full suite, CI and lane D's corpus, not the bench"
+  },
+  {
+   "id": "word-corpus",
+   "table": "external",
+   "section8": "Word: 0 accepted corpus shapes lose a token; 8,055 random packages byte-identical; a stored conversion of a refused package is refused at its next round (lane D, the integration)",
+   "kind": "external",
+   "where": "the full suite, CI and lane D's corpus, not the bench"
+  },
+  {
+   "id": "suites",
+   "table": "external",
+   "section8": "suites: Django 1,438 + new (1 skipped), ops 897 + new, verification 38, app.test.cjs 147 + new, test_walk.cjs >= 104 / 0 failed / 0 skipped, test_viewer_speed.cjs 5 of 5 (0 of 5 on A), the CI script, pip-audit, merge-commit CI cited by SHA",
+   "kind": "external",
+   "where": "the full suite, CI and lane D's corpus, not the bench"
+  }
+ ]
+}
