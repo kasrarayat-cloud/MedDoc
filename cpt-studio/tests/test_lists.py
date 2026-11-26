@@ -526,16 +526,55 @@ class ListPlanTests(TestCase):
 
 # --- the search (R2-20) --------------------------------------------------------------------------------------------
 
-import logging  # noqa: E402 - this section's own imports
+import base64  # noqa: E402 - this section's own imports
+import contextlib  # noqa: E402
+import io  # noqa: E402
+import logging  # noqa: E402
 import random  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import urllib.parse  # noqa: E402
+from importlib import import_module  # noqa: E402
 from pathlib import Path  # noqa: E402
 from unittest import mock  # noqa: E402
 
 from django.conf import settings  # noqa: E402
+from django.contrib.sessions.models import Session  # noqa: E402
 
 SEARCH = '/api/encounters/search'
+# Every table a read, an event, a limit or a session writes, which a search's words must never reach (integrated
+# refutation round 1, phileak-0 and phileak-2: the whole row of each, never only its free-text fields).
+SEARCH_MARKER_TABLES = (models.AccessRecord, models.AccessRecordRepeat, models.SecurityEvent, models.AuditEvent,
+                        models.RateWindow, models.SessionAccountLink)
+
+
+def search_marker_forms(word: str) -> set:
+    """Every form of ``word`` a no-leak guard looks for (integrated refutation round 1, phileak-0), as the bench's
+    markerForms reads a marker (ops/bench/bench.cjs, records[4]): the word as typed and case-folded, and its base64 and
+    base64url cores at the three byte alignments (the characters the word's bytes alone decide, wherever it starts)."""
+    forms = {word, word.casefold()}
+    data = word.encode('utf-8')
+    for pad in range(3):
+        encoded = base64.b64encode(b'\0' * pad + data).decode('ascii')
+        core = encoded[-(-pad * 4 // 3):(pad + len(data)) * 4 // 3]
+        forms |= {core, core.replace('+', '-').replace('/', '_')}
+    return forms
+
+
+def search_marker_hits(texts, words) -> list:
+    """[(form, the text's index)] of every form of each of ``words`` in ``texts``: each text read as it is and percent-
+    and plus-decoded; the word's own forms matched case-folded, a base64 core as written (its case is its content)."""
+    hits = []
+    for index, text in enumerate(texts):
+        readings = {text, urllib.parse.unquote_plus(text)}
+        folded = {reading.casefold() for reading in readings}
+        for word in words:
+            plain = {word, word.casefold()}
+            for form in sorted(search_marker_forms(word)):
+                if (form in plain and any(form.casefold() in reading for reading in folded)) or \
+                        (form not in plain and any(form in reading for reading in readings)):
+                    hits.append((form, index))
+    return hits
 ROW_TEXT = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'row_text.cjs'
 LOWER_TABLE = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'lower_table.cjs'
 # Awkward rows (R2-20's property test): titles a browser and PostgreSQL may lower-case or trim differently, SQL's own
@@ -933,37 +972,52 @@ class SearchTests(SearchCase):
         self.assertFalse(Record.objects.filter(view=read_audit.MEMBER_LIST).exists())
 
     def test_a_marker_searched_for_is_in_no_record_event_log_or_header(self):
+        # every form of the words (search_marker_hits: as typed, case-folded, percent- and plus-decoded, base64 and
+        # base64url) in every row of SEARCH_MARKER_TABLES, the session store decoded, the answers' headers and cookies,
+        # every log record as the console handler formats it - its exception text included - and what was printed
+        # (integrated refutation round 1, phileak-0 and phileak-2)
         self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))  # one window of the limit
         f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
-        seen = []
+        seen, printed = [], io.StringIO()
+        formatter = logging.Formatter()
 
         class Keep(logging.Handler):
             def emit(self, record):
-                seen.append(f'{record.getMessage()} {record.args!r}')
+                seen.append(f'{formatter.format(record)} {record.args!r}')
         keep = Keep(level=logging.DEBUG)
         root = logging.getLogger()
         root.addHandler(keep)
         previous = root.level
         root.setLevel(logging.DEBUG)
         try:
-            found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
-                                     content_type='application/json')
-            with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(1, 60)):  # and a refused one
-                refused = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker'}),
-                                           content_type='application/json')
+            with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(printed):
+                found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
+                                         content_type='application/json')
+                with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(1, 60)):  # and a refused one
+                    refused = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker'}),
+                                               content_type='application/json')
         finally:
             root.removeHandler(keep)
             root.setLevel(previous)
         self.assertEqual((found.status_code, refused.status_code), (200, 429))
         self.assertEqual(len(found.json()['encounters']), 1)
-        stored = json.dumps([[str(value) for value in row.__dict__.values()] for row in
-                             [*Record.objects.all(), *models.SecurityEvent.objects.all(), *models.RateWindow.objects.all()]])
+        stored = [json.dumps(list(table.objects.values()), default=str) for table in SEARCH_MARKER_TABLES]
+        store = import_module(settings.SESSION_ENGINE).SessionStore()
+        sessions = list(Session.objects.all())
+        self.assertTrue(sessions)  # the member's own session is read, decoded
+        for row in sessions:
+            stored += [row.session_data, json.dumps(store.decode(row.session_data), default=str)]
         for answer in (found, refused):
-            stored += json.dumps(dict(answer.items()))
-        stored += json.dumps(seen)
+            stored.append(json.dumps(dict(answer.items())))
+            stored.append(json.dumps([morsel.OutputString() for morsel in answer.cookies.values()]))  # Set-Cookie
+        stored += [json.dumps(seen), printed.getvalue()]
         self.assertTrue(models.SecurityEvent.objects.filter(event='list.rate_limited').exists())
-        for marker in ('zz-search-marker', 'ZZ-SEARCH-MARKER', 'search-marker'):
-            self.assertNotIn(marker, stored)
+        self.assertEqual(search_marker_hits(stored, ('zz-search-marker', 'search-marker')), [])
+        # the control: each form, written where a guard reads, is found
+        for form in sorted(search_marker_forms('zz-search-marker')):
+            with self.subTest(form=form):
+                self.assertTrue(search_marker_hits([json.dumps({'reason': form})], ('zz-search-marker',)))
+                self.assertTrue(search_marker_hits([urllib.parse.quote_plus(form)], ('zz-search-marker',)))
 
     def test_searches_count_toward_the_members_limit_and_a_first_page_does_not(self):
         f.encounter(self.ws, self.reviewer, title='Synthetic note')

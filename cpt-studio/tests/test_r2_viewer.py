@@ -59,10 +59,18 @@ class ViewTagTests(ViewerCase):
         self.assertRegex(tag, UUID_TAG)
         digest = self.stored_sha(self.enc)
         self.assertEqual(digest, hashlib.sha256(first.content).hexdigest())
-        bare = tag.strip('"').replace('-', '')
-        for piece in (digest, digest[:16], digest[:32], digest[-16:]):
-            self.assertNotIn(piece, bare)
-            self.assertNotIn(piece, tag)
+        # never a rendering of the content's sha256, sha1 or md5 (integrated refutation round 1, phileak-1): the digest,
+        # either end of it as a UUID (its first or last 32 hex digits, or 16 bytes), or 16 hex digits of it anywhere
+        bare = tag.strip('"').replace('-', '').lower()
+        self.assertEqual(len(bare), 32)
+        for name in ('sha256', 'sha1', 'md5'):
+            hexed = hashlib.new(name, first.content).hexdigest()
+            renderings = {hexed, hexed[:32], hexed[-32:], str(uuid.UUID(hexed[:32])), str(uuid.UUID(hexed[-32:]))}
+            renderings |= {hexed[index:index + 16] for index in range(len(hexed) - 15)}
+            for piece in renderings:
+                with self.subTest(digest=name, piece=piece):
+                    self.assertNotIn(piece.replace('-', ''), bare)
+                    self.assertNotIn(piece, tag)
         self.assertEqual(first['Cache-Control'], 'no-store')
         self.assertEqual(self.view(self.enc)['ETag'], tag)  # the same sign-in, document and file: the same tag
         self.assertEqual(api.view_tag(mock.Mock(session={request_meta.SESSION_SIGN_IN_REF: str(uuid.uuid4())}),

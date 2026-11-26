@@ -7270,10 +7270,48 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
     t.mock.timers.tick(1000);
     assert.equal(shown().length, 50, 'cleared: the list\'s rows again, from page memory');
     assert.equal(searches().length, 3);
-    assert.ok(calls.every(call => !/polyp|nothing/.test(call.url)), 'the words are never in an address');
+    // every form of the words typed - as typed, case-blind, percent- or plus-encoded, base64 or base64url at any byte
+    // alignment - in no request's address and no request header (integrated refutation round 1, phileak-0)
+    const typed = ['polyp', 'polyp report 2', 'polyp report 21', 'nothing like this'];
+    assert.deepEqual(calls.flatMap(call => searchMarkerHits(`${call.url}\n${JSON.stringify(call.headers ?? {})}`, typed)), [],
+      'the words are never in an address or a header');
+    for (const form of searchMarkerForms('polyp report 2')) {  // the control: each form, in an address, is found
+      assert.ok(searchMarkerHits(`/api/encounters?q=${encodeURIComponent(form)}`, ['polyp report 2']).length, form);
+    }
     assert.deepEqual(storage, [], 'nothing in the browser\'s storage');
   });
 });
+
+// Every form of a typed word a no-leak guard looks for (integrated refutation round 1, phileak-0), as the bench's
+// markerForms reads a marker (ops/bench/bench.cjs, records[4]): the word as typed and case-folded, and its base64 and
+// base64url cores at the three byte alignments.
+function searchMarkerForms(word) {
+  const forms = new Set([word, word.toLowerCase()]);
+  const bytes = Buffer.from(word, 'utf8');
+  for (let pad = 0; pad < 3; pad += 1) {
+    const b64 = Buffer.concat([Buffer.alloc(pad), bytes]).toString('base64');
+    const core = b64.slice(Math.ceil(pad * 4 / 3), Math.floor((pad + bytes.length) * 4 / 3));
+    forms.add(core);
+    forms.add(core.replace(/\+/g, '-').replace(/\//g, '_'));
+  }
+  return [...forms];
+}
+
+// The forms of `words` in `text`, read as it is and percent- and plus-decoded: a word's own forms case-blind, a base64
+// core as written (its case is its content).
+function searchMarkerHits(text, words) {
+  const raw = String(text);
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw.replace(/\+/g, ' '));
+  } catch {
+    // not percent-encoded text: read as it is
+  }
+  const readings = [raw, decoded];
+  return words.flatMap(word => searchMarkerForms(word).filter(form => ([word, word.toLowerCase()].includes(form)
+    ? readings.some(reading => reading.toLowerCase().includes(form.toLowerCase()))
+    : readings.some(reading => reading.includes(form)))));
+}
 
 // Release 1's web after a switch-back has no search route: Django's own HTML 404, as measured on 816045c7 (rollback-0).
 const RELEASE_1_NOT_FOUND = { status: 404, type: 'text/html; charset=utf-8', body: '\n<!doctype html>\n<html lang="en">\n<head>\n  <title>Not Found</title>\n</head>\n<body>\n  <h1>Not Found</h1><p>The requested resource was not found on this server.</p>\n</body>\n</html>\n' };
