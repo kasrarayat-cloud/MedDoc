@@ -694,6 +694,9 @@ class ObjectAndControlTests(ReleaseOneCase):
             'in the v:shapetype the drawing branch drops': (with_control(
                 '<w:object w:dxaOrig="6300" w:dyaOrig="960">' + no_picture_drawing + shapetype_with_picture
                 + empty_control + '</w:object>'), CONTROLS),
+            'inside an altChunk that holds nothing (a w:pict)': (with_embedding(
+                '<w:pict>' + SHAPETYPE + empty_shape + ole('Word.Document.12', sid='_x0000_i1031')
+                + '<w:altChunk>' + imagedata + '</w:altChunk></w:pict>'), OBJECTS),
         }
         for label, (data, kind) in refused.items():
             with self.subTest(f'refused: {label}'):
