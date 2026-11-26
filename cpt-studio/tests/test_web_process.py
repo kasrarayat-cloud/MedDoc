@@ -261,6 +261,7 @@ print('LANE-W ' + json.dumps({
     'open': sorted(alias for alias in connections if connections[alias].connection is not None),
     'kept': [lane_w_database['CONN_MAX_AGE'], lane_w_database['CONN_HEALTH_CHECKS']],
     'web': os.environ.get('CPT_STUDIO_WEB'),
+    'os_threads': len(os.listdir('/proc/self/task')),  # the kernel's count: a thread below threading.Thread too
 }))
 '''
 # R2-7: the worker's command as the worker starts it, and any other management command
@@ -269,7 +270,7 @@ COMMAND_SETTINGS_STEP = DJANGO_SETUP_STEP + CONNECTION_SETTINGS_REPORT
 # R2-5: the release's when_ready hook in a master that loaded the web and then held a real connection to the test
 # database - as an import that broke rule 2.4 would leave it - the moment before its first fork
 WHEN_READY_STEP = r'''
-import gc, json
+import gc, json, os
 import cptstudio.wsgi
 from django.db import connection, connections
 connection.ensure_connection()
@@ -278,7 +279,8 @@ lane_w_conf = {}
 exec(compile(open('deploy/gunicorn.conf.py').read(), 'deploy/gunicorn.conf.py', 'exec'), lane_w_conf)
 lane_w_conf['when_ready'](None)
 lane_w_open = sorted(alias for alias in connections if connections[alias].connection is not None)
-print('LANE-W ' + json.dumps({'before': before, 'frozen': gc.get_freeze_count(), 'open': lane_w_open}))
+print('LANE-W ' + json.dumps({'before': before, 'frozen': gc.get_freeze_count(), 'open': lane_w_open,
+                              'os_threads': len(os.listdir('/proc/self/task'))}))
 '''
 
 
@@ -314,7 +316,10 @@ class TheMasterLoadsAndWarmsTheWebTests(SimpleTestCase):
 
     def test_no_connection_is_open_and_no_thread_but_the_interpreters_runs(self):
         probe, report = self.warmed()
-        self.assertEqual((probe['opened'], probe['started'], probe['threads'], report['open']), ([], [], 1, []))
+        # the kernel's count as well as threading's: a thread started below threading.Thread.start (_thread, or a C
+        # library's pthread_create) passes the tripwire and threading.active_count(), and is held at every fork
+        self.assertEqual((probe['opened'], probe['started'], probe['threads'], report['os_threads'], report['open']),
+                         ([], [], 1, 1, []))
 
 
 class GunicornHooksTests(SimpleTestCase):
@@ -326,6 +331,7 @@ class GunicornHooksTests(SimpleTestCase):
         _, report = lane_w_probe(WHEN_READY_STEP, tripwires=False, database=connection.settings_dict['NAME'])
         self.assertIs(report['before']['open'], True)  # the control: a connection was open when the hook ran
         self.assertEqual(report['open'], [])
+        self.assertEqual(report['os_threads'], 1)  # and the hook started no thread, of any kind, before the forks
         self.assertGreater(report['frozen'] - report['before']['frozen'], 10_000)
 
     def test_a_database_that_does_not_answer_never_stops_a_worker_from_starting(self):
@@ -578,6 +584,10 @@ class RealGunicornTests(SimpleTestCase):
         # the master loaded the application before its first fork: the hasher's library, which only the warm-up loads,
         # is mapped in the master's own memory (a master that does not preload never imports Django)
         self.assertIn('_argon2_cffi_bindings', Path(f'/proc/{server.process.pid}/maps').read_text())
+        # one thread each, by the kernel's count: the master forks every worker from a single thread, and no worker
+        # starts one (a thread in the master at a fork leaves its locks held, with no owner, in the worker)
+        self.assertEqual([len(os.listdir(f'/proc/{pid}/task')) for pid in (server.process.pid, *server.workers())],
+                         [1] * 5)
         self.assertEqual(server.stop(), 0)
 
     def test_the_workers_keep_their_connections_and_replace_one_the_database_ended_without_an_error(self):
