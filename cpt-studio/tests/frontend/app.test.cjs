@@ -6700,7 +6700,9 @@ async function lateEndOpen({ end = '', keptBefore = false } = {}) {
     app.route();
     await mount(word, find, () => views.length === 2);
     out.reopen = views[1].tag;
-    views[1].release(taggedView(304, [], VIEW_TAG_A));
+    // answered as the server answers: a 304 only to a re-open asked with its tag (an untagged one answered 304 is refused,
+    // and its viewer's worker would wait out its time limit after this test)
+    views[1].release(views[1].tag ? taggedView(304, [], views[1].tag) : taggedView(200, undefined, VIEW_TAG_A));
     await turns();
     app.forgetMemory();
   }, (url, init) => {
