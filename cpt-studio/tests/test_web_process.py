@@ -266,9 +266,16 @@ print('LANE-W ' + json.dumps({
     'os_threads': len(os.listdir('/proc/self/task')),  # the kernel's count: a thread below threading.Thread too
 }))
 '''
-# R2-7: the worker's command as the worker starts it, and any other management command
-WORKER_SETTINGS_STEP = WORKER_IMPORT_STEP + CONNECTION_SETTINGS_REPORT
-COMMAND_SETTINGS_STEP = DJANGO_SETUP_STEP + CONNECTION_SETTINGS_REPORT
+# R2-7: the worker's command as the worker starts it (deploy/entrypoint.sh: python manage.py run_worker) and any other
+# management command (python manage.py check): manage.py run as the main module, as python runs it, then the report.
+# The worker's command is loaded, never run (help).
+MANAGE_STEP = '''
+import runpy, sys
+sys.argv = {argv!r}
+runpy.run_path('manage.py', run_name='__main__')
+'''
+WORKER_SETTINGS_STEP = MANAGE_STEP.format(argv=['manage.py', 'help', 'run_worker']) + CONNECTION_SETTINGS_REPORT
+COMMAND_SETTINGS_STEP = MANAGE_STEP.format(argv=['manage.py', 'check']) + CONNECTION_SETTINGS_REPORT
 # R2-5: the release's when_ready hook in a master that loaded the web and then held a real connection to the test
 # database - as an import that broke rule 2.4 would leave it - the moment before its first fork
 WHEN_READY_STEP = r'''

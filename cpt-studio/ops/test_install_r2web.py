@@ -156,6 +156,10 @@ class NoContainerIsMarkedTheWebTests(unittest.TestCase):
             self.assertEqual([word for word in argv if word.startswith('CPT_STUDIO_WEB=')], [])
         # and the protected environment files hold the secrets alone
         self.assertNotIn('CPT_STUDIO_WEB', install.APP_ENV_KEYS)
+        # nor does anything on the start path of the worker and the one-shots name it (refutation round 1)
+        for path in ('deploy/entrypoint.sh', 'deploy/Dockerfile', 'manage.py'):
+            with self.subTest(path=path):
+                self.assertNotIn('CPT_STUDIO_WEB', (APP_ROOT / path).read_text(encoding='utf-8'))
 
 
 class KeptLifeCycleLinesTests(unittest.TestCase):
