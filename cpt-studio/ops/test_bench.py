@@ -2624,17 +2624,27 @@ class AcceptanceTableTests(unittest.TestCase):
                 self.assertIsNotNone(JUDGE.a_reference(row)[0], row['id'])
 
     def test_the_memory_limits_are_in_the_metric_s_unit(self):
-        """judge[5]: the heap limit was 40.2, in MB, against a metric in MiB; both memory rows are in MiB now."""
+        """judge[5]: the heap limit was 40.2, in MB, against a metric in MiB; both memory rows are in MiB now. Round 2
+        (the replay of refute-m2 judge[4]): the limits hold on the committed table and on any derived one, whose
+        no-worse-than-A gate also carries its spread and floor_factor; the exact gates once failed every derived table,
+        so the aa5 derivation's own commit would have been red."""
         source = (BENCH / 'bench.cjs').read_text()
         self.assertIn("metric('open.memory.heap_list_mb.P0', Math.round(used / 104857.6) / 10)", source)
         self.assertIn('privateMb: Math.round(priv / 102.4) / 10', source)  # the renderer's private kB / 1024: MiB
-        rows = {r['id']: r for r in self.table['rows']}
-        self.assertEqual(rows['memory-heap']['gate'], [{'abs_max': round((24 * 1048576 + 15_000_000) / 1048576, 1)}])
         kept = sum(len(BD.rich_files(spec)['view'] or BD.rich_files(spec)['data']) for spec in BD.RICH
                    if spec['label'] in ('text-2p', 'text-4p', 'text-10p', 'word-3p'))  # the memory flow's cycle
         self.assertEqual(kept, 43934)
-        self.assertEqual(rows['memory-list']['gate'], [{'rel_max': 1.0,
-                                                        'rel_plus': round((25_000_000 + kept) / 1048576, 2)}])
+        reads = [r for r in self.table['rows'] if JUDGE.reads_a(r)]
+        pair = [{'metrics': {r['metric']: [100 + n] * -(-r.get('min_samples', 1) // 3) for r in reads}} for n in (0, 1)]
+        def base(gate):  # a gate's own limits, without what a derivation adds
+            return [{k: v for k, v in g.items() if k not in JUDGE.DERIVED_GATE_KEYS} for g in gate]
+        for name, table in (('committed', self.table), ('derived', JUDGE.derive(self.table, *pair, 'memory check'))):
+            with self.subTest(table=name):
+                rows = {r['id']: r for r in table['rows']}
+                self.assertEqual(base(rows['memory-heap']['gate']),
+                                 [{'abs_max': round((24 * 1048576 + 15_000_000) / 1048576, 1)}])
+                self.assertEqual(base(rows['memory-list']['gate']),
+                                 [{'rel_max': 1.0, 'rel_plus': round((25_000_000 + kept) / 1048576, 2)}])
 
     def test_every_statement_row_names_a_practice_of_more_than_one_page(self):
         """judge[7], bench[1]: at 50 documents (the page size) there is no later page and no COUNT, so three rows could
