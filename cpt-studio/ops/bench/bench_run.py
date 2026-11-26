@@ -480,7 +480,9 @@ class Acts:
         if name == 'refuse':  # a trigger refusing the insert of one view's access row; view '' drops it
             with connection.cursor() as cur:
                 cur.execute(f'DROP TRIGGER IF EXISTS {self.TRIGGER} ON studio_accessrecord')
+                cur.execute(f'DROP TRIGGER IF EXISTS {self.TRIGGER}_repeat ON studio_accessrecordrepeat')
                 cur.execute(f'DROP FUNCTION IF EXISTS {self.TRIGGER}()')
+                cur.execute(f'DROP FUNCTION IF EXISTS {self.TRIGGER}_repeat()')
                 view = body.get('view') or ''
                 if view:
                     if not re.fullmatch(r'member\.[a-z_]+', view):
@@ -490,6 +492,11 @@ class Acts:
                                 f"RETURN NEW; END $$")
                     cur.execute(f'CREATE TRIGGER {self.TRIGGER} BEFORE INSERT ON studio_accessrecord '
                                 f'FOR EACH ROW EXECUTE FUNCTION {self.TRIGGER}()')
+                    if view == 'member.list':  # a list read repeated within 60 s is recorded by its repeat counter
+                        cur.execute(f"CREATE FUNCTION {self.TRIGGER}_repeat() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                                    f"BEGIN RAISE EXCEPTION 'bench refuses a list repeat'; END $$")
+                        cur.execute(f'CREATE TRIGGER {self.TRIGGER}_repeat BEFORE INSERT OR UPDATE ON '
+                                    f'studio_accessrecordrepeat FOR EACH ROW EXECUTE FUNCTION {self.TRIGGER}_repeat()')
             return {'view': body.get('view') or ''}
         raise ValueError(f'unknown act {name!r}')
 
@@ -1042,7 +1049,7 @@ class Bench(TransactionTestCase):
     # -- the browser parts ---------------------------------------------------------------------------------------------
 
     def browser(self, flow, profile, *, size='n100', label=None, allowed=frozenset(SLOW_STATUS_OK), limit=1800,
-                web_args=(), extra=()):
+                web_args=(), extra=(), timing=True):
         """One bench.cjs flow against a fresh web and proxy of this tree; its metrics, checks and controls are merged
         into the round. Every answer's status is checked against ``allowed`` at the server side."""
         label = label or f'{flow}-{size}-{profile}'
@@ -1077,7 +1084,11 @@ class Bench(TransactionTestCase):
                 self.metric(name, values)
             self.result['checks'].update({f'{k}': v for k, v in data.get('checks', {}).items()})
             self.result['controls'].update(data.get('controls', {}))
-            self.result['console_errors'] += data.get('consoleErrors', []) + data.get('pageErrors', [])
+            errors = data.get('consoleErrors', []) + data.get('pageErrors', [])
+            if timing:
+                self.result['console_errors'] += errors
+            else:  # kept, by flow: the gate flows plant faults whose console errors are expected
+                self.result.setdefault('gate_console_errors', {})[label] = errors[:50]
             self.result['blocked_requests'] += data.get('blocked', [])
             for message in data.get('errors', []):
                 self.result['errors'].append({'part': flow, 'error': f'{label}: {message}'})
@@ -1134,7 +1145,7 @@ class Bench(TransactionTestCase):
         for size in ('n100', 'n1500'):
             since = models.AccessRecord.objects.count()
             repeats_before = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
-            data, entries, lines = self.browser('records', 'P0', size=size, label=f'records-{size}')
+            data, entries, lines = self.browser('records', 'P0', size=size, label=f'records-{size}', timing=False)
             rows = list(models.AccessRecord.objects.order_by('created_at', 'id').values(
                 'view', 'encounter_ids', 'count', 'filters', 'request_id', 'created_at', 'outcome',
                 'sign_in_ref')[since:])
@@ -1153,17 +1164,18 @@ class Bench(TransactionTestCase):
         for name in ('equation', 'polls', 'openings', 'list_ids', 'inline_before_pixels'):
             parts = {size: judged[size][name] for size in judged}
             self.check(f'records.{name}', all(p['ok'] for p in parts.values()), sizes=parts)
-        self.browser('fail-closed', 'P0', label='fail-closed', allowed=frozenset(SLOW_STATUS_OK | {503}))
-        self.check('records.marker', *marker_audit(self.raw, MARKER_WORD))
+        self.browser('fail-closed', 'P0', label='fail-closed', allowed=frozenset(SLOW_STATUS_OK | {503}), timing=False)
+        ok, detail = marker_audit(self.raw, MARKER_WORD)
+        self.check('records.marker', ok, **detail)
         self.result['records'] = judged
 
     def part_left_behind(self):
         data, entries, lines = self.browser('left-behind', 'P0', label='left-behind',
-                                            allowed=frozenset(range(100, 600)))
+                                            allowed=frozenset(range(100, 600)), timing=False)
         self.headers_audit(entries, 'left-behind')
 
     def part_correct(self):
-        self.browser('correct', 'P0', label='correct', allowed=frozenset(range(100, 600)))
+        self.browser('correct', 'P0', label='correct', allowed=frozenset(range(100, 600)), timing=False)
 
     # -- walk (M9): the tree's own walk over its web, its worker (a fake coder) and the admin host ---------------------
 
@@ -1247,7 +1259,8 @@ class Bench(TransactionTestCase):
             self.result['checks'].update(data.get('checks', {}))
             for message in data.get('errors', []):
                 self.result['errors'].append({'part': 'bluegreen', 'error': message})
-            self.check('bluegreen.x3', *self.x3(theirs, other))
+            ok, detail = self.x3(theirs, other)
+            self.check('bluegreen.x3', ok, **detail)
         finally:
             proxy.stop()
             theirs.stop()

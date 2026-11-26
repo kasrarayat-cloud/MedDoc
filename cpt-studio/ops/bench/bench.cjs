@@ -857,7 +857,10 @@ async function flowCorrect() {
       if (mode === 'session') { await s.context.close(); s = await newContext(); await signIn(s, DATA.users[SIZE]); await sleep(1200); }
       else { await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 }); }
     }
-    result.checks['correct.access_ended'] = { ok: Object.values(ended).every(e => !e.canvasDark), ended };
+    // a closed practice keeps reading (disposal.close; ORG-18 (4)): its document still opens. The other three are ends.
+    const ends = ['membership', 'destroyed', 'session'];
+    result.checks['correct.access_ended'] = { ok: ends.every(m => !ended[m].canvasDark), ended: Object.fromEntries(ends.map(m => [m, ended[m]])) };
+    result.checks['correct.closed_keeps_reading'] = { ok: Boolean(ended.closed.canvasDark), closed: ended.closed };
     // two tabs: another practice signs in in the second; the first never shows the first practice's kept documents
     await openDoc(s, 'text-2p', 'correct-tabs-warm'); await back(s);
     const other = await s.context.newPage();

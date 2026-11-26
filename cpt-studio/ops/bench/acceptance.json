@@ -2029,9 +2029,16 @@
   {
    "id": "correct.access_ended",
    "table": "correct",
-   "section8": "access ended means nothing drawn",
+   "section8": "access ended means nothing drawn (membership off, document destroyed, session ended)",
    "kind": "check",
    "check": "correct.access_ended"
+  },
+  {
+   "id": "correct.closed_keeps_reading",
+   "table": "correct",
+   "section8": "a closed practice keeps reading (release 1: disposal.close, ORG-18 (4)); section 8 lists \"practice closed\" among the ends of access, which the tree contradicts: named in the lane M report",
+   "kind": "check",
+   "check": "correct.closed_keeps_reading"
   },
   {
    "id": "correct.two_tabs",
