@@ -933,6 +933,12 @@ def fallback_shapes():
         ('H02 with its result a simple field', nested_in_instruction(
             if_before, if_after, '<w:fldSimple w:instr=\' INCLUDETEXT "SECRET" \'>' + t('INCLUDED TEXT')
             + '</w:fldSimple>'), 0),
+        ('outer IF, its result a simple field holding a picture', nested_in_instruction(
+            if_before, if_after, '<w:fldSimple w:instr=\' QUOTE "x" \'><w:r><w:pict>' + SHAPETYPE + vshape()
+            + '</w:pict></w:r></w:fldSimple>'), 0),
+        ('outer IF, its result a simple field holding a symbol', nested_in_instruction(
+            if_before, if_after, '<w:fldSimple w:instr=\' QUOTE "x" \'><w:r><w:sym w:font="Wingdings" w:char="F0E0"/>'
+            '</w:r></w:fldSimple>'), 0),
         # coded: HYPERLINK, TOC, QUOTE and STYLEREF keep their stored result (QUOTE and STYLEREF: the lead's 7.4 run on
         # lane D's corpus inputs H7f and H7g, refutation round 1)
         ('outer HYPERLINK, plain result', nested_in_instruction(' HYPERLINK "', '" ', t('LINK TEXT')), 0),
