@@ -4915,7 +4915,8 @@ test('the PDF library is named on the page as same-origin static modules, and no
   assert.match(bundle, /\n\s+worker: viewer\.worker,\n/);
   // the viewer downloads the view address itself (A5) and the library is opened on its bytes, with no eval, no WebAssembly,
   // no XFA and the page drawn on the main thread
-  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', cache: 'no-store', signal, headers: \{ \[POLL_HEADER\]: '1' \} \}\)/);
+  assert.match(bundle, /const headers = \{ \[POLL_HEADER\]: '1' \};\n  if \(held\) headers\['If-None-Match'\] = `"\$\{held\.tag\}"`;\n/);
+  assert.match(bundle, /response = await fetch\(view, \{ credentials: 'same-origin', cache: 'no-store', signal, headers \}\);/);
   assert.match(bundle, /library\.getDocument\(\{\n\s+data, isEvalSupported: false, enableXfa: false, useWasm: false,/);
   assert.ok(!/getDocument\(\{[^}]*\burl:/.test(bundle), 'the library is given no address to fetch');
   assert.match(bundle, /disableWorkerRendering: true/);
@@ -6057,5 +6058,282 @@ test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text rea
     global.getComputedStyle = style;
     Object.assign(global, globals);
     Object.assign(app.state, saved);
+  }
+});
+
+// A re-open drawn from page memory after a recorded 304, the view asked for at the click, page memory wiped at every end
+// (R2-15, R2-16, R2-18).
+
+const VIEW_TAG_A = '"0f0e0d0c-0b0a-4908-8706-050403020100"';
+const VIEW_TAG_B = '"1f0e0d0c-0b0a-4908-8706-050403020100"';
+// A view's answer with its headers: `tag` as the ETag the server sent, if any.
+const taggedView = (status, chunks, tag) => Promise.resolve({ ...viewResponse({ status, chunks }), headers: { get: name => (name === 'ETag' && tag ? tag : null) } });
+
+test('R2 V3: a re-open asks with the tag it holds and draws the kept bytes on a 304 alone; a changed 200 replaces them; any refusal or failure draws nothing and drops them; an untagged view is never kept', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });  // a refused re-open's viewer, closed, leaves its worker's wait to a time limit
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  const opened = [];
+  const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+  let answer = () => taggedView(200, undefined, VIEW_TAG_A);
+  app.state.keptViews.clear();
+  try {
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      await mount(word, find, () => opened.length === 1 && app.state.keptViews.size === 1);
+      assert.equal(fetches[0].init.headers['If-None-Match'], undefined, 'nothing held: nothing asked');
+      assert.equal(fetches[0].init.cache, 'no-store');
+      assert.equal(app.state.keptViews.get(view).tag, '0f0e0d0c-0b0a-4908-8706-050403020100');
+      assert.ok(app.state.keptViews.get(view).data instanceof Uint8Array, 'bytes in page memory: never a Blob');
+      app.closeViewer();
+      answer = () => taggedView(304, [], VIEW_TAG_A);
+      await mount(word, find, () => opened.length === 2);
+      assert.equal(fetches[1].init.headers['If-None-Match'], VIEW_TAG_A, 'asked with its tag');
+      assert.equal(fetches[1].init.headers['X-CPT-Poll'], '1', 'the page\'s own read: never the member\'s activity');
+      assert.deepEqual(opened[1], opened[0], 'the same bytes, drawn from page memory');
+      const kept = app.state.keptViews.get(view).data;
+      assert.ok(library.made.tasks.every(task => task.options.data !== kept), 'the library takes the array it is given: never the kept one');
+      assert.equal(app.state.keptViews.size, 1);
+      app.closeViewer();
+      // changed on the server: the new bytes are drawn, and kept in place of the old, which are overwritten
+      answer = () => taggedView(200, [Uint8Array.from([37, 80, 68, 70, 45, 50])], VIEW_TAG_B);
+      await mount(word, find, () => opened.length === 3);
+      assert.deepEqual(opened[2], [37, 80, 68, 70, 45, 50]);
+      await settle(() => app.state.keptViews.get(view)?.tag === VIEW_TAG_B.slice(1, -1));
+      assert.deepEqual([...app.state.keptViews.get(view).data], [37, 80, 68, 70, 45, 50]);
+      assert.ok(kept.every(byte => byte === 0), 'the copy replaced is overwritten');
+      app.closeViewer();
+      // refused, whatever the reason, or not reached: nothing is drawn from memory, and the copy goes
+      for (const [what, refuse] of [['401', () => taggedView(401, [], '')], ['403', () => taggedView(403, [], '')], ['404', () => taggedView(404, [], '')],
+        ['429', () => taggedView(429, [], '')], ['503', () => taggedView(503, [], '')], ['offline', () => Promise.reject(new TypeError('Failed to fetch'))]]) {
+        const data = Uint8Array.from([37, 80]);
+        app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);
+        answer = refuse;
+        const viewer = await mount(word, find, made => made.mode === 'frame');
+        assert.equal(viewer.fallback, 'download', what);
+        assert.equal(app.state.keptViews.size, 0, `${what}: the copy is dropped`);
+        assert.deepEqual([...data], [0, 0], `${what}: and overwritten`);
+        assert.equal(opened.length, 3, `${what}: nothing drawn`);
+        app.closeViewer();
+        t.mock.timers.tick(app.PDF_VIEW.limitMs);  // that wait gives up, concluding nothing about the library
+        await settle(() => false);
+        assert.ok(app.state.pdfLibrary, `${what}: the library is kept`);
+      }
+      // a 304 nobody asked for (no copy held) is no document
+      answer = () => taggedView(304, [], VIEW_TAG_A);
+      const odd = await mount(word, find, made => made.mode === 'frame');
+      assert.equal(odd.fallback, 'download');
+      app.closeViewer();
+      // a 200 with no tag, or a tag that is not a quoted UUID (a hash, say), is drawn and never kept
+      for (const tag of ['', `"${'ab'.repeat(32)}"`, '0f0e0d0c-0b0a-4908-8706-050403020100', '"*"']) {
+        const before = opened.length;
+        answer = () => taggedView(200, undefined, tag);
+        await mount(word, find, () => opened.length === before + 1);
+        await settle(() => false);
+        assert.equal(app.state.keptViews.size, 0, `tag ${tag || 'none'}: never kept`);
+        app.closeViewer();
+      }
+      // the weak form of the server's tag is a tag
+      answer = () => taggedView(200, undefined, `W/${VIEW_TAG_A}`);
+      await mount(word, find, () => app.state.keptViews.size === 1);
+      assert.equal(app.state.keptViews.get(view).tag, VIEW_TAG_A.slice(1, -1));
+    }, (url, init) => answer(url, init));
+  } finally {
+    app.forgetMemory();
+  }
+});
+
+test('R2 V3: a document that does not open is never kept, and a copy wiped while its re-open is answered is never drawn', async () => {
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  app.state.keptViews.clear();
+  try {
+    // the library refuses the bytes, or finds no page in them: nothing is kept
+    for (const open of [() => Promise.reject(Object.assign(new Error('Invalid PDF structure.'), { name: 'InvalidPDFException' })),
+      () => Promise.resolve({ numPages: 0, getPage: () => Promise.reject(new Error('none')) })]) {
+      await withPdfPage(() => Promise.resolve(fakeLibrary({ open }).library), async ({ element: find }) => {
+        const viewer = await mount(word, find, made => made.mode === 'frame');
+        assert.equal(viewer.fallback, 'document');
+        assert.equal(app.state.keptViews.size, 0, 'only a document that opened is kept');
+      }, () => taggedView(200, undefined, VIEW_TAG_A));
+    }
+    // a copy wiped (the session ended, or evicted) while its 304 is on the way: no bytes are drawn
+    const opened = [];
+    let release;
+    await withPdfPage(() => Promise.resolve(fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } }).library),
+      async ({ element: find, fetches }) => {
+        app.keepView(view, '0f0e0d0c-0b0a-4908-8706-050403020100', Uint8Array.from([37, 80, 68, 70]));
+        const viewer = await mount(word, find, () => fetches.length === 1);
+        assert.equal(fetches[0].init.headers['If-None-Match'], VIEW_TAG_A);
+        app.state.keptViews.clear();  // wiped, as at an end
+        release();
+        await settle(() => viewer.mode === 'frame');
+        assert.deepEqual([viewer.mode, viewer.fallback, opened.length], ['frame', 'download', 0]);
+      }, () => new Promise(resolve => { release = () => resolve(taggedView(304, [], VIEW_TAG_A)); }));
+  } finally {
+    app.forgetMemory();
+  }
+});
+
+test('R2 V3: the kept copies are bounded - six documents, 24 MiB - the least recently viewed going first, and are overwritten as they go and at the session\'s end', () => {
+  app.state.keptViews.clear();
+  assert.deepEqual(app.KEPT_VIEWS, { documents: 6, bytes: 24 * 1024 * 1024 });
+  const tag = 'abcdef00-0000-4000-8000-000000000000';
+  const bytes = size => new Uint8Array(size).fill(7);
+  const made = {};
+  for (let n = 1; n <= 8; n += 1) app.keepView(`/v${n}`, tag, (made[n] = bytes(10)));
+  assert.deepEqual([...app.state.keptViews.keys()], ['/v3', '/v4', '/v5', '/v6', '/v7', '/v8']);
+  assert.ok(made[1].every(byte => byte === 0) && made[2].every(byte => byte === 0), 'the ones that went are overwritten');
+  app.keepView('/v3', tag, app.state.keptViews.get('/v3').data);
+  app.keepView('/v9', tag, bytes(10));
+  assert.deepEqual([...app.state.keptViews.keys()], ['/v5', '/v6', '/v7', '/v8', '/v3', '/v9'], 'viewed again: kept longer');
+  assert.ok(made[3].every(byte => byte === 7), 'a copy kept again is not overwritten');
+  app.keepView('/big', tag, new Uint8Array(app.KEPT_VIEWS.bytes - 15));
+  assert.deepEqual([...app.state.keptViews.keys()], ['/v9', '/big'], 'the bytes bound it too');
+  app.keepView('/huge', tag, new Uint8Array(app.KEPT_VIEWS.bytes + 1));
+  for (const bad of ['', 'not-a-uuid', `${'ab'.repeat(16)}`]) app.keepView(`/bad${bad}`, bad, bytes(10));
+  app.keepView('/blob', tag, new Blob(['%PDF']));
+  assert.deepEqual([...app.state.keptViews.keys()], ['/v9', '/big'], 'never more than the bound, an untagged view, or anything but bytes');
+  const held = [...app.state.keptViews.values()].map(item => item.data);
+  app.forgetMemory();
+  assert.equal(app.state.keptViews.size, 0);
+  assert.ok(held.every(data => data.every(byte => byte === 0)), 'overwritten, not only let go of');
+});
+
+test('R2 V3, R2-18: the idle end, the cap, another tab\'s sign-out, a 401, a forced password change and the sign-out form each wipe page memory before the page leaves', async () => {
+  const form = () => fakeElement({ submitted: 0, submit() { this.submitted += 1; } });
+  const keep = () => {
+    const data = Uint8Array.from([37, 80]);
+    app.state.keptViews.clear();
+    app.keepView('/api/encounters/x/original?view=1', 'abcdef00-0000-4000-8000-000000000000', data);
+    app.state.viewHints = new Map([['x', true]]);
+    return data;
+  };
+  for (const [what, end, answers] of [
+    ['the idle end', () => { Object.assign(app.idle, { deadline: Date.now() - 1, gone: false }); app.scheduleIdle(); }],
+    ['the cap', () => { Object.assign(app.idle, { deadline: Date.now() - 1, capEnd: Date.now() - 1, idleEnd: Date.now() + 60000, gone: false }); app.scheduleIdle(); }],
+    ['another tab\'s sign-out', () => { Object.assign(app.idle, { gone: false, session: 'tag-a' }); app.receiveSession({ type: 'signed-out', reason: 'idle', session: 'tag-a' }); }],
+    ['a 401', () => { app.idle.gone = false; return app.api('/api/encounters').catch(() => {}); }, [{ match: () => true, status: 401, body: { error: 'signed_out', reason: 'idle' } }]],
+    ['a forced password change', () => app.api('/api/encounters').catch(() => {}), [{ match: () => true, status: 403, body: { error: 'password_change_required' } }]]]) {
+    await withSignedInPage({ elements: { signoutForm: form() }, answers }, async () => {
+      const data = keep();
+      app.state.leaving = false;
+      await end();
+      assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size], [0, [0, 0], 0], what);
+    });
+  }
+  // the sign-out form, sent by the member: its listener wipes page memory too
+  await withTimerPage({}, PAGE_SECONDS, async ({ element }) => {
+    const listeners = {};
+    const signout = element('#signoutForm');
+    signout.addEventListener = (type, fn) => { listeners[type] = fn; };
+    app.startIdleWatch();
+    const data = keep();
+    listeners.submit();
+    assert.deepEqual([app.state.keptViews.size, [...data]], [0, [0, 0]], 'the sign-out form');
+  });
+});
+
+test('R2 V4: the view is asked for with the click only once the library has started, on a page not outdated or leaving, where the list said it opens as a PDF or the page keeps its bytes, and only of the document chosen', async () => {
+  const word = fixture('encounter-word.json');
+  const view = `/api/encounters/${word.id}/original?view=1`;
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+    app.state.viewHints = new Map([[word.id, false]]);
+    app.state.pdfStarted = true;
+    app.startEarly(word.id);
+    assert.equal(fetches.length, 0, 'no hint and no copy: after the document\'s details, as before');
+    app.state.viewHints.set(word.id, true);
+    app.state.pdfStarted = false;
+    app.startEarly(word.id);
+    assert.equal(fetches.length, 0, 'not before the library and a worker have started in the page');
+    app.state.pdfStarted = true;
+    for (const stop of ['outdated', 'leaving']) {
+      app.state[stop] = true;
+      app.startEarly(word.id);
+      app.state[stop] = false;
+    }
+    app.idle.gone = true;
+    app.startEarly(word.id);
+    app.idle.gone = false;
+    global.IntersectionObserver = undefined;
+    app.startEarly(word.id);
+    global.IntersectionObserver = function IntersectionObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+    assert.equal(fetches.length, 0, 'nor on a page that is out of date, leaving or signed out, or cannot draw a PDF');
+    app.startEarly(word.id);
+    assert.deepEqual(fetches.map(item => [item.url, item.init.headers['X-CPT-Poll'], item.init.cache]), [[view, '1', 'no-store']], 'asked once, as the page\'s own read');
+    const early = app.state.early;
+    assert.equal(app.takeEarly(`/api/encounters/${UUID}/original?view=1`), null, 'never another document\'s');
+    assert.equal(app.takeEarly(view), early, 'taken over for its own view');
+    assert.equal(app.state.early, null);
+    // a route, a first read that fails, and a document that is no PDF each drop it, aborted
+    app.startEarly(word.id);
+    app.dropEarly();
+    assert.equal(fetches.at(-1).init.signal.aborted, true);
+    assert.equal(app.state.early, null);
+    app.state.viewHints = new Map();
+    app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', Uint8Array.from([37]));
+    app.startEarly(word.id);
+    assert.equal(fetches.length, 3, 'a kept copy is reason enough');
+    assert.equal(fetches.at(-1).init.headers['If-None-Match'], '"abcdef00-0000-4000-8000-000000000000"');
+    app.forgetMemory();
+  }, () => new Promise(() => {}));
+  // through the page's own route: the click's route asks for the view beside the details; the next route aborts it
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+    const doc = fixture('encounter-ready.json');
+    const address = `/api/encounters/${doc.id}`;
+    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true,
+      viewHints: new Map([[doc.id, true]]) });
+    global.location.hash = `#doc/${doc.id}`;
+    app.route();
+    assert.deepEqual(fetches.map(item => item.url), [`${address}/original?view=1`, address], 'the view asked for at the click, no later than the details');
+    const { signal } = fetches[0].init;
+    global.location.hash = '#how-it-works';
+    app.route();
+    assert.equal(signal.aborted, true, 'a route aborts it');
+    assert.equal(app.state.early, null);
+    app.forgetMemory();
+  }, (url, init) => (url.endsWith('?view=1') ? new Promise(() => {}) : Promise.resolve(response({ status: 404, body: { error: 'Not found.' } }))));
+  // a first read that fails drops it; a document that is not a PDF drops it
+  for (const [what, detail] of [['a first read that fails', () => Promise.resolve(response({ status: 503, body: { error: 'Unavailable.' } }))],
+    ['a text document', () => Promise.resolve(response({ status: 200, body: fixture('encounter-awaiting-answer.json') }))]]) {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+      const doc = what === 'a text document' ? fixture('encounter-awaiting-answer.json') : fixture('encounter-ready.json');
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true,
+        viewHints: new Map([[doc.id, true]]) });
+      global.location.hash = `#doc/${doc.id}`;
+      app.route();
+      const { signal } = fetches.find(item => item.url.endsWith('?view=1')).init;
+      await settle(() => signal.aborted);
+      assert.equal(signal.aborted, true, what);
+      assert.equal(app.state.early, null, what);
+      app.forgetMemory();
+    }, (url, init) => (url.endsWith('?view=1') ? new Promise(() => {}) : detail(url, init)));
+  }
+});
+
+test('R2-18: a document the server refuses (404: another practice\'s, or access ended) wipes page memory - the copies, the hints and the worker made ready ahead', async () => {
+  const id = 'f5000000-0000-4000-8000-0000000000ff';
+  await withPage({ answers: [{ match: (method, url) => url === `/api/encounters/${id}`, status: 404, body: { error: 'Not found.' } }] }, async ({ element }) => {
+    const data = Uint8Array.from([37, 80]);
+    app.keepView('/api/encounters/f5000000-0000-4000-8000-000000000001/original?view=1', 'abcdef00-0000-4000-8000-000000000000', data);
+    app.state.viewHints = new Map([['f5000000-0000-4000-8000-000000000001', true]]);
+    const thread = { terminated: false, terminate() { this.terminated = true; } };
+    app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+    Object.assign(app.state, { route: { name: 'doc', id }, routeSerial: 9 });
+    await app.loadDocument(id, 9, false);
+    assert.match(element('#main').innerHTML, /This document is not available\./);
+    assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated], [0, [0, 0], 0, null, true]);
+  });
+});
+
+test('R2-15: the dev preview tags a PDF view as the server does - a quoted UUID bound to the document, never the file\'s hash - and reads If-None-Match as studio.api does', () => {
+  const crypto = require('node:crypto');
+  const { bytes } = preview.viewBytes('synthetic-egd-colonoscopy.pdf');
+  const tag = preview.viewTag('f5000000-0000-4000-8000-000000000001', bytes);
+  assert.match(tag, /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/);
+  assert.notEqual(tag.replace(/[-"]/g, ''), crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 32), 'never the file\'s own hash');
+  assert.notEqual(preview.viewTag('f4000000-0000-4000-8000-000000000001', bytes), tag, 'bound to the document');
+  assert.equal(preview.viewTag('f5000000-0000-4000-8000-000000000001', bytes), tag, 'the same document, the same tag');
+  for (const [header, held] of [[tag, true], [`W/${tag}`, true], [`"other", ${tag}`, true], ['*', false], ['', false], [undefined, false], [tag.slice(1, -1), false]]) {
+    assert.equal(preview.namesTag(header, tag), held, String(header));
   }
 });

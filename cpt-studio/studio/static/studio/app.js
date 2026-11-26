@@ -1254,6 +1254,9 @@ const state = {
   // routed, its failures, the waiting worker and its timer), and whether the library and a worker have started in this
   // page, so both are in the browser's cache (R2-12)
   sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
+  // the PDFs kept in page memory for a re-open, by view address, the least recently viewed first (R2-15); the view asked
+  // for with the click (R2-16); and the documents the list said open as a PDF of at most 1 MiB (opens_pdf)
+  keptViews: new Map(), early: null, viewHints: new Map(),
 };
 
 function uiState(overrides = {}) {
@@ -1995,6 +1998,7 @@ function route() {
   const serial = ++state.routeSerial;
   const before = state.route;
   if (before) endEntrance();
+  dropEarly();
   stopPolling();
   stopTicker();
   closeDocumentDialogs();
@@ -2104,6 +2108,7 @@ async function showList(name, serial) {
     return;
   }
   if (serial !== state.routeSerial) return;
+  state.viewHints = new Map(rows.filter(row => row.opens_pdf === true).map(row => [row.id, true]));
   $('#documentsTable').innerHTML = listBody(name, rows);
   if ($('#listDescription')) $('#listDescription').textContent = listDescription(name, rows);
   if ($('#recentInvite')) $('#recentInvite').innerHTML = inviteMarkup(rows);
@@ -2143,6 +2148,7 @@ function showDocument(id, serial, fromList = false) {
     $('#main').innerHTML = messageView('This document is not available.', 'The address does not name a document in this workspace.');
     return undefined;
   }
+  startEarly(id);
   const loading = () => {
     if (serial !== state.routeSerial) return;
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -2182,6 +2188,9 @@ async function loadDocument(id, serial, silent, poll = false) {
       }
       return;
     }
+    dropEarly();
+    // a document the server refuses (another practice's, or access ended) ends what the page keeps for speed (R2-18)
+    if (error.status === 404) forgetMemory();
     window.scrollTo({ top: 0, behavior: 'instant' });
     $('#main').innerHTML = error.status === 404
       ? messageView('This document is not available.', 'It does not exist, or it is not in your workspace.')
@@ -2465,6 +2474,10 @@ const PDF_IMPORT = { load: specifier => import(specifier) };
 // `next` ms after a viewer closed or drew a page, once the browser is idle (within `idle` ms); after `fails` failures
 // none is made.
 const PDF_STANDBY = { first: 500, next: 600, idle: 2000, fails: 2 };
+// R2-15: the PDFs kept in page memory for a re-open, at most so many and so many bytes in all; and a view's tag as the
+// server answers it, a quoted UUID (W/ allowed): any other is no tag, and its bytes are never kept.
+const KEPT_VIEWS = { documents: 6, bytes: 24 * 1024 * 1024 };
+const VIEW_TAG = new RegExp(`^(?:W/)?"(${UUID_PART})"$`, 'i');
 
 // A wait on the library that went past its time limit (withinLimit).
 class TimeLimit extends Error {}
@@ -2663,9 +2676,29 @@ function startWorker(viewer, address) {
 // poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
 // member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
 // counted by the server either (studio.sessions.automatic).
+// R2-15: a view whose bytes the page keeps is asked for with their tag (If-None-Match); a 304 hands back a copy of them
+// (the library takes the array it is given), and any other answer, or none, drops them first. It answers {data, tag,
+// held}: tag, the quoted UUID a 200 named (else ''), held, whether the bytes are the kept ones.
 async function downloadDocument(view, signal, moved) {
-  const response = await fetch(view, { credentials: 'same-origin', cache: 'no-store', signal, headers: { [POLL_HEADER]: '1' } });
+  const held = state.keptViews.get(view) || null;
+  const headers = { [POLL_HEADER]: '1' };
+  if (held) headers['If-None-Match'] = `"${held.tag}"`;
+  let response;
+  try {
+    response = await fetch(view, { credentials: 'same-origin', cache: 'no-store', signal, headers });
+  } catch (error) {
+    dropView(view, held);
+    throw error;
+  }
+  // a copy wiped or replaced while it was asked for (an end, a bound) is no longer the one asked about: never drawn
+  if (held && response.status === 304 && state.keptViews.get(view) === held) {
+    moved();
+    keepView(view, held.tag, held.data);
+    return { data: held.data.slice(0), tag: held.tag, held: true };
+  }
+  dropView(view, held);
   if (!response.ok) throw new Error(`The document's download was answered ${response.status}.`);
+  const tag = VIEW_TAG.exec(response.headers?.get?.('ETag') || '')?.[1] || '';
   const chunks = [];
   let size = 0;
   if (response.body && typeof response.body.getReader === 'function') {
@@ -2687,7 +2720,61 @@ async function downloadDocument(view, signal, moved) {
     data.set(chunk, at);
     at += chunk.byteLength;
   }
-  return data;
+  return { data, tag, held: false };
+}
+
+// R2-15: the bytes of a PDF this page opened, kept in its memory under the tag the server gave them, for a re-open - an
+// array of the page's own: never a Blob (which the browser may write to disk), the Cache API, IndexedDB or Web Storage.
+// At most KEPT_VIEWS: the least recently viewed go first, and every copy that goes is overwritten.
+function keepView(view, tag, data) {
+  const kept = state.keptViews;
+  const old = kept.get(view);
+  kept.delete(view);
+  if (old && old.data !== data) old.data.fill(0);
+  if (!UUID.test(String(tag)) || !(data instanceof Uint8Array) || data.byteLength > KEPT_VIEWS.bytes) return;
+  kept.set(view, { tag, data });
+  let bytes = 0;
+  for (const item of kept.values()) bytes += item.data.byteLength;
+  for (const [key, item] of kept) {
+    if (kept.size <= KEPT_VIEWS.documents && bytes <= KEPT_VIEWS.bytes) break;
+    kept.delete(key);
+    bytes -= item.data.byteLength;
+    item.data.fill(0);
+  }
+}
+
+function dropView(view, held) {
+  if (!held || state.keptViews.get(view) !== held) return;
+  state.keptViews.delete(view);
+  held.data.fill(0);
+}
+
+// R2-16: the view of the document chosen, asked for with the click, beside its details: only once the library and a worker
+// have started in this page, on a page not outdated, leaving or signed out that can draw a PDF, and only where the page
+// keeps that view's bytes or the list said it opens as a PDF (opens_pdf) - never on a hover, a focus or a list. It is the
+// page's own read, recorded as the view's (member.inline). The viewer takes it over for that view only (takeEarly); a
+// route, a first read that fails and a document that is no PDF drop it.
+function startEarly(id) {
+  dropEarly();
+  const view = `/api/encounters/${id}/original?view=1`;
+  if (!state.pdfStarted || state.outdated || state.leaving || idle.gone || typeof AbortController !== 'function' || !pdfCapable()) return;
+  if (!state.keptViews.has(view) && state.viewHints.get(id) !== true) return;
+  const early = { view, abort: new AbortController(), moved: null, result: null };
+  early.result = downloadDocument(view, early.abort.signal, () => early.moved?.());
+  early.result.catch(() => {});
+  state.early = early;
+}
+
+function takeEarly(view) {
+  const early = state.early;
+  if (!early || early.view !== view) return null;
+  state.early = null;
+  return early;
+}
+
+function dropEarly() {
+  state.early?.abort.abort();
+  state.early = null;
 }
 
 function pdfAssets() {
@@ -2828,8 +2915,13 @@ function takeWorker(viewer, address) {
 
 // R2-18: what the page keeps in its memory for speed goes at every end - the sign-out, the idle end and the cap, a 401,
 // another tab's sign-out, a forced password change, a document the server refuses, and the page left (pagehide, the
-// back-forward cache included): the worker made ready ahead.
+// back-forward cache included): the view asked for with the click, the kept copies (overwritten first), the list's
+// hints and the worker made ready ahead.
 function forgetMemory() {
+  dropEarly();
+  for (const { data } of state.keptViews.values()) data.fill(0);
+  state.keptViews.clear();
+  state.viewHints.clear();
   endStandby();
 }
 
@@ -2838,7 +2930,10 @@ function mountViewer(doc) {
   closeViewer();
   const element = $('#documentViewer');
   const view = safeViewUrl(element?.dataset?.viewUrl);
-  if (!element || !view || viewerKind(doc?.document) !== 'pdf') return;
+  if (!element || !view || viewerKind(doc?.document) !== 'pdf') {
+    dropEarly();
+    return;
+  }
   // thread: the viewer's own worker; worker: the library's handle on it; download: the download's abort; watchdog: the
   // waits on the library (libraryWatchdog); quoteScroll: the quote's page while the scroll to it is under way; inputs: the
   // listeners that see the member scroll the viewer; queue and busy: the pages asked to be drawn, and the one drawing
@@ -2871,7 +2966,9 @@ async function openPdf(viewer) {
   }
   // R2-12: once the library and a worker have started in this page, the document is asked for beside them; before that,
   // after them, as in release 1, so that on a slow line the two never share it within the library's time limit
-  let downloading = state.pdfStarted ? downloadFor(viewer, null) : null;
+  const early = takeEarly(viewer.view);
+  if (!early) dropEarly();
+  let downloading = early || state.pdfStarted ? downloadFor(viewer, early) : null;
   // the library and the viewer's own worker (the one made ready ahead, or its own), within the time limit: where either
   // does not start, marking did not work here, whatever the document, and the next document tries the library again at
   // fresh addresses - unless the viewer was closed meanwhile: its worker was ended with it, so nothing is concluded
@@ -2905,8 +3002,12 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'library');
   });
   downloading = downloading || downloadFor(viewer, null);
-  const data = await downloading;
-  if (!data || !opening()) return;
+  const got = await downloading;
+  if (!got || !opening()) return;
+  const { data, tag, held } = got;
+  // R2-15: the library takes the array it is given, so the copy kept - of a tagged 200 only - is made first, and kept only
+  // once the document has opened
+  const copy = tag && !held && data.byteLength <= KEPT_VIEWS.bytes ? data.slice(0) : null;
   startStall(viewer);  // the library reads the document under the download's time limit, until it has opened
   let pdf;
   try {
@@ -2930,6 +3031,7 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'document');
     return;
   }
+  if (copy) keepView(viewer.view, tag, copy);
   let proxies;
   try {
     proxies = await watched(viewer, Promise.all(Array.from({ length: pdf.numPages }, (_, index) => pdf.getPage(index + 1))));
@@ -4744,6 +4846,7 @@ if (typeof module === 'object' && module.exports) {
     // release 2
     route, showDocument, shellSession, refreshSession, endEntrance, firstRoute, loadSession, SESSION_FRESH_MS, LOADING_AFTER_MS,
     scheduleStandby, startStandby, endStandby, takeWorker, forgetMemory, downloadFor, forgetPdfLibrary, PDF_STANDBY,
+    keepView, startEarly, takeEarly, dropEarly, KEPT_VIEWS,
   };
 }
 if (typeof document !== 'undefined') boot();

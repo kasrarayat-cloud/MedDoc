@@ -32,6 +32,9 @@
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
+// Release 2 (R2-15): a PDF view carries an ETag shaped as the server's (a quoted UUID, never a hash of the file: here an
+// HMAC of this run's key, the document and its bytes), and a request whose If-None-Match names it (its weak form too,
+// never '*') is answered 304 with no body, as studio.api answers the copy a page holds.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -335,6 +338,18 @@ function readBody(req) {
   });
 }
 
+// R2-15: a PDF view's tag, shaped as studio.api.view_tag's: a quoted UUID, bound to this run and the document.
+function viewTag(id, bytes) {
+  const hex = crypto.createHmac('sha256', CSRF).update(`${id}:`).update(crypto.createHash('sha256').update(bytes).digest('hex')).digest('hex');
+  return `"${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}"`;
+}
+
+// Whether an If-None-Match header names `tag`, as studio.api._held reads it (django.utils.http.parse_etags): the weak form
+// counts, '*' never does.
+function namesTag(header, tag) {
+  return String(header || '').split(',').map(item => item.trim().replace(/^W\//, '')).some(item => item !== '*' && item === tag);
+}
+
 function parseJson(buffer) {
   try {
     const value = JSON.parse(buffer.toString('utf8') || '{}');
@@ -464,8 +479,14 @@ async function handleApi(req, res, url) {
     // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
     const { bytes, type } = viewBytes(name);
     const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
+    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type
+    const tag = type === 'application/pdf' ? viewTag(match[1], bytes) : '';
+    if (tag && namesTag(req.headers['if-none-match'], tag)) {
+      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP });
+    }
     return send(res, 200, bytes, {
       'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
+      ...(tag ? { ETag: tag } : {}),
     });
   }
   match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);
@@ -662,4 +683,5 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP,
+  viewTag, namesTag };
