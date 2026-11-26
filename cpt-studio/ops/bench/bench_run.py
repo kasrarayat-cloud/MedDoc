@@ -1943,8 +1943,19 @@ def driver(argv=None) -> int:
             while attempt <= args.retries:
                 round_no = first_round + 100 * attempt
                 written = out / out_name(tag, round_no, group.split(','), profiles)
+                planned = judge.coverage(written.name, {'parts': group.split(',')})
+                spelled = judge.ROUND_RE.match(written.name).group('parts')
+                overlap = [p.name for p in sorted(out.glob(f'{tag}-r*.json')) if (m := judge.ROUND_RE.match(p.name))
+                           and int(m.group('round')) % 100 == round_no % 100 and m.group('parts') != spelled
+                           and judge.coverage(p.name, json.loads(p.read_text())) & planned]
+                if overlap:  # D-R2-44: never measured again under another group name
+                    log.write(f'{utc()} {tag}:{round_no} {spec} refused: {overlap[0]} measured part of it before\n')
+                    log.flush()
+                    rc = rc or 3
+                    break
                 if written.exists():  # a resumed protocol: a round measured before is kept as it is, never run again
-                    why = judge.attempt_reasons(written.name, json.loads(written.read_text()), controls)
+                    why = judge.attempt_reasons(written.name, json.loads(written.read_text()), controls,
+                                                read_revision(tree))  # judge[9]: a round of another tree: run again
                     log.write(f'{utc()} {tag}:{round_no} {spec} measured before, '
                               f'{"valid" if not why else "INVALID: " + why[0]}; kept, not run again\n')
                     log.flush()
@@ -1966,14 +1977,21 @@ def driver(argv=None) -> int:
                 print(line, flush=True)
                 log.write(line + '\n')
                 log.flush()
-                run_log = out / f'run-{tag}-r{round_no}-{spec.replace(",", "+")}.log'
-                with open(run_log, 'w') as handle:
+                stem, n = f'run-{tag}-r{round_no}-{spec.replace(",", "+")}', 1
+                run_log = out / f'{stem}.log'
+                while run_log.exists():  # a run log is never written over (a refused run keeps the round's own log)
+                    n += 1
+                    run_log = out / f'{stem}.{n}.log'
+                with open(run_log, 'x') as handle:
                     done = subprocess.run([args.python, '-B', 'manage.py', 'test', str(HERE), '--pattern',
                                            'bench_run.py', '--noinput'], cwd=tree, env=env, stdout=handle,
                                           stderr=subprocess.STDOUT, timeout=4 * 3600)
-                if not written.exists() and 'another bench holds the lock' in run_log.read_text() and busy < 50:
-                    busy += 1  # another bench took the lock first: nothing was measured, the same round is run again
-                    log.write(f'{utc()} {tag}:{round_no} {spec} the lock was held by another bench; waiting\n')
+                text, refused = run_log.read_text(), f'{written.name} exists; a round is never overwritten'
+                if busy < 50 and (('another bench holds the lock' in text and not written.exists()) or
+                                  (written.exists() and refused in text)):
+                    busy += 1  # nothing was measured here: another bench held the lock, or measured this round while
+                    #            this driver waited; the loop's top judges that file by judge.attempt_reasons alone
+                    log.write(f'{utc()} {tag}:{round_no} {spec} another bench held the lock or measured this round\n')
                     log.flush()
                     continue
                 rc = done.returncode

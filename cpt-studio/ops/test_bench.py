@@ -204,10 +204,30 @@ own = '@' + '+'.join(env['BENCH_PROFILES'].split(',')) if env.get('BENCH_GROUP_P
 name = env['BENCH_TAG'] + '-r' + str(number) + '-' + '+'.join(parts) + own + '.json'
 load = float(loads.get(str(number), loads.get('*', 1.0)))
 Path(env['BENCH_OUT'], name).write_text(json.dumps({'tag': env['BENCH_TAG'], 'round': number, 'parts': parts,
+    'revision': (Path.cwd().parent / 'REVISION').read_text().strip(),
     'load_before': [1.0, 1.0, 1.0], 'load_after': [1.0, 1.0, 1.0], 'load_max': load, 'metrics': {}, 'checks': {},
     'controls': {}, 'errors': [], 'unexpected_statuses': {}, 'console_errors': [], 'blocked_requests': []}))
 with open(env['STUB_CALLS'], 'a') as calls:
     calls.write(name + chr(10))
+"""
+
+
+STUB_MANAGE_CLAIM = """import json, os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[2])
+import bench_run as br  # judge[6]: the real lock and output claim (a round is never overwritten)
+env = os.environ
+out, tag, number = Path(env['BENCH_OUT']), env['BENCH_TAG'], int(env['BENCH_ROUND'])
+if br.take_lock(out / 'bench.lock') is None:
+    print('AssertionError: another bench holds the lock'); sys.exit(1)
+try:
+    target = br.claim_output(out, tag, number, env['BENCH_PARTS'].split(','))
+except FileExistsError as exc:
+    print(f'AssertionError: {exc}'); sys.exit(1)
+target.write_text(json.dumps({'parts': env['BENCH_PARTS'].split(','), 'load_before': [1.0], 'load_after': [1.0],
+                              'load_max': 1.0, 'errors': [], 'revision': 'stub-rev'}))
+with open(env['STUB_CALLS'], 'a') as f:
+    f.write(target.name + chr(10))
 """
 
 
@@ -221,6 +241,7 @@ class BenchDriverResumeTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.dir)
         (self.dir / 'tree' / 'cpt-studio').mkdir(parents=True)
         (self.dir / 'tree' / 'cpt-studio' / 'manage.py').write_text(STUB_MANAGE)
+        (self.dir / 'tree' / 'REVISION').write_text('stub-rev\n')
         self.out, self.calls = self.dir / 'out', self.dir / 'calls.log'
         self.out.mkdir()
 
@@ -256,6 +277,46 @@ class BenchDriverResumeTests(unittest.TestCase):
         self.assertEqual(self.calls_made(), ['A-r1-server.json', 'A-r101-server.json'])  # round 1 itself never again
         self.assertIn('measured before, INVALID: load average 12.0', (self.out / 'protocol.log').read_text())
 
+    def test_a_round_measured_during_the_lock_wait_is_kept_and_its_log_too(self):
+        """judge[6]: a second driver on one folder re-measured a valid round as round + 101, logged it INVALID by its
+        own exit code and wrote over the round's run log. The bench's own refusal now sends it back to the loop's
+        top, which judges the file found by judge.attempt_reasons alone; a run log is never written over."""
+        (self.dir / 'tree' / 'cpt-studio' / 'manage.py').write_text(STUB_MANAGE_CLAIM)
+        valid = {'parts': ['server'], 'load_before': [1.0], 'load_after': [1.0], 'load_max': 1.0, 'errors': [],
+                 'revision': 'stub-rev'}
+        real, seen = RUN.lock_free, []
+
+        def lock_free(path):  # while this driver waited, the other driver's bench measured A:1 and wrote its log
+            if not seen:
+                seen.append(1)
+                (self.out / 'A-r1-server.json').write_text(json.dumps(valid))
+                (self.out / 'run-A-r1-server.log').write_text("the other driver's valid round\n")
+            return real(path)
+        env = {'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': '55461', 'CPT_STUDIO_TEST_DB_SUFFIX': 'x',
+               'CPT_STUDIO_CODING_MODE': 'disabled', 'STUB_CALLS': str(self.calls)}
+        with unittest.mock.patch.object(RUN, 'lock_free', lock_free), unittest.mock.patch.dict(os.environ, env), \
+                unittest.mock.patch('sys.stdout', io.StringIO()):
+            rc = RUN.driver(['--tree', f'A={self.dir / "tree"}', '--order', 'A:1', '--group', 'server', '--out',
+                             str(self.out), '--ports', '9300-9349', '--max-load', '999', '--max-load-5', '999',
+                             '--wait-minutes', '0', '--retries', '1'])
+        log = (self.out / 'protocol.log').read_text()
+        self.assertEqual(rc, 0, log)
+        self.assertEqual(self.calls_made(), [])  # nothing measured here
+        self.assertFalse((self.out / 'A-r101-server.json').exists(), 'the valid round was measured again as 101')
+        self.assertNotIn('INVALID', log)
+        self.assertIn('another bench held the lock or measured this round', log)
+        self.assertEqual((self.out / 'run-A-r1-server.log').read_text(), "the other driver's valid round\n")
+        self.assertIn('exists; a round is never overwritten', (self.out / 'run-A-r1-server.2.log').read_text())
+
+    def test_a_round_of_another_tree_is_run_again(self):
+        """judge-9: a resumed driver kept a round measured on another tree as valid, so the tag stayed INVALID."""
+        self.assertEqual(self.drive({'*': 1.0}).returncode, 0)
+        (self.dir / 'tree' / 'REVISION').write_text('stub-rev-2\n')
+        self.assertEqual(self.drive({'*': 1.0}).returncode, 0)
+        self.assertEqual(self.calls_made(), ['A-r1-server.json', 'A-r101-server.json'])
+        self.assertIn('measured before, INVALID: measured on revision stub-rev, not stub-rev-2',
+                      (self.out / 'protocol.log').read_text())
+
     def test_a_round_with_a_failed_part_is_run_again(self):
         """The driver's retry rule is the judge's own: a part error, not only a load above 8, is INVALID."""
         (self.dir / 'tree' / 'cpt-studio' / 'manage.py').write_text(STUB_MANAGE.replace(
@@ -270,6 +331,128 @@ class BenchDriverResumeTests(unittest.TestCase):
         self.assertEqual(done.returncode, 3, done.stderr)  # protocol[0]: it exited 0 after 'no retries left'
         log = (self.out / 'protocol.log').read_text()
         self.assertIn('A:101 server INVALID (exit 0, load 12.0; load average 12.0 > 8.0); no retries left', log)
+
+
+REMEASURE_ROW = {'id': 'later', 'metric': 'open.later.first_page.P0', 'min_samples': 1, 'needs_a': False,
+                 'spread': 0.03, 'gate': [{'abs_max': 180}]}
+
+
+def _remeasure_file(folder, tag, number, group, metrics=None, **extra):
+    """judge[0] (round 2): one round file named by its group as the driver names it."""
+    parts = group.split('@')[0].split('+')
+    data = {'tag': tag, 'round': number, 'parts': parts, 'metrics': metrics or {}, 'checks': {},
+            'controls': {}, 'errors': [], 'unexpected_statuses': {}, 'console_errors': [], 'blocked_requests': [],
+            'load_before': [1.0, 1.0, 1.0], 'load_after': [1.0, 1.0, 1.0], 'load_max': 1.0, 'revision': tag,
+            'files': {'studio/static/studio/app.js': tag * 3}, **extra}
+    Path(folder, f'{tag}-r{number}-{group}.json').write_text(json.dumps(data))
+
+
+class BenchRemeasureTests(unittest.TestCase):
+    """judge[0] (round 2, D-R2-48): a round's identity is the (part, profile) pairs its files cover, not how its group
+    is spelled: a part measured twice in one round is INVALID, A and B carry the same base rounds, requests, an office
+    size and the front door come from one file of a round, and the driver resumes by coverage."""
+
+    def folder(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        return d
+
+    def answer(self, d, table):
+        return JUDGE.verdict(JUDGE.load_rounds(Path(d)), table, 'A', 'B')
+
+    def test_a_part_measured_again_under_another_group_name_is_never_pooled(self):
+        table = {'controls': [], 'rows': [REMEASURE_ROW]}
+        d = self.folder()
+        for n in (1, 2, 3):
+            _remeasure_file(d, 'A', n, 'open@P0', {REMEASURE_ROW['metric']: [300] * 6})
+            _remeasure_file(d, 'B', n, 'open@P0', {REMEASURE_ROW['metric']: [190] * 6})
+        self.assertEqual(self.answer(d, table)['verdict'], 'FAIL')
+        for n in (1, 2, 3):
+            _remeasure_file(d, 'B', n, 'open', {REMEASURE_ROW['metric']: [165] * 6})  # every profile, P0 again
+        got = self.answer(d, table)
+        self.assertEqual(got['verdict'], 'INVALID', got)
+        self.assertTrue(any('measured twice' in w and 'B-r1-open.json' in w for w in got['invalid']), got['invalid'])
+
+    def test_a_second_requests_or_office_file_in_a_round_is_never_the_one_judged(self):
+        d = self.folder()
+        good = [{'case': 'c', 'role': 'reader', 'params_sha256': f'{k:016x}', 'effort': 'max', 'attempts': 1}
+                for k in range(8)]
+        for n in (1, 2, 3):
+            _remeasure_file(d, 'A', n, 'cold+server+queries+load+requests', requests=good, requests_effort='max')
+            high = [dict(x, effort='high') for x in good]
+            if n == 1:
+                high[2] = dict(high[2], params_sha256='f' * 16)
+            _remeasure_file(d, 'B', n, 'cold+server+queries+load+requests', requests=high, requests_effort='high')
+        table = {'controls': [], 'rows': [{'id': 'coder', 'kind': 'same_as_a', 'min_rows': 8,
+                                           'effort': {'a': 'max', 'b': 'high'}}]}
+        self.assertEqual(self.answer(d, table)['verdict'], 'FAIL')
+        _remeasure_file(d, 'B', 1, 'requests', requests=[dict(x, effort='high') for x in good], requests_effort='high')
+        got = self.answer(d, table)
+        self.assertEqual(got['verdict'], 'INVALID', got)
+        self.assertTrue(any('requests' in w and 'measured twice' in w for w in got['invalid']), got['invalid'])
+        d2 = self.folder()
+        _remeasure_file(d2, 'B', 1, 'office')
+        _remeasure_file(d2, 'B', 1, 'office@P0')  # the office part runs at P0 whatever it is told: one measurement
+        self.assertTrue(JUDGE.load_rounds(Path(d2))['B'][1].get('remeasured'))
+
+    def test_a_value_one_file_carries_is_never_the_last_of_two_whatever_the_parts_say(self):
+        """judge[0], the lead's 'judged for every file': requests, an office size and the front door are taken from
+        one file of a round; a second file carrying one (whatever its parts list says) is a remeasure, never a
+        last-file-wins value."""
+        good = [{'case': 'c', 'role': 'reader', 'params_sha256': f'{k:016x}', 'effort': 'max', 'attempts': 1}
+                for k in range(8)]
+        for extra in ({'requests': good, 'requests_effort': 'max'}, {'office': {'101': {'typing': []}}},
+                      {'front_door': {'later': [['GET', '/x']], 'back': [['GET', '/y']]}}):
+            with self.subTest(carried=list(extra)[0]):
+                d = self.folder()
+                _remeasure_file(d, 'B', 1, 'server', **extra)
+                _remeasure_file(d, 'B', 1, 'cold', **extra)  # two parts that never write it: no coverage overlap
+                merged = JUDGE.load_rounds(Path(d))['B'][1]
+                self.assertTrue(any(w.startswith(list(extra)[0].split('_effort')[0]) for w in merged['remeasured']),
+                                merged['remeasured'])
+                why = JUDGE.invalid_reasons({'B': {1: merged}}, ['B'], control=True, controls=[])
+                self.assertTrue(any('measured twice' in w for w in why), why)
+        d = self.folder()
+        _remeasure_file(d, 'B', 1, 'server', requests=good, requests_effort='max')
+        self.assertEqual(JUDGE.load_rounds(Path(d))['B'][1]['remeasured'], [])  # one carrier: nothing twice
+
+    def test_rounds_of_one_tag_only_never_enter_the_verdict(self):
+        table = {'controls': [], 'rows': [REMEASURE_ROW]}
+        d = self.folder()
+        for n in (1, 2, 3):
+            _remeasure_file(d, 'A', n, 'open@P0', {REMEASURE_ROW['metric']: [300] * 6})
+            _remeasure_file(d, 'B', n, 'open@P0', {REMEASURE_ROW['metric']: [190] * 6})
+        for n in (4, 5, 6):
+            _remeasure_file(d, 'B', n, 'open@P0', {REMEASURE_ROW['metric']: [165] * 6})
+        got = self.answer(d, table)
+        self.assertEqual(got['verdict'], 'INVALID', got)
+        self.assertTrue(any('carry different rounds' in w for w in got['invalid']), got['invalid'])
+
+    def test_the_driver_never_measures_a_round_again_under_another_group_name(self):
+        d = Path(self.folder())
+        tree, out, calls = d / 'tree' / 'cpt-studio', d / 'out', d / 'calls.log'
+        tree.mkdir(parents=True)
+        out.mkdir()
+        tree.joinpath('manage.py').write_text(
+            "import json, os\nfrom pathlib import Path\ne = os.environ\nparts = e['BENCH_PARTS'].split(',')\n"
+            "own = '@' + '+'.join(e['BENCH_PROFILES'].split(',')) if e.get('BENCH_GROUP_PROFILES') == '1' else ''\n"
+            "name = e['BENCH_TAG'] + '-r' + e['BENCH_ROUND'] + '-' + '+'.join(parts) + own + '.json'\n"
+            "Path(e['BENCH_OUT'], name).write_text(json.dumps({'parts': parts, 'load_max': 1.0, 'metrics': {},\n"
+            "    'load_before': [1.0, 1.0, 1.0], 'load_after': [1.0, 1.0, 1.0], 'errors': []}))\n"
+            "open(e['STUB_CALLS'], 'a').write(name + chr(10))\n")
+        env = {k: v for k, v in os.environ.items() if not k.startswith(('BENCH_', 'DJANGO_SETTINGS'))}
+        env.update({'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': '55461', 'CPT_STUDIO_TEST_DB_SUFFIX': 'x',
+                    'CPT_STUDIO_CODING_MODE': 'disabled', 'PYTHONDONTWRITEBYTECODE': '1', 'STUB_CALLS': str(calls)})
+
+        def drive(group):
+            return subprocess.run([sys.executable, '-B', str(BENCH / 'bench_run.py'), '--tree', f'B={d / "tree"}',
+                                   '--order', 'B:1', '--group', group, '--out', str(out), '--ports', '9300-9349',
+                                   '--max-load', '999', '--max-load-5', '999', '--wait-minutes', '0'],
+                                  env=env, capture_output=True, text=True, timeout=120).returncode
+        self.assertEqual(drive('server'), 0)
+        self.assertEqual(drive('server@P0'), 3)  # the same part, spelled otherwise: refused, nothing run
+        self.assertEqual(calls.read_text().split(), ['B-r1-server.json'])
+        self.assertIn('refused: B-r1-server.json measured part of it before', (out / 'protocol.log').read_text())
 
 
 class BenchRoundRecordTests(unittest.TestCase):
@@ -836,21 +1019,21 @@ class JudgeTests(unittest.TestCase):
     def test_a_check_is_ok_only_when_every_file_of_its_round_says_so(self):
         """judge[0], records[0]: a round's files were merged last-file-wins, so open@P3's ok overwrote open@P0's failed
         barcode, and the left-behind file's ok overwrote open@P1's failed no-store. Each check is ANDed now."""
-        def run(order):
+        def run(failing):
             rounds = []
             for n in (1, 2, 3):
                 rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
                                      checks={'correct.barcode_every_open': {'ok': True}}))
-                for profile in order:
-                    ok = not (n == 1 and profile == 'P0')
+                for profile in ('P0', 'P3'):
+                    ok = not (n == 1 and profile == failing)
                     rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119],
                                                   'open.text.frame.P0': [100]}, app_js='bbb',
                                          parts=(f'open@{profile}',),
                                          checks={'correct.barcode_every_open': {'ok': ok, 'opens': 9}}))
             return self.answer(self.folder(rounds))
-        for order in (('P0', 'P3'), ('P3', 'P0')):  # the failing file sorting first, then last
-            with self.subTest(order=order):
-                got = run(order)
+        for failing in ('P0', 'P3'):  # judge[3]: the failing file sorting first (open@P0), then last (open@P3)
+            with self.subTest(failing=failing):
+                got = run(failing)
                 self.assertEqual(got['verdict'], 'FAIL', got)
                 self.assertEqual(next(r for r in got['rows'] if r['id'] == 'barcode')['verdict'], 'FAIL')
         merged = {}
@@ -858,6 +1041,10 @@ class JudgeTests(unittest.TestCase):
         JUDGE._and_merge(merged, {'left.no_store': {'ok': True}})
         self.assertFalse(merged['left.no_store']['ok'])
         self.assertEqual(len(merged['left.no_store']['by_file']), 2)
+        merged = {}
+        JUDGE._and_merge(merged, {'left.no_store': {'ok': True}})
+        JUDGE._and_merge(merged, {'left.no_store': {'ok': False, 'missing': ['GET /original 304']}})
+        self.assertFalse(merged['left.no_store']['ok'])  # judge[3]: the failing file merged last
 
     def test_a_file_needs_the_controls_only_where_its_open_part_ran_at_p0(self):
         """Only the P0 open flow plants the controls; an open@P1 file without them is valid on its own, an open@P0 or
@@ -928,6 +1115,83 @@ class JudgeTests(unittest.TestCase):
         got = self.answer(out)
         self.assertEqual(got['verdict'], 'INVALID')
         self.assertEqual(got['trees'], {'A': ['A'], 'B': ['B', 'B-old']})
+
+    def test_a_no_worse_than_a_floor_is_never_below_a_plus_one_instrument_step(self):
+        """judge[5]: the A-column check allowed one Event Timing step (a_step), the floor did not, so a B one step from
+        A FAILed and the same samples swapped PASSed. The floor is now max(floor_factor x A, A + a_step)."""
+        row = {'id': 'r', 'metric': 'm', 'min_samples': 3, 'a_recorded': 17, 'a_spread': 0.1177, 'spread': 0.1177,
+               'a_step': 8, 'gate': [{'rel_max': 1.0, 'spread': 0.1177, 'floor_factor': 1.2354}]}
+        a = {n: {'metrics': {'m': [v]}} for n, v in ((1, 16), (2, 16), (3, 24))}
+        b = lambda values: {n: {'metrics': {'m': [v]}} for n, v in zip((1, 2, 3), values)}
+        self.assertEqual(JUDGE.judge_row(row, a, b((24, 24, 16)))['verdict'], 'PASS')  # one step: limit 24
+        self.assertEqual(JUDGE.judge_row(row, a, b((32, 32, 24)))['verdict'], 'FAIL')  # two steps worse
+        stepless = {k: v for k, v in row.items() if k != 'a_step'}
+        self.assertEqual(JUDGE.judge_row(stepless, a, b((24, 24, 16)))['verdict'], 'FAIL')  # limit 19.77
+        plus = {**row, 'gate': [{'rel_max': 1.0, 'spread': 0.1177, 'floor_factor': 1.2354, 'plus_metric': 'later'}]}
+        b_plus = lambda values: {n: {'metrics': {'m': [v], 'later': [40]}} for n, v in zip((1, 2, 3), values)}
+        self.assertEqual(JUDGE.judge_row(plus, a, b_plus((64, 64, 56)))['verdict'], 'PASS')  # 16 + 8 + 40
+        self.assertEqual(JUDGE.judge_row(plus, a, b_plus((72, 72, 64)))['verdict'], 'FAIL')
+
+    def test_a_s_own_control_checks_are_read(self):
+        """judge[7]: the walk 'on A first and then on B' and the correctness checks 'checked on A as the control'
+        passed with A failing: a row marked control_a is INVALID unless A passed it in every round."""
+        rows = [{'id': 'walk.passes', 'table': 'walk', 'kind': 'check', 'check': 'walk.passes', 'control_a': True}]
+        table = {'controls': [], 'rows': rows}
+
+        def verdict(a_ok, a_has=True):
+            d = Path(tempfile.mkdtemp())
+            self.addCleanup(shutil.rmtree, d)
+            for n in (1, 2, 3):
+                if a_has:
+                    Path(d, f'A-r{n}-walk.json').write_text(json.dumps(
+                        _round('A', n, {}, parts=('walk',), controls=False, checks={'walk.passes': {'ok': a_ok}})))
+                else:
+                    Path(d, f'A-r{n}-plans.json').write_text(json.dumps(
+                        _round('A', n, {}, parts=('plans',), controls=False)))
+                Path(d, f'B-r{n}-walk.json').write_text(json.dumps(_round(
+                    'B', n, {}, parts=('walk',), app_js='bbb', controls=False, checks={'walk.passes': {'ok': True}})))
+            return JUDGE.verdict(JUDGE.load_rounds(d), table, 'A', 'B')
+        self.assertEqual(verdict(True)['verdict'], 'PASS')
+        self.assertEqual(verdict(False)['verdict'], 'INVALID')  # A, the control, failed
+        self.assertEqual(verdict(True, a_has=False)['verdict'], 'INVALID')  # A never walked
+
+    def test_a_round_of_another_tree_is_superseded_by_its_retry_on_the_named_tree(self):
+        """judge-9: a round of another tree was valid on its own, so final; its retry on the right tree was set
+        aside and the tag stayed INVALID. Named trees: B's by --b-revision, A's by the table's a_tree."""
+        rounds = []
+        for n in (1, 2, 3):
+            rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                 checks={'correct.barcode_every_open': {'ok': True}}))
+            rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119], 'open.text.frame.P0': [100]},
+                                 app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}},
+                                 revision='B-stale' if n == 1 else 'B'))
+        out = self.folder(rounds)
+        retry = _round('B', 101, {'open.later.first_page.P0': [120, 121, 119], 'open.text.frame.P0': [100]},
+                       app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}}, revision='B')
+        Path(out, 'B-r101-open.json').write_text(json.dumps(retry))
+        self.assertEqual(self.answer(out)['verdict'], 'INVALID')  # no tree named: the tag's two trees
+        got = JUDGE.verdict(JUDGE.load_rounds(out, (), {'B': 'B'}), TABLE, 'A', 'B', b_revision='B')
+        self.assertEqual((got['verdict'], got['superseded']), ('PASS', ['B-r1-open.json']), got)
+        stale = self.folder([r if r['tag'] == 'A' else {**r, 'revision': 'B-stale'} for r in rounds])
+        got = JUDGE.verdict(JUDGE.load_rounds(stale, (), {'B': 'B'}), TABLE, 'A', 'B', b_revision='B')
+        self.assertEqual(got['verdict'], 'INVALID')  # every B file of another tree: never judged as B
+        self.assertTrue(any('B is not B' in w for w in got['invalid']), got['invalid'])
+        failing = self.folder([r if r['tag'] == 'A' else {**r, 'revision': 'B', 'metrics': {
+            'open.later.first_page.P0': [200, 201, 199], 'open.text.frame.P0': [100]}} for r in rounds])
+        Path(failing, 'B-r101-open.json').write_text(json.dumps(retry))  # judge[2]: a valid round stays final
+        got = JUDGE.verdict(JUDGE.load_rounds(failing, (), {'B': 'B'}), TABLE, 'A', 'B', b_revision='B')
+        self.assertEqual((got['verdict'], got['superseded']), ('FAIL', ['B-r101-open.json']), got)
+        r1 = '816045c7264481bc6956285e1ca89991b9fcec2f'
+        table = {**copy.deepcopy(TABLE), 'a_tree': f'{r1} (release 1)'}
+        a_rounds = self.folder([{**r, 'revision': ('0' * 40 if r['round'] == 1 else r1)} if r['tag'] == 'A' else
+                                {**r, 'revision': 'B'} for r in rounds])
+        Path(a_rounds, 'A-r101-open.json').write_text(json.dumps({**rounds[0], 'round': 101, 'revision': r1}))
+        Path(table_path := a_rounds / 't.json').write_text(json.dumps(table))
+        with unittest.mock.patch('sys.stdout', io.StringIO()) as printed:
+            code = JUDGE.main(['verdict', '--out', str(a_rounds), '--a', 'A', '--b', 'B', '--acceptance',
+                               str(table_path)])
+        self.assertEqual(code, 0, printed.getvalue())
+        self.assertEqual(json.loads(printed.getvalue())['superseded'], ['A-r1-open.json'])
 
     def test_a_is_release_one_s_tree_when_the_table_names_it(self):
         """protocol[1]: an A measured on another tree would loosen exactly the gates whose limit is A."""
@@ -1029,6 +1293,58 @@ class JudgeTests(unittest.TestCase):
             self.assertEqual(JUDGE.main(['floors', '--out', str(partial), '--a', 'A:1', '--a', 'A:2',
                                          '--acceptance', str(table), '--source', 'test']), 3)
         self.assertIn('no value for', err.getvalue())
+
+    def test_the_spread_and_the_floors_refuse_a_pair_that_is_not_release_one(self):
+        """The A/A is release 1's: a pair measured on another tree derives no floor, no spread and no recorded A, as
+        the verdict calls such an A INVALID (judge[3], protocol[1])."""
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        table = Path(d, 'acceptance.json')
+        table.write_text(json.dumps({**TABLE, 'a_tree': '816045c7264481bc6956285e1ca89991b9fcec2f (release 1)'}))
+        for revision, want in (('816045c7264481bc6956285e1ca89991b9fcec2f', 0), ('0' * 40, 3)):
+            for n, values in ((1, [300, 298]), (2, [306, 304])):
+                Path(d, f'A-r{n}-open.json').write_text(json.dumps(_round(
+                    'A', n, {'open.later.first_page.P0': values, 'open.text.frame.P0': [100 + n]}, revision=revision)))
+            for command in ('spread', 'floors'):
+                with self.subTest(revision=revision[:8], command=command):
+                    extra = ['--source', 'test'] if command == 'floors' else []
+                    out, err = io.StringIO(), io.StringIO()
+                    with unittest.mock.patch('sys.stdout', out), unittest.mock.patch('sys.stderr', err):
+                        code = JUDGE.main([command, '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance',
+                                           str(table), *extra])
+                    self.assertEqual(code, want, err.getvalue())
+                    if want:
+                        self.assertEqual(out.getvalue(), '')
+                        self.assertIn('is not release 1', err.getvalue())
+
+    def test_the_spread_and_the_floors_refuse_a_pair_whose_rounds_ran_different_parts(self):
+        """protocol[0]: an A/A pair is the same part groups twice. A group in one round only (here a check-only group,
+        which no row's A reads, so derive alone accepts the pair) is refused, exit 3, nothing printed."""
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        good = {'open.later.first_page.P0': [300, 298], 'open.text.frame.P0': [100]}
+        gates = ('records', 'left-behind', 'correct')
+        for n in (1, 2):
+            Path(d, f'A-r{n}-open.json').write_text(json.dumps(_round('A', n, good)))
+        Path(d, 'A-r1-records+left-behind+correct.json').write_text(json.dumps(
+            _round('A', 1, {}, parts=gates, controls=False, checks={'records.equation': {'ok': True}})))
+        table = Path(d, 'acceptance.json')
+        table.write_text(json.dumps(TABLE))
+        for command in ('spread', 'floors'):
+            with self.subTest(command=command):
+                extra = ['--source', 'test'] if command == 'floors' else []
+                out, err = io.StringIO(), io.StringIO()
+                with unittest.mock.patch('sys.stdout', out), unittest.mock.patch('sys.stderr', err):
+                    code = JUDGE.main([command, '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance',
+                                       str(table), *extra])
+                self.assertEqual(code, 3)
+                self.assertEqual(out.getvalue(), '')
+                self.assertIn('ran different parts', err.getvalue())
+        Path(d, 'A-r2-records+left-behind+correct.json').write_text(json.dumps(
+            _round('A', 2, {}, parts=gates, controls=False, checks={'records.equation': {'ok': True}})))
+        with unittest.mock.patch('sys.stdout', io.StringIO()):  # the same groups twice: the pair derives
+            self.assertEqual(JUDGE.main(['floors', '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance',
+                                         str(table), '--source', 'test']), 0)
 
     def test_floors_check_holds_the_table_to_its_own_pair_byte_for_byte(self):
         """protocol[2]: the committed table must be exactly what judge.py floors writes from its A/A pair."""
@@ -1164,6 +1480,20 @@ class JudgeTests(unittest.TestCase):
             self.assertNotIn('a_recorded', got[name])
         with self.assertRaises(ValueError):
             JUDGE.derive(table, first, {'metrics': {'m': [10]}}, 'test')  # 'rel' reads A and the pair has no k
+
+    def test_derive_refuses_a_round_with_too_few_samples(self):
+        """Section 8 and D-R2-44: the floors apply the validity rule, too few samples included: a round that kept 1 of
+        a row's 6 samples (min_samples 18 over a session's three rounds) never sets its recorded A, spread or floor."""
+        table = {'controls': [], 'rows': [{'id': 'x', 'metric': 'm', 'min_samples': 18, 'gate': [{'rel_max': 1.02}]}]}
+        six = [300, 298, 305, 301, 299, 303]
+        derived = JUDGE.derive(table, {'metrics': {'m': six}}, {'metrics': {'m': six}}, 't')
+        self.assertIn('x', derived['derived']['rows'])
+        for short in ([304], six[:5], six[:5] + [None]):
+            with self.subTest(short=short), self.assertRaisesRegex(ValueError, 'too few samples'):
+                JUDGE.derive(table, {'metrics': {'m': six}}, {'metrics': {'m': short}}, 't')
+        table['rows'][0]['needs_a'] = False  # a row that does not read A is not counted
+        derived = JUDGE.derive(table, {'metrics': {'m': six}}, {'metrics': {'m': [1]}}, 't')
+        self.assertNotIn('x', derived['derived']['rows'])
 
     def test_derive_is_reproducible_byte_for_byte(self):
         """protocol[2]: the same table and pair give the same bytes, whether the table was derived before or not, and
@@ -1697,11 +2027,48 @@ class AcceptanceTableTests(unittest.TestCase):
         self.assertNotIn('spread', self.table)  # the old block of median spreads is gone
         self.assertEqual(_derived_problems(self.table, DERIVED_SHA256), [])
 
+    def test_the_rows_that_do_not_read_a_are_judged_on_their_absolute_limit_alone(self):
+        """judge[2]: the general gain rule made the six needs_a-false rows INVALID in every B session (floors write no
+        spread on them). Derived from a pair that measured every metric row, each PASSes a B under its limit with A at
+        release 1's aa4 values above it, and FAILs a B 5% over it, never INVALID."""
+        metric_rows = [r for r in self.table['rows'] if r.get('kind', 'metric') == 'metric' and r.get('metric')]
+        pair = [{'metrics': {r['metric']: [10 + n] * -(-r.get('min_samples', 1) // 3) for r in metric_rows}}
+                for n in (0, 1)]
+        rows = {r['id']: r for r in JUDGE.derive(self.table, pair[0], pair[1], 'guard pair')['rows']}
+        a_values = {'documents-usable-18000-P1': 124901, 'documents-long-task-1500-P0': 454,
+                    'documents-long-task-18000-P0': 6439, 'key-event-18000-P1': 7464, 'cold-closed-loop': 3213.1,
+                    'worker-retained': 29.5}
+        b_pass = {'documents-usable-18000-P1': 250, 'documents-long-task-1500-P0': 30,
+                  'documents-long-task-18000-P0': 50, 'key-event-18000-P1': 104, 'cold-closed-loop': 110,
+                  'worker-retained': 3}
+        for rid, a in a_values.items():
+            with self.subTest(row=rid):
+                row = rows[rid]
+                self.assertIs(row.get('needs_a'), False)
+                need = row.get('min_samples', 1)
+                a_rounds = {1: {'metrics': {row['metric']: [a] * need}}}
+                ok = JUDGE.judge_row(row, a_rounds, {1: {'metrics': {row['metric']: [b_pass[rid]] * need}}})
+                self.assertEqual(ok['verdict'], 'PASS', ok['why'])
+                over = [g['abs_max'] for g in row['gate'] if 'abs_max' in g][0] * 1.05
+                no = JUDGE.judge_row(row, a_rounds, {1: {'metrics': {row['metric']: [over] * need}}})
+                self.assertEqual(no['verdict'], 'FAIL', no['why'])
+        self.assertEqual([r['id'] for r in self.table['rows'] if r.get('needs_a') is False and r.get('gain')], [])
+
+    def test_the_table_marks_every_row_whose_control_is_a(self):
+        """judge[7]: walk.passes and every correct.* row are checked on A as the control (control_a); records.list_ids
+        and plans.* are not (release 1 is expected to fail them)."""
+        marked = {r['check'] for r in self.table['rows'] if r.get('control_a')}
+        want = {r['check'] for r in self.table['rows'] if r.get('kind') == 'check' and
+                (r['check'] == 'walk.passes' or r['check'].startswith('correct.'))}
+        self.assertEqual(len(want), 8)
+        self.assertEqual(marked, want)
+
     def test_a_derived_table_is_held_to_its_recorded_inputs(self):
         """protocol[3]: on a derived table the check recomputes every value from the recorded inputs and pins their
         sha256, so a floor moved with its spread copy, or inputs rewritten with their sha256, both fail."""
         reads = [r for r in self.table['rows'] if JUDGE.reads_a(r)]
-        pair = [{'metrics': {r['metric']: [100 + 3 * n] for r in reads}} for n in (0, 1)]
+        pair = [{'metrics': {r['metric']: [100 + 3 * n] * -(-r.get('min_samples', 1) // 3) for r in reads}}
+                for n in (0, 1)]
         derived = JUDGE.derive(self.table, pair[0], pair[1], 'test pair')
         pin = derived['derived']['sha256']
         self.assertEqual(_derived_problems(derived, pin), [])
@@ -1724,7 +2091,8 @@ class AcceptanceTableTests(unittest.TestCase):
         A."""
         reads = [r for r in self.table['rows'] if JUDGE.reads_a(r)]
         self.assertGreater(len(reads), 90)
-        pair = [{'metrics': {r['metric']: [10 + n] for r in reads}} for n in (0, 1)]
+        pair = [{'metrics': {r['metric']: [10 + n] * -(-r.get('min_samples', 1) // 3) for r in reads}}
+                for n in (0, 1)]
         derived = JUDGE.derive(self.table, pair[0], pair[1], 'test')
         for row in derived['rows']:
             floors = [g for g in row.get('gate', []) if JUDGE.needs_floor(g)]

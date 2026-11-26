@@ -25,8 +25,10 @@ Otherwise each gated row is judged on the pooled median of its samples (or its s
 - an absolute limit is the number;
 - a limit relative to A uses A measured in the same session, and a "no worse than A" limit (factor >= 1) is never
   tighter than A x (1 + 2 x that metric's recorded A/A spread): the floor_factor acceptance.json carries, derived
-  before any B was measured (judge.py floors), never at run time (C5);
-- a gain - wherever a limit lies below A (above it for a rate) - counts only when it exceeds twice the A/A spread.
+  before any B was measured (judge.py floors), never at run time (C5); and on a row with an instrument step (a_step),
+  never below A + one step (judge[5]);
+- a gain - wherever a limit lies below A (above it for a rate) - counts only when it exceeds twice the A/A spread, on
+  every row that reads A (a needs_a-false row is judged on its absolute limit alone: judge[2]).
 """
 from __future__ import annotations
 
@@ -45,6 +47,7 @@ ROUND_RE = re.compile(r'^(?P<tag>[A-Za-z][A-Za-z0-9_]{0,15})-r(?P<round>\d+)-'
 MAX_LOAD = 8.0
 A_TOLERANCE = 0.20
 ROUND_PROFILES = ('P0', 'P1', 'P2', 'P3')  # a round file without its own profiles ran them all (bench_run.PROFILES)
+PROFILE_PARTS = ('open', 'lists')  # bench_run's only parts that read the round's profiles
 
 
 # --- reading rounds ---------------------------------------------------------------------------------------------------
@@ -56,7 +59,14 @@ def file_profiles(name: str) -> tuple:
     return tuple(parts.split('@', 1)[1].split('+')) if '@' in parts else ROUND_PROFILES
 
 
-def attempt_reasons(name: str, data: dict, controls=()) -> list:
+def coverage(name: str, data: dict) -> set:
+    """What one round file measured, whatever its group is called: (part, profile) for open and lists, (part, '*')
+    for every other part, which runs alike whatever profiles it is given (office and office@P0 are one measurement)."""
+    profiles = file_profiles(name)
+    return {(part, p) for part in data.get('parts', []) for p in (profiles if part in PROFILE_PARTS else ('*',))}
+
+
+def attempt_reasons(name: str, data: dict, controls=(), revision=None) -> list:
     """Why one round file is INVALID on its own: invalid_reasons' round rules applied to this file alone (a load sample
     above 8, a failed part, an unexpected status, a console error, a request off loopback, an operation that never
     finished), and the controls where this file's open part ran at P0, the only profile that plants them. The driver
@@ -78,10 +88,12 @@ def attempt_reasons(name: str, data: dict, controls=()) -> list:
                 why.append(f'control {control} missing')
             elif not found.get('ok'):
                 why.append(f'control {control} failed')
+    if revision and data.get('revision') != revision:  # judge[9]: a file of another tree is no attempt of this tag's
+        why.append(f'measured on revision {str(data.get("revision"))[:12]}, not {str(revision)[:12]}')
     return why
 
 
-def chosen_attempts(out: Path, controls=()) -> tuple[list, list]:
+def chosen_attempts(out: Path, controls=(), revisions=None) -> tuple[list, list]:
     """(kept, not used): for each tag, base round (round mod 100) and part group, the FIRST attempt that is valid on its
     own (attempt_reasons), else the newest, so a round with no valid attempt stays INVALID. A valid round is final: the
     driver runs a round again as round + 100 only after an INVALID attempt, and an attempt found after a valid one is
@@ -95,7 +107,9 @@ def chosen_attempts(out: Path, controls=()) -> tuple[list, list]:
     kept, unused = [], []
     for key, found in attempts.items():
         found.sort()
-        valid = [path for _, path in found if not attempt_reasons(path.name, json.loads(path.read_text()), controls)]
+        named = (revisions or {}).get(key[0])  # judge[9]: the tag's named tree, when the caller names one
+        valid = [path for _, path in found
+                 if not attempt_reasons(path.name, json.loads(path.read_text()), controls, named)]
         choice = valid[0] if valid else found[-1][1]
         kept.append(choice)
         unused += [path.name for _, path in found if path != choice]
@@ -112,11 +126,11 @@ def _and_merge(into: dict, more: dict):
                                                   'by_file': prior.get('by_file', [prior]) + [value]}
 
 
-def load_rounds(out: Path, controls=()) -> dict:
+def load_rounds(out: Path, controls=(), revisions=None) -> dict:
     """{tag: {base round: merged}}: the chosen attempt of each round file of the folder (chosen_attempts), the files of
     one tag and base round merged: metrics pooled, checks and controls ANDed, every file's tree kept."""
     rounds = {}
-    kept, superseded = chosen_attempts(Path(out), controls)
+    kept, superseded = chosen_attempts(Path(out), controls, revisions)
     for path in kept:
         m = ROUND_RE.match(path.name)
         data = json.loads(path.read_text())
@@ -126,6 +140,12 @@ def load_rounds(out: Path, controls=()) -> dict:
             'requests': None, 'requests_effort': None, 'trees': set(), 'static': {}, 'office': {}, 'front_door': None,
             'superseded': superseded})
         merged['parts'] += data.get('parts', [])
+        covered = merged.setdefault('covered', {})  # D-R2-44: a valid round is final under any group name
+        for pair in sorted(coverage(path.name, data)):
+            if pair in covered:
+                merged.setdefault('remeasured', []).append(f'{"@".join(pair)}: {covered[pair]} and {path.name}')
+            else:
+                covered[pair] = path.name
         for name, values in data.get('metrics', {}).items():
             merged['metrics'].setdefault(name, []).extend(values)
         _and_merge(merged['checks'], data.get('checks', {}))
@@ -141,13 +161,20 @@ def load_rounds(out: Path, controls=()) -> dict:
         merged['files'].update(data.get('files', {}))
         merged['revision'] = data.get('revision') or merged['revision']
         merged['trees'].add((data.get('revision'), json.dumps(data.get('files') or {}, sort_keys=True)))
-        if data.get('requests') is not None:
+        twice = merged.setdefault('remeasured', [])  # judge[0]: requests, an office size and the front door come
+        if data.get('requests') is not None:          # from one file of a round, never the last of two
+            if merged['requests'] is not None:
+                twice.append(f'requests: {path.name} and an earlier file')
             merged['requests'] = data['requests']
             merged['requests_effort'] = data.get('requests_effort')
         merged['static'].update(data.get('static', {}))
         for size, value in (data.get('office') or {}).items():
+            if str(size) in merged['office']:
+                twice.append(f'office {size}: {path.name} and an earlier file')
             merged['office'][str(size)] = value
         if data.get('front_door'):
+            if merged['front_door']:
+                twice.append(f'front_door: {path.name} and an earlier file')
             merged['front_door'] = data['front_door']
     return rounds
 
@@ -257,7 +284,7 @@ def derive(table: dict, first: dict, second: dict, source: str) -> dict:
     The table is first stripped of earlier values (base_table), so a derivation is reproducible: the same table and
     rounds give the same bytes. ValueError when the pair lacks a value a row reads (a part group never measured)."""
     out = base_table(table)
-    values, missing = {}, []
+    values, missing, short = {}, [], []
     for row in out['rows']:
         if not reads_a(row):
             continue
@@ -267,9 +294,17 @@ def derive(table: dict, first: dict, second: dict, source: str) -> dict:
         if None in found:
             missing.append(row['id'])
             continue
+        # section 8's validity rule: too few samples is INVALID, A's too; min_samples counts a session's three rounds
+        need = math.ceil(row.get('min_samples', 1) / 3)
+        counts = [sum(1 for v in r if isinstance(v, (int, float)) and not isinstance(v, bool)) for r in (one, two)]
+        if min(counts) < need:
+            short.append(f'{row["id"]} {counts} (need {need} a round)')
+            continue
         values[row['id']] = found
     if missing:
         raise ValueError(f'the A/A pair has no value for {len(missing)} row(s) that read A: {missing[:10]}')
+    if short:
+        raise ValueError(f'too few samples in an A/A round for {len(short)} row(s) that read A: {short[:10]}')
     for row in out['rows']:
         if row['id'] in values:
             derive_row(row, *values[row['id']])
@@ -378,6 +413,11 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
         results = [r['checks'].get(row['check']) for r in b_rounds.values()]
         if not results or any(r is None for r in results):
             return {**out, 'verdict': 'INVALID', 'why': [f'check {row["check"]} missing in a round']}
+        if row.get('control_a'):  # R2-32 M5 and M9: checked on A as the control (the walk on A first)
+            on_a = [r['checks'].get(row['check']) for r in a_rounds.values()]
+            if not on_a or any(c is None or not c.get('ok') for c in on_a):
+                return {**out, 'verdict': 'INVALID', 'detail_a': on_a,
+                        'why': [f'A, the control, did not pass {row["check"]} in every round']}
         if not all(r['ok'] for r in results):
             return {**out, 'verdict': 'FAIL', 'why': [f'check {row["check"]} failed'], 'detail': results}
         return out
@@ -438,7 +478,9 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
                 ff = gate.get('floor_factor')
                 if ff is None:
                     return {**out, 'verdict': 'INVALID', 'why': ['no recorded A/A spread for a no-worse-than-A limit']}
-                floor = ff * a + (stat(pooled(b_rounds, gate['plus_metric']), how) if gate.get('plus_metric') else 0)
+                # never tighter than one step of the row's instrument (a_step), as the A-column check (D-R2-47)
+                floor = max(ff * a, a + (row.get('a_step') or 0)) + \
+                    (stat(pooled(b_rounds, gate['plus_metric']), how) if gate.get('plus_metric') else 0)
                 limit = max(limit, floor)
             limits.append(('max', limit, f'{factor} A + {plus}'))
     for direction, limit, label in limits:
@@ -451,7 +493,7 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
     # relative, lies below A (above it for a rate), not only on a row flagged gain (judge[10]: scan20's 400 ms)
     below = [v for d, v, _ in limits if d == 'max' and a is not None and v < a]
     above = [v for d, v, _ in limits if d == 'min' and a is not None and v > a]
-    if out['verdict'] == 'PASS' and (row.get('gain') or below or above):
+    if out['verdict'] == 'PASS' and reads_a(row) and (row.get('gain') or below or above):  # needs_a false: B alone
         s = row.get('spread')
         if s is None:
             return {**out, 'verdict': 'INVALID', 'why': ['no recorded A/A spread for a gain']}
@@ -491,6 +533,8 @@ def invalid_reasons(rounds: dict, tags, *, control: bool, controls: list, a_revi
                 why.append(f'{where}: load average {max(peaks):.1f} > {MAX_LOAD}')
             if r['errors']:
                 why.append(f'{where}: a part failed: {str(r["errors"][0])[:200]}')
+            if r.get('remeasured'):  # one part at one profile measured twice in one round (D-R2-44)
+                why.append(f'{where}: measured twice: {r["remeasured"][:3]}')
             if r.get('unfinished'):  # its samples were never recorded, so no row can see it (judge[1])
                 why.append(f'{where}: {len(r["unfinished"])} operation(s) never finished: {r["unfinished"][:3]}')
             if 'open' in r['parts']:
@@ -510,15 +554,29 @@ def invalid_reasons(rounds: dict, tags, *, control: bool, controls: list, a_revi
             if others:
                 why.append(f'{tag} is not release 1: revision(s) {[o[:12] for o in others[:3]]}, the table names '
                            f'{a_revision[:12]}')
+    if len(tags) == 2 and tags[0] != tags[1] and all(rounds.get(t) for t in tags) and \
+            set(rounds[tags[0]]) != set(rounds[tags[1]]):  # A B A B A B: no tag gets rounds of its own
+        why.append(f'{tags[0]} and {tags[1]} carry different rounds: {sorted(rounds[tags[0]])} and '
+                   f'{sorted(rounds[tags[1]])}')
     if not control and len(tags) == 2 and all(t in hashes for t in tags) and hashes[tags[0]] & hashes[tags[1]]:
         why.append('the two trees\' app.js hashes are equal (judge A against A only with --control)')
     return why
 
 
-def verdict(rounds: dict, table: dict, a: str, b: str, *, control: bool = False) -> dict:
+def table_a_revision(table: dict):
+    """The 40-hex release-1 revision the table's a_tree names, else None."""
     named = re.match(r'[0-9a-f]{40}', str(table.get('a_tree') or ''))
+    return named.group(0) if named else None
+
+
+def verdict(rounds: dict, table: dict, a: str, b: str, *, control: bool = False, b_revision=None) -> dict:
     why = invalid_reasons(rounds, [a, b], control=control, controls=table.get('controls', []),
-                          a_revision=named.group(0) if named else None)
+                          a_revision=table_a_revision(table))
+    if b_revision:  # judge[9]: B judged as the commit named, as A is as release 1
+        others = sorted({str(rev) for r in rounds.get(b, {}).values() for rev, _ in r.get('trees', ())
+                         if rev != b_revision})
+        if others:
+            why.append(f'{b} is not {b_revision[:12]}: revision(s) {[o[:12] for o in others[:3]]}')
     rows = [judge_row({**row, 'model': table.get('office_model')} if row.get('kind') == 'office' else row,
                       rounds.get(a, {}), rounds.get(b, {}), control=control) for row in table['rows']]
     if why or any(r['verdict'] == 'INVALID' for r in rows):
@@ -534,21 +592,22 @@ def verdict(rounds: dict, table: dict, a: str, b: str, *, control: bool = False)
     return {'verdict': answer, 'invalid': why, 'superseded': superseded, 'trees': trees, 'rows': rows}
 
 
-def aa_pair(out: Path, specs: list, controls: list) -> tuple[list, list]:
+def aa_pair(out: Path, specs: list, controls: list, a_revision: str | None = None) -> tuple[list, list]:
     """([round 1, round 2], why not): the A/A pair TAG:ROUND twice, each round merged as load_rounds does, and
     every reason it cannot give floors or a recorded A (protocol[0]: C5's floors come from valid rounds only; an
-    INVALID round is run again, never used): a round missing or INVALID by the round rules, two tags, or rounds that
-    ran different parts."""
-    rounds = load_rounds(Path(out), controls)
+    INVALID round is run again, never used): a round missing or INVALID by the round rules, two tags, rounds that
+    ran different parts, or files not of the release-1 revision the table names (judge[1], judge[9])."""
     picked = [(x.split(':')[0], int(x.split(':')[1])) for x in specs]
     if len(picked) != 2 or picked[0][0] != picked[1][0] or picked[0][1] == picked[1][1]:
         return [], ['an A/A pair is two different rounds of one tag (--a A:1 --a A:2)']
     tag = picked[0][0]
+    rounds = load_rounds(Path(out), controls, {tag: a_revision} if a_revision else None)  # judge[9]
     pair = [rounds.get(tag, {}).get(number) for _, number in picked]
     why = [f'{tag}:{number}: no such round in {out}' for (_, number), r in zip(picked, pair) if r is None]
     if why:
         return [], why
-    why = invalid_reasons({tag: dict(zip([n for _, n in picked], pair))}, [tag], control=True, controls=controls)
+    why = invalid_reasons({tag: dict(zip([n for _, n in picked], pair))}, [tag], control=True, controls=controls,
+                          a_revision=a_revision)  # the A/A is release 1's, as every A the verdict reads
     if sorted(set(pair[0]['parts'])) != sorted(set(pair[1]['parts'])):
         why.append(f'the two rounds ran different parts: {sorted(set(pair[0]["parts"]))} and '
                    f'{sorted(set(pair[1]["parts"]))}')
@@ -677,6 +736,7 @@ def main(argv=None) -> int:
     v.add_argument('--b', required=True)
     v.add_argument('--acceptance', default=str(HERE / 'acceptance.json'))
     v.add_argument('--control', action='store_true')
+    v.add_argument('--b-revision', help="B's exact commit: a B round file of another is INVALID on its own")
     s = sub.add_parser('spread')
     s.add_argument('--out', required=True)
     s.add_argument('--a', action='append', required=True, help='TAG:ROUND, twice')
@@ -691,10 +751,14 @@ def main(argv=None) -> int:
     table = json.loads(Path(args.acceptance).read_text())
     controls = table.get('controls', [])
     if args.command == 'verdict':
-        answer = verdict(load_rounds(Path(args.out), controls), table, args.a, args.b, control=args.control)
+        revisions = {args.a: table_a_revision(table)} if table_a_revision(table) else {}  # judge[9]
+        if args.b_revision:
+            revisions[args.b] = args.b_revision
+        answer = verdict(load_rounds(Path(args.out), controls, revisions), table, args.a, args.b,
+                         control=args.control, b_revision=args.b_revision)
         print(json.dumps(answer, indent=1, default=str))
         return {'PASS': 0, 'FAIL': 1, 'INVALID': 3}[answer['verdict']]
-    pair, why = aa_pair(Path(args.out), args.a, controls)
+    pair, why = aa_pair(Path(args.out), args.a, controls, table_a_revision(table))
     if why:  # no spread, no floor and no recorded A from an INVALID or partial pair: run it again
         print('refused: ' + '; '.join(why), file=sys.stderr)
         return 3

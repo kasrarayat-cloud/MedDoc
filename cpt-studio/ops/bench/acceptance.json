@@ -2150,56 +2150,64 @@
    "table": "correct",
    "section8": "the barcode is equal on every open and re-open",
    "kind": "check",
-   "check": "correct.barcode_every_open"
+   "check": "correct.barcode_every_open",
+   "control_a": true
   },
   {
    "id": "correct.rapid_switching",
    "table": "correct",
    "section8": "rapid switching ends on the right document, with <= 2 workers",
    "kind": "check",
-   "check": "correct.rapid_switching"
+   "check": "correct.rapid_switching",
+   "control_a": true
   },
   {
    "id": "correct.word_reconvert",
    "table": "correct",
    "section8": "a stale Word conversion is never drawn",
    "kind": "check",
-   "check": "correct.word_reconvert"
+   "check": "correct.word_reconvert",
+   "control_a": true
   },
   {
    "id": "correct.access_ended",
    "table": "correct",
    "section8": "access ended means nothing drawn (membership off, document destroyed, session ended)",
    "kind": "check",
-   "check": "correct.access_ended"
+   "check": "correct.access_ended",
+   "control_a": true
   },
   {
    "id": "correct.closed_keeps_reading",
    "table": "correct",
    "section8": "a closed practice keeps reading (release 1: disposal.close, ORG-18 (4)); section 8 lists \"practice closed\" among the ends of access, which the tree contradicts: named in the lane M report",
    "kind": "check",
-   "check": "correct.closed_keeps_reading"
+   "check": "correct.closed_keeps_reading",
+   "control_a": true
   },
   {
    "id": "correct.two_tabs",
    "table": "correct",
    "section8": "another practice's sign-in shows none of the kept documents",
    "kind": "check",
-   "check": "correct.two_tabs"
+   "check": "correct.two_tabs",
+   "control_a": true
   },
   {
    "id": "correct.hung_pdf",
    "table": "correct",
    "section8": "after a hung PDF, the 20 s note appears and the next document opens",
    "kind": "check",
-   "check": "correct.hung_pdf"
+   "check": "correct.hung_pdf",
+   "control_a": true
   },
   {
    "id": "walk.passes",
    "table": "walk",
    "section8": "the walk's judge passes 46 of 46 (at least), on A first and then on B",
    "kind": "check",
-   "check": "walk.passes"
+   "check": "walk.passes",
+   "control_a": true
   },
   {
    "id": "left.heap_after_end",
