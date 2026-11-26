@@ -11,7 +11,14 @@ bytes, then a body of the header's ``size`` bytes.
 - The answer: {"status": "ok", "size": n, "sha256": hex} and the PDF (at most docx_package.MAX_PDF_BYTES), or
   {"status": "error", "kind": "refused" | "failed" | "busy", "size": 0}. The worker reads refused and failed as a failed
   conversion (CONVERT) and busy - the converter stopping, the package checks out of time, or no answer at all: an
-  unreachable socket, a timeout, a closed connection - as BUSY, which a member may retry.
+  unreachable socket, a timeout, a closed connection - as BUSY, which a member may retry. Release 2 (R2-31), additive
+  both ways: a refused answer gains "reason" (a ContentNotShown's code, docx_package.REFUSAL_CODES) and "counts" (an
+  int of 0 to MAX_COUNT for each of docx_package.LOST_KINDS) only when the file was refused for what E2 would leave
+  out of its PDF; release 1's worker reads the kind alone, and this worker believes a reason only in exactly that form
+  (_refusal) - from release 1's converter, which gives none, it reads the general refusal of a file release 1 refuses.
+  A file only release 2 refuses, release 1's converter converts as release 1 does, so this worker would code it: the
+  install plan keeps that pair apart (the converter switches before release 2's worker starts, and stays on a
+  switch-back).
 - Every connection is taken at once and read in a thread of its own (at most MAX_CONNECTIONS at a time; one more is
   closed unread), so a ping is answered at once, even while a conversion runs. Conversions run one at a time, in the
   order they came, in a thread of their own; up to BACKLOG wait their turn, and one more is answered busy at once. A
@@ -57,6 +64,7 @@ BACKLOG = 8  # conversions that may wait their turn while one runs (and the list
 MAX_CONNECTIONS = 16  # connections read at once, each in a thread of its own (the worker sends 4; a ping takes ms)
 MAX_REQUEST_BYTES = 15 * 1024 * 1024  # settings.MAX_UPLOAD_BYTES (a test holds them equal): nothing larger is uploaded
 MAX_HEADER_BYTES = 4096
+MAX_COUNT = docx_package.MAX_REFUSAL_COUNT  # the largest count of a refused file's content the worker believes (R2-31)
 REQUEST_SECONDS = 30  # how long a connection may take to send its whole request
 ANSWER_SECONDS = 30  # and to take its answer
 CONNECT_SECONDS = 2
@@ -98,7 +106,12 @@ class ConverterBusy(Exception):
 
 class ConverterFailed(Exception):
     """The converter refused the Word file, failed to convert it, or answered in a form it does not use. The worker
-    fails the document CONVERT."""
+    fails the document CONVERT. ``code`` and ``counts``: why a refused file was refused, when the converter said so in
+    the form _refusal believes (R2-31), else '' and {}."""
+
+    def __init__(self, detail, code='', counts=None):
+        super().__init__(detail)
+        self.code, self.counts = code, dict(counts or {})
 
 
 class _Malformed(Exception):
@@ -148,8 +161,29 @@ def _send(sock, data, deadline):
     sock.sendall(data)
 
 
-def _error(kind) -> dict:
-    return {'status': ERROR, 'kind': kind, 'size': 0}
+def _error(kind, code='', counts=None) -> dict:
+    """An error answer; a refusal for what E2 would leave out of the PDF also names its code and counts (R2-31)."""
+    answer = {'status': ERROR, 'kind': kind, 'size': 0}
+    if code:
+        answer.update(reason=code, counts=dict(counts or {}))
+    return answer
+
+
+def _refusal(answer) -> tuple:
+    """(code, counts) of a refused answer that names them in exactly the form a release-2 converter writes - a code of
+    docx_package.REFUSAL_CODES, consistent with counts that hold exactly docx_package.LOST_KINDS, each an int (not a
+    bool) of 0 to MAX_COUNT, not all 0 (INSERTED_DOCUMENT exactly when an inserted document or a field is counted) -
+    else ('', {}): an older converter gives none, and nothing else is believed."""
+    code, counts = answer.get('reason'), answer.get('counts')
+    if code not in docx_package.REFUSAL_CODES or type(counts) is not dict \
+            or set(counts) != set(docx_package.LOST_KINDS):
+        return '', {}
+    if any(type(value) is not int or not 0 <= value <= MAX_COUNT for value in counts.values()):
+        return '', {}
+    if not any(counts.values()) or \
+            (code == docx_package.INSERTED_DOCUMENT) != (counts['documents'] > 0 or counts['fields'] > 0):
+        return '', {}
+    return code, {kind: counts[kind] for kind in docx_package.LOST_KINDS}
 
 
 # --- the worker's side ------------------------------------------------------------------------------------------------
@@ -185,7 +219,7 @@ def request(path, data: bytes, *, connect_seconds=CONNECT_SECONDS, total_seconds
             if kind == BUSY:
                 raise ConverterBusy('the converter was busy')
             if kind == REFUSED:
-                raise ConverterFailed('the converter refused the Word package')
+                raise ConverterFailed('the converter refused the Word package', *_refusal(answer))
             if kind == FAILED:
                 raise ConverterFailed('the conversion failed in the converter')
             raise ConverterFailed('the converter answered in a form it does not use')
@@ -419,7 +453,7 @@ class ConverterServer(socketserver.UnixStreamServer):
             return
         except docx_package.ConversionRefused as exc:
             log.info('converter: refused a Word file (%s)', exc)
-            self._answer(sock, _error(REFUSED))
+            self._answer(sock, _error(REFUSED, exc.code, exc.counts))
             return
         except docx_package.ConversionFailed as exc:
             log.warning('converter: a conversion failed (%s)', exc)

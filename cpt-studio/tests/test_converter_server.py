@@ -4,7 +4,10 @@ temporary folder with stand-in runners (no LibreOffice): ok, refused, failed and
 timeout; an oversize request and an oversize answer; a client that disconnects halfway; CONVERTER_REQUIRED with no
 socket, which is BUSY and never converts in the worker; byte identity - the service's PDF equals the in-process PDF for
 the same input and runner; and a BUSY document error settling as a failed round a member may retry, through the
-existing coding path (the spec's [TO CONFIRM]). Synthetic bytes only; nothing leaves the machine."""
+existing coding path (the spec's [TO CONFIRM]). Release 2, R2-31: a refusal for what E2 would leave out of the PDF
+names its code and counts in the refused answer, additively, and the worker believes them in that one form only -
+release 1's worker and converter meet release 2's across the switch. Synthetic bytes only; nothing leaves the
+machine."""
 import hashlib
 import io
 import json
@@ -19,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -32,6 +36,7 @@ from tests.support import coding as f
 from tests.test_fable_document import (CONVERTED, DANGEROUS, DOCX, PLAIN_PACKAGE, TEXT, _echo_package, _follower,
                                        complex_field, failing_runner, fake_runner, full_package, no_pdf_runner,
                                        paragraph, private_tempdir, simple_field, word_package)
+from tests.test_r2_word import RELEASE_1_CONVERTER_BLOB, release_1_package, release_1_source
 
 CPT_STUDIO = Path(__file__).resolve().parent.parent
 MIB = 1024 * 1024
@@ -450,3 +455,238 @@ class BusyRoundTests(TestCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         with override_settings(CONVERTER_SOCKET=str(folder / 'missing.sock'), CONVERTER_REQUIRED=True):
             self.assert_busy_and_retried()
+
+
+# --- release 2, R2-31: the refused answer names its code and counts, additively ------------------------------------
+
+R2_IMPORTING = full_package(TEXT + '<w:altChunk r:id="rIdChunk"/>', document_rels=(
+    '<Relationship Id="rIdChunk" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" '
+    'Target="afchunk1.txt"/>',), parts=[('word/afchunk1.txt', 'SYNTHETIC IMPORTED TEXT')])
+R2_BARE_OBJECT = full_package(paragraph('<w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/>'
+                                        '</w:object></w:r>'), document_rels=(
+    '<Relationship Id="rIdOle" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" '
+    'Target="embeddings/object.bin"/>',), parts=[('word/embeddings/object.bin', b'\xd0\xcf synthetic object')])
+R2_REFUSALS = ((R2_IMPORTING, 'inserted_document', {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}),
+               (R2_BARE_OBJECT, 'inserted_object', {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}))
+
+
+class R2Answering:
+    """A socket that answers every convert request with ``header`` (a converter of another build, or one that
+    misbehaves), after reading the whole request."""
+
+    def __init__(self, header):
+        self.folder = Path(tempfile.mkdtemp())
+        self.path = str(self.folder / 'answering.sock')
+        self.header, self.listener = header, socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(self.path)
+        self.listener.listen(4)
+        self.listener.settimeout(0.05)  # closing it would not wake an accept: the loop looks at stopped instead
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+
+    def serve(self):
+        while not self.stopped.is_set():
+            try:
+                connection, _ = self.listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            with connection:
+                connection.settimeout(10)
+                (length,) = struct.unpack('>I', connection.recv(4, socket.MSG_WAITALL))
+                size = json.loads(connection.recv(length, socket.MSG_WAITALL))['size']
+                connection.recv(size, socket.MSG_WAITALL)
+                connection.sendall(frame(self.header))
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stopped.set()
+        self.thread.join(10)
+        self.listener.close()
+        shutil.rmtree(self.folder, ignore_errors=True)
+
+
+def r2_release_1_converter_module():
+    """Release 1's converter module - the worker and converter of the other half of the blue/green switch - from its
+    pinned fixture (tests/fixtures/release-1/, checked against its git blob id: never skipped), bound to release 1's own
+    docx_package, so its conversions run release 1's package checks as the real release 1 converter does (refutation
+    round 1, protocol[0]: bound to this tree's package, it ran release 2's checks)."""
+    module = types.ModuleType('laned_release_1_converter_server')
+    module.__package__ = 'studio'
+    exec(compile(release_1_source('converter_server.py', RELEASE_1_CONVERTER_BLOB), 'release-1 converter_server.py',
+                 'exec'), module.__dict__)
+    module.docx_package = release_1_package()
+    return module
+
+
+@override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
+class RefusalReasonTests(SimpleTestCase):
+    """R2-31 steps 2 and 3: a file refused for what E2 would leave out of its PDF is answered refused, size 0, with its
+    code and counts added; the worker believes them only in exactly the form a release-2 converter writes them, and
+    otherwise - an older converter, or anything else - reads the general refusal, as today."""
+
+    def setUp(self):
+        private_tempdir(self)
+
+    def assert_general(self, error):
+        self.assertEqual((error.failure_kind, error.text, error.code, error.counts, error.recorded()),
+                         (CONVERT, document.CONVERT_TEXT, '', {}, {}))
+
+    def test_the_raw_answer_for_each_code(self):
+        with Running(fake_runner) as running, self.assertLogs('studio.converter_server', 'INFO') as logged:
+            for data, code, counts in R2_REFUSALS:
+                with self.subTest(code=code):
+                    sock = raw(running.path)
+                    sock.sendall(frame({'op': 'convert', 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()},
+                                       data))
+                    self.assertEqual(answer_of(sock), {'status': 'error', 'kind': 'refused', 'size': 0, 'reason': code,
+                                                       'counts': counts})
+                    sock.close()
+            # any other refusal keeps release 1's answer exactly: no reason, no counts
+            data = b'PK\x03\x04 synthetic, not a zip'
+            sock = raw(running.path)
+            sock.sendall(frame({'op': 'convert', 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()}, data))
+            self.assertEqual(answer_of(sock), {'status': 'error', 'kind': 'refused', 'size': 0})
+            sock.close()
+        said = '\n'.join(logged.output)
+        self.assertIn('converter: refused a Word file (it holds inserted content that could not be shown in the PDF)',
+                      said)
+        self.assertNotIn('SYNTHETIC', said)
+        self.assertNotIn('afchunk', said)
+
+    def test_the_document_error_has_the_sentence_code_and_counts_through_the_socket_and_in_process(self):
+        with Running(fake_runner) as running, self.assertLogs('studio', 'INFO'):
+            for data, code, counts in R2_REFUSALS:
+                for path in (running.path, ''):
+                    with self.subTest(code=code, socket=bool(path)), override_settings(CONVERTER_SOCKET=path), \
+                            self.assertRaises(document.DocumentError) as caught:
+                        document.convert_docx(data, runner=failing_runner)
+                    error = caught.exception
+                    self.assertEqual((error.failure_kind, error.text, error.code, error.counts),
+                                     (CONVERT, document.REFUSED_PACKAGE_TEXT[code], code, counts))
+                    self.assertEqual(error.recorded(), {'refused': code, 'inserted': counts})
+                    if path:
+                        with self.assertRaises(converter_server.ConverterFailed) as failed:
+                            converter_server.request(path, data, total_seconds=60)
+                        self.assertEqual((str(failed.exception), failed.exception.code, failed.exception.counts),
+                                         ('the converter refused the Word package', code, counts))
+
+    def test_a_reason_in_any_other_form_gives_the_general_sentence_and_no_record(self):
+        good = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
+        refused = {'status': 'error', 'kind': 'refused', 'size': 0}
+        variants = {
+            'an older converter: no reason': refused,
+            'an unknown reason': {**refused, 'reason': 'inserted_picture', 'counts': good},
+            'a reason that is a list': {**refused, 'reason': ['inserted_document'], 'counts': good},
+            'counts that are a list': {**refused, 'reason': 'inserted_document', 'counts': [1, 0, 0, 0]},
+            'no counts': {**refused, 'reason': 'inserted_document'},
+            'a count missing': {**refused, 'reason': 'inserted_document',
+                                'counts': {'documents': 1, 'objects': 0, 'controls': 0}},
+            'an extra key': {**refused, 'reason': 'inserted_document', 'counts': {**good, 'pages': 0}},
+            'True for a count': {**refused, 'reason': 'inserted_document', 'counts': {**good, 'documents': True}},
+            '-1': {**refused, 'reason': 'inserted_object', 'counts': {**good, 'documents': 0, 'objects': -1}},
+            'a string': {**refused, 'reason': 'inserted_document', 'counts': {**good, 'documents': '1'}},
+            'a float': {**refused, 'reason': 'inserted_document', 'counts': {**good, 'documents': 1.0}},
+            'past 1,000,000': {**refused, 'reason': 'inserted_document', 'counts': {**good, 'documents': 1_000_001}},
+            'every count 0': {**refused, 'reason': 'inserted_object', 'counts': {**good, 'documents': 0}},
+            'a document code with no document': {**refused, 'reason': 'inserted_document',
+                                                 'counts': {**good, 'documents': 0, 'objects': 1}},
+            'an object code with a document': {**refused, 'reason': 'inserted_object', 'counts': good},
+            'an object code with a field (R2-30\'s fallback is told as a document)': {
+                **refused, 'reason': 'inserted_object', 'counts': {**good, 'documents': 0, 'fields': 1}},
+            'a reason on a failure': {'status': 'error', 'kind': 'failed', 'size': 0, 'reason': 'inserted_document',
+                                      'counts': good},
+        }
+        for label, header in variants.items():
+            with self.subTest(label), R2Answering(header) as answering, \
+                    override_settings(CONVERTER_SOCKET=answering.path), \
+                    self.assertRaises(document.DocumentError) as caught:
+                document.convert_docx(PLAIN_PACKAGE)
+            self.assert_general(caught.exception)
+        # the positive control: the same listener, in the one form believed
+        with R2Answering({**refused, 'reason': 'inserted_document', 'counts': good}) as answering, \
+                override_settings(CONVERTER_SOCKET=answering.path), \
+                self.assertRaises(document.DocumentError) as caught:
+            document.convert_docx(PLAIN_PACKAGE)
+        self.assertEqual((caught.exception.code, caught.exception.counts), ('inserted_document', good))
+        fields = {**good, 'documents': 0, 'fields': 1}  # and a field R2-30's fallback counts, told as a document
+        with R2Answering({**refused, 'reason': 'inserted_document', 'counts': fields}) as answering, \
+                override_settings(CONVERTER_SOCKET=answering.path), \
+                self.assertRaises(document.DocumentError) as caught:
+            document.convert_docx(PLAIN_PACKAGE)
+        self.assertEqual((caught.exception.code, caught.exception.counts, caught.exception.text),
+                         ('inserted_document', fields, document.REFUSED_PACKAGE_TEXT['inserted_document']))
+        self.assertEqual(converter_server.MAX_COUNT, 1_000_000)
+
+    def test_a_count_past_the_bound_gives_one_sentence_and_record_on_every_path(self):
+        # refutation round 1, protocol[1]: the converter sent a count past the bound unclamped and the worker, which
+        # believes none past it, gave the general sentence and no record - while the same file through the worker's
+        # own check (C8) or an in-process conversion gave R2-31's. ContentNotShown carries every count at most at the
+        # bound, so each path gives the same refusal. The bound is lowered to 2 here, in both modules alike as in
+        # production, so three objects pass it.
+        self.assertEqual((docx_package.MAX_REFUSAL_COUNT, converter_server.MAX_COUNT), (1_000_000, 1_000_000))
+        past = docx_package.MAX_REFUSAL_COUNT + 1
+        self.assertEqual(docx_package.ContentNotShown({'objects': past}).counts['objects'],
+                         docx_package.MAX_REFUSAL_COUNT)
+        bare = '<w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object></w:r>'
+        three = full_package(paragraph(bare * 3), document_rels=(
+            '<Relationship Id="rIdOle" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'package" Target="embeddings/object.bin"/>',), parts=[('word/embeddings/object.bin',
+                                                                   b'\xd0\xcf synthetic')])
+        counts = {'documents': 0, 'objects': 2, 'controls': 0, 'fields': 0}
+        expected = (CONVERT, document.REFUSED_PACKAGE_TEXT['inserted_object'], 'inserted_object', counts,
+                    {'refused': 'inserted_object', 'inserted': counts})
+        with mock.patch.object(docx_package, 'MAX_REFUSAL_COUNT', 2), \
+                mock.patch.object(converter_server, 'MAX_COUNT', 2), Running(fake_runner) as running, \
+                self.assertLogs('studio', 'INFO'):
+            for path in (running.path, ''):  # the converter's answer, and a conversion in the worker
+                with self.subTest(socket=bool(path)), override_settings(CONVERTER_SOCKET=path), \
+                        self.assertRaises(document.DocumentError) as caught:
+                    document.convert_docx(three, runner=failing_runner)
+                error = caught.exception
+                self.assertEqual((error.failure_kind, error.text, error.code, error.counts, error.recorded()),
+                                 expected)
+            with self.subTest('the worker\'s own check (C8)'), self.assertRaises(document.DocumentError) as caught:
+                document.needs_fresh_conversion(three)
+            error = caught.exception
+            self.assertEqual((error.failure_kind, error.text, error.code, error.counts, error.recorded()), expected)
+
+    def test_release_1s_worker_and_converter_meet_release_2s_across_the_switch(self):
+        release_1 = r2_release_1_converter_module()
+        self.assertFalse(hasattr(release_1.docx_package, 'ContentNotShown'))  # the control: release 1's own package
+        # release 1's worker reads release 2's converter by the kind alone: a failed conversion, its general sentence
+        with Running(fake_runner) as running, self.assertLogs('studio', 'INFO'):
+            for data, code, _ in R2_REFUSALS:
+                with self.subTest(worker='release 1', code=code), \
+                        self.assertRaises(release_1.ConverterFailed) as caught:
+                    release_1.request(running.path, data, total_seconds=60)
+                self.assertEqual(str(caught.exception), 'the converter refused the Word package')
+        # release 1's converter gives no reason: for a file release 1 itself refuses, release 2's worker reads the
+        # general refusal
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        server = release_1.ConverterServer(str(folder / 'release-1.sock'), runner=fake_runner, idle_seconds=0.05)
+        thread = threading.Thread(target=server.serve_until_stopped, daemon=True)
+        thread.start()
+        try:
+            with self.assertLogs(release_1.log.name, 'INFO'):  # its own logger: the module loaded from the fixture
+                with override_settings(CONVERTER_SOCKET=server.path), \
+                        self.assertRaises(document.DocumentError) as caught:
+                    document.convert_docx(b'PK\x03\x04 synthetic, not a zip')
+                self.assert_general(caught.exception)
+                # and a file only release 2 refuses, release 1's converter converts - the import or the object left out,
+                # as release 1 does today. That direction is outside the install plan: the converter switches at phase
+                # 3, before release 2's worker (S4), and stays on switch-back; a converter rolled back to release 1
+                # after S4 would code such files without the import or the object.
+                for data, code, _ in R2_REFUSALS:
+                    with self.subTest(converter='release 1', code=code), \
+                            override_settings(CONVERTER_SOCKET=server.path):
+                        self.assertTrue(document.convert_docx(data).startswith(b'%PDF-'))
+        finally:
+            server.draining = True
+            thread.join(30)
+            server.server_close()

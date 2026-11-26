@@ -31,10 +31,40 @@ before it waits on it, so the parent's finally kills that group as well as the c
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
   spell), keeping the result the reader sees - a field's type read from its live instruction text, text a tracked
   change deleted counting only when nothing live names a type (_Field); w:object (its preview picture kept), w:control
-  and w:altChunk, with the parts only they named, and their Overrides in the content types. Each part is edited by byte
-  ranges of its own bytes, never written out again, and a part with nothing to remove passes through byte for byte: a
-  Word file with none of these features gives exactly the package it gave before release 1. A formula ('=' first) is
-  never removed. What was removed is reported as counts only.
+  and a w:altChunk that holds nothing, with the parts only they named, and their Overrides in the content types. Each
+  part is edited by byte ranges of its own bytes, never written out again, and a part with nothing to remove passes
+  through byte for byte: a Word file with none of these features gives exactly the package it gave before release 1. A
+  formula ('=' first) is never removed. What was removed is reported as counts only.
+- Release 2, the canonical package gate (refutation round 3, D-R2-46): once release 1's own checks pass - its refusals
+  run first, with their reasons -, the package's structure - its zip archive and entry names, every relationships part
+  and its targets, the content types, and the id a preview names - must be in the one form a Word package takes, where
+  lane D, LibreOffice and the doctor's Word read every structural reference alike; any other form is refused
+  (PackageNotCanonical, told as an inserted document) before E2 reads a part, whatever the file holds. The files
+  measured from Word and the real tools are in that form; a tool that copies a template's relationships part without its
+  part is not (pandoc 3.1.3 with --reference-doc copies every word/_rels/*.xml.rels but document's and footnotes', such
+  as a docx-npm template's endnotes.xml.rels), and form 3 refuses it (class b).
+- Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
+  would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
+  rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
+  reader resolves, LibreOffice or the doctor's Word, or by a target no reading resolves (refutation round 2, D-R2-40) -,
+  in any format, story or namespace form, and - on purpose, although the file holds nothing of it - one whose
+  relationship is External, and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or
+  pointer that would leave no picture - a v:imagedata or a:blip whose relationship, as LibreOffice reads it, names by
+  the zip name LibreOffice opens a part that is sent and is a picture it decodes - in its place (R2-29); a field kept,
+  not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader sees outside the fields in it
+  while a removed field stood in its instruction, which LibreOffice 7.4 drops (R2-30's fallback); and, told as an
+  inserted document, a zip entry a Unicode Path field names otherwise than its stored name, so the part checked here
+  could be another than the part LibreOffice opens (refutation round 2, loss[6] (b)). An altChunk that holds nothing
+  (no r:id, or one naming no relationship, a missing part or an empty part) is removed as release 1 removes it,
+  counted in 'chunks'. A removed field in another field's result, and in no field's instruction, stays a
+  field whose instruction is QUOTE - a type LibreOffice shows by its stored result - unless it is an INCLUDEPICTURE
+  whose stored result shows no text, symbol or mark: a picture alone (R2-30, refutation rounds 1 and 2). Everything
+  else is edited as release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's
+  package - apart from, in a part E2 edits, a relationship id a kept attribute writes with a character reference, whose
+  relationship and part release 1 dropped (_still_named, refutation round 1's loss[6]). (Round 1's other deviation, a
+  zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed, is refused by the canonical package gate.)
+  check_in_child runs the same check on a Word file whose conversion a round stored, before that conversion is read
+  again (R2-28 step 7, C8); a package that differs from release 1's - a QUOTE or either deviation - converts afresh.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -56,7 +86,7 @@ import time
 import zipfile
 import zlib
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from xml.etree import ElementTree
 from xml.parsers import expat
 from xml.sax.saxutils import escape, quoteattr
@@ -116,6 +146,8 @@ WORD_NAMESPACES = ('http://schemas.openxmlformats.org/wordprocessingml/2006/main
 RELATIONSHIP_ID_NAMESPACES = ('http://schemas.openxmlformats.org/officeDocument/2006/relationships',
                               'http://purl.oclc.org/ooxml/officeDocument/relationships')
 VML_NAMESPACE = 'urn:schemas-microsoft-com:vml'
+DRAWINGML_NAMESPACES = ('http://schemas.openxmlformats.org/drawingml/2006/main',  # transitional
+                        'http://purl.oclc.org/ooxml/drawingml/main')  # strict
 SVG_TYPE = 'image/svg+xml'  # an SVG picture may declare a DOCTYPE; no other part of a Word package may (OPC)
 
 
@@ -128,8 +160,52 @@ class _OutOfTime(PackageRefused):
     """safe_package passed PACKAGE_SECONDS."""
 
 
+# --- release 2 (R2-28 to R2-30): what E2 would take out of a Word file and leave nothing of in the PDF ----------------
+INSERTED_DOCUMENT, INSERTED_OBJECT = 'inserted_document', 'inserted_object'  # ContentNotShown's codes (R2-28)
+REFUSAL_CODES = (INSERTED_DOCUMENT, INSERTED_OBJECT)
+# What ContentNotShown counts: inserted documents (a w:altChunk that holds content or reaches outside, a w:subDoc:
+# R2-28), objects and controls that would leave no picture (R2-29), and fields whose stored result LibreOffice 7.4
+# loses once a field in their instruction is removed (R2-30's fallback, its own count; told as an inserted document,
+# the lead's decision in refutation round 1: every removed field type pulls content from outside the file).
+LOST_KINDS = ('documents', 'objects', 'controls', 'fields')
+# the largest count a refusal carries (R2-31); a larger one is carried as this, so every path that builds the refusal -
+# the converter's answer, the worker's own check, a conversion in the worker - gives the same sentence and record
+# (refutation round 1, protocol[1])
+MAX_REFUSAL_COUNT = 1_000_000
+CONTENT_NOT_SHOWN = 'it holds inserted content that could not be shown in the PDF'  # names no part and no text
+
+
+class ContentNotShown(PackageRefused):
+    """E2 would take content out of the Word file and leave nothing of it in the PDF (release 2, Group F's rule): the
+    file is refused, and nothing of it is converted. ``counts``: how many of each of LOST_KINDS; ``code``:
+    INSERTED_DOCUMENT when it holds an inserted document or a field R2-30's fallback counts, else INSERTED_OBJECT -
+    which of the two sentences a member reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
+
+    def __init__(self, counts, reason=CONTENT_NOT_SHOWN):
+        self.counts = {kind: min(counts.get(kind, 0), MAX_REFUSAL_COUNT) for kind in LOST_KINDS}
+        self.code = INSERTED_DOCUMENT if self.counts['documents'] or self.counts['fields'] else INSERTED_OBJECT
+        super().__init__(reason)
+
+
+class PackageNotCanonical(ContentNotShown):
+    """Release 2, the canonical package gate (refutation round 3, D-R2-46): the Word file's package is not in the one
+    form a Word package takes (_require_canonical_zip, _require_canonical_structure, and a preview's id in
+    _PartReader), so lane D, LibreOffice and the doctor's Word could each read one of its structural references - a zip
+    name, a relationship, its target, a content type, the id a preview names - as another. It is refused before E2 reads
+    a part, whatever it holds, told as an inserted document, as D-R2-43's swap is: one count, the package. ``form``:
+    which form it breaks, in fixed words that name no part (the operator's log)."""
+
+    def __init__(self, form):
+        super().__init__({'documents': 1}, f'its package is not in the one form a Word package takes: {form}')
+
+
 class ConversionRefused(Exception):
-    """convert_in_child: safe_package refused the Word file; the reason is in fixed words."""
+    """convert_in_child (and check_in_child): safe_package refused the Word file; the reason is in fixed words.
+    ``code`` and ``counts``: a ContentNotShown's (R2-31), else '' and {}."""
+
+    def __init__(self, reason, code='', counts=None):
+        super().__init__(reason)
+        self.code, self.counts = code, dict(counts or {})
 
 
 class ConversionBusy(Exception):
@@ -173,8 +249,8 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
         shutil.rmtree(work, ignore_errors=True)
     if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'busy':
         raise ConversionBusy(answer[1])
-    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'refused':
-        raise ConversionRefused(answer[1])
+    if isinstance(answer, tuple) and len(answer) == 4 and answer[0] == 'refused':
+        raise ConversionRefused(*answer[1:])
     if not (isinstance(answer, tuple) and len(answer) == 3 and answer[0] == 'pdf'):
         raise ConversionFailed('the conversion produced no PDF')
     _, pdf, removed = answer
@@ -189,15 +265,69 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
 
 def _convert_package(runner, data: bytes, work: str):
     """In the bounded child (its memory cap and wall clock bound the zip and XML reading too): ('pdf', what ``runner``
-    makes of safe_package(data) in the work folder ``work``, the removal counts), ('refused', reason), or ('busy',
-    reason) when the checks ran out of PACKAGE_SECONDS."""
+    makes of safe_package(data) in the work folder ``work``, the removal counts), ('refused', reason, code, counts) - a
+    ContentNotShown's code and counts, else '' and {} (R2-31) -, or ('busy', reason) when the checks ran out of
+    PACKAGE_SECONDS."""
     try:
         package, removed = _safe_package(data)
     except _OutOfTime as exc:
         return ('busy', str(exc))
+    except ContentNotShown as exc:
+        return ('refused', str(exc), exc.code, dict(exc.counts))
     except PackageRefused as exc:
-        return ('refused', str(exc))
+        return ('refused', str(exc), '', {})
     return ('pdf', runner(package, Path(work)), removed)
+
+
+# check_in_child's answer when the check could not decide a file it opened as a zip (refutation round 2, rounds[0]):
+# truthy, so a later round converts afresh, as for R2-30's edit - and a round's own view is read again only once the
+# converter has accepted the file (studio.jobs._stored_conversion)
+CHECK_UNDECIDED = 'undecided'
+
+
+def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES):
+    """Release 2, R2-28 step 7 (C8): release 2's package check of ``data`` - a Word file a round of whose revision
+    stored its conversion - before that conversion is read again, run as a conversion's check runs (in a bounded child
+    of ``seconds`` and ``memory_bytes``, safe_package's own PACKAGE_SECONDS inside it) and converting nothing.
+
+    False: the stored conversion may be read again - the check refused nothing and the package is release 1's: no
+    QUOTE shell (R2-30), no name stored without the UTF-8 flag read as UTF-8 (R2-28 step 2) and no id kept only as
+    expat reads it (R2-29 step 5) - refutation round 2, rounds[1]: either of the last two keeps a picture release 1's
+    package lost -; or the file is no zip at all, which every deployed version refused at that same line, so no stored
+    conversion came of it (the stand-ins of the job tests). True: the round converts afresh - its package is not release
+    1's. CHECK_UNDECIDED: the check refused the zip for a reason that is not ContentNotShown, before its parts were read
+    or after (refutation round 1, protocol[2]: a zip that passes a limit is no exception), and the converter decides,
+    as for a fresh conversion (round 2, rounds[0]). ConversionRefused (with ContentNotShown's code and counts),
+    ConversionBusy or ConversionFailed otherwise, as convert_in_child raises them."""
+    try:
+        answer = bounded.run_bounded(_check_package, data, seconds=seconds, memory_bytes=memory_bytes)
+    except bounded.Overrun as exc:
+        raise ConversionFailed(f'the check passed its {exc.reason} limit') from None
+    except Exception as exc:  # noqa: BLE001 - the child's failure is logged by run_bounded
+        raise ConversionFailed(type(exc).__name__) from None
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'busy':
+        raise ConversionBusy(answer[1])
+    if isinstance(answer, tuple) and len(answer) == 4 and answer[0] == 'refused':
+        raise ConversionRefused(*answer[1:])
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'checked' \
+            and answer[1] in (True, False, CHECK_UNDECIDED):
+        return answer[1]
+    raise ConversionFailed('the check gave no answer')
+
+
+def _check_package(data: bytes):
+    """In check_in_child's bounded child: ('checked', False, True or CHECK_UNDECIDED), ('refused', reason, code, counts)
+    for ContentNotShown, or ('busy', reason)."""
+    report = {}
+    try:
+        _package(data, report)
+    except _OutOfTime as exc:
+        return ('busy', str(exc))
+    except ContentNotShown as exc:
+        return ('refused', str(exc), exc.code, dict(exc.counts))
+    except PackageRefused:
+        return ('checked', CHECK_UNDECIDED if report.get('zip') else False)
+    return ('checked', report.get('shells', 0) > 0 or report.get('renamed', 0) > 0 or report.get('parsed', 0) > 0)
 
 
 def safe_package(data: bytes) -> bytes:
@@ -208,11 +338,23 @@ def safe_package(data: bytes) -> bytes:
     - It must be a Word package: a zip, every part named once (part names compare without case), none encrypted, at
       most MAX_PACKAGE_PARTS parts, each part's size within E1's limits; '[Content_Types].xml' and the package
       relationships ('_rels/.rels') present; the package's officeDocument relationship internal, naming a part present
-      whose content type is a Word document's or template's main part; no part that marks an OpenDocument package.
+      whose content type is a Word document's or template's main part; no part that marks an OpenDocument package;
+      no entry a Unicode Path extra field names otherwise than its stored name read as UTF-8, whatever the field's CRC
+      (refused as an inserted document, ContentNotShown: refutation round 2, loss[6] (b)).
     - Every relationship with a TargetMode other than Internal is dropped from every relationships part, and any part
       only such relationships named is dropped with its own relationships. A relationships part that declares a DTD, or
       is not a Relationships element, is refused.
-    - E2's removals (fields, objects, controls, imported documents), by byte ranges.
+    - E2's removals (fields, objects, controls, imported documents that hold nothing), by byte ranges.
+    - Release 2, the canonical package gate (D-R2-46): a package whose structure is not in the one form a Word package
+      takes is refused (PackageNotCanonical) before E2 reads a part.
+    - Release 2 (Group F's rule): a file E2 would take content out of while leaving nothing of it in the PDF is refused,
+      ContentNotShown, and nothing of it is rebuilt or converted - an imported document that holds content or reaches
+      outside and every subdocument (R2-28), an object or a control that would leave no picture (R2-29), a field whose
+      stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
+      another field's result stays a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a picture
+      alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no QUOTE
+      gives exactly release 1's package, apart from the deviation the module's docstring names (refutation round 1's
+      loss[6]; its loss[2] deviation is refused by the canonical package gate).
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -220,13 +362,39 @@ def safe_package(data: bytes) -> bytes:
 
 def _safe_package(data: bytes):
     """(safe_package's bytes, the counts of what E2 removed: {'fields', 'objects', 'controls', 'chunks'})."""
+    return _package(data, {})
+
+
+def _package(data: bytes, report: dict):
+    """_safe_package's work. ``report`` is told how far it got, whether it returns or raises: 'zip', once the file
+    opened as a zip archive; 'read', once every part was read and the package found a Word one (E2 then begins); and
+    how its package differs from release 1's - 'renamed', how many names stored without the UTF-8 flag it read as UTF-8
+    where release 1 read them as cp437; 'shells', how many of R2-30's QUOTE shells it made in the parts still sent;
+    'parsed', how many relationship ids it kept, in the parts still sent, only as expat reads a kept attribute
+    (check_in_child reads 'zip', 'renamed', 'shells' and 'parsed': refutation round 2, rounds[1])."""
     deadline = time.monotonic() + PACKAGE_SECONDS
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except (zipfile.BadZipFile, zipfile.LargeZipFile, ValueError, OSError):
         raise PackageRefused('it is not a zip archive') from None
+    report['zip'] = True
     with archive:
         infos = archive.infolist()
+        for info in infos:  # a name without the UTF-8 flag is read as LibreOffice reads it: UTF-8, where it is valid
+            # (refutation round 1, loss[2]: zipfile reads it as cp437, so an import that holds content was removed as
+            # holding nothing, and the rebuild renamed the part); a name zipfile took from a Unicode Path extra field
+            # (0x7075) is left as it is
+            if not info.flag_bits & 0x800 and info.filename == info.orig_filename:
+                try:
+                    read = info.filename.encode('cp437').decode('utf-8')
+                except UnicodeDecodeError:
+                    continue
+                if read != info.filename:  # release 1 renamed this part: its package is not this one (rounds[1])
+                    report['renamed'] = report.get('renamed', 0) + 1
+                    info.filename = read
+        renamed_by_field = _renamed_by_unicode_path(data, infos)
+        if renamed_by_field:  # loss[6] (b), the lead's decision: one part checked here, another opened by LibreOffice
+            raise ContentNotShown({'documents': renamed_by_field})
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):
@@ -244,13 +412,14 @@ def _safe_package(data: bytes):
             parts[info.filename] = _read_part(archive, info)
             _check_time(deadline)
     by_folded = {name.casefold(): name for name in parts}
+    reader_names = _reader_names(infos)  # R2-28 step 2: every name a reader may give each part (an import's lookup)
     _require_word_main_part(parts, by_folded)
-    rewritten, dropped_targets, kept_targets, kept_rows = {}, set(), set(), {}
+    rewritten, dropped_targets, kept_targets, kept_rows, dropped_rows = {}, set(), set(), {}, {}
     for name in parts:
         if not name.casefold().endswith('.rels'):
             continue
         kept, dropped = _relationships(name, parts[name])
-        kept_rows[name] = kept
+        kept_rows[name], dropped_rows[name] = kept, dropped
         folder = _source_folder(name)
         for relationship in kept:
             target = _part_name(folder, relationship.get('Target', ''))
@@ -269,7 +438,13 @@ def _safe_package(data: bytes):
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
-    removed, held = _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline)
+    _require_canonical_zip(data, infos)  # the canonical package gate's zip half (D-R2-46): release 1's refusals first
+    _require_canonical_structure(parts)  # the canonical package gate, its parts' half (D-R2-46): before E2 reads a part
+    report['read'] = True
+    removed, held, unshown, shells, parsed = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows,
+                                                                    rewritten, special, orphans, deadline, reader_names)
+    report['shells'] = sum(made for name, made in shells.items() if name not in orphans)
+    report['parsed'] = sum(count for name, count in parsed.items() if name not in orphans)
     released = orphans - external_orphans  # what E2 dropped, with the content it removed
     if released:  # a part E2 dropped takes its Override with it
         types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in released})
@@ -278,6 +453,10 @@ def _safe_package(data: bytes):
     for name, refusal in held.items():  # a part that could not be checked is refused only if it is still sent
         if name not in orphans:
             raise refusal
+    # release 2: what E2 would leave nothing of, in the parts still sent - the file is refused, and never rebuilt
+    lost = {kind: sum(counts[kind] for name, counts in unshown.items() if name not in orphans) for kind in LOST_KINDS}
+    if any(lost.values()):
+        raise ContentNotShown(lost)
     out = io.BytesIO()
     try:
         with zipfile.ZipFile(out, 'w') as rebuilt:
@@ -419,6 +598,206 @@ def _require_word_main_part(parts, by_folded):
         raise PackageRefused('its main document part is not a Word document')
 
 
+# --- release 2: the canonical package gate (refutation round 3, D-R2-46) -------------------------------------------
+# Lane D, LibreOffice and the doctor's Word each read a package's structure - its zip names, its relationships parts,
+# their targets, its content types, the id a preview names - and each reads a spelling Word never writes its own way:
+# three refutation rounds found, in every repair that taught lane D one more of LibreOffice's readings, the next
+# spelling read otherwise. So the structure is held to the one form a Word package takes, in which every structural
+# reference has exactly one reading and the three readers' coincide by construction; any other form is refused
+# (PackageNotCanonical) before E2 reads a part, whatever the file holds. The forms are those Word and the real tools
+# measured write (Word, LibreOffice, pandoc, python-docx and the committed templates): every file measured from them
+# passes, though not every file they can write (pandoc --reference-doc with a template holding a relationships part for
+# a part pandoc does not write is refused by form 3: class b). A path segment is of RFC 3986's unreserved characters but
+# '~' - which no reader escapes, decodes or folds - and is never empty, '.' or '..' ('..' only leads a relative target):
+# no scheme, authority, query, fragment, escape, backslash or white space. A package's own name for its content types is
+# the one name outside that alphabet.
+_SEGMENT = re.compile(r'[A-Za-z0-9._-]+')
+_RELATIONSHIP_ID = re.compile(r'[A-Za-z_][A-Za-z0-9._-]*')  # an XML name of ASCII letters, as Word's 'rId7' and 'R0f1e'
+_RELATIONSHIPS_NAME = re.compile(r'(?:(.+)/)?_rels/([^/]+)\.rels')  # 'word/_rels/document.xml.rels'
+_TARGET_MODES = ('Internal', 'External')
+# The relationships a part has at most one of (ECMA-376 Part 1 and Office's own): a reader finds that part by the
+# relationship's Type, not by an id, so a second one lets LibreOffice read one part where Word reads another - a
+# footnotes, comments or styles part swapped, as refutation round 3's loss[5] swapped the document. (A Type's case is
+# not held: real tools write 'officedocument' for 'officeDocument' in core-properties' Type, measured.)
+_SINGLE_TYPES = frozenset(
+    [f'{base}{kind}' for base in ('http://schemas.openxmlformats.org/officeDocument/2006/relationships/',
+                                  'http://purl.oclc.org/ooxml/officeDocument/relationships/')
+     for kind in ('officeDocument', 'styles', 'numbering', 'settings', 'webSettings', 'fontTable', 'footnotes',
+                  'endnotes', 'comments', 'theme', 'glossaryDocument', 'extended-properties', 'custom-properties')]
+    + ['http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+       'http://schemas.openxmlformats.org/officedocument/2006/relationships/metadata/core-properties',
+       'http://schemas.microsoft.com/office/2007/relationships/stylesWithEffects',
+       'http://schemas.microsoft.com/office/2011/relationships/people',
+       'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
+       'http://schemas.microsoft.com/office/2016/09/relationships/commentsIds',
+       'http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible'])
+
+
+def _canonical_name(name) -> bool:
+    """Whether a zip entry's name is in the one form: '/'-separated segments (_SEGMENT, none '.' or '..'), or a folder's
+    entry - the same, then '/' -, or the content types' own name."""
+    segments = (name[:-1] if name.endswith('/') else name).split('/')
+    return name == CONTENT_TYPES_PART or all(_SEGMENT.fullmatch(segment) and segment not in ('.', '..')
+                                             for segment in segments)
+
+
+def _canonical_part(folder, target):
+    """The zip name an Internal ``target`` of a part in ``folder`` names when the target is in the one form - '/' and a
+    part's name, or a part's name relative to ``folder``, led by as many '..' as stay inside the package (every other
+    segment _SEGMENT, none '.' or '..') -, else None. A target in this form is read alike as release 1 reads it
+    (_part_name), as LibreOffice opens a picture (_opened_name) or an import (_uri_path_name), and as RFC 3986 resolves
+    it (_word_name, the doctor's Word)."""
+    rooted = target.startswith('/')
+    segments = (target[1:] if rooted else target).split('/')
+    base = [] if rooted else folder.split('/') if folder else []
+    ups = 0
+    while not rooted and ups < len(segments) and segments[ups] == '..':
+        ups += 1
+    rest = segments[ups:]
+    if ups > len(base) or not rest or not all(_SEGMENT.fullmatch(segment) and segment not in ('.', '..')
+                                               for segment in rest):
+        return None
+    return '/'.join(base[:len(base) - ups] + rest)
+
+
+def _require_canonical_zip(data: bytes, infos):
+    """The gate's zip half, once release 1's own checks have passed, before E2 reads a part: one archive from its first
+    byte - a local header - to its last - its end record, with no comment -, so no reader finds another archive in it;
+    every entry named in the one form (_canonical_name) as stored, so zipfile, LibreOffice and Word read one name
+    (ASCII: the UTF-8 flag and cp437 agree; no name a Unicode Path field, a NUL or a separator renames); a folder's
+    entry holding nothing; every part stored or deflated, the two methods Word reads; and every entry's local header
+    agreeing with its directory record (_local_header_agrees), so a reader that streams the archive reads the bytes
+    zipfile reads. Release 1's own refusals run before this, with their reasons - more than 10,000 parts, a part
+    encrypted, two names one reader folds alike ('named twice'), a part too large, an OpenDocument package, no content
+    types or package relationships, a part that cannot be read, a main part that is not a Word document, a relationships
+    part that is not one - and so does D-R2-43's, a Unicode Path field naming an entry otherwise (refute-d4, diff[0]:
+    before, a file release 1 refuses with its own reason was told and recorded as an inserted document when its zip was
+    not in the one form either)."""
+    if not data.startswith(b'PK\x03\x04') or (infos and min(info.header_offset for info in infos) != 0) \
+            or data[-22:-18] != b'PK\x05\x06' or data[-2:] != b'\x00\x00':
+        raise PackageNotCanonical('its zip archive does not run from its first byte to its last')
+    for info in infos:
+        if info.orig_filename != info.filename or not _canonical_name(info.orig_filename):
+            raise PackageNotCanonical('a zip entry is not named in the one form')
+        if not _local_header_agrees(data, info):
+            raise PackageNotCanonical('a zip entry\'s local header and its directory record differ')
+        if info.orig_filename.endswith('/') and info.file_size:
+            raise PackageNotCanonical('a folder entry holds bytes')
+        if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            raise PackageNotCanonical('a part is compressed in a way Word does not read')
+
+
+def _local_header_agrees(data: bytes, info) -> bool:
+    """Whether an entry's local header - which a reader that streams the archive reads, as zipfile reads the central
+    directory's record - gives it the same flags, method and name, and the same CRC and sizes, or zeros where the flags
+    say a data descriptor carries them (as LibreOffice writes it)."""
+    head = data[info.header_offset:info.header_offset + 30]
+    if len(head) < 30 or head[:4] != b'PK\x03\x04':
+        return False
+    flags, method, crc, compressed, size, name_length = struct.unpack_from('<HH4xIIIH', head, 6)
+    name = data[info.header_offset + 30:info.header_offset + 30 + name_length]
+    stored = info.orig_filename.encode('utf-8' if info.flag_bits & 0x800 else 'cp437', 'replace')
+    sizes = (crc, compressed, size)
+    return flags == info.flag_bits and method == info.compress_type and name == stored and (
+        sizes == (info.CRC, info.compress_size, info.file_size) or (flags & 0x08 and sizes == (0, 0, 0)))
+
+
+def _plain_rows(raw):
+    """((the root's name, its attributes), [(each child's name, its attributes)], whether any element stands deeper) of
+    an XML part, its names as written - no namespace resolved: an 'xmlns' declaration is one more attribute -, as
+    LibreOffice's package reader matches them (comphelper's relationships and content types reader). Over bytes _xml has
+    already parsed: well-formed, with no DTD."""
+    root, rows, depth, deeper = [], [], [0], [False]
+    parser = expat.ParserCreate()
+
+    def start(name, attrs):
+        depth[0] += 1
+        if depth[0] == 1:
+            root.append((name, attrs))
+        elif depth[0] == 2:
+            rows.append((name, attrs))
+        else:
+            deeper[0] = True
+
+    def end(name):
+        depth[0] -= 1
+    parser.StartElementHandler, parser.EndElementHandler = start, end
+    parser.Parse(raw, True)
+    return root[0], rows, deeper[0]
+
+
+def _require_canonical_structure(parts):
+    """The gate's parts' half, once release 1's package checks have passed and before E2 reads a part:
+    - every relationships part is named for a part present by its exact name ('_rels/.rels', the package's own), so a
+      reader that folds case finds no relationships another does not;
+    - each is a Relationships element of the package relationships namespace, unprefixed and declaring nothing else,
+      whose every child is a Relationship of that namespace, unprefixed, with exactly Id, Type, Target and at most
+      TargetMode - 'Internal' or 'External' -, and nothing deeper: so a reader that matches names as written
+      (LibreOffice) and one that resolves namespaces (lane D, Word) read the same rows (refutation round 3, loss[3] and
+      loss[5]);
+    - an Id is an XML name of ASCII letters, digits, '.', '-' and '_', once in its part: one row per id (loss[1]'s first
+      row needs no rule); and a Type a part has one of (_SINGLE_TYPES: its styles, footnotes, comments ...) once;
+    - an Internal target is in the one form (_canonical_part) and names a part present by its exact name: one part for
+      every reader (loss[0], loss[2]); an External one is dropped, as release 1 drops it;
+    - the content types are a Types element of their namespace in the same form, holding only a Default (exactly
+      Extension and ContentType; no extension twice, without case) or an Override (exactly PartName and ContentType;
+      '/' and a name in the one form, naming a part present only by its exact name - one that names no part is one
+      every reader passes over, as release 1's own package leaves it; no part twice, without case), and the main
+      document part has its own Override, so the type lane D checks is the type LibreOffice detects."""
+    names = set(parts)
+    for name in parts:
+        if name.endswith('/'):
+            continue  # a folder's entry (_require_canonical_zip: it holds nothing)
+        folded = name.casefold()
+        if not (folded.endswith('.rels') or '_rels' in folded.split('/')):
+            continue
+        if name != ROOT_RELATIONSHIPS_PART:
+            match = _RELATIONSHIPS_NAME.fullmatch(name)
+            source = None if match is None else f'{match.group(1)}/{match.group(2)}' if match.group(1) \
+                else match.group(2)
+            if source not in names:
+                raise PackageNotCanonical('a relationships part is not named for a part of the package')
+            if source.casefold().endswith('.rels'):  # OPC: a relationships part has no relationships of its own
+                raise PackageNotCanonical('a relationships part describes a part that has none')
+        (root, declared), rows, deeper = _plain_rows(parts[name])
+        if root != 'Relationships' or declared != {'xmlns': RELATIONSHIPS_NS} or deeper:
+            raise PackageNotCanonical('a relationships part is not in the one form')
+        folder, ids, single = _source_folder(name), set(), set()
+        for row, attrs in rows:
+            if row != 'Relationship' or not {'Id', 'Type', 'Target'} <= attrs.keys() <= \
+                    {'Id', 'Type', 'Target', 'TargetMode'} or attrs.get('TargetMode', 'Internal') not in _TARGET_MODES:
+                raise PackageNotCanonical('a relationship is not in the one form')
+            if not _RELATIONSHIP_ID.fullmatch(attrs['Id']) or attrs['Id'] in ids or not attrs['Type']:
+                raise PackageNotCanonical('a relationship id is not in the one form or is not its own')
+            ids.add(attrs['Id'])
+            if attrs['Type'] in _SINGLE_TYPES and attrs['Type'] in single:
+                raise PackageNotCanonical('a part has two relationships of a kind it has one of')
+            single.add(attrs['Type'])
+            if attrs.get('TargetMode', 'Internal') == 'Internal' and \
+                    _canonical_part(folder, attrs['Target']) not in names:
+                raise PackageNotCanonical('an internal target is not in the one form or names no part')
+    (root, declared), rows, deeper = _plain_rows(parts[CONTENT_TYPES_PART])
+    if root != 'Types' or declared != {'xmlns': CONTENT_TYPES_NS} or deeper:
+        raise PackageNotCanonical('the content types are not in the one form')
+    extensions, overridden, folded = set(), set(), {name.casefold(): name for name in names}
+    for row, attrs in rows:
+        if row == 'Default' and attrs.keys() == {'Extension', 'ContentType'} and attrs['Extension'] \
+                and attrs['Extension'].casefold() not in extensions:
+            extensions.add(attrs['Extension'].casefold())
+        elif row == 'Override' and attrs.keys() == {'PartName', 'ContentType'} and attrs['PartName'].startswith('/') \
+                and _canonical_part('', attrs['PartName']) is not None \
+                and folded.get(attrs['PartName'][1:].casefold(), attrs['PartName'][1:]) == attrs['PartName'][1:] \
+                and attrs['PartName'][1:].casefold() not in overridden:
+            overridden.add(attrs['PartName'][1:].casefold())
+        else:
+            raise PackageNotCanonical('a content type is not in the one form')
+    main = [attrs['Target'] for row, attrs in _plain_rows(parts[ROOT_RELATIONSHIPS_PART])[1]
+            if attrs.get('Type') in OFFICE_DOCUMENT_TYPES]
+    part = _canonical_part('', main[0]) if len(main) == 1 else None
+    if part is None or part.casefold() not in overridden:
+        raise PackageNotCanonical('the main document part has no content type of its own')
+
+
 # --- E2: field instructions and embedded content, removed by byte ranges -------------------------------------------
 
 def _names(*local_names):
@@ -426,20 +805,86 @@ def _names(*local_names):
 
 
 # The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
-# with one dictionary lookup.
-_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION = range(10)
+# with one dictionary lookup. A w:subDoc shares the w:altChunk's role (R2-28 step 5); a w:pict is read for R2-29 only;
+# a mark - a note's reference, which brings the note's words, or a non-breaking hyphen - is what a reader sees in a
+# stored result besides text and a symbol, and is read past in an instruction (refutation round 2, loss[4]).
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION, _PICT, \
+    _MARK = range(12)
 _ROLES = {name: role for role, local_names in (
     (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
-    (_ALTCHUNK, ('altChunk',)), (_POINTER, ('objectEmbed', 'objectLink')),
+    (_ALTCHUNK, ('altChunk', 'subDoc')), (_POINTER, ('objectEmbed', 'objectLink')),
     (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')),
-    (_DELETION, ('del', 'moveFrom')))
+    (_DELETION, ('del', 'moveFrom')), (_PICT, ('pict',)),
+    (_MARK, ('footnoteReference', 'endnoteReference', 'noBreakHyphen')))
     for name in _names(*local_names)}
 # Text a tracked change deleted: these elements inside a w:del or w:moveFrom (repair round 1, C5: see _Field).
 _DELETED_TEXT = _names('delInstrText', 'delText')
 # What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
-_ROLES['urn:schemas-microsoft-com:office:office OLEObject'] = _POINTER
+OLE_OBJECT = 'urn:schemas-microsoft-com:office:office OLEObject'
+_ROLES[OLE_OBJECT] = _POINTER
 _CONTAINERS = (_OBJECT, _CONTROL, _ALTCHUNK, _POINTER)  # removed whole (an object but for its preview)
 _OBJECTS, _DRAWINGS, _FLDDATAS = _names('object'), _names('drawing'), _names('fldData')
+# Release 2, R2-28: a w:subDoc is always an inserted document (a master document's subdocuments are other files); a
+# w:altChunk is one when its r:id names a relationship that reaches outside, or a part present and not empty.
+_SUBDOCS = _names('subDoc')
+_ALTCHUNK_IDS = tuple(f'{namespace} id' for namespace in RELATIONSHIP_ID_NAMESPACES)
+# R2-29: what a w:object may hold beside VML and a w:drawing - the pointers, which show nothing themselves, and a
+# movie - and what a picture is: a v:imagedata (r:id or o:relid) or an a:blip (r:embed) whose part is sent.
+_OBJECT_POINTERS = _names('objectEmbed', 'objectLink', 'control', 'movie') | {OLE_OBJECT}
+_SHAPETYPE = f'{VML_NAMESPACE} shapetype'
+_PICTURE_KEYS = {f'{VML_NAMESPACE} imagedata': tuple(f'{namespace} id' for namespace in RELATIONSHIP_ID_NAMESPACES)
+                 + ('urn:schemas-microsoft-com:office:office relid',)}
+_PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
+                                                 for relationships in RELATIONSHIP_ID_NAMESPACES)
+                      for namespace in DRAWINGML_NAMESPACES})
+# The canonical package gate (D-R2-46): the ids a reader may draw a preview's picture from - those, and a v:imagedata's
+# r:pict (ECMA-376's alternate image data, which Word may read) -, of which a preview in a w:object or w:pict names one
+# at most: LibreOffice reads o:relid where present, else the first r:id (refutation round 3, loss[1]), Word its own.
+_PICTURE_IDS = {name: keys + (tuple(f'{namespace} pict' for namespace in RELATIONSHIP_ID_NAMESPACES)
+                              if name.endswith(' imagedata') else ())
+                for name, keys in _PICTURE_KEYS.items()}
+# A preview is a picture only when its part's bytes begin as one LibreOffice decodes - EMF, placeable WMF, standard WMF
+# (memory or disk), PNG, JPEG, GIF (its whole signature), TIFF in either byte order, BMP (_is_picture) and, from
+# refutation round 2, PDF, which LibreOffice 7.4 draws as Mac Word writes it (D-R2-40, R1-L0e): a part that is not empty
+# but holds no picture - one byte, words, the embedded document itself - leaves nothing in the object's place
+# (refutation round 1, loss[0]). Words cannot begin so (round 2, loss[5]: 'BM' or 'GIF8' alone counted words), but for
+# a GIF's six letters and '%PDF-'; those, and a picture header over a body LibreOffice cannot draw (an 88-byte EMF
+# header), are known limits. EMZ and WMZ count by their gzip stream's decompressed prefix, an EMF or WMF signature
+# (D-R2-45, refutation round 3: 7.4 draws them through release 1's package); PICT and SVG stay refused on purpose -
+# 7.4 draws them too, but neither has a signature as strong (PICT's header is a heuristic, SVG is text that may draw
+# nothing), so a broken one could be coded with nothing in its place (D-R2-45).
+_PICTURE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00', b'\x89PNG',
+                       b'\xff\xd8\xff', b'GIF87a', b'GIF89a', b'II*\x00', b'MM\x00*', b'%PDF-')
+# the DIB header sizes of a BMP, the four bytes at its offset 14 (each holds NUL bytes, so no words match)
+_BMP_HEADER_SIZES = frozenset((12, 16, 40, 52, 56, 64, 108, 124))
+# what an EMZ or WMZ must inflate to (EMF, placeable WMF, standard WMF in memory or on disk), read from a bounded prefix
+_METAFILE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00')
+_GZIP_HEAD_BYTES = 64
+
+
+def _is_picture(data: bytes) -> bool:
+    """Whether a preview part's bytes begin as a picture LibreOffice decodes (_PICTURE_SIGNATURES). A BMP ('BM') needs a
+    DIB header size it reads and, as LibreOffice's own detection asks, its reserved bytes zero or that size 12 or 40
+    (refutation round 2, loss[5]; a 108-byte header with its reserved bytes set is not drawn on 24.2.7)."""
+    if data[:2] == b'BM':
+        return len(data) >= 18 and int.from_bytes(data[14:18], 'little') in _BMP_HEADER_SIZES \
+            and (data[6:10] == bytes(4) or data[14] in (12, 40))
+    if data[:2] == b'\x1f\x8b':  # gzip: an EMZ or WMZ, by the first bytes it inflates to (D-R2-45)
+        try:
+            head = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data, _GZIP_HEAD_BYTES)
+        except zlib.error:
+            return False
+        return head.startswith(_METAFILE_SIGNATURES)
+    return data.startswith(_PICTURE_SIGNATURES)
+# R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object (a
+# symbol and a mark: _PartReader._role_starts).
+_SHOWN = _names('drawing', 'pict', 'object')
+# outer types whose stored result 7.4 keeps with release 1's edit (R2-30): HYPERLINK and TOC, and QUOTE and STYLEREF
+# (the lead's 7.4 run on lane D's corpus inputs H7f and H7g, refutation round 1); any other type, an unknown name
+# included, stays refused - LibreOffice evaluates many real types
+_EXEMPT_OUTER_TYPES = ('HYPERLINK', 'TOC', 'QUOTE', 'STYLEREF')
+# a removed type whose result, when it is a picture alone, LibreOffice draws wherever it stands (_Field.picture_alone)
+_PICTURE_TYPE = 'INCLUDEPICTURE'
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
 # type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
@@ -458,20 +903,25 @@ _VML_PREFIX = f'{VML_NAMESPACE} '
 # A part is read for E2 only when its bytes hold one of these elements' tags (any prefix): element names are literal in
 # a part's bytes, so a part without one has nothing E2 removes.
 _TRIGGER = re.compile(rb'<(?:[^\s<>/:!?"\'=]+:)?(?:fldChar|fldSimple|instrText|delInstrText|object|control|altChunk'
-                      rb'|OLEObject|objectEmbed|objectLink)[\s/>]')
+                      rb'|OLEObject|objectEmbed|objectLink|subDoc)[\s/>]')
 _DOCTYPE = re.compile(rb'<!DOCTYPE')
+_REFERENCE_IN_VALUE = re.compile(rb'=\s*(?:"[^"<]*&|\'[^\'<]*&)')  # an attribute value holding a reference
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
+_ATTRIBUTE = re.compile(rb'([^\s=/>"\']+)\s*=\s*("[^"]*"|\'[^\']*\')')  # one attribute of a tag, and its quoted value
 _DECLARED_ENCODING = re.compile(rb'^(?:\xef\xbb\xbf)?<\?xml[^>]*?encoding\s*=\s*["\']([A-Za-z0-9._-]+)["\']')
 _SKIP_PREFIX = re.compile('[\\s\\\\"\'\\u201c\\u201d\\u2018\\u2019]*')  # white space, backslashes and quotes
 _LETTER_RUN = re.compile(r'[A-Za-z]*')
-_TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED)  # letters enough to decide a type
+# Letters enough to decide a type, and one more, so that INCLUDEPICTURE is told from a longer word (R2-30): a type is
+# removed when its letters begin with a removed one, which the extra letter never changes.
+_TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED) + 1
 _TIME_CHECK_ELEMENTS = 0xFFF  # the deadline is checked every 4,096 elements too
 _REMOVED_KINDS = ('fields', 'objects', 'controls', 'chunks')
 _REREADS = 4  # how often a part may be read again after a removal inside another field's instruction (see below)
 # An element as the reader keeps it: a list [name, offset of its start tag, the namespaces its start tag declares, its
 # property children (only while a field's instruction is open), its children (a w:fldSimple's or w:object's only),
-# expat's index at its end (an end tag's '<', or the end of an empty element), a w:fldSimple's instruction].
+# expat's index at its end (an end tag's '<', or the end of an empty element), a w:fldSimple's instruction - or, for a
+# w:altChunk or w:subDoc, whether it is refused as an inserted document (R2-28)].
 _NAME, _AT, _DECLARED, _PROPS, _CHILDREN, _END, _INSTRUCTION = range(7)
 
 
@@ -524,6 +974,14 @@ def _removed_type(text) -> bool:
     return reading.removed()
 
 
+def _names_a_picture(text) -> bool:
+    """Whether ``text`` (a w:fldSimple's instruction) names INCLUDEPICTURE and nothing longer, read as _Reading reads
+    one (R2-30: its result, a picture, is unwrapped as release 1 unwraps it)."""
+    reading = _Reading()
+    reading.feed(text or '')
+    return reading.letters.upper() == _PICTURE_TYPE
+
+
 def _symbol_character(attrs) -> str:
     """The character a w:sym stands for (its w:char, hexadecimal), as a reader would put it in an instruction."""
     try:
@@ -544,12 +1002,22 @@ class _Field:
     on a real LibreOffice (24.2): it renders the base's 'deleted LINK, inserted PAGE' as a live page number, a deleted
     'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
     left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
-    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction')
+    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction', 'holds_removed',
+                 'watched', 'result_shown', 'simple', 'picture', 'text_shown')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
         self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
+        # R2-30's fallback: a removed field stood in this field's instruction; its result is read (from its first
+        # separate); it holds something a reader sees outside the fields in it; the w:fldSimple elements open at that
+        # separate - one opened since is a field of its result (refutation round 1, refuse[1])
+        self.holds_removed = self.watched = self.result_shown = False
+        self.simple = 0
+        # refutation round 1, loss[1]: an INCLUDEPICTURE (read at its first separate), and whether its own stored
+        # result shows text, a symbol or a mark (round 2, loss[4]) - then it is no picture alone, and stays a field
+        # (R2-30's QUOTE)
+        self.picture = self.text_shown = False
 
     def feed(self, text, name=None, deleted=False):
         """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
@@ -581,19 +1049,66 @@ class _Field:
         return any((live if live.state != _Reading.BEFORE or deleted is None else deleted).removed()
                    for live, deleted in self.readings)
 
+    def _types(self) -> set:
+        """The type every reading names (its letters, as removed() reads them), in capitals."""
+        return {(live if live.state != _Reading.BEFORE or deleted is None else deleted).letters.upper()
+                for live, deleted in self.readings}
+
+    def names_a_picture(self) -> bool:
+        """INCLUDEPICTURE in every reading (R2-30)."""
+        return self._types() == {_PICTURE_TYPE}
+
+    def picture_alone(self) -> bool:
+        """INCLUDEPICTURE whose stored result shows no text, no symbol and no mark: a picture, which LibreOffice draws
+        wherever it stands, so it is unwrapped as release 1 unwraps it (refutation round 1, loss[1]: one whose result
+        shows text lost that text once unwrapped inside a kept field's result; round 2, loss[4]: one whose result
+        holds a note's reference lost the note's words, a non-breaking hyphen its hyphen)."""
+        return self.names_a_picture() and not self.text_shown
+
+    def loses_its_result(self) -> bool:
+        """R2-30's fallback, read at a kept field's end once a removed field stood in its instruction: a type every
+        reading names other than HYPERLINK, TOC, QUOTE or STYLEREF, and a stored result that holds, outside the fields
+        in it, something a reader sees - 7.4's 'H01' shape, whose plain result LibreOffice 7.4 drops, with or without
+        R2-30's QUOTE. A result that is fields alone keeps every word on 7.4 (H02-H04, I01, I02: the QUOTE keeps a
+        removed one)."""
+        types = self._types()
+        exempt = len(types) == 1 and next(iter(types)) in _EXEMPT_OUTER_TYPES
+        return bool(self.separates) and self.result_shown and not exempt
+
 
 class _PartReader:
     """One part read once with expat (namespaces resolved): the byte ranges E2 removes from it, the tags it renames,
     the counts, and the relationship ids found where a removal can reach. ``editable``: whether edits can be made in its
     bytes (UTF-8 only); when not, a part that needs one is refused. ``nested_removal``: a field was removed inside
-    another field's instruction, whose type its result may now complete (_edited_part reads the part again)."""
+    another field's instruction, whose type its result may now complete (_edited_part reads the part again).
 
-    def __init__(self, raw, deadline, *, editable=True):
+    Release 2: ``lost`` counts what E2 would leave nothing of in the PDF (LOST_KINDS: ContentNotShown), and ``shells``
+    the removed fields kept as QUOTE fields (R2-30). ``pictures``: the part's relationship ids a preview may name - a
+    picture part that is sent -, ``inserted``: those that make a w:altChunk an inserted document - they reach outside,
+    or name a part that is not empty by any name a reader resolves (_relationship_ids). ``carried``: the offsets of the
+    fields an earlier reading of the part found a removed field in the instruction of (R2-30's fallback, decided once
+    no field of the part is removed inside an instruction any more: _edited_part)."""
+
+    def __init__(self, raw, deadline, *, editable=True, pictures=frozenset(), inserted=frozenset(),
+                 carried=frozenset()):
         self.raw, self.deadline, self.editable = raw, deadline, editable
+        self.pictures, self.inserted, self.carried = pictures, inserted, carried
         self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
+        self.lost = dict.fromkeys(LOST_KINDS, 0)
+        # R2-29: the open w:object and w:pict, each [element, 'controls' once it holds a control, its pointers], and the
+        # offsets of the pictures that stand in them (in document order)
+        self.holders, self.pictured = [], []
+        # R2-30: QUOTE shells made; the fields found holding a removed field in their instruction (their offsets) and
+        # how many of them lose their result (counted in lost['fields'] by the reading that removes nothing more inside
+        # an instruction)
+        self.shells, self.candidates, self.unshown = 0, [], 0
         self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
-        self.text_field = self.text_name = self.parser = None
+        self.watched = 0  # open fields whose result is read for R2-30's fallback
+        self.simple = 0  # open w:fldSimple elements (refutation round 1, refuse[1])
+        self.simple_pictures = []  # open w:fldSimple INCLUDEPICTUREs: [element, its result shows text, symbol, mark]
+        self.text_field = self.text_name = self.parser = self.shown_field = None
+        self.shown_picture = self.shown_simple = None  # the INCLUDEPICTURE whose result the text being read stands in
         self.nested_removal = self.text_deleted = False
 
     def read(self):
@@ -613,6 +1128,8 @@ class _PartReader:
         for field in self.fields:
             if field.removed():
                 raise PackageRefused('a field to be removed is not closed')
+        if not self.nested_removal:  # R2-30's fallback: no field's type can change by another reading of the part
+            self.lost['fields'] += self.unshown
         return self
 
     # expat's handlers
@@ -640,6 +1157,15 @@ class _PartReader:
             for key, value in attrs.items():
                 if key.startswith(_RELATIONSHIP_ID_PREFIXES):
                     self.references.append((element[_AT], value))
+        if self.holders and name in _PICTURE_KEYS:
+            ids = [key for key in _PICTURE_IDS[name] if key in attrs]
+            if len(ids) > 1:  # the canonical package gate: one reading of its id (refutation round 3, loss[1])
+                raise PackageNotCanonical('a preview names more than one relationship id')
+            if ids and ids[0] in _PICTURE_KEYS[name] and attrs[ids[0]] in self.pictures:
+                self.pictured.append(element[_AT])  # R2-29: a picture whose part is sent, in an open object or w:pict
+        if self.watched and name in _SHOWN and self.fields and self.fields[-1].watched \
+                and self.simple <= self.fields[-1].simple:
+            self.fields[-1].result_shown = True  # R2-30's fallback: a picture in the result a field holds
         stack.append(element)
 
     def _role_starts(self, role, element, attrs):
@@ -657,6 +1183,10 @@ class _PartReader:
                 if field.in_instruction:
                     field.in_instruction = False
                     self.instructions -= 1
+                    if field.holds_removed or field.begin[_AT] in self.carried:  # R2-30's fallback: read its result
+                        field.watched, field.simple = True, self.simple
+                        self.watched += 1
+                    field.picture = field.names_a_picture()  # loss[1]: an INCLUDEPICTURE's result is read
                 field.decided = True
             elif kind == 'end' and field is not None:
                 field.end = (element, list(self.stack))
@@ -664,21 +1194,56 @@ class _PartReader:
         elif role == _FLDSIMPLE:
             if open_type:
                 field.nested()
+            self.simple += 1
             element[_CHILDREN] = []
             element[_INSTRUCTION] = next((attrs[key] for key in _INSTR if key in attrs), '')
+            if _names_a_picture(element[_INSTRUCTION]):  # loss[1]: its result is read
+                self.simple_pictures.append([element, False])
         elif role in _CONTAINERS:
             self.containers += 1
             if role == _OBJECT:
                 element[_CHILDREN] = []
+                self.holders.append([element, '', 0])
+            elif role == _ALTCHUNK:  # R2-28 step 4: refused when it holds content or reaches outside; every w:subDoc
+                element[_INSTRUCTION] = element[_NAME] in _SUBDOCS or any(
+                    attrs[key] in self.inserted for key in _ALTCHUNK_IDS if key in attrs)
+            elif self.holders:  # R2-29 step 4: a pointer or a control counts in the w:object or w:pict it stands in
+                holder = self.holders[-1]
+                holder[2] += 1
+                if role == _CONTROL:
+                    holder[1] = 'controls'
+            else:  # and in neither, it is lost
+                self.lost['controls' if role == _CONTROL else 'objects'] += 1
+        elif role == _PICT:
+            self.holders.append([element, '', 0])
         elif role == _TEXT:
             if open_type:
                 self.text_field, self.text_name = field, element[_NAME]
                 self.text_deleted = bool(self.deletions) and element[_NAME] in _DELETED_TEXT
                 self.parser.CharacterDataHandler = self._text
+            else:
+                if field is not None and field.watched and not field.result_shown and self.simple <= field.simple:
+                    self.shown_field = field  # R2-30's fallback: text in the result being read, outside its fields
+                if field is not None and field.picture and not field.text_shown:
+                    self.shown_picture = field  # loss[1]: text in an INCLUDEPICTURE's result
+                simple = self._simple_picture()
+                if simple is not None and not simple[1]:
+                    self.shown_simple = simple  # loss[1]: text in a w:fldSimple INCLUDEPICTURE's result
+                if self.shown_field is not None or self.shown_picture is not None or self.shown_simple is not None:
+                    self.parser.CharacterDataHandler = self._shown_text
         elif role == _DELETION:
             self.deletions += 1
-        elif open_type:  # a symbol stands for its character, a tab or a break for white space
-            field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
+        elif open_type:  # a symbol stands for its character, a tab or a break for white space; a mark is read past
+            if role != _MARK:
+                field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
+        elif role in (_SYMBOL, _MARK):  # in a stored result: a reader sees it (a mark: refutation round 2, loss[4])
+            if field is not None and field.watched and self.simple <= field.simple:
+                field.result_shown = True
+            if field is not None and field.picture:
+                field.text_shown = True
+            simple = self._simple_picture()
+            if simple is not None:
+                simple[1] = True
 
     def _end(self, name):
         element = self.stack.pop()
@@ -692,8 +1257,9 @@ class _PartReader:
                 parent[_PROPS].append(element)
             return
         if role == _TEXT:
-            if self.text_field is not None:
-                self.text_field = None
+            if self.text_field is not None or self.shown_field is not None or self.shown_picture is not None \
+                    or self.shown_simple is not None:
+                self.text_field = self.shown_field = self.shown_picture = self.shown_simple = None
                 self.parser.CharacterDataHandler = None
         elif role == _DELETION:
             self.deletions -= 1
@@ -703,30 +1269,130 @@ class _PartReader:
                 self.fields.pop()
                 if field.in_instruction:
                     self.instructions -= 1
+                if field.watched:
+                    self.watched -= 1
                 if field.removed():
-                    self._remove_field(field)
-                    self.nested_removal = self.nested_removal or bool(self.instructions)
+                    if not self.instructions and field.separates and self._in_a_result() \
+                            and not field.picture_alone():
+                        self._shell_field(field)
+                    else:
+                        self._remove_field(field)
+                        self._removed_in_an_instruction(field.names_a_picture())
+                elif field.holds_removed or field.begin[_AT] in self.carried:
+                    self.candidates.append(field.begin[_AT])  # R2-30's fallback (read)
+                    self.unshown += field.loses_its_result()
         elif role == _FLDSIMPLE:
+            self.simple -= 1
+            shows_text = False
+            if self.simple_pictures and self.simple_pictures[-1][0] is element:
+                shows_text = self.simple_pictures.pop()[1]
             if _removed_type(element[_INSTRUCTION]):
-                self._remove_simple_field(element)
-                self.nested_removal = self.nested_removal or bool(self.instructions)
+                picture = _names_a_picture(element[_INSTRUCTION])
+                if not self.instructions and self._in_a_result() and not (picture and not shows_text) \
+                        and self.raw[self._tag_end(element[_AT]) - 2] != 0x2F:
+                    self._shell_simple_field(element)
+                else:
+                    self._remove_simple_field(element)
+                    self._removed_in_an_instruction(picture)
         elif role in _CONTAINERS:
             self.containers -= 1
             if role == _OBJECT:
-                self._remove_object(element)
+                self._end_object(element, self.holders.pop())
+            elif role == _ALTCHUNK:
+                if element[_INSTRUCTION]:  # R2-28: refused as an inserted document; no edit is made
+                    self.lost['documents'] += 1
+                else:  # it holds nothing: removed as release 1 removes it
+                    self._remove(element)
+                    self._take_pictures(element)
+                    self.removed['chunks'] += 1
             else:
                 self._remove(element)
+                self._take_pictures(element)
                 if role == _CONTROL:
                     self.removed['controls'] += 1
-                elif role == _ALTCHUNK:
-                    self.removed['chunks'] += 1
                 elif not any(ancestor[_NAME] in _OBJECTS for ancestor in self.stack):
                     self.removed['objects'] += 1  # a pointer outside an object; inside one the object counts
+        elif role == _PICT:  # R2-29 step 4: lost when its pictures are fewer than the pointers or controls it holds
+            _, kind, pointers = self.holders.pop()
+            if self._pictures_in(element) < pointers:
+                self.lost[kind or 'objects'] += 1
 
     def _text(self, data):
         field = self.text_field
         if field is not None and not field.decided:
             field.feed(data, self.text_name, self.text_deleted)
+
+    def _shown_text(self, data):
+        if data.strip():
+            if self.shown_field is not None:
+                self.shown_field.result_shown = True
+            if self.shown_picture is not None:
+                self.shown_picture.text_shown = True
+            if self.shown_simple is not None:
+                self.shown_simple[1] = True
+
+    def _simple_picture(self):
+        """The innermost open w:fldSimple INCLUDEPICTURE whose result text here stands in, as [element, whether its
+        result shows text or a symbol] (loss[1]); None when there is none, or a complex field began inside it (text
+        there is that field's instruction or result)."""
+        if not self.simple_pictures:
+            return None
+        simple = self.simple_pictures[-1]
+        if self.fields and self.fields[-1].begin[_AT] > simple[0][_AT]:
+            return None
+        return simple
+
+    # release 2
+    def _in_a_result(self) -> bool:
+        """Whether what just ended lies in another field's result (asked while no field's instruction is open): an open
+        complex field, or a w:fldSimple around it (R2-30)."""
+        return bool(self.fields) or any(_ROLES.get(element[_NAME]) == _FLDSIMPLE for element in self.stack)
+
+    def _removed_in_an_instruction(self, picture):
+        """A removed field just went as release 1 removes it. Inside another field's instruction (release 1's re-read),
+        every field whose instruction is open holds it - unless it was INCLUDEPICTURE (R2-30's fallback), whatever its
+        own result shows: the lead's 7.4 run on lane D's H7p (an INCLUDEPICTURE whose result is text, in an IF's
+        instruction) shows release 1's package losing nothing there (refutation round 1)."""
+        if self.instructions:
+            self.nested_removal = True
+            if not picture:
+                for field in self.fields:
+                    if field.in_instruction:
+                        field.holds_removed = True
+
+    def _pictures_in(self, element) -> int:
+        """How many pictures whose part is sent stand in ``element`` (R2-29)."""
+        return (bisect.bisect_left(self.pictured, element[_END])
+                - bisect.bisect_left(self.pictured, element[_AT]))
+
+    def _take_pictures(self, element, keep=()):
+        """R2-29: the pictures in ``element`` - just ended, and removed but for its children ``keep`` - leave the
+        count, so no holder counts a picture a removal takes (refutation round 3, loss[4]: a picture inside the
+        w:control, w:movie or o:OLEObject a removal takes was counted as standing in the object's place)."""
+        first, kept = bisect.bisect_left(self.pictured, element[_AT]), []
+        for child in keep:  # in document order, so what is kept stays in order
+            kept += self.pictured[bisect.bisect_left(self.pictured, child[_AT], first):
+                                  bisect.bisect_left(self.pictured, child[_END], first)]
+        self.pictured[first:] = kept
+
+    def _end_object(self, element, holder):
+        """R2-29 step 3: a w:object is lost - under 'controls' when it held a control, else 'objects' - when its
+        pictures are fewer than its pointers, when it holds anything but VML, w:drawing and pointers, when it has both a
+        drawing and a VML shape, or when it points at something with no drawing and other than exactly one VML shape:
+        the file is refused and the object left as it is. Otherwise it is removed as release 1 removes it."""
+        _, kind, pointers = holder
+        children = element[_CHILDREN] or []
+        drawings = [child for child in children if child[_NAME] in _DRAWINGS]
+        shapes = [child for child in children if child[_NAME].startswith(_VML_PREFIX) and child[_NAME] != _SHAPETYPE]
+        beside = [child for child in children if child[_NAME] not in _DRAWINGS and child[_NAME] not in _OBJECT_POINTERS
+                  and not child[_NAME].startswith(_VML_PREFIX)]
+        self._take_pictures(element, keep=drawings or [child for child in children
+                                                       if child[_NAME].startswith(_VML_PREFIX)])
+        if self._pictures_in(element) < pointers or beside or (drawings and shapes) \
+                or (pointers and not drawings and len(shapes) != 1):
+            self.lost[kind or 'objects'] += 1
+            return
+        self._remove_object(element)
 
     # the removals
     def _edit(self, start, end, replacement=b''):
@@ -750,16 +1416,17 @@ class _PartReader:
     def _remove(self, element):
         self._edit(*self._span(element))
 
-    def _remove_between(self, first, first_chain, last, last_chain):
+    def _remove_between(self, first, first_chain, last, last_chain, marks=True):
         """Removes everything from the start of ``first`` to the end of ``last`` (a field's begin mark and its separate
         or end mark), keeping only what the elements around them need to stay whole: below the element both are in, the
-        end tags of ``first``'s ancestors and the start tags and property children (pPr, rPr, ...) of ``last``'s."""
+        end tags of ``first``'s ancestors and the start tags and property children (pPr, rPr, ...) of ``last``'s. With
+        ``marks`` False, ``first`` and ``last`` themselves stay: what stands between them goes (R2-30)."""
         common = 0
         for mine, theirs in zip(first_chain, last_chain):
             if mine is not theirs:
                 break
             common += 1
-        low, high = first[_AT], self._span(last)[1]
+        low, high = (first[_AT], self._span(last)[1]) if marks else (self._span(first)[1], last[_AT])
         kept = [(element[_END], self._tag_end(element[_END])) for element in first_chain[common:]]
         for element in last_chain[common:]:
             kept.append((element[_AT], self._tag_end(element[_AT])))
@@ -774,6 +1441,40 @@ class _PartReader:
             at = max(at, end)
         if high > at:
             self._edit(at, high)
+
+    def _shell_field(self, field):
+        """R2-30: a removed complex field in another field's result stays a field, of a type LibreOffice shows by its
+        stored result: its begin mark is followed by the instruction ' QUOTE ' (an instrText of the begin mark's own
+        prefix, with any namespaces the mark declares), what stood between the begin and separate marks goes, and the
+        separate mark, the result and the end mark stay. The count stays under fields."""
+        separate, separate_chain = field.separates[0]
+        start, end = self._span(field.begin)
+        prefix = _TAG_NAME.match(self.raw, start).group(1).rpartition(b':')[0]
+        tag = prefix + b':instrText' if prefix else b'instrText'
+        declarations = ''.join(f' xmlns={quoteattr(uri)}' if declared is None else f' xmlns:{declared}={quoteattr(uri)}'
+                               for declared, uri in field.begin[_DECLARED]).encode('utf-8')
+        self._edit(start, end, self.raw[start:end] + b'<' + tag + declarations + b' xml:space="preserve"> QUOTE </'
+                   + tag + b'>')
+        self._remove_between(field.begin, field.begin_chain, separate, separate_chain, marks=False)
+        self.removed['fields'] += 1
+        self.shells += 1
+
+    def _shell_simple_field(self, element):
+        """R2-30: a removed w:fldSimple in another field's result stays a field: every instr attribute of its start tag
+        reads ' QUOTE ', its w:fldData goes (as release 1's unwrapping takes it), its runs stay."""
+        start_end = self._tag_end(element[_AT])
+        values = [(match.start(2), match.end(2)) for match in _ATTRIBUTE.finditer(
+            self.raw, _TAG_NAME.match(self.raw, element[_AT]).end(), start_end)
+            if match.group(1).rpartition(b':')[2] == b'instr']
+        if not values:
+            raise PackageRefused('a document part cannot be edited safely')
+        for value_start, value_end in values:
+            self._edit(value_start, value_end, b'" QUOTE "')
+        for child in element[_CHILDREN]:
+            if child[_NAME] in _FLDDATAS:
+                self._remove(child)
+        self.removed['fields'] += 1
+        self.shells += 1
 
     def _remove_field(self, field):
         """A complex field's instruction goes - begin to separate, and the end mark - and its result stays; with no
@@ -896,15 +1597,30 @@ def _named_by(references, edits) -> set:
     return found
 
 
-def _still_named(data, values) -> set:
-    """Which of ``values`` (relationship ids) some attribute of ``data`` still holds, found by their bytes (as written,
-    or with XML's escapes): a relationship whose id any kept attribute holds is kept."""
+def _still_named(data, values):
+    """(which of ``values`` (relationship ids) some attribute of ``data`` still holds, those only expat finds): an
+    id is found by its bytes (as written, or with XML's escapes), or as expat reads the attribute; a
+    relationship whose id any kept attribute holds is kept. The parse runs only for an id the bytes miss - one a kept
+    attribute writes with a character reference, or with white space expat normalizes (refutation round 1, loss[6]:
+    such an id's relationship was dropped, and the picture a kept element named with it lost) - over bytes _well_formed
+    has already parsed. Release 1 kept only the ids its bytes find, so an id found by the parse alone makes a package
+    that is not release 1's (refutation round 2, rounds[1])."""
     found = set()
     for value in values:
         for form in {value, escape(value, {'"': '&quot;', "'": '&apos;'})}:
             if re.search(rb'=\s*(["\'])' + re.escape(form.encode('utf-8')) + rb'\1', data):
                 found.add(value)
-    return found
+    missing, parsed = set(values) - found, set()
+    # expat reads an attribute otherwise than its bytes only through a reference in its value or by normalizing white
+    # space (an edited part declares no DTD), so the parse - a Python call per element - runs only where either can
+    # be; elsewhere the byte search decides alone, as release 1's did (refutation round 3, rounds[2]: a clean file
+    # release 1 checked in time went past PACKAGE_SECONDS, and every round of it was busy)
+    if missing and (any(space in value for value in missing for space in ' \t\r\n')
+                    or (b'&' in data and _REFERENCE_IN_VALUE.search(data) is not None)):
+        parser = expat.ParserCreate(namespace_separator=' ')
+        parser.StartElementHandler = lambda name, attrs: parsed.update(missing.intersection(attrs.values()))
+        parser.Parse(data, True)
+    return found | parsed, parsed
 
 
 def _well_formed(data):
@@ -915,35 +1631,69 @@ def _well_formed(data):
         raise PackageRefused('a document part could not be edited safely') from None
 
 
-def _edited_part(raw, deadline):
-    """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named), or None when
-    nothing is to be removed - the part then passes through byte for byte.
+def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
+    """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named, the counts of
+    what E2 would leave nothing of - LOST_KINDS -, the QUOTE shells made, how many ids a kept attribute holds only as
+    expat reads it), or None when nothing is to be removed - the part then passes through byte for byte. When anything
+    is lost, the file is refused (ContentNotShown), so the part is returned unedited. ``pictures`` and ``inserted``:
+    _relationship_ids of the part.
 
     The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
     take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
     (well-formed, every prefix bound); and an id some kept attribute still holds keeps its relationship, found by its
-    bytes. The one way an edit can make a new instruction is a field removed inside another field's instruction: its
-    result, kept, now stands in that instruction, and may complete the outer field's type ('LI' and a removed field's
-    result 'NK'). Only then is the part read again, and edited again, until nothing more is removed."""
-    reader = _PartReader(raw, deadline, editable=_editable(raw)).read()
+    bytes or as expat reads the attribute (_still_named). The one way an edit can make a new instruction is a field
+    removed inside another field's instruction: its result, kept, now stands in that instruction, and may complete the
+    outer field's type ('LI' and a removed field's result 'NK'). Only then is the part read again, and edited again,
+    until nothing more is removed. Each reading is given the offsets, moved by the edits, of the fields an earlier one
+    found holding a removed field in their instruction, and the reading that removes nothing more inside an instruction
+    - when every field's type is final - counts those whose result 7.4 would lose (R2-30's fallback)."""
+    reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, inserted=inserted).read()
+    if any(reader.lost.values()):
+        return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0, 0
     if not reader.edits:
         return None
-    data, removed, gone = raw, dict.fromkeys(_REMOVED_KINDS, 0), set()
+    data, removed, gone, shells, lost = raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), 0, dict.fromkeys(LOST_KINDS, 0)
     for _ in range(_REREADS):
         edits = _merged(reader.edits)
         gone |= _named_by(reader.references, edits)
         for kind in _REMOVED_KINDS:
             removed[kind] += reader.removed[kind]
+        for kind in LOST_KINDS:
+            lost[kind] += reader.lost[kind]
+        shells += reader.shells
         data = _applied(data, edits)
         if not reader.nested_removal:
             break
-        reader = _PartReader(data, deadline).read()
+        reader = _PartReader(data, deadline, pictures=pictures, inserted=inserted,
+                             carried=_moved(reader.candidates, edits)).read()
         if not reader.edits:
+            for kind in LOST_KINDS:
+                lost[kind] += reader.lost[kind]
             break
     else:
         raise PackageRefused('a document part could not be edited safely')
     _well_formed(data)
-    return data, removed, gone - _still_named(data, gone)
+    kept, parsed = _still_named(data, gone)
+    return data, removed, gone - kept, lost, shells, len(parsed)
+
+
+def _moved(offsets, edits) -> frozenset:
+    """``offsets`` of a part where they stand once ``edits`` (merged: in order, apart) are made; one an edit takes is
+    gone."""
+    moved = set()
+    for offset in offsets:
+        shift = 0
+        for start, end, replacement in edits:
+            if end <= offset:
+                shift += len(replacement) - (end - start)
+            elif start <= offset:
+                break
+            else:
+                moved.add(offset + shift)
+                break
+        else:
+            moved.add(offset + shift)
+    return frozenset(moved)
 
 
 def _content_types(raw):
@@ -1003,14 +1753,16 @@ def _refuse_any_dtd(raw):
         pass
 
 
-def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
+def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten, special, orphans, deadline,
+                           reader_names):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
     SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
     relationships only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only
     they named added to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is
-    still sent})."""
-    removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
+    still sent}, {part: what E2 would leave nothing of in it}, {part: the QUOTE shells made in it}, {part: the ids it
+    keeps only as expat reads them})."""
+    removed, held, dropped_ids, unshown, shells, parsed = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}, {}, {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:
         name = info.filename
@@ -1021,13 +1773,22 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
         try:
             triggered = _TRIGGER.search(view) is not None
             if triggered:
-                outcome = _edited_part(raw, deadline)
+                pictures, inserted = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names)
+                outcome = _edited_part(raw, deadline, pictures, inserted)
                 if outcome is not None:
-                    rewritten[name], counts, ids = outcome
-                    for kind in _REMOVED_KINDS:
-                        removed[kind] += counts[kind]
-                    if ids:
-                        dropped_ids[name] = ids
+                    edited, counts, ids, lost, made, expat_only = outcome
+                    if any(lost.values()):  # the file is refused: nothing of the part is edited
+                        unshown[name] = lost
+                    else:
+                        rewritten[name] = edited
+                        for kind in _REMOVED_KINDS:
+                            removed[kind] += counts[kind]
+                        if ids:
+                            dropped_ids[name] = ids
+                        if made:
+                            shells[name] = made
+                        if expat_only:
+                            parsed[name] = expat_only
             elif _DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE:
                 _refuse_any_dtd(raw)
         except _OutOfTime:
@@ -1052,7 +1813,196 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
             if target is not None:
                 candidates.add(target.casefold())
     orphans |= _released(candidates, kept_rows, by_folded, special, orphans)
-    return removed, held
+    return removed, held, unshown, shells, parsed
+
+
+def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names):
+    """(pictures, inserted) of the part ``name``'s relationships, by id (refutation round 1 split them):
+    - pictures, what a preview must name (R2-29 step 1): an id whose relationship LibreOffice reads - the first kept row
+      of that id with an Id, a Type and a Target, as its relations reader keeps the first (refutation round 2, loss[1])
+      - names, by the zip name LibreOffice opens for it (_opened_name: no '.' segment, fragment or escape resolved;
+      round 2, loss[0] and refuse[0]), a part whose bytes begin as a picture (_is_picture: refutation round 1, loss[0]);
+    - inserted, what makes a w:altChunk an inserted document (R2-28 step 2): a relationship that reaches outside
+      (TargetMode other than Internal: dropped), and a kept one - any row of its id - whose target names a part that is
+      not empty by any name a reader resolves: read as release 1 reads it (_part_name), by its URI path alone as
+      LibreOffice opens an Internal target (_uri_path_name: refutation round 1, loss[4]; round 2, loss[3]), and as RFC
+      3986 resolves it, a '..' past the root dropped (_word_name: D-R2-40) - each as written or percent-decoded, and
+      matched without case, as Word does (loss[5]), against every name a reader may give a part (_reader_names: its zip
+      name percent-decoded, D-R2-40; a stored name zipfile read otherwise, round 2, loss[6]). A target no reading
+      resolves - an authority urlsplit cannot parse, nothing but an authority, an empty one - is refused too: a reader
+      may still open a part by it, and lane D cannot tell which (round 2, loss[2]: C9 fails closed)."""
+    folder, _, leaf = name.rpartition('/')
+    rels = by_folded.get((f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels').casefold())
+    pictures, inserted, read = set(), {row.get('Id') for row in dropped_rows.get(rels, ())}, set()
+    for row in kept_rows.get(rels, ()):
+        written, source, rid = row.get('Target', ''), _source_folder(rels), row.get('Id')
+        target = _part_name(source, written)
+        if rid and row.get('Type') and written and rid not in read:  # the row LibreOffice reads for this id
+            read.add(rid)
+            if _is_picture(parts.get(_opened_name(folder, written), b'')):
+                pictures.add(rid)
+        readings = (target, _uri_path_name(source, written), _word_name(source, written))
+        if all(reading is None for reading in readings):
+            inserted.add(rid)  # loss[2]: no reading names a part, and a reader may still open one - C9 fails closed
+        for reading in readings:
+            for form in {reading, unquote(reading)} if reading is not None else ():
+                if any(parts[part] for part in reader_names.get(form.casefold(), ())):
+                    inserted.add(rid)
+    return frozenset(pictures), frozenset(inserted)
+
+
+def _opened_name(folder, target):
+    """The zip entry LibreOffice opens for an Internal target of a part in ``folder`` when it reads a picture (oox's
+    Relations::getFragmentPathFromRelation, then its storage), or None (refutation round 2, loss[0] and refuse[0]): a
+    target that begins with '/' is the rest as written; any other is appended to the folder segment by segment, a '..'
+    taking off what follows the last '/' (nothing past the root); the storage passes over empty segments. Nothing else
+    is resolved: a '.' or '..' left, a fragment, a query or a percent escape stays as written and names no part (None
+    for a '.' or '..' left, or no name at all)."""
+    if not target:
+        return None
+    if target.startswith('/'):
+        path = target[1:]
+    else:
+        path = folder
+        for segment in target.split('/'):
+            if segment == '..':
+                path = path[:max(path.rfind('/'), 0)]
+            else:
+                path = f'{path}/{segment}' if path else segment
+    segments = [segment for segment in path.split('/') if segment]
+    return None if not segments or '.' in segments or '..' in segments else '/'.join(segments)
+
+
+def _uri_path_name(folder, target):
+    """The package part a relationship's target names by its URI path alone - its scheme, authority, query and fragment
+    dropped, as LibreOffice opens an Internal target (refutation round 1, loss[4]) - and, for a rootless path under a
+    scheme, that path with its dot segments removed, minus its first character, as LibreOffice opens it (it takes that
+    character for the root's '/': 'x:afchunk1.docx' opens 'fchunk1.docx'; refutation round 2, loss[3]); or None (a
+    target urlsplit cannot parse is for _relationship_ids to refuse: loss[2])."""
+    try:
+        split = urlsplit(target or '')
+    except ValueError:
+        return None
+    if not split.path:
+        return None
+    if split.scheme and not split.path.startswith('/'):
+        return _dot_segments_removed(split.path)[1:].lstrip('/') or None
+    return _part_name(folder, split.path)
+
+
+def _word_name(folder, target):
+    """The package part a target with no scheme and no authority names as RFC 3986 resolves it against its part's own
+    name - its query and fragment dropped, its dot segments removed and a '..' past the package root dropped, as the
+    doctor's Word resolves a part name (D-R2-40: release 1's reading and LibreOffice's then find no part) - or None."""
+    try:
+        split = urlsplit(target or '')
+    except ValueError:
+        return None
+    if split.scheme or split.netloc or not split.path:
+        return None
+    path = split.path if split.path.startswith('/') else f'/{folder}/{split.path}' if folder else f'/{split.path}'
+    return _dot_segments_removed(path).lstrip('/') or None
+
+
+def _dot_segments_removed(path):
+    """RFC 3986 5.2.4's remove_dot_segments of ``path`` (a '..' past the root dropped), as LibreOffice's URI factory and
+    the doctor's Word apply it."""
+    out, rest = [], path
+    while rest:
+        if rest.startswith('../'):
+            rest = rest[3:]
+        elif rest.startswith('./'):
+            rest = rest[2:]
+        elif rest.startswith('/./') or rest == '/.':
+            rest = '/' + rest[3:]
+        elif rest.startswith('/../') or rest == '/..':
+            rest = '/' + rest[4:]
+            if out:
+                out.pop()
+        elif rest in ('.', '..'):
+            rest = ''
+        else:
+            cut = rest.find('/', 1)
+            cut = len(rest) if cut < 0 else cut
+            out.append(rest[:cut])
+            rest = rest[cut:]
+    return ''.join(out)
+
+
+def _reader_names(infos) -> dict:
+    """{a name a reader may give a zip entry, folded: the names, as read here, of the entries it may name} - what an
+    import's target is matched against (R2-28 step 2): an entry's name as read here (UTF-8 where a name without the
+    UTF-8 flag is valid: refutation round 1, loss[2]), its stored name as zipfile first read it (cp437 without the flag)
+    and that read as UTF-8 - also where zipfile named the entry from a Unicode Path extra field, which a reader ignoring
+    the field does not (round 2, loss[6]) -, and each percent-decoded, as Word maps a part name to its zip item
+    (D-R2-40)."""
+    names = {}
+    for info in infos:
+        stored = {info.filename, info.orig_filename, _utf8_reading(info)}
+        for form in stored | {unquote(name) for name in stored}:
+            names.setdefault(form.casefold(), set()).add(info.filename)
+    return names
+
+
+def _utf8_reading(info) -> str:
+    """A zip entry's stored name read as LibreOffice reads it: UTF-8 where that is valid, else as zipfile read it."""
+    if info.flag_bits & 0x800:
+        return info.orig_filename
+    try:
+        return info.orig_filename.encode('cp437').decode('utf-8')
+    except UnicodeDecodeError:
+        return info.orig_filename
+
+
+def _renamed_by_unicode_path(data: bytes, infos) -> int:
+    """How many zip entries carry a Unicode Path extra field (0x7075) - in their central directory record or their
+    local header - that names them otherwise than their stored name read as UTF-8, whatever the field's CRC and
+    version (refutation round 2, loss[6] (b), the lead's decision: zipfile applies such a field only when its CRC
+    matches, LibreOffice 24.2.7 reads it without, so the part checked here and the part LibreOffice opens could differ -
+    two entries whose fields swap their names code one document while the doctor's reader opens another). A field that
+    is not UTF-8, too short to hold its version and CRC, or cut off, and a stored name that is not UTF-8, name it
+    otherwise. Such a file is refused, whatever it holds: Word writes no such field."""
+    count = 0
+    for info in infos:
+        raw = info.orig_filename.encode('utf-8' if info.flag_bits & 0x800 else 'cp437', 'replace')  # its bytes
+        try:
+            stored = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            stored = None
+        local = _local_header_extra(data, info)
+        fields = [field for extra in (info.extra, local) if extra for field in _unicode_path_fields(extra)]
+        if any(name is None or name != stored for _crc, name in fields):  # the CRC ignored, as LibreOffice ignores it
+            count += 1
+    return count
+
+
+def _unicode_path_fields(extra: bytes):
+    """(the name CRC, the name - None when unreadable) of each Unicode Path field (0x7075) in an extra field block."""
+    at = 0
+    while at + 4 <= len(extra):
+        kind, size = struct.unpack_from('<HH', extra, at)
+        body = extra[at + 4:at + 4 + size]
+        if kind == 0x7075:
+            if len(body) < 5 or len(body) < size:
+                yield None, None  # too short to hold its version and CRC, or cut off
+            else:
+                crc = struct.unpack_from('<L', body, 1)[0]
+                try:
+                    yield crc, body[5:].decode('utf-8')
+                except UnicodeDecodeError:
+                    yield crc, None
+        at += 4 + size
+
+
+def _local_header_extra(data: bytes, info):
+    """The extra field block of a zip entry's local header (zipfile reads only the central directory's), or None when
+    no local header stands at its offset (zipfile then refuses to read the entry)."""
+    at = info.header_offset
+    head = data[at:at + 30]
+    if len(head) < 30 or head[:4] != b'PK\x03\x04':
+        return None
+    name_length, extra_length = struct.unpack_from('<HH', head, 26)
+    return data[at + 30 + name_length:at + 30 + name_length + extra_length]
 
 
 def _released(candidates, kept_rows, by_folded, special, dropped):

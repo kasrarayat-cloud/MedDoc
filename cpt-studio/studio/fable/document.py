@@ -9,7 +9,10 @@
   does not answer in time, fails the document BUSY - a member may retry - and nothing is converted inside the worker.
   With no socket, in-process (tests and local runs), unless settings.CONVERTER_REQUIRED, which makes a missing socket
   BUSY too: production never converts in the worker. A failed conversion is DocumentError CONVERT. The PDF is sent as
-  above.
+  above. Release 2: a Word file refused because E2 would leave content out of its PDF (docx_package.ContentNotShown)
+  is CONVERT with the sentence of its code (REFUSED_PACKAGE_TEXT) and its code and counts for the record (R2-31); and
+  a round that would read a conversion an earlier round stored first runs the same check on the stored original
+  (needs_fresh_conversion, studio.jobs: R2-28 step 7, C8).
 - TXT (UTF-8; a leading byte-order mark is dropped) and pasted text: a text document block with citations.
 
 The stored form of the block (``stored_block``, what ProviderRun.request_body keeps) replaces the base64 data with
@@ -46,6 +49,14 @@ PASTE_TITLE = 'Pasted text'
 CONVERTER_CONNECT_SECONDS = 2
 CONVERTER_MARGIN_SECONDS = 18
 CONVERT_TEXT = 'The Word file could not be opened.'
+# Release 2, R2-31: a Word file refused because E2 would leave something out of the PDF (docx_package.ContentNotShown),
+# by its code - what the member has, and what to do; every other refusal keeps CONVERT_TEXT.
+REFUSED_PACKAGE_TEXT = {
+    docx_package.INSERTED_DOCUMENT: ('This Word file has another document inserted in it, which cannot be read here. '
+                                     'Open it in Word, save it as a PDF and upload the PDF.'),
+    docx_package.INSERTED_OBJECT: ('This Word file has an embedded object that cannot be shown here. Open it in Word, '
+                                   'save it as a PDF and upload the PDF.'),
+}
 BUSY_TEXT = 'The coding service is busy. Try again in a few minutes.'  # studio.jobs.FAILURE_TEXT[BUSY], word for word
 STORAGE_TEXT = 'The stored document could not be read back unchanged.'
 EMPTY_TEXT = 'The document is empty.'
@@ -60,11 +71,20 @@ REFUSED_TEXT = {'pdf': 'This PDF could not be read. It may be password-protected
 
 class DocumentError(Exception):
     """The document cannot be sent: ``failure_kind`` (CONVERT, BUSY, DOCUMENT or STORAGE) and ``text``, a plain
-    sentence for the customer; ``detail`` says more, for the operator, in fixed words."""
+    sentence for the customer; ``detail`` says more, for the operator, in fixed words. ``code`` and ``counts``: why a
+    Word file was refused and how much of what it holds, when E2 would leave content out of its PDF (R2-31): one of
+    docx_package.REFUSAL_CODES and {kind: n} over docx_package.LOST_KINDS, else '' and {}."""
 
-    def __init__(self, failure_kind: str, text: str, detail: str = ''):
+    def __init__(self, failure_kind: str, text: str, detail: str = '', *, code: str = '', counts=None):
         super().__init__(text)
         self.failure_kind, self.text, self.detail = failure_kind, text, detail
+        self.code = code if code in docx_package.REFUSAL_CODES else ''
+        self.counts = {kind: (counts or {}).get(kind, 0) for kind in docx_package.LOST_KINDS} if self.code else {}
+
+    def recorded(self) -> dict:
+        """What the round's coding.round_failed event adds (R2-31): {'refused': the code, 'inserted': the counts}, or {}
+        - codes and counts only, never a word of the file."""
+        return {'refused': self.code, 'inserted': dict(self.counts)} if self.code else {}
 
 
 @dataclass(frozen=True)
@@ -169,9 +189,39 @@ def convert_docx(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_by
     except docx_package.ConversionBusy as exc:  # its checks ran out of time: not the file's fault
         raise DocumentError(BUSY, BUSY_TEXT, str(exc)) from None
     except docx_package.ConversionRefused as exc:
-        raise DocumentError(CONVERT, CONVERT_TEXT, f'the Word package was refused: {exc}') from None
+        raise _refused(exc, f'the Word package was refused: {exc}') from None
     except docx_package.ConversionFailed as exc:
         raise DocumentError(CONVERT, CONVERT_TEXT, str(exc)) from None
+
+
+def needs_fresh_conversion(data: bytes):
+    """Release 2, R2-28 step 7 (C8), the worker's side: release 2's package check of ``data`` - a Word file a round of
+    whose revision stored its conversion - before that conversion is read again (docx_package.check_in_child: in the
+    worker, in the bounded child and under the limits a conversion's check runs under, converting nothing, with no
+    converter call). DocumentError CONVERT when the check refuses the file (ContentNotShown): the sentence and the
+    record of its code, as a fresh conversion of it would end. True when the round must convert afresh: its package is
+    not release 1's (R2-30's QUOTE applies to the file, or a name or an id release 1 lost is kept: refutation round 2,
+    rounds[1]). docx_package.CHECK_UNDECIDED (truthy) when the check could not decide - it ran out of time, failed, or
+    refused the file for another reason once it opened as a zip -: the converter then decides, as for any fresh
+    conversion, a round's own view included (round 2, rounds[0]: studio.jobs._stored_conversion). False when the stored
+    conversion may be read again: a clean revision's view stays byte-identical, with no converter call; or the file is
+    no zip at all, of which no conversion was ever made."""
+    try:
+        return docx_package.check_in_child(data)
+    except docx_package.ConversionRefused as exc:
+        raise _refused(exc, f'the Word package was refused: {exc}') from None
+    except (docx_package.ConversionBusy, docx_package.ConversionFailed):
+        return docx_package.CHECK_UNDECIDED
+
+
+def _refused(exc, detail) -> DocumentError:
+    """CONVERT for a refused Word file (``exc``: docx_package.ConversionRefused or converter_server.ConverterFailed):
+    with the sentence, code and counts of a file refused for what E2 would leave out of its PDF, else the general
+    sentence and no code (R2-31)."""
+    code = getattr(exc, 'code', '')
+    if isinstance(code, str) and code in REFUSED_PACKAGE_TEXT:
+        return DocumentError(CONVERT, REFUSED_PACKAGE_TEXT[code], detail, code=code, counts=getattr(exc, 'counts', {}))
+    return DocumentError(CONVERT, CONVERT_TEXT, detail)
 
 
 def converter_wait_seconds() -> int:
@@ -181,12 +231,13 @@ def converter_wait_seconds() -> int:
 
 def _converted_by_service(path, data: bytes) -> bytes:
     """The PDF the converter service on the socket ``path`` made of ``data`` (studio.converter_server.request): BUSY
-    when it cannot be reached, does not answer in time or says it is busy; CONVERT when it refused the file, failed, or
-    answered in a form it does not use."""
+    when it cannot be reached, does not answer in time or says it is busy; CONVERT when it refused the file - with the
+    sentence and record of a ContentNotShown's code when the converter gave one this worker believes (R2-31) -, failed,
+    or answered in a form it does not use."""
     try:
         return converter_server.request(path, data, connect_seconds=CONVERTER_CONNECT_SECONDS,
                                         total_seconds=converter_wait_seconds())
     except converter_server.ConverterBusy as exc:
         raise DocumentError(BUSY, BUSY_TEXT, str(exc)) from None
     except converter_server.ConverterFailed as exc:
-        raise DocumentError(CONVERT, CONVERT_TEXT, str(exc)) from None
+        raise _refused(exc, str(exc)) from None
