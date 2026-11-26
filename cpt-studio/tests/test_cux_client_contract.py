@@ -114,23 +114,37 @@ class ContractTests(TestCase):
 
 
 class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
-    """Refutation round 1, item B: every call a release-1 page makes - the session, every list, a later page, a
-    document, a paste, an answer, a retry, an export - is answered 409 client_outdated before its view runs, so it
-    reads and writes nothing: no INSERT, UPDATE or DELETE, and the rows that record or change anything stay as they
-    were. Each call that would record or change anything is one its view would act on (a document with questions, a
-    failed round to retry, a whole paste, another coded document to export), so a guard moved after the view shows."""
+    """Refutation round 1, item B: every customer API call a release-1 page makes (816045c72 app.js, api()) - the
+    session, every list, a later page, a document, a paste, an answer, a decision, a stop, a resume, a retry, an export,
+    the team and a member's access - is answered 409 client_outdated before its view runs, so it reads and writes
+    nothing: no INSERT, UPDATE or DELETE, and the rows that record or change anything stay as they were. Each call that
+    would record or change anything is one its view would act on (a document with questions, a coded document to
+    decide, one being coded to stop, a stopped one to resume, a failed round to retry, a whole paste, another coded
+    document to export, an owner turning a member's access off), so a guard moved after the view shows. The last five
+    were added in refutation round 2 (gates[0]). The page's POST /session/activity (views.activity_ping) is not an API
+    call: it is outside the contract by design and answers 200."""
     WATCHED = (models.AccessRecord, models.AccessRecordRepeat, models.Encounter, models.SourceRevision,
-               models.CodingRound, models.Job, models.RateWindow, models.AuditEvent, models.SecurityEvent)
+               models.CodingRound, models.Job, models.RateWindow, models.AuditEvent, models.SecurityEvent,
+               models.CodeDecision)
     WRITES = ('INSERT', 'UPDATE', 'DELETE')
 
     def test_every_call_of_a_release_1_page_is_refused_and_writes_nothing(self):
         coded = self.done()
         exported = self.done(title='Synthetic note to export')
+        decided = self.done(title='Synthetic note to decide')
+        running = self.started(title='Synthetic note being coded')  # after every done(): run_next claims the next job
+        stopped = self.started(title='Synthetic note that was stopped')
+        self.assertEqual(self.client_for(self.reviewer).post(f'/api/encounters/{stopped.pk}/stop', data='{}',
+                                                             content_type='application/json').status_code, 200)
+        owner = f.member(self.ws, role=models.Membership.OWNER)
         failed = self.encounter(title='Synthetic note that could not be coded')
         r.write_round(failed, state_=models.CodingRound.FAILED, failure_kind='busy', error=jobs.FAILURE_TEXT['busy'])
         question = self.client_for(self.reviewer).get(f'/api/encounters/{coded.pk}').json()['questions'][0]['id']
         page = self.client_for(self.reviewer, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
+        owners_page = self.client_for(owner, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
         answer = {'answers': [{'question_id': question, 'text': 'Yes, from the rectum.'}]}
+        decision = {'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve', 'note': '',
+                    'acknowledgement': r.ACKNOWLEDGEMENTS['human']}
         calls = {
             'session': lambda: page.get('/api/session'),
             'list': lambda: page.get('/api/encounters'),
@@ -147,6 +161,16 @@ class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
                                          content_type='application/json'),
             'an export': lambda: page.post(f'/api/encounters/{exported.pk}/reports', data=json.dumps(
                 {'kind': 'draft', 'fmt': 'pdf', 'round': 1}), content_type='application/json'),
+            'a decision': lambda: page.post(f'/api/encounters/{decided.pk}/decisions', data=json.dumps(decision),
+                                            content_type='application/json'),
+            'a stop': lambda: page.post(f'/api/encounters/{running.pk}/stop', data='{}',
+                                        content_type='application/json'),
+            'a resume': lambda: page.post(f'/api/encounters/{stopped.pk}/resume', data='{}',
+                                          content_type='application/json'),
+            'the team': lambda: owners_page.get('/api/members'),
+            "a member's access": lambda: owners_page.post(f'/api/members/{self.viewer.pk}/access',
+                                                          data=json.dumps({'active': False}),
+                                                          content_type='application/json'),
         }
         for name, call in calls.items():
             with self.subTest(call=name):
