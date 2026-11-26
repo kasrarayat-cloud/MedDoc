@@ -51,6 +51,91 @@ ROOT = Path(settings.BASE_DIR)
 TEXT_FILE = b'SYNTHETIC NOTE polyp removed by cold snare.'
 PASTED = ('SYNTHETIC PROCEDURE NOTE\nProcedure: colonoscopy to the cecum.\nFindings: one 6 mm polyp in the sigmoid '
           'colon, removed by cold snare.\nPlan: follow up per pathology.')
+# Release 1's reader and checker answers, tests.support.rounds' READER and CHECKER at 9ee0c85be, copied here as
+# literals for the same reason: the checker's request carries the reader's answer (fable.result.listing), so an
+# edit to that shared fixture would move this pin with no change to what the coder is sent (refutation round 1,
+# gates[5]); the checker's answer decides only the round's final state.
+RELEASE_1_READER = {'document_kind': 'synthetic colonoscopy report',
+                    'services_found': ['colonoscopy with polypectomy'],
+                    'codes': [{'code': '45385',
+                               'units': 1,
+                               'modifiers': [],
+                               'status': 'ready',
+                               'reason': 'A 6 mm sigmoid polyp was removed by cold snare.',
+                               'evidence': [{'quote': 'removed by cold snare', 'page': 1}],
+                               'question': None},
+                              {'code': '45380',
+                               'units': 1,
+                               'modifiers': [],
+                               'status': 'needs_answer',
+                               'reason': 'A biopsy may have been taken.',
+                               'evidence': [{'quote': 'removed by cold snare', 'page': 1}],
+                               'question': 'Was a biopsy taken from a separate site?'},
+                              {'code': '43239',
+                               'units': 1,
+                               'modifiers': [],
+                               'status': 'ready',
+                               'reason': 'An upper endoscopy with biopsy is documented.',
+                               'evidence': [{'quote': 'removed by cold snare', 'page': 1}],
+                               'question': None},
+                              {'code': '43251',
+                               'units': 1,
+                               'modifiers': [],
+                               'status': 'not_supported',
+                               'reason': 'No snare was used in the upper tract.',
+                               'evidence': [{'quote': 'removed by cold snare', 'page': 1}],
+                               'question': None}],
+                    'documentation_problems': ['The note is not signed.'],
+                    'questions': [{'question': 'Was a biopsy taken from a separate site?', 'affects': ['45380']}]}
+RELEASE_1_CHECKER = {'reviews': [{'line': 'L1',
+                                  'code': '45385',
+                                  'verdict': 'agree',
+                                  'correct_code': '45385',
+                                  'correct_units': 1,
+                                  'correct_modifiers': [],
+                                  'correct_status': 'ready',
+                                  'reason': 'The snare removal is documented.',
+                                  'evidence': [{'quote': 'cold snare', 'page': 1}],
+                                  'question': None},
+                                 {'line': 'L2',
+                                  'code': '45380',
+                                  'verdict': 'agree',
+                                  'correct_code': '45380',
+                                  'correct_units': 1,
+                                  'correct_modifiers': [],
+                                  'correct_status': 'needs_answer',
+                                  'reason': 'Supported as listed.',
+                                  'evidence': [{'quote': 'cold snare', 'page': 1}],
+                                  'question': None},
+                                 {'line': 'L3',
+                                  'code': '43239',
+                                  'verdict': 'disagree',
+                                  'correct_code': '43239',
+                                  'correct_units': 1,
+                                  'correct_modifiers': [],
+                                  'correct_status': 'ready',
+                                  'reason': 'The biopsy site is not stated.',
+                                  'evidence': [{'quote': 'cold snare', 'page': 1}],
+                                  'question': None},
+                                 {'line': 'L4',
+                                  'code': '43251',
+                                  'verdict': 'agree',
+                                  'correct_code': '43251',
+                                  'correct_units': 1,
+                                  'correct_modifiers': [],
+                                  'correct_status': 'not_supported',
+                                  'reason': 'Supported as listed.',
+                                  'evidence': [{'quote': 'cold snare', 'page': 1}],
+                                  'question': None}],
+                     'missed_codes': [{'code': '45378',
+                                       'units': 1,
+                                       'modifiers': [],
+                                       'status': 'ready',
+                                       'reason': 'A diagnostic colonoscopy is documented.',
+                                       'evidence': [{'quote': 'colonoscopy to the cecum', 'page': 1}],
+                                       'question': None}],
+                     'questions': [{'question': 'Which site was biopsied during the upper endoscopy?',
+                                    'affects': ['43239']}]}
 
 
 def synthetic_pdf() -> bytes:
@@ -138,8 +223,8 @@ def requests_sent(ws, user, case) -> tuple:
     upload = CASES[case]
     revision = f.upload(enc, user, **upload) if upload else f.paste(enc, user, text=PASTED)
     jobs.start_round(enc, revision, models.CodingRound.UPLOAD, user)
-    fake = f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
-                       checker=f.succeeded(r.checker_message(r.CHECKER)))
+    fake = f.FakeCoder(reader=f.succeeded(r.reader_message(RELEASE_1_READER)),
+                       checker=f.succeeded(r.checker_message(RELEASE_1_CHECKER)))
     with mock.patch.object(fable_client, 'coder', return_value=fake):
         jobs.run_job(jobs.claim_next())
     sent = tuple((role, request.sha256, hashlib.sha256(fable_client.canonical(request.params)).hexdigest(),
