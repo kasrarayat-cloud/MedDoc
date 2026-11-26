@@ -517,3 +517,9 @@
 .export-group+.export-group{margin-top:22px}
 @media (prefers-reduced-motion: reduce){.export-pdf[aria-busy="true"]>svg{animation:none}
 }
+
+/* Release 2 (R2-14): the entrance fade plays on a page load's first view only. */
+main:not([data-entrance])>.view-entrance{animation:none}
+/* Release 2 (R2-22): a paged list's end, in the layout while empty so it can be seen nearing the window. */
+.list-more{min-height:1px;margin-top:12px;text-align:center}
+.list-more .empty-state{padding:12px 20px}
