@@ -70,7 +70,7 @@ import time
 import zipfile
 import zlib
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from xml.etree import ElementTree
 from xml.parsers import expat
 from xml.sax.saxutils import escape, quoteattr
@@ -562,6 +562,11 @@ _PICTURE_KEYS = {f'{VML_NAMESPACE} imagedata': tuple(f'{namespace} id' for names
 _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
                                                  for relationships in RELATIONSHIP_ID_NAMESPACES)
                       for namespace in DRAWINGML_NAMESPACES})
+# A preview is a picture only when its part's bytes begin as one - EMF, placeable WMF, standard WMF (memory or disk),
+# PNG, JPEG, GIF, BMP, TIFF in either byte order (refutation round 1, loss[0]): a part that is not empty but holds no
+# picture - one byte, words, the embedded document itself - leaves nothing in the object's place
+_PICTURE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00', b'\x89PNG',
+                       b'\xff\xd8\xff', b'GIF8', b'BM', b'II*\x00', b'MM\x00*')
 # R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object.
 _SHOWN = _names('drawing', 'pict', 'object')
 # outer types whose stored result 7.4 keeps with release 1's edit (R2-30): HYPERLINK and TOC, and QUOTE and STYLEREF
@@ -753,15 +758,16 @@ class _PartReader:
     another field's instruction, whose type its result may now complete (_edited_part reads the part again).
 
     Release 2: ``lost`` counts what E2 would leave nothing of in the PDF (LOST_KINDS: ContentNotShown), and ``shells``
-    the removed fields kept as QUOTE fields (R2-30). ``pictures``: the part's relationship ids that name a part present
-    and not empty, ``external``: those that reach outside (_relationship_ids). ``carried``: the offsets of the fields
-    an earlier reading of the part found a removed field in the instruction of (R2-30's fallback, decided once no field
-    of the part is removed inside an instruction any more: _edited_part)."""
+    the removed fields kept as QUOTE fields (R2-30). ``pictures``: the part's relationship ids a preview may name - a
+    picture part that is sent -, ``inserted``: those that make a w:altChunk an inserted document - they reach outside,
+    or name a part that is not empty by any name a reader resolves (_relationship_ids). ``carried``: the offsets of the
+    fields an earlier reading of the part found a removed field in the instruction of (R2-30's fallback, decided once
+    no field of the part is removed inside an instruction any more: _edited_part)."""
 
-    def __init__(self, raw, deadline, *, editable=True, pictures=frozenset(), external=frozenset(),
+    def __init__(self, raw, deadline, *, editable=True, pictures=frozenset(), inserted=frozenset(),
                  carried=frozenset()):
         self.raw, self.deadline, self.editable = raw, deadline, editable
-        self.pictures, self.external, self.carried = pictures, external, carried
+        self.pictures, self.inserted, self.carried = pictures, inserted, carried
         self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
         self.lost = dict.fromkeys(LOST_KINDS, 0)
@@ -864,7 +870,7 @@ class _PartReader:
                 self.holders.append([element, '', 0])
             elif role == _ALTCHUNK:  # R2-28 step 4: refused when it holds content or reaches outside; every w:subDoc
                 element[_INSTRUCTION] = element[_NAME] in _SUBDOCS or any(
-                    attrs[key] in self.pictures or attrs[key] in self.external for key in _ALTCHUNK_IDS if key in attrs)
+                    attrs[key] in self.inserted for key in _ALTCHUNK_IDS if key in attrs)
             elif self.holders:  # R2-29 step 4: a pointer or a control counts in the w:object or w:pict it stands in
                 holder = self.holders[-1]
                 holder[2] += 1
@@ -1223,11 +1229,11 @@ def _well_formed(data):
         raise PackageRefused('a document part could not be edited safely') from None
 
 
-def _edited_part(raw, deadline, pictures=frozenset(), external=frozenset()):
+def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
     """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named, the counts of
     what E2 would leave nothing of - LOST_KINDS -, the QUOTE shells made), or None when nothing is to be removed - the
     part then passes through byte for byte. When anything is lost, the file is refused (ContentNotShown), so the part is
-    returned unedited. ``pictures`` and ``external``: _relationship_ids of the part.
+    returned unedited. ``pictures`` and ``inserted``: _relationship_ids of the part.
 
     The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
     take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
@@ -1238,7 +1244,7 @@ def _edited_part(raw, deadline, pictures=frozenset(), external=frozenset()):
     given the offsets, moved by the edits, of the fields an earlier one found holding a removed field in their
     instruction, and the reading that removes nothing more inside an instruction - when every field's type is final -
     counts those whose result 7.4 would lose (R2-30's fallback)."""
-    reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, external=external).read()
+    reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, inserted=inserted).read()
     if any(reader.lost.values()):
         return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0
     if not reader.edits:
@@ -1255,7 +1261,7 @@ def _edited_part(raw, deadline, pictures=frozenset(), external=frozenset()):
         data = _applied(data, edits)
         if not reader.nested_removal:
             break
-        reader = _PartReader(data, deadline, pictures=pictures, external=external,
+        reader = _PartReader(data, deadline, pictures=pictures, inserted=inserted,
                              carried=_moved(reader.candidates, edits)).read()
         if not reader.edits:
             for kind in LOST_KINDS:
@@ -1361,8 +1367,8 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
         try:
             triggered = _TRIGGER.search(view) is not None
             if triggered:
-                pictures, external = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows)
-                outcome = _edited_part(raw, deadline, pictures, external)
+                pictures, inserted = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows)
+                outcome = _edited_part(raw, deadline, pictures, inserted)
                 if outcome is not None:
                     edited, counts, ids, lost, made = outcome
                     if any(lost.values()):  # the file is refused: nothing of the part is edited
@@ -1403,20 +1409,40 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
 
 
 def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
-    """(the ids of the part ``name``'s kept relationships whose target is a part of the package that is not empty, by
-    its name as written or percent-decoded; the ids of its relationships that reach outside - TargetMode other than
-    Internal, dropped): what a preview picture must name (R2-29 step 1), and what makes a w:altChunk an inserted
-    document (R2-28 step 2)."""
+    """(pictures, inserted) of the part ``name``'s relationships, by id (refutation round 1 split them):
+    - pictures, what a preview must name (R2-29 step 1): a kept relationship whose target names a part by its exact zip
+      name - the one name LibreOffice opens (loss[5]) - whose bytes begin as a picture (_PICTURE_SIGNATURES, loss[0]);
+    - inserted, what makes a w:altChunk an inserted document (R2-28 step 2): a relationship that reaches outside
+      (TargetMode other than Internal: dropped), and a kept one whose target names a part that is not empty by any name
+      a reader resolves - as written or percent-decoded, and without case, as Word does (loss[5]); and by its URI path
+      alone, whatever scheme, authority, query or fragment it carries, as LibreOffice opens an Internal target
+      (loss[4])."""
     folder, _, leaf = name.rpartition('/')
     rels = by_folded.get((f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels').casefold())
-    present = set()
+    pictures, inserted = set(), {row.get('Id') for row in dropped_rows.get(rels, ())}
     for row in kept_rows.get(rels, ()):
-        target = _part_name(_source_folder(rels), row.get('Target', ''))
-        for form in {target, unquote(target)} if target is not None else ():
-            part = by_folded.get(form.casefold())
-            if part is not None and parts[part]:
-                present.add(row.get('Id'))
-    return frozenset(present), frozenset(row.get('Id') for row in dropped_rows.get(rels, ()))
+        written, source = row.get('Target', ''), _source_folder(rels)
+        target = _part_name(source, written)
+        if target is not None and parts.get(target, b'').startswith(_PICTURE_SIGNATURES):
+            pictures.add(row.get('Id'))
+        for named in (target, _uri_path_name(source, written)):
+            for form in {named, unquote(named)} if named is not None else ():
+                part = by_folded.get(form.casefold())
+                if part is not None and parts[part]:
+                    inserted.add(row.get('Id'))
+    return frozenset(pictures), frozenset(inserted)
+
+
+def _uri_path_name(folder, target):
+    """The package part a relationship's target names by its URI path alone - its scheme, authority, query and fragment
+    dropped, as LibreOffice opens an Internal target (refutation round 1, loss[4]) - or None."""
+    try:
+        split = urlsplit(target or '')
+    except ValueError:
+        return None
+    if not split.path or not (split.path.startswith('/') or not (split.scheme or split.netloc)):
+        return None
+    return _part_name(folder, split.path)
 
 
 def _released(candidates, kept_rows, by_folded, special, dropped):

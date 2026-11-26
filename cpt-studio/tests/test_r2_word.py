@@ -508,6 +508,18 @@ class ObjectAndControlTests(ReleaseOneCase):
             'a drawing whose a:blip links (r:link) the picture': package(
                 in_object(drawing(attribute='r:link'), '<w:objectEmbed r:id="rIdOle" w:progId="Word.Document.12"/>',
                           attributes=''), (rel('rIdPic', 'image', 'media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
+            # refutation round 1, loss[0]: a part that is not empty but no picture leaves nothing in the object's place
+            'one byte': preview_object('media/image1.emf', content=b'\x00'),
+            'bytes in no picture format': preview_object('media/image1.emf', content=b'plain words, no picture'),
+            'the embedded document itself': preview_object('media/image1.emf', inner='<v:imagedata r:id="rIdOle"/>'),
+            # loss[5]: LibreOffice opens a preview by its exact name only (Word also finds these; LibreOffice draws
+            # nothing)
+            'a percent-encoded name that is present': preview_object('media/image%201.emf',
+                                                                     part_name='word/media/image 1.emf'),
+            'a name present only without case': preview_object('media/IMAGE1.EMF'),
+            'a drawing whose a:blip embeds a percent-encoded name that is present': package(
+                drawn, (rel('rIdPic', 'image', 'media/image%201.emf'), DOCX_RELS[1]),
+                (('word/media/image 1.emf', EMF), DOCX_PARTS[1])),
         }
         for label, data in refused.items():
             with self.subTest(f'refused: {label}'):
@@ -515,14 +527,17 @@ class ObjectAndControlTests(ReleaseOneCase):
                     docx_package._safe_package(data)
                 self.assertEqual(caught.exception.counts['objects'], 1)
         kept = {
-            'a percent-encoded name that is present': preview_object('media/image%201.emf',
-                                                                     part_name='word/media/image 1.emf'),
             'a name present as written': preview_object('media/image1.emf'),
             'o:relid': preview_object('media/image1.emf', inner='<v:imagedata o:relid="rIdPrev"/>'),
-            'a drawing whose a:blip embeds a percent-encoded name that is present': package(
-                drawn, (rel('rIdPic', 'image', 'media/image%201.emf'), DOCX_RELS[1]),
-                (('word/media/image 1.emf', EMF), DOCX_PARTS[1])),
+            'a drawing whose a:blip embeds a name present as written': package(
+                drawn, (rel('rIdPic', 'image', 'media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
         }
+        # each picture format a preview is (loss[0]): EMF, placeable WMF, standard WMF in memory and on disk, PNG, JPEG,
+        # GIF, BMP, TIFF in both byte orders
+        for signature in (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00',
+                          b'\x89PNG\r\n\x1a\n', b'\xff\xd8\xff\xe0', b'GIF89a', b'BM', b'II*\x00', b'MM\x00*'):
+            kept[f'a picture that begins {signature!r}'] = preview_object(
+                'media/image1.emf', content=signature + b' synthetic picture bytes')
         for label, data in kept.items():
             with self.subTest(f'kept: {label}'):
                 package_bytes, removed = docx_package._safe_package(data)
@@ -545,6 +560,11 @@ class ImportHoldingNothingTests(ReleaseOneCase):
             'an empty part with an Override': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'empty.txt'),),
                                                       (('word/empty.txt', b''),),
                                                       (override('word/empty.txt', 'text/plain'),)),
+            # refutation round 1, loss[4]: a name read by its URI path that names no part holds nothing either
+            'a missing part named with a query': package(BEFORE + alt + AFTER,
+                                                         (rel('rIdChunk', 'aFChunk', 'missing.docx?v=1'),)),
+            'a missing part named by a file URI': package(BEFORE + alt + AFTER,
+                                                          (rel('rIdChunk', 'aFChunk', 'file:///word/missing.docx'),)),
         }
         for label, data in shapes.items():
             with self.subTest(label):

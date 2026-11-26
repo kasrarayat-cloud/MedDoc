@@ -1417,6 +1417,17 @@ class InsertedDocumentTests(SimpleTestCase):
                     'rIdSub', 'subDocument', 'file:///synthetic/chapter.docx', 'External')))]),
             'a w:subDoc that names nothing at all': full_package(TEXT + '<w:subDoc/>'),
         }
+        # refutation round 1: the names a reader resolves to a part present - by its URI path alone, as LibreOffice
+        # opens an Internal target (loss[4]), and without case or percent-encoded, as Word does (loss[5])
+        for target, part in (('file:///word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('//localhost/word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('afchunk1.docx?v=1', 'word/afchunk1.docx'),
+                             ('/word/afchunk1.docx?x#y', 'word/afchunk1.docx'),
+                             ('AFCHUNK1.DOCX', 'word/afchunk1.docx'),
+                             ('afchunk%201.docx', 'word/afchunk 1.docx')):
+            forms[f'named {target!r}, the part {part!r}'] = full_package(
+                TEXT + R2_ALT + TEXT, document_rels=(relationship('rIdChunk', 'aFChunk', target),),
+                parts=[(part, r2_imported_docx())], defaults=docx_default)
         for label, data in forms.items():
             with self.subTest(label):
                 self.assert_inserted(data)
@@ -1449,6 +1460,11 @@ class InsertedDocumentTests(SimpleTestCase):
                 TEXT + R2_ALT + TEXT, [chunk_row], [('word/afchunk1.txt', b'')], empty_override), without),
             ('an altChunk with properties and no r:id', package(
                 TEXT + '<w:altChunk><w:altChunkPr><w:matchSrc/></w:altChunkPr></w:altChunk>' + TEXT), without),
+            # refutation round 1, loss[4]: read by its URI path, the name still names no part
+            ('a missing part named with a query', package(
+                TEXT + R2_ALT + TEXT, [relationship('rIdChunk', 'aFChunk', 'missing.docx?v=1')]), without),
+            ('a missing part named by a file URI', package(
+                TEXT + R2_ALT + TEXT, [relationship('rIdChunk', 'aFChunk', 'file:///word/missing.docx')]), without),
         ]
 
     def test_an_import_that_holds_nothing_is_removed_as_in_release_1(self):
