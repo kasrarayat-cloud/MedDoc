@@ -189,7 +189,7 @@ def in_queue(queryset):
     count all read, so the three agree by construction (release 2, R2-19). The round is tested per document, a one-row
     subquery by the rounds' encounter index, so no statement reads a whole rounds table: a page stops at its 51st row, a
     count probes once per waiting document. An EXISTS let PostgreSQL hash every practice's rounds for the count instead:
-    faster only where two in three documents hold a waiting state and one in three has a round (customer.session_json
+    faster wherever about half or more of a large practice waits (customer.session_json
     18.3 ms against 35.9 ms, customer.list_page('queue') 25.1 ms against 40.1 ms, at 18,250 such documents among
     30,000), slower on a practice shaped like live's, where each document has its round and about one in twenty waits
     (the queue's COUNT 7.4 ms against 2.1 ms on section 8's bench data; refutation round 1, avail[1]). These are times

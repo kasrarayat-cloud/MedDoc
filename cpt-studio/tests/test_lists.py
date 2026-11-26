@@ -464,9 +464,10 @@ class ListStatementTests(TestCase):
 class ListPlanTests(TestCase):
     """At 20,000 documents (one practice of 2,000 among them: a minority of the table), each statement of a list page and
     of the session reads an index - the documents page studio_enc_ws_time, the queue page studio_enc_ws_queue - and
-    never scans studio_encounter, studio_codinground or studio_sourcefile, the COUNTs included (D-R2-37: a whole list's
-    COUNT reads an index when its practice is a minority; PlanAtEighteenThousandTests holds the practice that is most of
-    the table). tests/test_r1_repair_s.py reads the reads page the same way."""
+    never scans studio_encounter, studio_codinground or studio_sourcefile, the COUNTs included (here, a practice of 2,000
+    among 20,000; D-R2-37 holds a whole list's COUNT to its time, not to an index: a practice nearer half the table may
+    be read whole until VACUUM, and PlanAtEighteenThousandTests holds the practice that is most of the table).
+    tests/test_r1_repair_s.py reads the reads page the same way."""
 
     @classmethod
     def setUpTestData(cls):
@@ -1079,9 +1080,24 @@ class PlanAtEighteenThousandTests(TransactionTestCase):
     no Seq Scan on studio_encounter, studio_codinground or studio_sourcefile (nor the revisions, for the search). An
     exact COUNT of a whole list - the two first pages' totals and session_json's two counts - cannot avoid reading the
     practice when it is most of the table, so it is held to its time instead: at most 20 ms, the best of five (planning
-    and execution, as EXPLAIN ANALYZE reports them), and it reads no whole rounds or files table either."""
+    and execution, as EXPLAIN ANALYZE reports them), and it reads no whole rounds or files table either. The first state
+    is ANALYZE's alone, controlled and checked: autovacuum is off on the four tables for the test (an autovacuum of the
+    rounds inside the build let the EXISTS mutant R1-13 pass here; lane S refutation round 2, plans[1]), and no page of
+    the rounds is marked all-visible until the second state's VACUUM, which marks them."""
 
     COUNT_MS = 20
+
+    def autovacuum_back(self, tables):
+        with connection.cursor() as cursor:
+            for table in tables:
+                cursor.execute(f'ALTER TABLE {table} RESET (autovacuum_enabled)')
+
+    def rounds_all_visible(self) -> int:
+        """The rounds table's pages the visibility map marks all-visible, as the planner reads them (relallvisible, set
+        by ANALYZE and VACUUM: 0 until a VACUUM has marked a page)."""
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT relallvisible FROM pg_class WHERE oid = to_regclass(%s)', ['studio_codinground'])
+            return cursor.fetchone()[0]
 
     def explain(self, sql):
         """(the plan EXPLAIN ANALYZE reports for ``sql``, its planning and execution time in ms)."""
@@ -1094,6 +1110,11 @@ class PlanAtEighteenThousandTests(TransactionTestCase):
         return '\n'.join(lines), sum(took)
 
     def test_at_one_practice_of_18000_pages_and_searches_read_an_index_and_each_count_is_held_to_its_time(self):
+        tables = ('studio_encounter', 'studio_codinground', 'studio_sourcefile', 'studio_sourcerevision')
+        with connection.cursor() as cursor:  # 'after ANALYZE' is ANALYZE's alone: no autovacuum reaches the seed first
+            for table in tables:
+                cursor.execute(f'ALTER TABLE {table} SET (autovacuum_enabled = false)')
+        self.addCleanup(self.autovacuum_back, tables)
         ws, others = f.workspace('Synthetic practice of 18,000'), f.workspace('Synthetic other practices')
         user = f.member(ws)
         live_like_practice(ws, user, 18000, seed=18000)
@@ -1104,8 +1125,12 @@ class PlanAtEighteenThousandTests(TransactionTestCase):
         self.assertTrue(700 < waiting < 1100, waiting)  # about one in twenty, each with its round
         for state, command in (('after ANALYZE', 'ANALYZE'), ('after VACUUM ANALYZE', 'VACUUM ANALYZE')):
             with connection.cursor() as cursor:
-                for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile', 'studio_sourcerevision'):
+                for table in tables:
                     cursor.execute(f'{command} {table}')
+            if command == 'ANALYZE':  # the state checked, not assumed: no VACUUM has reached the rounds of the seed
+                self.assertEqual(self.rounds_all_visible(), 0, state)
+            else:  # and the reading sees a VACUUM when one has run
+                self.assertGreater(self.rounds_all_visible(), 0, state)
             with CaptureQueriesContext(connection) as seen:
                 documents = customer.list_page(membership, 'documents')
                 customer.list_page(membership, 'documents', documents['next'])
