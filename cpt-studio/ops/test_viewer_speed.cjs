@@ -719,6 +719,11 @@ test('V12c, R2-22: above 200 documents, the list\'s last page that comes under a
       assert.deepEqual([atAnswer.shown, atAnswer.text.includes(says)], [1, true], `${what}: the answer shows it`);
       assert.deepEqual([after.found, after.rows, after.shown, after.text.includes(says), after.said], [false, rows, 1, true, null],
         `${what}: the whole list on the page keeps the answer's row as the answer showed it`);
+      if (rows === 231) {  // cleared: the whole list newest first, a document only the answer holds first
+        await page.fill('#documentSearch', '');
+        assert.equal(await page.evaluate(() => document.querySelector('#documentsTable .document-row')?.getAttribute('href')),
+          `#doc/${added.id}`, `${what}: cleared, the newer document first`);
+      }
       assert.deepEqual(errors, [], `${what}: no error in the page`);
     } finally {
       await context.close();

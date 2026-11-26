@@ -2411,9 +2411,9 @@ async function loadDocument(id, serial, silent, poll = false) {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
     // a 404 (another practice's document, access ended) is an end (R2-18); to a route left it spares the view the
-    // route shown is opening (an older read is the open document's own)
+    // route shown is opening (an older read, or a route back to it, is the document's own)
     if (serial !== state.routeSerial || older()) {
-      if (error.status === 404) forgetMemory(serial === state.routeSerial ? '' : state.viewer?.view || state.early?.view
+      if (error.status === 404) forgetMemory(serial === state.routeSerial || state.route?.id === id ? '' : state.viewer?.view || state.early?.view
         || (state.route?.name === 'doc' ? `/api/encounters/${state.route.id}/original?view=1` : ''));
       return;
     }

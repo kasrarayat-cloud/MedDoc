@@ -6724,6 +6724,41 @@ test('R2-18, R2-15: a late 404 to a route already left spares the open the route
     'pagehide while it opens: an end, counted, no copy kept, the re-open downloads');
 });
 
+test('R2-18: a late 404 for a document the member has opened again is that document\'s own end: its kept copy and its early view go, and it is counted', async () => {
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  for (const pdfStarted of [false, true]) {
+    const reads = [];
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      const data = Uint8Array.from([37, 80, 68, 70]);
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), data);
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), early: null, pdfStarted });
+      global.location.hash = `#doc/${word.id}`;  // its read held
+      app.route();
+      await settle(() => reads.length === 1);
+      global.location.hash = '#documents';
+      app.route();
+      global.location.hash = `#doc/${word.id}`;  // opened again, its read held too
+      app.route();
+      await settle(() => reads.length === 2);
+      const early = app.state.early;  // with a worker started here, the re-open's view asked for with the click
+      const wipes = app.state.wipes;
+      reads[0](response({ status: 404, body: { error: 'Not found.' } }));  // the first read's late 404
+      await settle(() => false);
+      assert.deepEqual([app.state.keptViews.has(view), [...data], app.state.wipes - wipes, early ? early.abort.signal.aborted : null],
+        [false, [0, 0, 0, 0], 1, pdfStarted ? true : null], `pdfStarted ${pdfStarted}: its own late 404 is an end, counted`);
+      reads[1](response({ status: 503, body: { error: 'The service is not available right now.' } }));  // its new read fails
+      await settle(() => false);
+      assert.equal(app.state.keptViews.has(view), false, `pdfStarted ${pdfStarted}: still gone`);
+      app.forgetMemory();
+    }, (url, init) => {
+      if (url === `/api/encounters/${word.id}`) return new Promise(resolve => { reads.push(resolve); });
+      if (url === view) return new Promise((resolve, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+      return new Promise(() => {});
+    });
+  }
+});
+
 test('R2-18: a 404 on a refresh or a poll of the open document while its own view is on the way is an end: once the document opens, no copy of it is kept, and the copy made is overwritten', async () => {
   const word = fixture('encounter-word.json');
   const view = word.document.view_url;
@@ -7722,6 +7757,9 @@ test('R2-22, C2: the list\'s last page under a search answer keeps what the answ
       await settle(() => !app.state.list.loading && app.state.list.browse.next === null);
       assert.deepEqual([seen().length, seen()[0]?.includes(title), seen()[0]?.includes(label), empty.attached ? empty.textContent : null], [1, true, true, null],
         `${words}: the list's last page keeps the answer's row`);
+      type('');  // cleared: the whole list, newest first - a document only the answer holds first
+      assert.deepEqual([table.rows.length, table.rows[0]?.href], words === 'discharge summary' ? [231, '#doc/a1000000-0000-4000-8000-999999999999']
+        : [230, hrefOf(keysetRows()[0])], `${words}: cleared, the list newest first`);
     });
   }
 });
