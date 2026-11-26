@@ -168,7 +168,7 @@ class HappyPathTests(CodingCase):
             self.assertEqual(run.usage, msg['usage'])
             self.assertEqual(run.provider_request_id, 'req_synthetic')
             self.assertEqual((run.scope['round'], run.scope['fallback'], run.scope['effort']),
-                             (str(round_.pk), False, 'max'))
+                             (str(round_.pk), False, 'high'))  # the coder's effort: R2-33's (D434), 'max' in release 1
             self.assertEqual(run.service_date.isoformat(), '2026-10-05')
             source = run.request_body['messages'][0]['content'][0]['source']
             self.assertEqual(source['data'], {'$original_sha256': self.rev.source_file.sha256,

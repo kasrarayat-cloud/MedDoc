@@ -120,7 +120,7 @@ class CodingEnvironmentTests(unittest.TestCase):
 
     def test_every_container_is_given_the_mode_the_effort_and_the_figures(self):
         env = dict(item.split('=', 1) for item in install.runtime_env('disabled', '')[1::2])
-        self.assertEqual((env['CPT_STUDIO_CODING_MODE'], env['CPT_STUDIO_CODING_EFFORT']), ('disabled', 'max'))
+        self.assertEqual((env['CPT_STUDIO_CODING_MODE'], env['CPT_STUDIO_CODING_EFFORT']), ('disabled', 'high'))
         self.assertEqual((env['CPT_STUDIO_DOCUMENT_CEILING_USD'], env['CPT_STUDIO_CONCURRENT_DOCUMENTS']), ('25', '4'))
         self.assertNotIn(CODER['file_env'], env)  # disabled names no file
         self.assertFalse([name for name in env if name.startswith('CPT_STUDIO_QUESTION_')])
@@ -128,7 +128,18 @@ class CodingEnvironmentTests(unittest.TestCase):
         for name in ('CPT_STUDIO_PROVIDER_MODE', 'CPT_STUDIO_ASTRA_MODE', 'CPT_STUDIO_FABLE_MODE',
                      'CPT_STUDIO_GEMINI_MODE'):
             self.assertEqual(env[name], 'disabled')
-        self.assertEqual((install.CODING_EFFORT, install.CODING_MODES), ('max', ('disabled', 'live')))
+        self.assertEqual((install.CODING_EFFORT, install.CODING_MODES), ('high', ('disabled', 'live')))
+
+    def test_the_worker_is_started_with_the_coders_effort_high(self):
+        # R2-33 (owner D433, result D434): the coder's effort is 'high', 'max' in release 1. The installer writes it
+        # into the worker's own environment - the container that sends - once, whatever its coding mode, and the
+        # worker's settings read it (cptstudio/settings.py: CODING_EFFORT from CPT_STUDIO_CODING_EFFORT)
+        for coding, ruling in ((None, ''), ('live', RULING)):
+            with self.subTest(coding=coding):
+                worker = install.service_args('worker', IMAGE, REVISION, 'disabled', ruling, coding=coding)
+                self.assertEqual(worker[-2:], [IMAGE, 'worker'])
+                self.assertEqual([item for item in flags(worker, '-e') if item.startswith(f'{CODER["effort_env"]}=')],
+                                 ['CPT_STUDIO_CODING_EFFORT=high'])
 
     def test_live_and_a_loader_checks_file_name_the_worker_path(self):
         live = dict(item.split('=', 1) for item in install.runtime_env('disabled', RULING, coding='live')[1::2])

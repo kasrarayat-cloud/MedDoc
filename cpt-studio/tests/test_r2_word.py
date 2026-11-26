@@ -6,7 +6,8 @@
   fallback refuses a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader
   sees outside the fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and
   nothing else; a seeded fuzz.
-- The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
+- The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it,
+  but for the coder's effort, which R2-33 made "high" (release 1's was "max"): the pin is release 1's tree at "high".
 - The canonical package gate (refutation round 3, D-R2-46): a package not in the one form a Word package takes - its
   zip, its relationships parts and targets, its content types, a preview's id - is refused before E2 reads a part, told
   as an inserted document (CanonicalPackageTests); the files measured from Word and the real tools pass it unchanged.
@@ -2897,110 +2898,114 @@ def pin_requests(ws, user, data):
         (role, request.sha256, hashlib.sha256(fable_client.canonical(request.params)).hexdigest(), request.attempts)
         for role, request in fake.calls)
 
-# Measured on release 1's tree - an export of 9ee0c85be (docx_package.py blob c4aa942e) - with exactly these builders,
-# CONVERTER_SOCKET='' and laned_pin_pdf: per shape, the upload's sha256, the package's sha256 as the converter saw it,
-# and each request (role, request.sha256, sha256 of the exact parameters, attempts). A failure here is the alarm, never
-# a value to re-pin: what the coder is sent for a clean Word file may change only through the coding-path gate (D358).
+# Measured on release 1's tree at the coder's effort "high" (R2-33, D433 and D434; release 1's setting was "max", at
+# which lane D first measured them on an export of 9ee0c85be, docx_package.py blob c4aa942e): twice and independently
+# (the lead's m1 and m2) on release 1's commit 816045c7 (cpt-studio tree bc0729bb9596) with
+# CPT_STUDIO_CODING_EFFORT=high, with exactly these builders, CONVERTER_SOCKET='' and laned_pin_pdf: per shape, the
+# upload's sha256, the package's sha256 as the converter saw it, and each request (role, request.sha256, sha256 of the
+# exact parameters, attempts). The effort moved every request.sha256 and parameters sha256 and nothing else: the
+# uploads, the packages and the attempts are as at "max". A failure here is the alarm, never a value to re-pin: what
+# the coder is sent for a clean Word file may change only through the coding-path gate (D358).
 RELEASE_1_WORD_REQUESTS = {
     'plain, a PAGE field': (
         'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
         'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
         (
-            ('reader', 'f709a11872af1092c3d2bdd05d1812f668704a13a6ee1122fbbf908686974073',
-             '68c703d43e7a01ac70ad99d4e7c3891ec9dfada9886572f6c440cb360c5a44a4', 2),
-            ('checker', '7984eb2c9f1346ae50469c590f219d941814a2cef0d0fc12cf8658ffde00226b',
-             '28166ac5c600bf9a554dba95b0baf4247e7e0916cdb47c6f8059384219a7fe82', 2),
+            ('reader', '7b5a7edaf8cd646d09cdbb28b6cf8f9111daf830b389c9c4ba6a4c31c8d2d9f2',
+             '0b4559423486b087a7c540aff307cdd66f8944ba906f25dc015ee9283f559909', 2),
+            ('checker', '6ae3baa72e07529746da968a4f3f62d716948fc38d2d82a8c6e8c6bf83b10586',
+             '0619e6d3b483d7c2788433e3fffb1dd6770f0aae48cf3811628eb87e2ea522fd', 2),
         )),
     'an object with its preview': (
         'd0c7171d5eae0ef9364030f85829773e45067a5e069e317283e4d8f86f03c4a7',
         '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
         (
-            ('reader', 'd9cabd6201c9bb8f620658a00d45d856ae3c8b8da35a1030cf9feedcaa600479',
-             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
-            ('checker', '0b2f18d2a4242fdb45897101a6f2439e504bd7fb76128dd0710c6ea57003c4ec',
-             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+            ('reader', '488fafce876c304ca85cac7212f8fd54eb61cc6a38b369c0c44fb973395ccd25',
+             '7ca37765cb8e5767f47e85d920a1053636876008cae82b4d9edbbd3c6b42054c', 2),
+            ('checker', '3e1df38df52353eb68c09acd84eb5cca07eef8616386935095af903ff334d797',
+             '5c4ab9bb89b0575af8d1993ad3af1e889cd9f7058accef35dff167680e1be830', 2),
         )),
     'a removed field with its result': (
         '25137a7f789df0ea6af37ad33cf9ad683c7ddb2d0ba877a7877af70db96bbf43',
         '613e01ffb636b81b7f1edebdcac6c60e453a097cc04dce75e064bf8c6a70c02f',
         (
-            ('reader', '01a7ca13a7979444e54998b1d877f37f3053d3b65b21c3b0f3630ca42114e8fc',
-             'e109717c963e7109ea5b6e3391b73086cd1ca65b005c2c8bf56e6c05e6ed5aee', 2),
-            ('checker', '4253486b77447dbdc28aee03c989ff4593c312690c8b5d952cb341b3e8e8fc49',
-             'c3d8c454ab6e2dca8ed087c8e84c106af89094d36f3e53bacf7d54acdb069a71', 2),
+            ('reader', 'b1f085b0eb04b05b413bb15fff25b9c3a21960fd45b5c75f44702cefdfa13106',
+             '5ef14ebe01cd8048c651b5b7bf285de5409e8887e7403ee72645b410fd409c49', 2),
+            ('checker', '56e297d4a2faefb95411e379b613246bed922024e6fd870f34afd291cf48090c',
+             '684b03e181de815129161cd49fd3f16ec4bf67cecadfca7a63c68b5a23daafeb', 2),
         )),
     'an empty w:object': (
         '27c59b326f1103b050508b562fb006702079a2e84034999aed9066dec7dbfccf',
         '32f07c4f214665ec879f1599d33b017f0f5d04d5e5b36b4b818e58194ac0ccf4',
         (
-            ('reader', '01dc7df561b2ff2b7b000d61b2ca6597a2bd51ae27a486020106815abd381929',
-             'd3e960badb04ed07e3bf21fe5d32778433db789a47360b9f53c35242147a8543', 2),
-            ('checker', '9881a03fa672d5edd661739b254454caff698866072a3ef6161da9880b54e493',
-             '9cca02dd8a243dc8e366e4eb62b6e25c5f3a97a9df4e1602593b06e36f381229', 2),
+            ('reader', '7e29aa355464b975f9eb31abfcf4311fcc70b7d190baabae09b0dc9c9f4bde70',
+             'eaeabfd1c897df440837752cb5973b37230517ca2f6e0667a6670a2fbf82d992', 2),
+            ('checker', '416f26132dfd16e20cef34f6540c307351c16e149696499e4582cb9ff6ff83b6',
+             'a3ac93f2c0be679a59f1eb5fa70ac623e66a1360bc631447e7c7cf98b64441bb', 2),
         )),
     'an empty removed w:fldSimple in an IF result': (
         '368e6cc9070892c286fed7ada17add47b9fab127dd6f70274a9e3763946e63d6',
         '68220ffe7297ccf93d6c9ba824378283a724739585361e0c87eeb049dfadc708',
         (
-            ('reader', 'e9b37c3c1d90b981899903698a2da031389689bbe7c0f970ee415f6dee044c47',
-             '32d3060fa79f0d2150e6bf852085a51f91dc2305f074ad61ec89dfcfd2c0e84d', 2),
-            ('checker', '674ab65d12ab01a11799ee5f481e050652d65b1b01979ba1f20e07cc20a43dbb',
-             '7efcc22bc6ac127d3d17b0a977935cca6011731c6f34f973bfa42c78f5d82265', 2),
+            ('reader', '975e8a457a006a5511f1dcc2ddbb6462a8f4423eac18206cd4213974cce13ff4',
+             '3d55db8375f872e14e9ee0193f93688a048f9ff0af9e9ea3494e6470d07ee30a', 2),
+            ('checker', '7ff43b9f49218c3fefaac0db91f9beaa35b841a0befbc8be02811032a52fda84',
+             'af75156555ea3340a38634fe27051ce812f170da9cfa84c6c671aabf22b3ad0a', 2),
         )),
     'an object with its preview and a w:movie': (
         'c5d359bd2527e317f13c58ea5708178fa1663108d99539c882fa56281f09b652',
         '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
         (
-            ('reader', '08937266afd8a758c016bda66236375b308cf1533e8d1b3b67a460c7498b1cb0',
-             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
-            ('checker', 'ab540ec6cd2b3ab7caefe0a9d4585b152278e8056835ecfa103c68ce19a8d387',
-             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+            ('reader', '2512b6faa611e720eaf459184c560b88d65afec4b1059198fcfed5fde812840d',
+             '7ca37765cb8e5767f47e85d920a1053636876008cae82b4d9edbbd3c6b42054c', 2),
+            ('checker', '28ae07ff747f1836f261dbda52f4ee6cf259a3aebaa1e2d199528a54e1d5a82a',
+             '5c4ab9bb89b0575af8d1993ad3af1e889cd9f7058accef35dff167680e1be830', 2),
         )),
     'an altChunk that holds nothing': (
         'c7d8cb0ca87e9c1da7eabb414aecfa3c6eb7d6cae5ddd308add238223fdf8fcf',
         '1a7ca20d8f460e0ee40bf098c84ff0cd3d2ff05c240795a829ebc57b11ec4793',
         (
-            ('reader', '0761e4bd54a7dbe0fb97ed821a89fead977537a28a3d69f9657e1d91892ff207',
-             'c165680749a6f130302dab82d0e6e6e3fed7f8bd8e2c9d9ee7c7bdfcf374929d', 2),
-            ('checker', '3679ae9d6361cf6f1b5139a75da91a09e28fd2ade3553fc0b4dd46109792ebec',
-             '7c8c38865ffd06dc1f2fc4ce41cd2330c3f84c73fd938bb0279fd9692bcf5c1a', 2),
+            ('reader', '0d14990deab6669168b63b4ae055408e80e916cd24215c3737ab368b5ea499a2',
+             'd117db80365d8f84c41e4e76fe5e710a138ce13e9c596573d4282a7e34e058fa', 2),
+            ('checker', 'e55c09f4fd58c7fc31bff528243e3ccbe4f918ce1b0b58d0b5fd71206c9efab1',
+             '38cb11876980fbd4fc7e4fb90600c0f13123dfd874c7ec7adabf5548b3cfb548', 2),
         )),
     'a picture INCLUDEPICTURE in an IF result': (
         '59beff8ba0f3272b659e9688770c88d8c337172f06190eaf44336066b66c4828',
         'aa4c439652576e60b6c37dd38af74dbbc0948309a297d9e7b01b9ef0a4d53ab9',
         (
-            ('reader', '0886fe679f3f8cc5902af5ced4514dda6063e46b5e8f147c29b887a7c25f78ed',
-             'b9882167d1e57c2ee227660f35c779b9e46659b2d5671d2e50d564c9d8df73e0', 2),
-            ('checker', '1a6d4a08379419c85e679f3fa4faeaaf1d2c718f8ccbd978b6936fae64319773',
-             'a8dc9902c92aa69a205bbe6a4647a2188d8daff206d06d0fd546f4d1f48d57cf', 2),
+            ('reader', '21f99259e39d9ed8196c7f115aef33e4b4be5f1cbe393964eab1e3e80fdb64ee',
+             '14848fa616d0d514ca27ccca8920d45e7dc2c0227a2dfe31ce92c69f9ff6c80e', 2),
+            ('checker', '8896f5738d62b60ffaba3eebea1446bfdf6f8952de27874f4ee46e92eff5eb0c',
+             '0c15743e63ec22edaed89794e8605c519e01f9883189c069b5cd8eab683564e7', 2),
         )),
     'a removed field in a HYPERLINK instruction, plain result': (
         'd80e298b0d73c8fae0a16ef126d550dcdf14f6a3357d9d03e31ed1e20694a2a4',
         '45e0d8196c736dd3578f47a6af006a48187422b233df4581753337ba9f7f9b15',
         (
-            ('reader', 'e3e69de51ff0379f2e93d8d0c2e8364a0488292cd4e4af2c6ec0ee8f3fcce005',
-             '8754b7f48f07ab0f31eedfa404bbf469f79aeb89aa194529bcb4e962cae342d9', 2),
-            ('checker', '93c2679d01ae5ef8301516c095e950fd85fc28603bc385ee32342de19304fa64',
-             'e19e673bc57c94c89af657c7983985a4f3a2d867c3865804995ace17f695aae7', 2),
+            ('reader', '3767c6e33b2b4ebb7123f6436ca8042fa314de29f77bf2490bdee2d22ed1c303',
+             '311053fb24fc264bf26e7245d319b60ede510421f39e3ce43222ae3d4f79b9c5', 2),
+            ('checker', '88435c5567d1b1a7507a2808d818a8b42b33a6f22c478a9ed59d3e549cde3dfb',
+             'a1059bdcb71cb7132495bf7847f05c513fcc598410685db8c384a46159d92a46', 2),
         )),
     'a removed field in a QUOTE instruction, plain result': (
         'a5189f553064ec1ce8cc24d07f4f3d4a0748fc690d6bc87a1b3f25d41510d97c',
         '2f271ef6ad028d35fbdbea5360f75823a26269610f2e9ed7b35cd474429663a9',
         (
-            ('reader', '0399dda60d6e4edc624f239e0c078feea9ee71acbce4200d52d8d3a345b6662f',
-             '94111e17890d7e49c57772a43e2cd3aa31122e5f83ed0e59a4bacfa3630721b8', 2),
-            ('checker', 'dead2940e10127cee732bc249eaa398036b74bb8e5177b8f1e186c57a6924524',
-             '4039eae8168d430c0e4fb8fae517fc1621aa601dc1e65d72d0840e1bbaf75c0d', 2),
+            ('reader', 'e6a66dfc46bd280b6e6a31bc6d3c13500182e44efb413d9868956bc762426db9',
+             'cf8370a8a32c381e7df990f3b3d161074d00dab1cf112e3b3f8a9281e9d0a758', 2),
+            ('checker', '55cfbec7d66db4565c6d7d218fbdccd8f4fef69c9b977a31dc023d7873b6eb48',
+             'af79df7134274501b72ff13338e430a71dd745ecf9a3b5fa113e362e3583dd43', 2),
         )),
 }
 
 
 class CleanWordRequestTests(TestCase):
     """Refutation round 1, refuse[0] (the Word case of R2-3, D358): a Word file that needs no refusal and no QUOTE is
-    sent to the coder exactly as release 1 sent it - the package, every request and its parameters - over clean shapes
-    that include what release 2 reads and leaves alone: an object with its preview, an empty w:object, an import that
-    holds nothing, a picture INCLUDEPICTURE in a field's result, and a removed field in an exempt outer field's
-    instruction (HYPERLINK, QUOTE)."""
+    sent to the coder exactly as release 1 sent it, at the coder's effort R2-33 set ('high'; release 1's was 'max') -
+    the package, every request and its parameters - over clean shapes that include what release 2 reads and leaves
+    alone: an object with its preview, an empty w:object, an import that holds nothing, a picture INCLUDEPICTURE in a
+    field's result, and a removed field in an exempt outer field's instruction (HYPERLINK, QUOTE)."""
 
     @classmethod
     def setUpClass(cls):

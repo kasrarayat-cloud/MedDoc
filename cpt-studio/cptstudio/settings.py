@@ -276,13 +276,15 @@ ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
 # The coding step (studio/fable/; BUILD-SPEC 3 and 4): Claude Fable 5.2 reads the original document twice, as the reader
 # and as the checker. CODING_MODE 'disabled' (the default) sends nothing; 'replay' reads recorded final messages from
 # CODING_REPLAY_DIR by request sha256 and calls nothing; 'live' calls the Anthropic API with the key read at send time
-# from ANTHROPIC_CREDENTIALS_FILE (above; mounted in the worker only). CODING_EFFORT is output_config.effort ('max', the
-# owner's setting); CODING_READ_TIMEOUT_SECONDS bounds each wait for a byte of the stream (anthropic.Timeout's read).
+# from ANTHROPIC_CREDENTIALS_FILE (above; mounted in the worker only). CODING_EFFORT is output_config.effort ('high',
+# the owner's setting since release 2, R2-33; it was 'max' in release 1: the owner approved a paid test of five
+# synthetic documents at both efforts, D433, and at 'high' every code, unit and modifier matched 'max', at 84% less
+# cost, D434); CODING_READ_TIMEOUT_SECONDS bounds each wait for a byte of the stream (anthropic.Timeout's read).
 CODING_MODE = _env('CODING_MODE', 'disabled')
 if CODING_MODE not in {'disabled', 'replay', 'live'}:
     raise RuntimeError('CPT_STUDIO_CODING_MODE must be disabled, replay or live.')
 CODING_REPLAY_DIR = _env('CODING_REPLAY_DIR', '')
-CODING_EFFORT = _env('CODING_EFFORT', 'max')
+CODING_EFFORT = _env('CODING_EFFORT', 'high')
 if CODING_EFFORT not in {'low', 'medium', 'high', 'xhigh', 'max'}:
     raise RuntimeError('CPT_STUDIO_CODING_EFFORT must be low, medium, high, xhigh or max.')
 _read_timeout = _env('CODING_READ_TIMEOUT_SECONDS', '900')

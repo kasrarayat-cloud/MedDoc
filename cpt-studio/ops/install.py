@@ -221,7 +221,11 @@ CODER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
          'loader': 'load_anthropic_credentials', 'setting': 'ANTHROPIC_CREDENTIALS_FILE',
          'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)}
 CODING_MODES = ('disabled', 'live')  # --coding-mode: the installer never starts a pair replaying
-CODING_EFFORT = 'max'  # the owner's setting (the build specification, section 4.1)
+# The coder's effort, the owner's setting (the build specification, section 4.1): 'high' since release 2 (R2-33), 'max'
+# in release 1. The owner approved a paid test of five synthetic documents at both efforts (D433); at 'high' every
+# code, unit and modifier matched 'max', at 84% less cost (D434). Every container the installer starts is given it as
+# CPT_STUDIO_CODING_EFFORT (runtime_env), the worker's included.
+CODING_EFFORT = 'high'
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
 PASSAGE_DATA = f'{APP}/studio/reference/data'
@@ -7162,7 +7166,7 @@ def pair_modes(mode, participants=None, interpreter=None, coding=None) -> str:
 
 
 def coding_summary(mode) -> str:
-    """'coding live, effort max': how an app phase starts its pair (the Fable coding build runs no other provider)."""
+    """'coding live, effort high': how an app phase starts its pair (the Fable coding build runs no other provider)."""
     return f'coding {mode}, effort {CODING_EFFORT}'
 
 
