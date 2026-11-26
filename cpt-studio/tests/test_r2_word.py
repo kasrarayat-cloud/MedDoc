@@ -787,9 +787,6 @@ class FieldShellTests(ReleaseOneCase):
                                                                  fc('separate'), picture, fc('end')) + AFTER,
                                                       (rel('rIdPrev', 'image', 'media/image1.emf'),),
                                                       (('word/media/image1.emf', EMF),)),
-            'a simple INCLUDEPICTURE in a simple IF': package(BEFORE + p(
-                '<w:fldSimple w:instr=" IF 1 = 1 "><w:fldSimple w:instr=\' INCLUDEPICTURE "x" \'>' + t('PIC')
-                + '</w:fldSimple></w:fldSimple>') + AFTER),
             'a removed field in an instruction whose outer result holds a field': package(BEFORE + p(
                 fc('begin'), instr(' IF 1 = 1 "'), field(INC, 'INCLUDED'), instr('" "" '), fc('separate'),
                 field(' QUOTE "x" ', 'INCLUDED'), fc('end')) + AFTER),
@@ -808,6 +805,27 @@ class FieldShellTests(ReleaseOneCase):
         shelled = package(BEFORE + p(fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), longer, fc('end'))
                           + AFTER, (rel('rIdPrev', 'image', 'media/image1.emf'),), (('word/media/image1.emf', EMF),))
         self.assertEqual(shells_in(docx_package._safe_package(shelled)[0]), 1)  # the control: a longer word is not it
+        # refutation round 1, loss[1]: an INCLUDEPICTURE whose stored result shows text or a symbol is no picture alone
+        # - unwrapped in an IF's result, its words were lost (release 1) - so it stays a field, shelled
+        symbol = '<w:r><w:sym w:font="Wingdings" w:char="F0E0"/></w:r>'
+        for label, inner, shell in (
+                ('a simple one in a simple IF', '<w:fldSimple w:instr=\' INCLUDEPICTURE "x" \'>' + t('PIC')
+                 + '</w:fldSimple>', '<w:fldSimple w:instr=" QUOTE ">' + t('PIC') + '</w:fldSimple>'),
+                ('a complex one with a caption beside its picture, in a complex IF', picture.replace(
+                    fc('separate') + '<w:r><w:pict>', fc('separate') + t('CAPTION') + '<w:r><w:pict>'), None),
+                ('a complex one whose result is a symbol', fc('begin') + instr(' INCLUDEPICTURE "SECRET.png" ')
+                 + fc('separate') + symbol + fc('end'), None)):
+            with self.subTest(f'INCLUDEPICTURE with text: {label}'):
+                outer = (p('<w:fldSimple w:instr=" IF 1 = 1 ">', inner, '</w:fldSimple>') if shell is not None
+                         else p(fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), inner, fc('end')))
+                data = package(BEFORE + outer + AFTER, (rel('rIdPrev', 'image', 'media/image1.emf'),),
+                               (('word/media/image1.emf', EMF),))
+                out = docx_package._safe_package(data)[0]
+                self.assertEqual(shells_in(out), 1)
+                self.assertNotIn('SECRET', document_part(out))
+                self.assertNotEqual(self.release_1()._safe_package(data)[0], out)  # release 1 unwrapped it
+                if shell is not None:
+                    self.assertIn(shell, document_part(out))
 
 
 def nested_in_instruction(before, after, result, *, nested_result=None, nested=None):
@@ -849,6 +867,9 @@ def fallback_shapes():
             if_before, if_after, t('INCLUDED ') + field(' PAGE ', '3') + t(' TEXT')), 1),
         ('outer IF, its stored result a field, then text', nested_in_instruction(
             if_before, if_after, field(' PAGE ', '3') + t(' INCLUDED TEXT')), 1),
+        # refutation round 1, refuse[1]: a w:fldSimple in the result is a field of it, as a complex one is
+        ('outer IF, its stored result text beside a simple field', nested_in_instruction(
+            if_before, if_after, t('INCLUDED ') + '<w:fldSimple w:instr=" PAGE ">' + t('3') + '</w:fldSimple>'), 1),
         ('two outer fields, one in the other\'s instruction, each a plain result', package(BEFORE + p(
             fc('begin'), instr(' IF 1 = 1 "'), fc('begin'), instr(' QUOTE "'), field(INC, 'INCLUDED'), instr('" '),
             fc('separate'), t('QUOTED'), fc('end'), instr('" "" '), fc('separate'), t('IF RESULT'), fc('end'))
@@ -868,6 +889,12 @@ def fallback_shapes():
                        field(INC, 'BRANCH TEXT'), instr('" "" '), fc('separate'), field(INC, 'SHOWN IN WORD'),
                        fc('end')) + AFTER), 0),
         ('outer IF, its result a kept field', nested_in_instruction(if_before, if_after, field(' QUOTE "x" ', 'Q')), 0),
+        # refutation round 1, refuse[1]: the same results written as w:fldSimple fields are fields alone too
+        ('outer IF, its result a kept simple field', nested_in_instruction(
+            if_before, if_after, '<w:fldSimple w:instr=\' QUOTE "x" \'>' + t('Q') + '</w:fldSimple>'), 0),
+        ('H02 with its result a simple field', nested_in_instruction(
+            if_before, if_after, '<w:fldSimple w:instr=\' INCLUDETEXT "SECRET" \'>' + t('INCLUDED TEXT')
+            + '</w:fldSimple>'), 0),
         # coded: HYPERLINK, TOC, QUOTE and STYLEREF keep their stored result (QUOTE and STYLEREF: the lead's 7.4 run on
         # lane D's corpus inputs H7f and H7g, refutation round 1)
         ('outer HYPERLINK, plain result', nested_in_instruction(' HYPERLINK "', '" ', t('LINK TEXT')), 0),
@@ -899,7 +926,7 @@ class FieldFallbackTests(ReleaseOneCase):
 
     def test_a_removed_field_in_an_instruction_with_a_plain_stored_result_is_refused(self):
         shapes = fallback_shapes()
-        self.assertEqual(sum(1 for *_, fields in shapes if fields), 13)
+        self.assertEqual(sum(1 for *_, fields in shapes if fields), 14)
         for label, data, fields in shapes:
             with self.subTest(label):
                 if fields:

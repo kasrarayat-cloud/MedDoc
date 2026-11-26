@@ -37,16 +37,19 @@ before it waits on it, so the parent's finally kills that group as well as the c
   formula ('=' first) is never removed. What was removed is reported as counts only.
 - Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
   would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
-  rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty, in any format,
-  story or namespace form, and - on purpose, although the file holds nothing of it - one whose relationship is External,
-  and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or pointer that would leave no
-  picture - a v:imagedata or a:blip naming a part that is sent - in its place (R2-29); a field kept, not HYPERLINK or
-  TOC, whose stored result holds something a reader sees outside the fields in it while a removed field stood in its
-  instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming
-  no relationship, a missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A
-  removed field in another field's result, and in no field's instruction, stays a field whose instruction is QUOTE -
-  a type LibreOffice shows by its stored result - unless it is INCLUDEPICTURE (R2-30). Everything else is edited as
-  release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's package.
+  rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
+  reader resolves -, in any format, story or namespace form, and - on purpose, although the file holds nothing of it -
+  one whose relationship is External, and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object,
+  control or pointer that would leave no picture - a v:imagedata or a:blip naming, by its exact name, a part that is
+  sent and is a picture - in its place (R2-29); a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored
+  result holds something a reader sees outside the fields in it while a removed field stood in its instruction, which
+  LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
+  missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A removed field in another
+  field's result, and in no field's instruction, stays a field whose instruction is QUOTE - a type LibreOffice shows
+  by its stored result - unless it is an INCLUDEPICTURE whose stored result shows no text: a picture alone (R2-30,
+  refutation round 1). Everything else is edited as release 1 edits it, so a Word file that needs no refusal and no
+  QUOTE gives exactly release 1's package (a zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed,
+  apart).
   check_in_child runs the same check on a Word file whose conversion a round stored, before that conversion is read
   again (R2-28 step 7, C8).
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
@@ -305,8 +308,9 @@ def safe_package(data: bytes) -> bytes:
       ContentNotShown, and nothing of it is rebuilt or converted - an imported document that holds content or reaches
       outside and every subdocument (R2-28), an object or a control that would leave no picture (R2-29), a field whose
       stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
-      another field's result stays a field whose instruction is QUOTE (R2-30). Everything else is edited as release 1
-      edits it: a Word file that needs no refusal and no QUOTE gives exactly release 1's package.
+      another field's result stays a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a picture
+      alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no QUOTE
+      gives exactly release 1's package.
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -582,7 +586,8 @@ _SHOWN = _names('drawing', 'pict', 'object')
 # (the lead's 7.4 run on lane D's corpus inputs H7f and H7g, refutation round 1); any other type, an unknown name
 # included, stays refused - LibreOffice evaluates many real types
 _EXEMPT_OUTER_TYPES = ('HYPERLINK', 'TOC', 'QUOTE', 'STYLEREF')
-_PICTURE_TYPE = 'INCLUDEPICTURE'  # a removed type whose result is a picture LibreOffice draws wherever it stands
+# a removed type whose result, when it is a picture alone, LibreOffice draws wherever it stands (_Field.picture_alone)
+_PICTURE_TYPE = 'INCLUDEPICTURE'
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
 # type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
@@ -700,15 +705,20 @@ class _Field:
     'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
     left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
     __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction', 'holds_removed',
-                 'watched', 'result_shown')
+                 'watched', 'result_shown', 'simple', 'picture', 'text_shown')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
         self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
         # R2-30's fallback: a removed field stood in this field's instruction; its result is read (from its first
-        # separate); it holds something a reader sees outside the fields in it
+        # separate); it holds something a reader sees outside the fields in it; the w:fldSimple elements open at that
+        # separate - one opened since is a field of its result (refutation round 1, refuse[1])
         self.holds_removed = self.watched = self.result_shown = False
+        self.simple = 0
+        # refutation round 1, loss[1]: an INCLUDEPICTURE (read at its first separate), and whether its own stored
+        # result shows text or a symbol - then it is no picture alone, and stays a field (R2-30's QUOTE)
+        self.picture = self.text_shown = False
 
     def feed(self, text, name=None, deleted=False):
         """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
@@ -746,8 +756,14 @@ class _Field:
                 for live, deleted in self.readings}
 
     def names_a_picture(self) -> bool:
-        """INCLUDEPICTURE in every reading (R2-30): its result, a picture, is unwrapped as release 1 unwraps it."""
+        """INCLUDEPICTURE in every reading (R2-30)."""
         return self._types() == {_PICTURE_TYPE}
+
+    def picture_alone(self) -> bool:
+        """INCLUDEPICTURE whose stored result shows no text and no symbol: a picture, which LibreOffice draws wherever
+        it stands, so it is unwrapped as release 1 unwraps it (refutation round 1, loss[1]: one whose result shows text
+        lost that text once unwrapped inside a kept field's result)."""
+        return self.names_a_picture() and not self.text_shown
 
     def loses_its_result(self) -> bool:
         """R2-30's fallback, read at a kept field's end once a removed field stood in its instruction: a type every
@@ -789,7 +805,10 @@ class _PartReader:
         self.shells, self.candidates, self.unshown = 0, [], 0
         self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
         self.watched = 0  # open fields whose result is read for R2-30's fallback
+        self.simple = 0  # open w:fldSimple elements (refutation round 1, refuse[1])
+        self.simple_pictures = []  # open w:fldSimple INCLUDEPICTUREs: [element, its result shows text or a symbol]
         self.text_field = self.text_name = self.parser = self.shown_field = None
+        self.shown_picture = self.shown_simple = None  # the INCLUDEPICTURE whose result the text being read stands in
         self.nested_removal = self.text_deleted = False
 
     def read(self):
@@ -841,7 +860,8 @@ class _PartReader:
         if self.holders and name in _PICTURE_KEYS and any(attrs.get(key) in self.pictures
                                                           for key in _PICTURE_KEYS[name]):
             self.pictured.append(element[_AT])  # R2-29: a picture whose part is sent, in an open object or w:pict
-        if self.watched and name in _SHOWN and self.fields and self.fields[-1].watched:
+        if self.watched and name in _SHOWN and self.fields and self.fields[-1].watched \
+                and self.simple <= self.fields[-1].simple:
             self.fields[-1].result_shown = True  # R2-30's fallback: a picture in the result a field holds
         stack.append(element)
 
@@ -861,8 +881,9 @@ class _PartReader:
                     field.in_instruction = False
                     self.instructions -= 1
                     if field.holds_removed or field.begin[_AT] in self.carried:  # R2-30's fallback: read its result
-                        field.watched = True
+                        field.watched, field.simple = True, self.simple
                         self.watched += 1
+                    field.picture = field.names_a_picture()  # loss[1]: an INCLUDEPICTURE's result is read
                 field.decided = True
             elif kind == 'end' and field is not None:
                 field.end = (element, list(self.stack))
@@ -870,8 +891,11 @@ class _PartReader:
         elif role == _FLDSIMPLE:
             if open_type:
                 field.nested()
+            self.simple += 1
             element[_CHILDREN] = []
             element[_INSTRUCTION] = next((attrs[key] for key in _INSTR if key in attrs), '')
+            if _names_a_picture(element[_INSTRUCTION]):  # loss[1]: its result is read
+                self.simple_pictures.append([element, False])
         elif role in _CONTAINERS:
             self.containers += 1
             if role == _OBJECT:
@@ -894,15 +918,28 @@ class _PartReader:
                 self.text_field, self.text_name = field, element[_NAME]
                 self.text_deleted = bool(self.deletions) and element[_NAME] in _DELETED_TEXT
                 self.parser.CharacterDataHandler = self._text
-            elif field is not None and field.watched and not field.result_shown:
-                self.shown_field = field  # R2-30's fallback: text in the result being read
-                self.parser.CharacterDataHandler = self._shown_text
+            else:
+                if field is not None and field.watched and not field.result_shown and self.simple <= field.simple:
+                    self.shown_field = field  # R2-30's fallback: text in the result being read, outside its fields
+                if field is not None and field.picture and not field.text_shown:
+                    self.shown_picture = field  # loss[1]: text in an INCLUDEPICTURE's result
+                simple = self._simple_picture()
+                if simple is not None and not simple[1]:
+                    self.shown_simple = simple  # loss[1]: text in a w:fldSimple INCLUDEPICTURE's result
+                if self.shown_field is not None or self.shown_picture is not None or self.shown_simple is not None:
+                    self.parser.CharacterDataHandler = self._shown_text
         elif role == _DELETION:
             self.deletions += 1
         elif open_type:  # a symbol stands for its character, a tab or a break for white space
             field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
-        elif role == _SYMBOL and field is not None and field.watched:
-            field.result_shown = True
+        elif role == _SYMBOL:
+            if field is not None and field.watched and self.simple <= field.simple:
+                field.result_shown = True
+            if field is not None and field.picture:
+                field.text_shown = True
+            simple = self._simple_picture()
+            if simple is not None:
+                simple[1] = True
 
     def _end(self, name):
         element = self.stack.pop()
@@ -916,8 +953,9 @@ class _PartReader:
                 parent[_PROPS].append(element)
             return
         if role == _TEXT:
-            if self.text_field is not None or self.shown_field is not None:
-                self.text_field = self.shown_field = None
+            if self.text_field is not None or self.shown_field is not None or self.shown_picture is not None \
+                    or self.shown_simple is not None:
+                self.text_field = self.shown_field = self.shown_picture = self.shown_simple = None
                 self.parser.CharacterDataHandler = None
         elif role == _DELETION:
             self.deletions -= 1
@@ -931,7 +969,7 @@ class _PartReader:
                     self.watched -= 1
                 if field.removed():
                     if not self.instructions and field.separates and self._in_a_result() \
-                            and not field.names_a_picture():
+                            and not field.picture_alone():
                         self._shell_field(field)
                     else:
                         self._remove_field(field)
@@ -940,9 +978,13 @@ class _PartReader:
                     self.candidates.append(field.begin[_AT])  # R2-30's fallback (read)
                     self.unshown += field.loses_its_result()
         elif role == _FLDSIMPLE:
+            self.simple -= 1
+            shows_text = False
+            if self.simple_pictures and self.simple_pictures[-1][0] is element:
+                shows_text = self.simple_pictures.pop()[1]
             if _removed_type(element[_INSTRUCTION]):
                 picture = _names_a_picture(element[_INSTRUCTION])
-                if not self.instructions and self._in_a_result() and not picture \
+                if not self.instructions and self._in_a_result() and not (picture and not shows_text) \
                         and self.raw[self._tag_end(element[_AT]) - 2] != 0x2F:
                     self._shell_simple_field(element)
                 else:
@@ -976,7 +1018,23 @@ class _PartReader:
 
     def _shown_text(self, data):
         if data.strip():
-            self.shown_field.result_shown = True
+            if self.shown_field is not None:
+                self.shown_field.result_shown = True
+            if self.shown_picture is not None:
+                self.shown_picture.text_shown = True
+            if self.shown_simple is not None:
+                self.shown_simple[1] = True
+
+    def _simple_picture(self):
+        """The innermost open w:fldSimple INCLUDEPICTURE whose result text here stands in, as [element, whether its
+        result shows text or a symbol] (loss[1]); None when there is none, or a complex field began inside it (text
+        there is that field's instruction or result)."""
+        if not self.simple_pictures:
+            return None
+        simple = self.simple_pictures[-1]
+        if self.fields and self.fields[-1].begin[_AT] > simple[0][_AT]:
+            return None
+        return simple
 
     # release 2
     def _in_a_result(self) -> bool:
@@ -986,7 +1044,9 @@ class _PartReader:
 
     def _removed_in_an_instruction(self, picture):
         """A removed field just went as release 1 removes it. Inside another field's instruction (release 1's re-read),
-        every field whose instruction is open holds it - unless it was INCLUDEPICTURE (R2-30's fallback)."""
+        every field whose instruction is open holds it - unless it was INCLUDEPICTURE (R2-30's fallback), whatever its
+        own result shows: the lead's 7.4 run on lane D's H7p (an INCLUDEPICTURE whose result is text, in an IF's
+        instruction) shows release 1's package losing nothing there (refutation round 1)."""
         if self.instructions:
             self.nested_removal = True
             if not picture:
