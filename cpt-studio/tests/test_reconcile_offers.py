@@ -9,15 +9,17 @@ offer comes back. Synthetic data only; nothing is sent.
 """
 import json
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from studio import jobs, models
 from tests.support import operator as ops
 from tests.support import rounds as r
+from tests.test_frontend import PLAIN_STATIC
 
 Run, Round = models.ProviderRun, models.CodingRound
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class ReconcileFirstTests(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()

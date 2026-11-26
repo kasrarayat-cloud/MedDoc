@@ -76,6 +76,10 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = 'cptstudio.wsgi.application'
 
+# Release 2 (R2-7, D-R2-17): the web's process. cptstudio/wsgi.py sets CPT_STUDIO_WEB before these settings are read,
+# and nothing else sets it: the worker, the converter and every management command start without it.
+_web_process = _flag('WEB')
+
 DATABASES = {'default': {
     'ENGINE': 'django.db.backends.postgresql',
     'NAME': _env('DB_NAME', 'cptstudio'),
@@ -83,7 +87,18 @@ DATABASES = {'default': {
     'PASSWORD': _env('DB_PASSWORD', ''),
     'HOST': _env('DB_HOST', '127.0.0.1'),
     'PORT': _env('DB_PORT', '55451'),
-    'CONN_MAX_AGE': 60,
+    # The web keeps each process's one connection for an hour and checks it at the first query of each request, so a
+    # click after a pause opens no connection inside the request, and a connection the database ended is replaced, never
+    # answered with an error (R2-7). An hour, not for ever, so a changed database setting that needs a new session
+    # reaches the web within it. The worker and the commands keep 60 s and no check: a worker thread's connection holds
+    # its provider slot's session lock across a send (studio.jobs._take_slot).
+    'CONN_MAX_AGE': 3600 if _web_process else 60,
+    'CONN_HEALTH_CHECKS': _web_process,
+    # The web waits at most 5 s for a new connection (refutation round 1 of R2-7), so a database that accepts and never
+    # answers holds no worker past it: a worker's connection at its start, which gunicorn never times out, and a
+    # request's both fail, and /health/ answers 503, inside gunicorn's and nginx's timeouts. The worker and the commands
+    # keep the driver's own default.
+    'OPTIONS': {'connect_timeout': 5} if _web_process else {},
     # One test database per concurrent test run: two runs sharing a name
     # destroy each other's database.
     'TEST': {'NAME': f"test_cptstudio_{_env('TEST_DB_SUFFIX', 'default')}"},
