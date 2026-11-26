@@ -209,7 +209,12 @@ class KeptLifeCycleLinesTests(unittest.TestCase):
         for text in ('CPT Studio web: the application could not be loaded. Jane Doe',
                      'CPT Studio web: the application could not be loaded: CPT_STUDIO_STATE_DIR must be absolute',
                      'CPT Studio web: the application could not be loaded',
-                     'Error: CPT_STUDIO_STATE_DIR must be an absolute path.'):
+                     'Error: CPT_STUDIO_STATE_DIR must be an absolute path.',
+                     # one word after the words, glued to their full stop, or before them: a pattern widened by one
+                     # optional word on either side keeps one of these (refutation round 2)
+                     'CPT Studio web: the application could not be loaded. Jane',
+                     'CPT Studio web: the application could not be loaded.Jane',
+                     'Jane CPT Studio web: the application could not be loaded.'):
             with self.subTest(text=text):  # each read from stderr, where the pattern applies
                 self.assertEqual(
                     install.ids_only_lines('web', b'', f'2026-11-26T10:00:01.000000000Z {text}'.encode()), ([], 1))
