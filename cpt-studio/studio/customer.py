@@ -2,7 +2,8 @@
 built from stored rows on each request.
 
 - session_json: GET /api/session.
-- list_rows: GET /api/encounters.
+- list_page: GET /api/encounters - one page of a list (release 2, R2-19: Documents and the Review queue 50 rows a page,
+  the Overview's recent 5), newest first, with the cursor of the next page and, on a first page, the list's total.
 - encounter_json: GET /api/encounters/<id> - the document and its in-page view, the practice's context, the progress of
   the latest coding round, its code lines (each with its line, the second check's verdict, its quotes, its current
   decision - with the id an undo names - and the decisions the member may record), its questions (each naming the
@@ -43,10 +44,10 @@ from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
-from django.db.models import Exists, OuterRef
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
-from . import decisions, jobs, models, state
+from . import decisions, jobs, models, paging, state
 from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_own_original
 
@@ -179,8 +180,14 @@ def initials(user) -> str:
     return (''.join(part[0] for part in parts[:2]) or name[:2]).upper()
 
 
-def _with_rounds(queryset):
-    return queryset.annotate(has_round=Exists(Round.objects.filter(encounter_id=OuterRef('pk'))))
+def in_queue(queryset):
+    """``queryset``'s documents that wait on a member - questions to answer, codes to review or to approve: a stored
+    state of QUEUE_STATES and a coding round. The one rule the Review queue's pages, its total and the session's queue
+    count all read, so the three agree by construction (release 2, R2-19). The round is asked for per document, as a
+    one-row subquery: PostgreSQL may answer an EXISTS here with a hash of every practice's rounds (a sequential scan
+    that grows with all practices; measured on the queue's count at 20,000 documents), and never does a LIMIT 1."""
+    first_round = Subquery(Round.objects.filter(encounter_id=OuterRef('pk')).order_by().values('pk')[:1])
+    return queryset.filter(state__in=QUEUE_STATES).alias(queue_round=first_round).filter(queue_round__isnull=False)
 
 
 def live(queryset):
@@ -194,7 +201,7 @@ def session_json(user, membership) -> dict:
     document, and those waiting on a member: questions to answer, codes to review or to approve)."""
     workspace = membership.workspace
     encounters = live(workspace.encounters.all())
-    queue = _with_rounds(encounters).filter(has_round=True, state__in=QUEUE_STATES).count()
+    queue = in_queue(encounters).count()
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'specialty': workspace.category.name},
@@ -259,24 +266,82 @@ def stored_state(encounter, has_round: bool) -> str:
     return state.compute(encounter) or EARLIER
 
 
-def document_kind(encounter) -> str:
+def document_kind(encounter, has_file=None) -> str:
+    """What the document is: its current revision's kind (upload or paste), or for an earlier system's revision (an
+    addendum, or none) an upload when it has a stored file and a paste otherwise. ``has_file``: whether it has one, when
+    the caller has read it (the list reads every row's first file in one statement); otherwise asked here."""
     revision = encounter.current_revision
     if revision is not None and revision.kind in (Revision.UPLOAD, Revision.PASTE):
         return revision.kind
-    return Revision.UPLOAD if encounter.files.exists() else Revision.PASTE
+    if has_file is None:
+        has_file = encounter.files.exists()
+    return Revision.UPLOAD if has_file else Revision.PASTE
 
 
-def list_rows(membership) -> list:
-    """GET /api/encounters: the workspace's encounters, newest first."""
-    rows = _with_rounds(live(membership.workspace.encounters.select_related('current_revision'))).order_by('-created_at')
+# --- the paged lists (release 2, R2-19 and R2-16) ---------------------------------------------------------------------
+# GET /api/encounters?list=documents|queue|recent[&before=<cursor>] answers {"encounters": [row...], "next", "total"}:
+# Documents and the Review queue 50 rows a page (51 read, to know whether more follow), the Overview's recent 5 with no
+# next page; newest first - created_at descending, then id (the console's keyset, studio.paging). total is the list's
+# exact number on a first page only: the rows' own number when the whole list is on it, else one COUNT; null for recent
+# and for a later page. A page is three statements, whatever the practice holds - its rows (one indexed read of
+# studio_enc_ws_time, or studio_enc_ws_queue for the queue), the ids among them with a coding round, and each one's first
+# stored file - plus that COUNT on a first page that has more. The flags are read apart, over the page's ids: an EXISTS
+# in the SELECT list made PostgreSQL hash every practice's rounds for a 51-row page. Each row goes through release 1's
+# own rules (stored_state, service_date, insurance, document_kind), so it is release 1's row but for opens_pdf: true when
+# the first stored file (original_file's order) is a PDF of at most OPENS_PDF_MAX_BYTES, so the page may ask for its view
+# at the click (R2-16; a Word document's converted view is not hinted: release 2 stores no size for it, C6, D-R2-31).
+
+LIST_DOCUMENTS, LIST_QUEUE, LIST_RECENT = 'documents', 'queue', 'recent'
+LIST_NAMES = (LIST_DOCUMENTS, LIST_QUEUE, LIST_RECENT)
+LIST_PAGE_ROWS, LIST_RECENT_ROWS = 50, 5
+OPENS_PDF_MAX_BYTES = 1024 * 1024  # 1 MiB: every live GI PDF qualifies (the largest is 891 KB)
+LIST_FIELDS = ('pk', 'title', 'state', 'user_values', 'created_at', 'current_revision__kind')
+
+
+def list_rows_of(found) -> list:
+    """The list rows of ``found`` - step 1's values (LIST_FIELDS) of a page, in order - by R2-19's steps 2 and 3: the
+    page's ids that have a coding round, then each one's first stored file (one DISTINCT ON read), each row then built
+    by release 1's rules, with opens_pdf."""
+    ids = [row['pk'] for row in found]
+    rounds = set(Round.objects.filter(encounter_id__in=ids).order_by().values_list('encounter_id', flat=True))
+    files = {item['encounter_id']: item for item in models.SourceFile.objects.filter(encounter_id__in=ids)
+             .order_by('encounter_id', 'uploaded_at', 'pk').distinct('encounter_id')
+             .values('encounter_id', 'media_type', 'size')}
     out = []
-    for encounter in rows:
-        value = stored_state(encounter, encounter.has_round)
-        out.append({'id': str(encounter.pk), 'title': encounter.title, 'state': value,
+    for row in found:
+        kind = row['current_revision__kind']
+        encounter = SimpleNamespace(pk=row['pk'], state=row['state'], user_values=row['user_values'],
+                                    current_revision=SimpleNamespace(kind=kind) if kind is not None else None)
+        first = files.get(row['pk'])
+        value = stored_state(encounter, row['pk'] in rounds)
+        out.append({'id': str(row['pk']), 'title': row['title'], 'state': value,
                     'state_label': STATE_LABELS.get(value, value), 'service_date': service_date(encounter),
-                    'insurance': insurance(encounter), 'created_at': iso(encounter.created_at),
-                    'kind': document_kind(encounter)})
+                    'insurance': insurance(encounter), 'created_at': iso(row['created_at']),
+                    'kind': document_kind(encounter, has_file=first is not None),
+                    'opens_pdf': (first is not None and first['media_type'] == PDF
+                                  and first['size'] <= OPENS_PDF_MAX_BYTES)})
     return out
+
+
+def list_page(membership, which, before=None) -> dict:
+    """One page of GET /api/encounters (see above) of ``membership``'s practice: ``which`` one of LIST_NAMES, ``before``
+    the cursor the page starts after (None: the first page; never for recent) - both read by the API before this, which
+    refuses anything else. {'encounters': rows, 'next': the next page's cursor or None, 'total': int or None}."""
+    if which not in LIST_NAMES or (before is not None and (which == LIST_RECENT or paging.parse(before) is None)):
+        raise ValueError('list_page is given a list and a cursor the API has read.')
+    listed = live(models.Encounter.objects.filter(workspace_id=membership.workspace_id))
+    if which == LIST_QUEUE:
+        listed = in_queue(listed)
+    page, _cursor = paging.older_than(listed, before)
+    size = LIST_RECENT_ROWS if which == LIST_RECENT else LIST_PAGE_ROWS
+    found = list(page.order_by('-created_at', '-pk').values(*LIST_FIELDS)[:size if which == LIST_RECENT else size + 1])
+    shown = found[:size]
+    more = len(found) > size
+    total = None
+    if which != LIST_RECENT and before is None:
+        total = listed.count() if more else len(shown)
+    return {'encounters': list_rows_of(shown),
+            'next': paging.cursor_of(shown[-1]['created_at'], shown[-1]['pk']) if more else None, 'total': total}
 
 
 # --- the document and its view ----------------------------------------------------------------------------------------------

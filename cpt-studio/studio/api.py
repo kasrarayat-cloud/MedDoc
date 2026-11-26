@@ -8,7 +8,9 @@ the member reads is one of this module's own sentences (api_view: never an excep
 record - runs, models, usage, hashes, the coding review's whole answers - is a platform operator's, under /ops/.
 
     GET  /api/session                               customer.session_json
-    GET  /api/encounters                            customer.list_rows
+    GET  /api/encounters[?list=documents|queue|recent][&before=<cursor>]
+                                                    customer.list_page: one page of a list (release 2, R2-19), with the
+                                                    next page's cursor and, on a first page, the list's total
     POST /api/encounters                            an upload or a paste (multipart); starts coding round 1
     GET  /api/encounters/<id>                       customer.encounter_json
     POST /api/encounters/<id>/answers               {answers: [{question_id, text}]} -> a new round
@@ -40,8 +42,8 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, rate, read_audit, request_meta
-from . import security_events, session_store, sessions
+from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, paging, rate, read_audit
+from . import request_meta, security_events, session_store, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -86,6 +88,9 @@ class ApiError(Exception):
 
 RATE_LIMITED = 'rate_limited'
 EXPORT_MEMBER_SCOPE, EXPORT_WORKSPACE_SCOPE, UPLOAD_MEMBER_SCOPE = 'export.member', 'export.workspace', 'upload.member'
+# Release 2 (R2-21, D-R2-13): a member's later list pages and searches, settings.LIST_PAGES_LIMIT_PER_MEMBER; a first
+# page and the Overview pay no count, the read record's repeat rule bounds them
+LIST_MEMBER_SCOPE = 'list.member'
 
 
 class RateLimited(Exception):
@@ -266,19 +271,63 @@ def session(request):
     return JsonResponse(customer.session_json(request.user, membership))
 
 
+# --- the lists (release 2, R2-19 and R2-21) ---------------------------------------------------------------------------
+# GET /api/encounters?list=documents|queue|recent[&before=<cursor>] (no list: documents) answers one page of the list
+# (customer.list_page). An unknown list, or a cursor this API cannot read, is answered 400 with one of these sentences,
+# before anything is read or recorded; a cursor is exactly one the API gave (studio.paging, written as cursor_of writes
+# it), and the recent five have no later page. Each page served is recorded before it leaves - member.list naming the
+# documents it showed, in order, with its list and cursor - and a later page first counts toward the member's limit.
+
+LIST_UNKNOWN = 'That list is not available.'
+LIST_CURSOR_UNREADABLE = 'That part of the list could not be read. Open the list again.'
+
+
+def _cursor_read(raw):
+    """``raw`` when it is a cursor exactly as this API writes them (paging.cursor_of of what it names), else None."""
+    position = paging.parse(raw)
+    return raw if position is not None and paging.cursor_of(*position) == raw else None
+
+
+def _list_asked(request):
+    """(the list a GET /api/encounters asks for, its cursor or None); ApiError 400 for anything else - a list not served,
+    a parameter given twice, a cursor that is no cursor of this API, or a cursor on the recent five."""
+    names, cursors = request.GET.getlist('list'), request.GET.getlist('before')
+    if len(names) > 1 or (names and names[0] not in customer.LIST_NAMES):
+        raise ApiError(400, LIST_UNKNOWN)
+    which = names[0] if names else customer.LIST_DOCUMENTS
+    if not cursors:
+        return which, None
+    if len(cursors) > 1 or which == customer.LIST_RECENT or _cursor_read(cursors[0]) is None:
+        raise ApiError(400, LIST_CURSOR_UNREADABLE)
+    return which, cursors[0]
+
+
+def _later_page_counted(request, membership):
+    """A later page or a search counts one hit of list.member (settings.LIST_PAGES_LIMIT_PER_MEMBER); over it, 429
+    rate_limited and, at the window's first refusal, one SecurityEvent list.rate_limited - nothing read or recorded."""
+    _limited(request, LIST_MEMBER_SCOPE, request.user.pk, settings.LIST_PAGES_LIMIT_PER_MEMBER,
+             workspace_id=membership.workspace_id)
+
+
 @api_view
 @read_audit.phi_read(read_audit.MEMBER_LIST)
 def encounters(request):
-    """GET the list; POST an upload (multipart: file or text, title, service_date, insurance, synthetic_attestation,
-    client_key) -> 201 {id}, its coding round 1 queued in the same transaction (intake.create_encounter). The list is
-    recorded as member.list: the practice, the time it was read and how many rows it holds - the whole practice, with no
-    paging, so that says exactly which rows were shown."""
+    """GET one page of a list; POST an upload (multipart: file or text, title, service_date, insurance,
+    synthetic_attestation, client_key) -> 201 {id}, its coding round 1 queued in the same transaction
+    (intake.create_encounter). A page is recorded as member.list before it is served (release 2, R2-21): the practice,
+    the documents of that page in the order shown, their number, when it was read, and the list and cursor it was asked
+    with - so the record says exactly which rows were shown, whatever the page."""
     membership = active_membership(request.user)
     if request.method == 'GET':
+        which, before = _list_asked(request)
+        if before is not None:
+            _later_page_counted(request, membership)
         as_of = timezone.now()
-        rows = customer.list_rows(membership)
-        _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, count=len(rows), as_of=as_of)
-        return JsonResponse({'encounters': rows})
+        page = customer.list_page(membership, which, before)
+        shown = [row['id'] for row in page['encounters']]
+        _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
+                  count=len(shown), as_of=as_of, filters={'list': which, 'before': before})
+        return JsonResponse(page)
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)

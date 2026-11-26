@@ -25,7 +25,8 @@ from tests.support import rounds as r
 
 Round = models.CodingRound
 SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
-ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'}
+ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind', 'opens_pdf'}
+LIST_KEYS = {'encounters', 'next', 'total'}  # release 2 (R2-19, R2-24): one page, its next cursor, the list's total
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',
                   'activity'}
@@ -77,8 +78,11 @@ class ContractTests(ApiCase):
         self.assertEqual(session['counts'], {'documents': 2, 'queue': 1})
         listing = self.get_json('/api/encounters')
         self.assert_contract(listing, 'list')
+        self.assertEqual(set(listing), LIST_KEYS)
+        self.assertEqual((listing['next'], listing['total']), (None, 2))  # the whole list on its first page
         self.assertEqual([row['id'] for row in listing['encounters']], [str(queued.pk), str(done.pk)])
         self.assertEqual(set(listing['encounters'][0]), ROW_KEYS)
+        self.assertEqual([row['opens_pdf'] for row in listing['encounters']], [False, True])  # a paste; a small PDF
         self.assertEqual((listing['encounters'][0]['kind'], listing['encounters'][1]['kind']), ('paste', 'upload'))
         self.assertEqual(listing['encounters'][1]['insurance'], 'medicare')
         for enc in (done, queued):

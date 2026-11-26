@@ -587,8 +587,8 @@ class StubSite:
         if route == ('GET', '/api/encounters'):
             row = {'id': self.id, 'title': self.encounter['title'], 'state': 'reviewed', 'state_label': 'Reviewed',
                    'service_date': '2026-11-02', 'insurance': 'medicare', 'created_at': self.encounter['created_at'],
-                   'kind': 'upload'}
-            return self.send(request, 200, {'encounters': [row]})
+                   'kind': 'upload', 'opens_pdf': True}
+            return self.send(request, 200, {'encounters': [row], 'next': None, 'total': 1})
         if route in (('GET', f'/api/encounters/{self.id}/original'), ('GET', f'/api/encounters/{self.id}/original?view=1')):
             headers = [('X-Content-SHA256', 'cd' * 32)] if self.leak.get('original_hash') else []
             return self.send(request, 200, b'%PDF-1.4 synthetic ' + b'0' * (3 * 1024 * 1024), 'application/pdf', headers)

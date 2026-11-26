@@ -54,7 +54,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 
-from . import audit, jobs, models, read_audit, security_events, session_store, spend
+from . import audit, jobs, models, paging, read_audit, security_events, session_store, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
@@ -812,33 +812,20 @@ def spending_page(request):
 
 # --- activity ----------------------------------------------------------------------------------------------------------
 # Pages are read by position (keyset), not by number: "older" names the last row shown, and the next page holds the rows
-# strictly older than it, so rows arriving meanwhile never repeat a row or skip one (refutation r1, money-6).
+# strictly older than it, so rows arriving meanwhile never repeat a row or skip one (refutation r1, money-6). The helpers
+# live in studio.paging since release 2 (R2-19: the customer's paged lists use them too); these names delegate to it.
 
-CURSOR_RE = re.compile(r'(\d{8}T\d{6}\.\d{6}Z)~([0-9a-f-]{1,36})')
+CURSOR_RE = paging.CURSOR_RE
 
 
 def cursor_of(row) -> str:
-    return f'{row.created_at.astimezone(dt_timezone.utc):%Y%m%dT%H%M%S.%fZ}~{row.pk}'
+    return paging.cursor_of(row.created_at, row.pk)
 
 
 def _older_than(queryset, request, *, integer_pk=False):
     """(``queryset`` limited to the rows older than the request's ``before`` cursor, the cursor); the whole queryset
-    with no cursor (the newest page); (None, '') when the cursor cannot be read."""
-    raw = request.GET.get('before', '')
-    if not raw:
-        return queryset, ''
-    match = CURSOR_RE.fullmatch(raw) if isinstance(raw, str) else None
-    if not match:
-        return None, ''
-    try:
-        moment = datetime.strptime(match.group(1), '%Y%m%dT%H%M%S.%fZ').replace(tzinfo=dt_timezone.utc)
-        key = int(match.group(2)) if integer_pk else uuid.UUID(match.group(2))
-    except (ValueError, TypeError):
-        return None, ''
-    # the bound on created_at alone lets an index start the scan at the cursor (refutation round 1, avail-3 and avail-5):
-    # the same rows, read from the cursor rather than from the newest row down
-    return (queryset.filter(created_at__lte=moment).filter(Q(created_at__lt=moment) | Q(created_at=moment, pk__lt=key)),
-            raw)
+    with no cursor (the newest page); (None, '') when the cursor cannot be read (studio.paging.older_than)."""
+    return paging.older_than(queryset, request.GET.get('before', ''), integer_pk=integer_pk)
 
 
 def describe(event) -> dict:
