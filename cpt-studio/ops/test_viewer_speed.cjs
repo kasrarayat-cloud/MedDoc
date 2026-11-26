@@ -585,15 +585,27 @@ test('V11b, R2-15, R2-18: a late 404 to a route already left, met while the next
       const kept = await page.evaluate(() => [...state.keptViews.keys()]);
       await page.evaluate(() => { location.hash = 'documents'; });
       await listed(page);
+      // the re-open's answer as the page receives it: Chromium at times reports that request to the test as aborted
+      // (net::ERR_ABORTED) although the page reads it whole and draws it, with no abort of the page's after the route away
+      await page.evaluate(address => {
+        window.__reopen = [];
+        const fetched = window.fetch.bind(window);
+        window.fetch = async (url, init) => {
+          const answer = await fetched(url, init);
+          if (url === address) window.__reopen.push([/^"[0-9a-f-]{36}"$/.test(init?.headers?.['If-None-Match'] || ''), answer.status]);
+          return answer;
+        };
+      }, viewOf(READY));
       calls.length = 0;
       await openRow(page, READY);
       await settled(calls);
-      const again = calls.filter(call => call.url === viewOf(READY)).map(call => [/^"[0-9a-f-]{36}"$/.test(call.condition), call.status, call.body > 0]);
+      const asked = calls.filter(call => call.url === viewOf(READY)).length;
+      const again = await page.evaluate(() => window.__reopen);
       const ended = end === 'pagehide';
-      assert.deepEqual({ ...met, counted: met.counted - counted, kept, again },
+      assert.deepEqual({ ...met, counted: met.counted - counted, kept, asked, again },
         // pagehide reaches the page's own listener, the function boot bound, not the name wrapped here
         { forgets: end === '404' ? [viewOf(READY)] : [], counted: ended ? 1 : 0, loading: true, kept: ended ? [] : [viewOf(READY)],
-          again: [ended ? [false, 200, true] : [true, 304, false]] },
+          asked: 1, again: [ended ? [false, 200] : [true, 304]] },
         `${what}: ${ended ? 'an end met while it opened: counted, no copy kept, the re-open downloads' : 'the open keeps its copy, the re-open is a 304'}`);
       assert.deepEqual(errors.filter(error => !/^Failed to load resource/.test(error)), [], `${what}: no error in the page`);
     } finally {
