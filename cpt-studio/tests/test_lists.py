@@ -249,6 +249,31 @@ class PagedListTests(ListCase):
         self.assertEqual([pages[0]['encounters'][-1]['id'], pages[1]['encounters'][0]['id']], edge)  # id breaks the tie
         self.assertEqual(ids, [row['id'] for row in release_1_order(release_1_list_rows(membership_of(self.reviewer)))])
 
+    def test_a_tie_of_six_across_the_page_edge_keeps_the_id_order_whatever_the_plan(self):
+        # the order is created_at, then id: with the index (which holds both) and without it - a sequential scan and a
+        # sort, where rows of one created_at come in no order of their own - the pages are the same, each row once
+        made = mixed_practice(self.ws, self.reviewer, 47)
+        moment = timezone.now() - timedelta(days=1)
+        for offset, enc in enumerate(reversed(made)):
+            models.Encounter.objects.filter(pk=enc.pk).update(created_at=moment + timedelta(seconds=offset + 1))
+        tied = [models.Encounter.objects.create(id=uuid.UUID(int=index + 1), workspace=self.ws, created_by=self.reviewer,
+                                                title=f'Synthetic tied note {index}') for index in range(6)]
+        models.Encounter.objects.filter(pk__in=[enc.pk for enc in tied]).update(created_at=moment)  # rows 48 to 53
+        expected = [str(enc.pk) for enc in made] + [str(enc.pk) for enc in reversed(tied)]
+        for plan in ('the index', 'a sort'):
+            with self.subTest(plan=plan):
+                with connection.cursor() as cursor:
+                    for name in ('enable_indexscan', 'enable_bitmapscan', 'enable_indexonlyscan'):
+                        cursor.execute(f'SET {name} = {"on" if plan == "the index" else "off"}')
+                try:
+                    joined, pages = self.walk()
+                finally:
+                    with connection.cursor() as cursor:
+                        for name in ('enable_indexscan', 'enable_bitmapscan', 'enable_indexonlyscan'):
+                            cursor.execute(f'RESET {name}')
+                self.assertEqual([row['id'] for row in joined], expected)
+                self.assertEqual([len(page['encounters']) for page in pages], [50, 3])
+
     def test_tombstones_never_appear_in_any_list_or_page(self):
         made = mixed_practice(self.ws, self.reviewer, 120)
         gone = set(models.Encounter.objects.filter(workspace=self.ws, destroyed_at__isnull=False)
@@ -474,6 +499,9 @@ class ListPlanTests(TestCase):
                 rows_sql, rows_plan = found[0]
                 self.assertIn('LIMIT 51', rows_sql)
                 self.assertIn(index, rows_plan)
+                if which == 'documents':  # the flags are read apart, over the page's ids - never in the rows' statement
+                    self.assertNotIn('studio_codinground', rows_sql)
+                    self.assertNotIn('studio_sourcefile', rows_sql)
                 for sql, plan in found:
                     for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile'):
                         self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan[:1500]))
