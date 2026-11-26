@@ -4,6 +4,9 @@ import threading
 from django.core.management.base import BaseCommand
 
 from studio import jobs
+# The coder's sender and its SDK, loaded at the worker's start (release 2, R2-4): studio.jobs imports them only where a
+# send needs them, so the web never loads them, and a release that cannot load them stops here, never at a document.
+from studio.fable import client  # noqa: F401
 
 # How long the command waits for the heartbeat thread to see that the worker is done (it looks every 0.1 s).
 HEARTBEAT_JOIN_SECONDS = 5

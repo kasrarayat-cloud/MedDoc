@@ -36,7 +36,9 @@ from . import audit, models, state
 from .storage import OriginalCorrupted, in_practice_folder, read_own_original, store_original
 from .fable import (BUSY, CEILING, CONVERT, DECLINED, DOCUMENT, FAILED, HOLD, STORAGE, TOO_LONG, UNAVAILABLE,
                     UNKNOWN, UNREADABLE)
-from .fable import client as fable_client
+# The sender (studio.fable.client, and the Anthropic SDK it loads) is imported where a worker's send needs it - in
+# _live_gate, _code and _send - never here: the web imports this module and never sends (release 2, R2-4); the worker
+# loads it at its start (studio/management/commands/run_worker.py). tests/test_web_process.py holds both.
 from .fable import document as fable_document
 from .fable import pricing, prompts
 from .fable import result as fable_result
@@ -384,6 +386,8 @@ def _stop_requested(job, encounter):
 def _live_gate(job, coder, revision, round_):
     """A live send needs a synthetic-attested document, the recorded authority and an owner or reviewer's request
     (unchanged from the earlier pipeline)."""
+    from .fable import client as fable_client  # here, not at the top: the web never loads the SDK (R2-4)
+
     if coder.mode != fable_client.LIVE:
         return
     if not settings.SYNTHETIC_ONLY or revision.synthetic_attested_at is None:
@@ -423,6 +427,8 @@ def stage_code(job):
 
 
 def _code(job, round_):
+    from .fable import client as fable_client  # here, not at the top: the web never loads the SDK (R2-4)
+
     encounter = job.encounter
     if _stop_requested(job, encounter):
         raise StageCancelled(STOPPED_MESSAGE)
@@ -562,6 +568,8 @@ def _send(job, round_, purpose, request, coder):
     every attempt it may make, from the API's count of the request (_worst_case) -, a provider slot taken without
     waiting, the run reserved before any network I/O, then sent once and its outcome recorded - an unknown one included
     - with any hold it sets, and the slot's lock if the send outlived the database session that held it."""
+    from .fable import client as fable_client  # here, not at the top: the web never loads the SDK (R2-4)
+
     encounter = job.encounter
     if _stop_requested(job, encounter):
         raise StageCancelled(STOPPED_MESSAGE)
