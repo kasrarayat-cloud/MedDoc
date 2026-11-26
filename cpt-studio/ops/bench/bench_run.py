@@ -1585,6 +1585,7 @@ def records_n100_rule(judged: dict) -> dict:
     kinds = judged['equation']['kinds']
     judged['equation']['ok'] = judged['equation']['ok'] and all(
         kinds[k]['answers'] > 0 for k in ('member.list', 'member.detail', 'member.inline', 'member.download'))
+    judged['list_ids']['ok'] = judged['list_ids']['ok'] and judged['list_ids'].get('changed', 0) > 0  # R2-21
     return judged
 
 
@@ -1599,6 +1600,24 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     for row in rows:
         by_rid.setdefault(row['request_id'], []).append(row)
     out = {}
+    details = sorted((r for r in rows if r['view'] == 'member.detail' and r['outcome'] == 'served'),
+                     key=lambda r: r['created_at'])
+    sign_ins = {}  # the proxy's member digest -> the sign-ins its requests' rows name
+    for e in served:
+        for r in by_rid.get(rid(e), []):
+            sign_ins.setdefault(e.get('member'), set()).add(r['sign_in_ref'])
+    polled_doc = lambda e: e['url'].partition('?')[0].rsplit('/', 1)[1]  # noqa: E731
+
+    def poll_writes(e):
+        """The rows release 1 writes for this poll (read_audit.detail_seen_recently), at either end of its answer: 0
+        with a served member.detail row of this sign-in and document in the 60 s before, on the same UTC day, else 1."""
+        mine = sign_ins.get(e.get('member'), set())
+        seen = lambda now: any(  # noqa: E731
+            q['request_id'] != rid(e) and q['sign_in_ref'] in mine and q['encounter_ids'] == [polled_doc(e)]
+            and now - 60000 <= q['created_at'] <= now and q['created_at'] // 86400000 == now // 86400000
+            for q in details)
+        ends = [e.get('t0'), e.get('tEnd')]
+        return set() if None in ends else {0 if seen(now) else 1 for now in ends}  # no time: nothing passes
     kinds, polls = {}, []
     for kind in ('member.list', 'member.detail', 'member.inline', 'member.download'):
         mine = [e for e in served if read_kind(e['method'], e['url']) == kind]
@@ -1609,7 +1628,8 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
         if kind == 'member.list':
             ok = len(mine) == len(rows_k) + repeats_added
         else:
-            ok = all(len([r for r in by_rid.get(rid(e), []) if r['view'] == kind]) == 1 for e in plain) and \
+            want = lambda e: poll_writes(e) if e in polled else {1}  # noqa: E731  (a poll: release 1's own count)
+            ok = all(len([r for r in by_rid.get(rid(e), []) if r['view'] == kind]) in want(e) for e in mine) and \
                 len([r for r in rows_k if r['request_id'] not in {rid(e) for e in polled}]) == len(plain)
         kinds[kind] = {'answers': len(mine), 'polls': len(polled), 'rows': len(rows_k), 'ok': ok}
     answered = {rid(e) for e in served}
@@ -1619,13 +1639,13 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     # records[7]: release 1 (read_audit.detail_seen_recently) writes a poll's row only when this sign-in has no served
     # member.detail row of the document - the open's own included - within 60 s before it on the same UTC day
     poll_rids = {rid(e) for e in polls}
-    details = sorted((r for r in rows if r['view'] == 'member.detail' and r['outcome'] == 'served'),
-                     key=lambda r: r['created_at'])
+    misnamed = [rid(e) for e in polls for r in by_rid.get(rid(e), [])
+                if r['view'] == 'member.detail' and r['encounter_ids'] != [polled_doc(e)]]
     same_day = lambda q, r: q['created_at'] // 86400000 == r['created_at'] // 86400000  # noqa: E731
     crowded = [round(r['created_at'] - q['created_at']) for i, r in enumerate(details) if r['request_id'] in poll_rids
                for q in details[:i] if (q['sign_in_ref'], q['encounter_ids']) == (r['sign_in_ref'], r['encounter_ids'])
                and same_day(q, r) and r['created_at'] - q['created_at'] < 60000]
-    out['polls'] = {'ok': not crowded, 'poll_answers': len(polls),
+    out['polls'] = {'ok': not crowded and not misnamed, 'misnamed': misnamed[:10], 'poll_answers': len(polls),
                     'poll_rows': sum(1 for r in rows if r['request_id'] in poll_rids), 'crowded_ms': crowded[:10]}
     opens, late = [], []
     for a in actions:
@@ -1649,8 +1669,9 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     out['openings'] = {'ok': all(o['ok'] for o in opens), 'opens': opens}
     out['inline_before_pixels'] = {'ok': not late, 'late': late}
     mismatches = []
-    seen_ids = [r['encounter_ids'] for r in rows if r['view'] == 'member.list']
+    list_rows = [r for r in rows if r['view'] == 'member.list' and r['outcome'] == 'served']
     sent = {rid(e): e['url'] for e in served}
+    when = {rid(e): (e.get('t0'), e.get('tEnd')) for e in served}
 
     def wanted(answer):  # records[6], R2-21: {list, before} of the request the proxy saw; a search's cursor its body's
         path, _, query = (sent.get(answer.get('rid') or '') or '').partition('?')
@@ -1658,6 +1679,12 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
             return {'list': 'search', 'before': answer.get('before')}
         q = urllib.parse.parse_qs(query)
         return {'list': q.get('list', ['documents'])[0], 'before': q.get('before', [None])[0]}
+
+    def repeats(answer, row):  # R2-21: the same documents, list and cursor, on a row of the 60 s before, its UTC day
+        t0, t_end = when.get(answer.get('rid') or '', (None, None))
+        return t0 is not None and t_end is not None and row['encounter_ids'] == answer.get('ids') and \
+            row.get('filters') == wanted(answer) and t0 - row['created_at'] <= 60000 and \
+            row['created_at'] <= t_end and row['created_at'] // 86400000 in (t0 // 86400000, t_end // 86400000)
     for answer in lists:
         written = [r for r in by_rid.get(answer.get('rid') or '', []) if r['view'] == 'member.list']
         if written:
@@ -1665,9 +1692,15 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
                     or written[0].get('filters') != wanted(answer):
                 mismatches.append({'path': answer.get('path'), 'served': len(answer.get('ids') or []),
                                    'named': len(written[0]['encounter_ids'] or [])})
-        elif not (repeats_added and answer.get('ids') in seen_ids):
+        elif not (repeats_added and any(repeats(answer, r) for r in list_rows)):
             mismatches.append({'path': answer.get('path'), 'served': len(answer.get('ids') or []), 'named': None})
-    out['list_ids'] = {'ok': bool(lists) and not mismatches, 'answers': len(lists), 'mismatches': mismatches[:10]}
+    # a list read again within 60 s after it changed: the only shape that sees a repeat rule blind to the documents
+    t0 = lambda a: when.get(a.get('rid') or '', (None, None))[0]  # noqa: E731
+    changed = sum(1 for i, a in enumerate(lists) if any(
+        wanted(b) == wanted(a) and b.get('ids') != a.get('ids') and None not in (t0(a), t0(b))
+        and 0 <= t0(a) - t0(b) <= 60000 for b in lists[:i]))
+    out['list_ids'] = {'ok': bool(lists) and not mismatches, 'answers': len(lists), 'mismatches': mismatches[:10],
+                       'changed': changed}
     return out
 
 

@@ -862,6 +862,12 @@ class BenchBrowserFlowPinsTests(unittest.TestCase):
         flow = source[source.index('async function flowRecords('):source.index('async function flowFailClosed(')]
         self.assertIn("for (const [label, query] of [['text-2p', ''], ['word-3p', ''], "
                       "['word-3p', '?format=original']])", flow)
+        # records[0] (round 2): the polls end with a document this sign-in never read, the poll release 1 records
+        self.assertIn("for (const label of ['text-4p', 'text-4p', 'text-4p', 'text-10p']) {", flow)
+        # records[5] (round 2): page 1 read again after it changed, so the repeat rule meets a changed list
+        tabs = "await tab(s, 'workspace', 'records-changed'); await tab(s, 'documents', 'records-changed');"
+        self.assertIn(f"await act('destroy', {{ doc: 'scan-20p' }});\n      {tabs}\n"
+                      f"      await act('destroy', {{ doc: 'scan-20p', on: false }});\n      {tabs}", flow)
         self.assertIn("if (kept.has(label)) await proxyRule({ kind: 'delay',", flow)
         self.assertIn('result.markerPage = [...new Set([...typed, ...(await pageMarkerHits(s, urls, DATA.marker))])];',
                       flow)
@@ -1614,9 +1620,11 @@ class OfficeModelTests(unittest.TestCase):
 DOC_A, DOC_B = '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'
 
 
-def _entry(rid, method, url, status=200, poll=False):
+def _entry(rid, method, url, status=200, poll=False, at=3000.0, t0=None):
+    """One proxy entry; a proxy entry always carries t0 and tEnd (records[0] and records[5], round 2)."""
     headers = {'x-request-id': rid, **({'x-cpt-poll': '1'} if poll else {})}
-    return {'method': method, 'url': url, 'status': status, 'reqHeaders': headers}
+    start = at if t0 is None else t0
+    return {'method': method, 'url': url, 'status': status, 'reqHeaders': headers, 't0': start, 'tEnd': start + 20}
 
 
 def _row(rid, view, ids=(), at=1000.0, sign_in='s1', outcome='served', filters=None):
@@ -1699,6 +1707,24 @@ class RecordsJudgementTests(unittest.TestCase):
         refused = rows + [_row('p1', 'member.detail', [DOC_A], at=5000, outcome='refused')]
         self.assertTrue(RUN.judge_records(crowded, refused, 1, actions, lists, docs=DOCS)['polls']['ok'])
 
+    def test_a_poll_release_1_records_needs_its_row(self):
+        """records-0 (round 2): every poll was taken out of the equation, so a poll release 1 records passed with no
+        row, and the flow's only polls fell inside the open's minute."""
+        entries, rows, actions, lists = self.flow()
+        late = entries + [_entry('p2', 'GET', f'/api/encounters/{DOC_A}', poll=True, at=62100)]
+        self.assertFalse(RUN.judge_records(late, rows, 1, actions, lists, docs=DOCS)['equation']['ok'])
+        written = rows + [_row('p2', 'member.detail', [DOC_A], at=62110)]
+        self.assertTrue(RUN.judge_records(late, written, 1, actions, lists, docs=DOCS)['equation']['ok'])
+        first = entries + [_entry('p3', 'GET', f'/api/encounters/{DOC_B}', poll=True, at=4000)]  # never read: one row
+        self.assertFalse(RUN.judge_records(first, rows, 1, actions, lists, docs=DOCS)['equation']['ok'])
+        edge = entries + [_entry('p4', 'GET', f'/api/encounters/{DOC_A}', poll=True, at=61990)]  # spans d1 + 60 s
+        for extra in ([], [_row('p4', 'member.detail', [DOC_A], at=62001)]):
+            self.assertTrue(RUN.judge_records(edge, rows + extra, 1, actions, lists, docs=DOCS)['equation']['ok'])
+        wrong = rows + [_row('p2', 'member.detail', [DOC_B], at=62110)]
+        self.assertFalse(RUN.judge_records(late, wrong, 1, actions, lists, docs=DOCS)['polls']['ok'])
+        untimed = [dict(e, t0=None) if e['reqHeaders']['x-request-id'] == 'p1' else e for e in entries]
+        self.assertFalse(RUN.judge_records(untimed, rows, 1, actions, lists, docs=DOCS)['equation']['ok'])
+
     def test_an_opening_names_and_draws_the_document_opened(self):
         """records[5]: openings counted rows by request id only, so rows naming another document passed."""
         entries, rows, actions, lists = self.flow()
@@ -1733,6 +1759,23 @@ class RecordsJudgementTests(unittest.TestCase):
         found = [_row('s9', 'member.list', [DOC_A], filters={'list': 'search', 'before': None})]
         asked = [{'rid': 's9', 'path': '/api/encounters/search', 'ids': [DOC_A], 'before': None}]
         self.assertTrue(RUN.judge_records(search, found, 0, [], asked, docs=DOCS)['list_ids']['ok'])
+
+    def test_a_repeat_names_the_list_cursor_and_time_of_its_row(self):
+        """R2-21: an answer with no row passed as a repeat of any list row with its ids, whatever its list or cursor."""
+        entries, rows, actions, lists = self.flow()
+        self.assertTrue(RUN.judge_records(entries, rows, 1, actions, lists, docs=DOCS)['list_ids']['ok'])
+        for url, t0 in (('/api/encounters?list=queue', 1500.0), ('/api/encounters?list=documents&before=x', 1500.0),
+                        ('/api/encounters?list=documents', 61500.0)):
+            moved = [e if e['reqHeaders']['x-request-id'] != 'l2' else _entry('l2', 'GET', url, t0=t0)
+                     for e in entries]
+            got = RUN.judge_records(moved, rows, 1, actions, lists, docs=DOCS)
+            self.assertTrue(got['equation']['ok'], url)
+            self.assertFalse(got['list_ids']['ok'], (url, t0))
+        changed = lists[:1] + [dict(lists[1], ids=[DOC_B, DOC_A])]
+        self.assertEqual(RUN.judge_records(entries, rows, 1, actions, changed, docs=DOCS)['list_ids']['changed'], 1)
+        got = RUN.records_n100_rule(RUN.judge_records(entries, rows, 1, actions, lists, docs=DOCS))
+        self.assertFalse(got['list_ids']['ok'])  # no list read again after it changed: no pass at 100
+
 
     def test_the_download_kind_is_exercised_at_the_practice_of_100(self):
         """records[8]: no records flow downloaded, so a download served with no record passed the equation."""

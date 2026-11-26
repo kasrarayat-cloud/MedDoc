@@ -756,6 +756,12 @@ async function flowRecords() {
     const d = await tab(s, 'documents', 'records-documents');
     for (let i = 0; i < 3 && d; i += 1) { if ((await laterPage(s)) === null) break; }
     if (SIZE === 'n100') {
+      // R2-21: page 1 read again within 60 s after it changed (a listed document destroyed, then restored), so a
+      // repeat rule that stopped comparing the documents counts the changed page on the old row and list_ids sees it
+      await act('destroy', { doc: 'scan-20p' });
+      await tab(s, 'workspace', 'records-changed'); await tab(s, 'documents', 'records-changed');
+      await act('destroy', { doc: 'scan-20p', on: false });
+      await tab(s, 'workspace', 'records-changed'); await tab(s, 'documents', 'records-changed');
       // records[10]: a kept re-open's view is held 300 ms at the proxy, so a page that draws its kept copy before the
       // answer paints before its record exists, and inline_before_pixels sees it
       const kept = new Set();
@@ -779,9 +785,10 @@ async function flowRecords() {
     await sleep(800);
     result.checks['records.hover'] = { ok: (await proxyLog(seq)).length === 0 && (await act('count')).total === before,
       requests: (await proxyLog(seq)).length, rows: (await act('count')).total - before };
-    if (SIZE === 'n100') {  // three polls of one document within a minute
-      for (let i = 0; i < 3; i += 1) {
-        await s.page.evaluate(([id, h, v]) => fetch(`/api/encounters/${id}`, { headers: { [h]: v, 'X-CPT-Poll': '1' } }).then(r => r.status), [DOC['text-4p'].id, DATA.client[0], DATA.client[1]]);
+    if (SIZE === 'n100') {  // three polls of one document within a minute (release 1 writes none), then the first poll
+      // of a document this sign-in has not read (release 1 writes one: read_audit.detail_seen_recently)
+      for (const label of ['text-4p', 'text-4p', 'text-4p', 'text-10p']) {
+        await s.page.evaluate(([id, h, v]) => fetch(`/api/encounters/${id}`, { headers: { [h]: v, 'X-CPT-Poll': '1' } }).then(r => r.status), [DOC[label].id, DATA.client[0], DATA.client[1]]);
         await sleep(150);
       }
     }
