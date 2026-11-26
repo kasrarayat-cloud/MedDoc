@@ -2601,9 +2601,13 @@
   {
    "id": "coder-requests",
    "table": "coder",
-   "section8": "the coder: 8 request hashes equal to A (and every round equal)",
+   "section8": "the coder: 8 requests equal to release 1's byte for byte (and every round equal), except output_config.effort, sent as release 1's \"max\" on A and R2-33's \"high\" on B (D-R2-44)",
    "kind": "same_as_a",
-   "min_rows": 8
+   "min_rows": 8,
+   "effort": {
+    "a": "max",
+    "b": "high"
+   }
   },
   {
    "id": "requests.recorded",

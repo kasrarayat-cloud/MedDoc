@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 OPS = Path(__file__).resolve().parent
@@ -348,6 +349,12 @@ def _round(tag, number, metrics, *, parts=('open',), app_js='aaa', controls=True
     return data
 
 
+def _requests(effort, hashes):
+    """{1: a round's requests part}: one request row per hash, sent at ``effort`` with the tree's setting the same."""
+    return {1: {'requests': [{'case': 'text', 'role': 'reader', 'params_sha256': h, 'effort': effort, 'attempts': 2}
+                             for h in hashes], 'requests_effort': effort}}
+
+
 TABLE = {'controls': ['nomarker', 'planted_delay', 'planted_fetch', 'planted_detail', 'reduced_motion', 'heap_probe'],
          'rows': [
              {'id': 'later', 'metric': 'open.later.first_page.P0', 'min_samples': 6, 'a_section8': 298,
@@ -433,7 +440,7 @@ class JudgeTests(unittest.TestCase):
         retry = _round('B', 101, {'open.later.first_page.P0': [122, 120, 118], 'open.text.frame.P0': [101]},
                        app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}})
         Path(out, 'B-r101-open.json').write_text(json.dumps(retry))
-        kept, superseded = JUDGE.newest_attempts(out)
+        kept, superseded = JUDGE.chosen_attempts(out)
         self.assertEqual(superseded, ['B-r1-open.json'])
         self.assertIn('B-r101-open.json', [p.name for p in kept])
         self.assertEqual(sorted(JUDGE.load_rounds(out)['B']), [1, 2, 3])
@@ -460,6 +467,215 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [111]}}})['verdict'], 'FAIL')
         tight = {**row, 'gate': [{'rel_max': 1.36, 'no_worse': True, 'floor_factor': 1.10}]}
         self.assertEqual(JUDGE.judge_row(tight, a, {1: {'metrics': {'m': [135]}}})['verdict'], 'PASS')  # 1.36 wins
+
+    def test_a_check_is_ok_only_when_every_file_of_its_round_says_so(self):
+        """judge[0], records[0]: a round's files were merged last-file-wins, so open@P3's ok overwrote open@P0's failed
+        barcode, and the left-behind file's ok overwrote open@P1's failed no-store. Each check is ANDed now."""
+        def run(order):
+            rounds = []
+            for n in (1, 2, 3):
+                rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                     checks={'correct.barcode_every_open': {'ok': True}}))
+                for profile in order:
+                    ok = not (n == 1 and profile == 'P0')
+                    rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119],
+                                                  'open.text.frame.P0': [100]}, app_js='bbb',
+                                         parts=(f'open@{profile}',),
+                                         checks={'correct.barcode_every_open': {'ok': ok, 'opens': 9}}))
+            return self.answer(self.folder(rounds))
+        for order in (('P0', 'P3'), ('P3', 'P0')):  # the failing file sorting first, then last
+            with self.subTest(order=order):
+                got = run(order)
+                self.assertEqual(got['verdict'], 'FAIL', got)
+                self.assertEqual(next(r for r in got['rows'] if r['id'] == 'barcode')['verdict'], 'FAIL')
+        merged = {}
+        JUDGE._and_merge(merged, {'left.no_store': {'ok': False, 'missing': ['GET /original 304']}})
+        JUDGE._and_merge(merged, {'left.no_store': {'ok': True}})
+        self.assertFalse(merged['left.no_store']['ok'])
+        self.assertEqual(len(merged['left.no_store']['by_file']), 2)
+
+    def test_an_operation_that_never_finished_is_invalid(self):
+        """judge[1], bench[0]: a tab that never became opaque left no sample, and the row still met its count."""
+        stuck = self.answer(self.pair([300, 298, 296], [120, 121, 119],
+                                      b_extra={'unfinished': ['P0 tab-queue queue']}))
+        self.assertEqual(stuck['verdict'], 'INVALID')
+        self.assertTrue(any('never finished' in w and 'tab-queue' in w for w in stuck['invalid']), stuck)
+
+    def test_a_valid_round_is_never_superseded(self):
+        """judge[2], records[1]: an attempt after a valid round replaced it, so a FAIL disappeared. The first valid
+        attempt is final; a later one is set aside, named and never judged."""
+        rounds = []
+        for n in (1, 2, 3):
+            rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                 checks={'correct.barcode_every_open': {'ok': True}}))
+            rounds.append(_round('B', n, {'open.later.first_page.P0': [200, 201, 199], 'open.text.frame.P0': [100]},
+                                 app_js='bbb', checks={'correct.barcode_every_open': {'ok': n != 1}}))
+        out = self.folder(rounds)
+        for n in (1, 2, 3):
+            later = _round('B', 100 + n, {'open.later.first_page.P0': [90, 91, 89], 'open.text.frame.P0': [100]},
+                           app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}})
+            Path(out, f'B-r{100 + n}-open.json').write_text(json.dumps(later))
+        got = self.answer(out)
+        self.assertEqual(got['verdict'], 'FAIL', got)
+        self.assertEqual(sorted(got['superseded']), ['B-r101-open.json', 'B-r102-open.json', 'B-r103-open.json'])
+        kept, unused = JUDGE.chosen_attempts(out)
+        self.assertIn('B-r1-open.json', [p.name for p in kept])
+        records = [_round('A', 1, {'x': [1]}, parts=('records',)),
+                   _round('B', 1, {'x': [1]}, parts=('records',), app_js='bbb', load_after=[2.0, 1.0, 1.0],
+                          checks={'records.equation': {'ok': False}}),
+                   _round('B', 101, {'x': [1]}, parts=('records',), app_js='bbb',
+                          checks={'records.equation': {'ok': True}})]
+        table = {'controls': [], 'rows': [{'id': 'eq', 'kind': 'check', 'check': 'records.equation'}]}
+        self.assertEqual(self.answer(self.folder(records), table=table)['verdict'], 'FAIL')
+
+    def test_a_tag_is_one_tree(self):
+        """judge[3]: a B file measured on A's tree (or on another B head) never enters B's verdict unseen."""
+        rounds = []
+        for n in (1, 2, 3):
+            rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                 checks={'correct.barcode_every_open': {'ok': True}}))
+            rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119], 'open.text.frame.P0': [100]},
+                                 app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}}))
+        out = self.folder(rounds)
+        self.assertEqual(self.answer(out)['verdict'], 'PASS')
+        stray = _round('B', 2, {'x': [1]}, parts=('lists',), app_js='aaa', revision='A')  # not last in its round
+        Path(out, 'B-r2-lists.json').write_text(json.dumps(stray))
+        got = self.answer(out)
+        self.assertEqual(got['verdict'], 'INVALID')
+        self.assertTrue(any('2 trees' in w for w in got['invalid']), got['invalid'])
+        self.assertTrue(any('app.js hashes are equal' in w for w in got['invalid']), got['invalid'])
+        Path(out, 'B-r2-lists.json').unlink()
+        other = _round('B', 101, {'open.later.first_page.P0': [120]}, app_js='ccc', revision='B-old',
+                       load_after=[1.0, 1.0, 1.0])
+        rounds[1]['load_after'] = [12.0, 1.0, 1.0]  # B round 1 INVALID, so its retry on another head is used
+        Path(out, 'B-r1-open.json').write_text(json.dumps(rounds[1]))
+        Path(out, 'B-r101-open.json').write_text(json.dumps(other))
+        got = self.answer(out)
+        self.assertEqual(got['verdict'], 'INVALID')
+        self.assertEqual(got['trees'], {'A': ['A'], 'B': ['B', 'B-old']})
+
+    def test_a_is_release_one_s_tree_when_the_table_names_it(self):
+        """protocol[1]: an A measured on another tree would loosen exactly the gates whose limit is A."""
+        table = {**copy.deepcopy(TABLE), 'a_tree': '816045c7264481bc6956285e1ca89991b9fcec2f (release 1)'}
+        rounds = []
+        for n in (1, 2, 3):
+            rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                 checks={'correct.barcode_every_open': {'ok': True}},
+                                 revision='816045c7264481bc6956285e1ca89991b9fcec2f'))
+            rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119], 'open.text.frame.P0': [100]},
+                                 app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}}))
+        self.assertEqual(self.answer(self.folder(rounds), table=table)['verdict'], 'PASS')
+        for r in rounds:
+            if r['tag'] == 'A':
+                r['revision'] = '0' * 40
+        got = self.answer(self.folder(rounds), table=table)
+        self.assertEqual(got['verdict'], 'INVALID')
+        self.assertTrue(any('is not release 1' in w for w in got['invalid']), got['invalid'])
+
+    def test_too_few_a_samples_is_invalid_wherever_the_row_reads_a(self):
+        """judge[4]: only rows saying needs_a true counted A's samples, so a session with one A round judged B."""
+        few_a = self.answer(self.pair([300], [120, 121, 119]))  # A 3 later-open samples, the row needs 6
+        self.assertEqual(few_a['verdict'], 'INVALID', few_a)
+        self.assertTrue(any('too few samples (A 3, B 9' in ' '.join(r['why']) for r in few_a['rows']), few_a)
+        table = {'controls': TABLE['controls'], 'rows': [
+            {'id': 'abs', 'metric': 'pause.detail.ms', 'min_samples': 3, 'a_recorded': 74.65,
+             'gate': [{'abs_max': 50}]},
+            {'id': 'new', 'metric': 'open.reopen.view_body_bytes.P0', 'min_samples': 3, 'needs_a': False,
+             'gate': [{'eq': 0}]}]}
+        rounds = [_round('A', n, {'open.later.first_page.P0': [300]}) for n in (1, 2, 3)]
+        rounds += [_round('B', n, {'pause.detail.ms': [45], 'open.reopen.view_body_bytes.P0': [0]}, app_js='bbb')
+                   for n in (1, 2, 3)]
+        rows = {r['id']: r for r in self.answer(self.folder(rounds), table=table)['rows']}
+        self.assertEqual(rows['abs']['verdict'], 'INVALID', rows['abs'])  # no A: the A-column check cannot run
+        self.assertEqual(rows['new']['verdict'], 'PASS', rows['new'])
+
+    def test_the_a_column_tolerance_is_at_least_one_event_timing_step(self):
+        """judge[9]: Event Timing reports 8 ms steps, so at a recorded 32 ms one key 8 ms slower is still A."""
+        row = {'id': 'k', 'metric': 'lists.search.key_event.100.P0', 'stat': 'max', 'min_samples': 4,
+               'a_recorded': 32, 'a_spread': 0.0, 'a_step': 8, 'gate': [{'abs_max': 64}], 'spread': 0.0}
+        b = {1: {'metrics': {row['metric']: [16, 24, 24, 16]}}}
+        for keys, verdict in (([40, 24, 32, 16], 'PASS'), ([24, 16, 16, 24], 'PASS'), ([48, 24, 32, 16], 'INVALID')):
+            with self.subTest(keys=keys):
+                self.assertEqual(JUDGE.judge_row(row, {1: {'metrics': {row['metric']: keys}}}, b)['verdict'], verdict)
+        bare = {k: v for k, v in row.items() if k != 'a_step'}
+        self.assertEqual(JUDGE.judge_row(bare, {1: {'metrics': {row['metric']: [40, 24, 32, 16]}}}, b)['verdict'],
+                         'INVALID')
+
+    def test_a_limit_below_a_asks_for_a_gain_beyond_twice_the_spread(self):
+        """judge[10]: scan20-P0's 400 ms sits 8% under a recorded 436 ms with a 4.6% spread, so a 398 ms B 'gained'
+        inside release 1's own spread. Wherever a limit lies below A the gain rule applies, flag or not."""
+        row = {'id': 's', 'metric': 'm', 'min_samples': 1, 'a_recorded': 436, 'gate': [{'abs_max': 400}],
+               'spread': 0.0461}
+        a = {1: {'metrics': {'m': [436]}}}
+        self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [398]}}})['verdict'], 'FAIL')
+        self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [390]}}})['verdict'], 'PASS')
+        self.assertEqual(JUDGE.judge_row({k: v for k, v in row.items() if k != 'spread'}, a,
+                                         {1: {'metrics': {'m': [390]}}})['verdict'], 'INVALID')
+        above = {**row, 'gate': [{'abs_max': 500}]}  # a limit above A asks for no gain
+        self.assertEqual(JUDGE.judge_row(above, a, {1: {'metrics': {'m': [440]}}})['verdict'], 'PASS')
+        rate = {'id': 'r', 'metric': 'm', 'min_samples': 1, 'gate': [{'abs_min': 100}], 'spread': 0.05}
+        slow = {1: {'metrics': {'m': [95]}}}
+        self.assertEqual(JUDGE.judge_row(rate, slow, {1: {'metrics': {'m': [101]}}})['verdict'], 'FAIL')  # 6% <= 10%
+        self.assertEqual(JUDGE.judge_row(rate, slow, {1: {'metrics': {'m': [110]}}})['verdict'], 'PASS')
+
+    def test_the_spread_and_the_floors_refuse_an_invalid_or_partial_pair(self):
+        """protocol[0], [3]: floors and a recorded A came out of an INVALID round (load 22) and passed every test."""
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        good = {'open.later.first_page.P0': [300, 298], 'open.text.frame.P0': [100]}
+        Path(d, 'A-r1-open.json').write_text(json.dumps(_round('A', 1, good, load_max=9.5)))
+        Path(d, 'A-r2-open.json').write_text(json.dumps(_round('A', 2, good)))
+        table = Path(d, 'acceptance.json')
+        table.write_text(json.dumps(TABLE))
+        for command in ('spread', 'floors'):
+            with self.subTest(command=command):
+                extra = ['--source', 'test'] if command == 'floors' else []
+                out, err = io.StringIO(), io.StringIO()
+                with unittest.mock.patch('sys.stdout', out), unittest.mock.patch('sys.stderr', err):
+                    code = JUDGE.main([command, '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance',
+                                       str(table), *extra])
+                self.assertEqual(code, 3)
+                self.assertEqual(out.getvalue(), '')
+                self.assertIn('load average 9.5', err.getvalue())
+        Path(d, 'A-r101-open.json').write_text(json.dumps(_round('A', 101, good)))  # its valid retry
+        out = io.StringIO()
+        with unittest.mock.patch('sys.stdout', out):
+            self.assertEqual(JUDGE.main(['floors', '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance',
+                                         str(table), '--source', 'test']), 0)
+        derived = json.loads(out.getvalue())
+        self.assertEqual(derived['derived']['rows']['text'], [100, 100, 100])
+        Path(d, 'B-only-a-list.json').write_text('{}')  # not a round file: ignored
+        partial = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, partial)
+        for n in (1, 2):  # one part group only: the rows that read open's A have no value
+            Path(partial, f'A-r{n}-lists.json').write_text(json.dumps(_round('A', n, {'x': [1]}, parts=('lists',))))
+        err = io.StringIO()
+        with unittest.mock.patch('sys.stderr', err), unittest.mock.patch('sys.stdout', io.StringIO()):
+            self.assertEqual(JUDGE.main(['floors', '--out', str(partial), '--a', 'A:1', '--a', 'A:2',
+                                         '--acceptance', str(table), '--source', 'test']), 3)
+        self.assertIn('no value for', err.getvalue())
+
+    def test_floors_check_holds_the_table_to_its_own_pair_byte_for_byte(self):
+        """protocol[2]: the committed table must be exactly what judge.py floors writes from its A/A pair."""
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d)
+        for n, values in ((1, [300, 298]), (2, [306, 304])):
+            Path(d, f'A-r{n}-open.json').write_text(json.dumps(_round('A', n, {'open.later.first_page.P0': values,
+                                                                                'open.text.frame.P0': [100 + n]})))
+        table = Path(d, 'acceptance.json')
+        table.write_text(json.dumps(TABLE))
+        args = ['floors', '--out', str(d), '--a', 'A:1', '--a', 'A:2', '--acceptance', str(table), '--source', 'x']
+        out = io.StringIO()
+        with unittest.mock.patch('sys.stdout', out):
+            self.assertEqual(JUDGE.main(args), 0)
+        table.write_text(out.getvalue())
+        with unittest.mock.patch('sys.stderr', io.StringIO()):
+            self.assertEqual(JUDGE.main(args + ['--check']), 0)
+        moved = json.loads(out.getvalue())
+        moved['rows'][1]['gate'][0]['floor_factor'] = 2.0
+        table.write_text(json.dumps(moved, indent=1) + '\n')
+        with unittest.mock.patch('sys.stderr', io.StringIO()):
+            self.assertEqual(JUDGE.main(args + ['--check']), 1)
 
     def test_a_gain_must_exceed_twice_the_spread(self):
         row = {'id': 'g', 'metric': 'm', 'min_samples': 1, 'a_section8': None, 'gate': [{'rel_max': 0.98}],
@@ -488,24 +704,38 @@ class JudgeTests(unittest.TestCase):
                          'FAIL')
 
     def test_what_the_coder_is_sent_must_be_equal_on_both_trees(self):
-        row = {'id': 'c', 'kind': 'same_as_a'}
-        same = [['text', 'reader', 'aa', 'bb', 2]]
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': same}}, {1: {'requests': same}})['verdict'], 'PASS')
-        other = [['text', 'reader', 'ab', 'bb', 2]]
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': same}}, {1: {'requests': other}})['verdict'], 'FAIL')
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': None}}, {1: {'requests': same}})['verdict'], 'INVALID')
+        row = {'id': 'c', 'kind': 'same_as_a', 'effort': {'a': 'max', 'b': 'high'}}
+        a, b = _requests('max', ['aa']), _requests('high', ['aa'])
+        self.assertEqual(JUDGE.judge_row(row, a, b)['verdict'], 'PASS')  # the effort aside, byte for byte the same
+        self.assertEqual(JUDGE.judge_row(row, a, _requests('high', ['ab']))['verdict'], 'FAIL')  # one prompt byte
+        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': None}}, b)['verdict'], 'INVALID')
+
+    def test_the_coder_row_compares_the_effort_as_release_one_and_r2_33_set_it(self):
+        """bench[3]: B is asked at R2-33's 'high', release 1 at 'max'; the row compares every other byte and the effort
+        as exactly those values, never a looser comparison."""
+        row = {'id': 'c', 'kind': 'same_as_a', 'effort': {'a': 'max', 'b': 'high'}}
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', ['aa']), _requests('max', ['aa']))['verdict'], 'FAIL')
+        self.assertEqual(JUDGE.judge_row(row, _requests('high', ['aa']), _requests('high', ['aa']))['verdict'], 'FAIL')
+        named = _requests('high', ['aa'])
+        named[1]['requests_effort'] = 'max'  # what the tree's settings say must be what it sent
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', ['aa']), named)['verdict'], 'FAIL')
+        old = {1: {'requests': [['text', 'reader', 'aa', 'bb', 2]], 'requests_effort': None}}
+        self.assertEqual(JUDGE.judge_row(row, old, _requests('high', ['aa']))['verdict'], 'INVALID')  # an old bench
+        table = json.loads((BENCH / 'acceptance.json').read_text())
+        coder = next(r for r in table['rows'] if r['id'] == 'coder-requests')
+        self.assertEqual(coder.get('effort'), {'a': 'max', 'b': 'high'})
 
     def test_the_coder_row_never_passes_on_requests_nobody_recorded(self):
         """Two empty lists are equal, so a requests part that recorded nothing on both trees passed this row; it is
         INVALID now. Section 8 asks for 8 request hashes, and the committed row says so (min_rows 8)."""
-        row = {'id': 'c', 'kind': 'same_as_a'}
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': []}}, {1: {'requests': []}})['verdict'], 'INVALID')
-        eight = [['text', 'reader', f'{n:02d}', 'bb', 2] for n in range(8)]
+        row = {'id': 'c', 'kind': 'same_as_a', 'effort': {'a': 'max', 'b': 'high'}}
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', []), _requests('high', []))['verdict'], 'INVALID')
+        eight = [f'{n:02d}' for n in range(8)]
         row = {**row, 'min_rows': 8}
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight[:7]}}, {1: {'requests': eight[:7]}})['verdict'],
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', eight[:7]), _requests('high', eight[:7]))['verdict'],
                          'INVALID')
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight}}, {1: {'requests': []}})['verdict'], 'INVALID')
-        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight}}, {1: {'requests': eight}})['verdict'], 'PASS')
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', eight), _requests('high', []))['verdict'], 'INVALID')
+        self.assertEqual(JUDGE.judge_row(row, _requests('max', eight), _requests('high', eight))['verdict'], 'PASS')
         table = json.loads((BENCH / 'acceptance.json').read_text())
         self.assertEqual(next(r for r in table['rows'] if r['id'] == 'coder-requests').get('min_rows'), 8)
 
@@ -513,18 +743,71 @@ class JudgeTests(unittest.TestCase):
         first = {'metrics': {'m': [100, 102, 98], 'n': [10, 10, 10], 'z': [0]}}
         second = {'metrics': {'m': [104, 106, 102], 'n': [10, 10, 10], 'z': [0]}}
         got = JUDGE.spread(first, second)
-        self.assertAlmostEqual(got['m'], 4 / 102, places=4)
+        self.assertEqual(got['m'], 0.0393)  # 4 / 102 = 0.039216, rounded UP (protocol[5])
         self.assertEqual(got['n'], 0.0)
         self.assertEqual(got['z'], 0.0)
         self.assertEqual(JUDGE.floor_factor(0.05), 1.1)
-        table = {'rows': [{'id': 'x', 'metric': 'm', 'gate': [{'rel_max': 1.02}]},
-                          {'id': 'y', 'metric': 'm', 'gate': [{'abs_max': 5}]},
-                          {'id': 'g', 'metric': 'm', 'gate': [{'rel_max': 0.6}], 'gain': True}]}
-        floored = JUDGE.apply_floors(table, got)
-        self.assertAlmostEqual(floored['rows'][0]['gate'][0]['floor_factor'], 1 + 2 * round(4 / 102, 4), places=4)
+        table = {'controls': [], 'rows': [{'id': 'x', 'metric': 'm', 'gate': [{'rel_max': 1.02}]},
+                                          {'id': 'y', 'metric': 'm', 'gate': [{'abs_max': 5}]},
+                                          {'id': 'g', 'metric': 'm', 'gate': [{'rel_max': 0.6}], 'gain': True}]}
+        floored = JUDGE.derive(table, first, second, 'test')
+        self.assertEqual(floored['rows'][0]['gate'][0]['floor_factor'], 1.0786)
         self.assertNotIn('floor_factor', floored['rows'][1]['gate'][0])
         self.assertNotIn('floor_factor', floored['rows'][2]['gate'][0])
-        self.assertAlmostEqual(floored['rows'][2]['spread'], round(4 / 102, 4))
+        self.assertEqual(floored['rows'][2]['spread'], 0.0393)
+
+    def test_the_spread_is_rounded_up_so_no_floor_is_below_c5_s_minimum(self):
+        """protocol[5]: medians 18 and 16 are 2/17 = 0.117647 apart; rounded to nearest the floor 1.2352 x 17 = 20.998
+        failed a B of 21 that C5's exact floor (21.0) passes."""
+        self.assertGreaterEqual(JUDGE.up_spread(18, 16), 2 / 17)
+        self.assertEqual(JUDGE.up_spread(18, 16), 0.1177)
+        self.assertEqual(JUDGE.up_spread(100, 100), 0.0)
+        self.assertEqual(JUDGE.up_spread(0.05, 0.05), 0.0)
+        self.assertEqual(JUDGE.up_spread(105, 95), 0.1)  # exact at 4 decimals stays: float noise never lifts it
+        row = JUDGE.derive_row({'id': 'r', 'metric': 'm', 'min_samples': 1, 'gate': [{'rel_max': 1.0}]}, 18, 16, 17)
+        a = {1: {'metrics': {'m': [17]}}}
+        self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [21]}}})['verdict'], 'PASS')
+        self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [21.1]}}})['verdict'], 'FAIL')
+
+    def test_derive_writes_every_row_that_reads_a_in_its_own_statistic(self):
+        """protocol[1], [2]: every row whose A is read gets lane M's recorded A and its A/A spread in the row's own
+        statistic (a max row whose medians agree but whose maxima differ gets the maxima's), never None; a row that says
+        needs_a false gets none, and a pair that lacks a row's value is refused."""
+        first = {'metrics': {'m': [10, 50, 10], 'k': [20], 'z': [5]}}
+        second = {'metrics': {'m': [10, 40, 10], 'k': [21], 'z': [6]}}
+        table = {'controls': [], 'rows': [
+            {'id': 'max', 'metric': 'm', 'stat': 'max', 'gate': [{'abs_max': 64}]},
+            {'id': 'rel', 'metric': 'k', 'gate': [{'rel_max': 1.0, 'rel_plus': 15}]},
+            {'id': 'new', 'metric': 'z', 'needs_a': False, 'gate': [{'eq': 0}]},
+            {'id': 'rep', 'kind': 'report', 'metric': 'k'}]}
+        got = {r['id']: r for r in JUDGE.derive(table, first, second, 'test')['rows']}
+        self.assertEqual(got['max']['a_recorded'], 50)  # the pooled max, not the median 10
+        self.assertEqual(got['max']['a_spread'], JUDGE.up_spread(50, 40))  # the maxima's spread, the medians' is 0
+        self.assertEqual(got['rel']['a_recorded'], 20.5)
+        self.assertEqual(got['rel']['gate'][0]['floor_factor'], JUDGE.floor_factor(JUDGE.up_spread(20, 21)))
+        for name in ('new', 'rep'):
+            self.assertNotIn('a_recorded', got[name])
+        with self.assertRaises(ValueError):
+            JUDGE.derive(table, first, {'metrics': {'m': [10]}}, 'test')  # 'rel' reads A and the pair has no k
+
+    def test_derive_is_reproducible_byte_for_byte(self):
+        """protocol[2]: the same table and pair give the same bytes, whether the table was derived before or not, and
+        every earlier value is replaced, never kept."""
+        first = {'metrics': {'m': [100, 102], 'k': [7]}}
+        second = {'metrics': {'m': [104, 106], 'k': [7]}}
+        table = {'controls': [], 'rows': [{'id': 'x', 'metric': 'm', 'gate': [{'rel_max': 1.02}]},
+                                          {'id': 'k', 'metric': 'k', 'gate': [{'abs_max': 9}]}]}
+        once = JUDGE.derive(table, first, second, 'pair 1')
+        again = JUDGE.derive(once, first, second, 'pair 1')
+        self.assertEqual(json.dumps(once, indent=1), json.dumps(again, indent=1))
+        moved = JUDGE.derive(once, {'metrics': {'m': [100, 102], 'k': [7]}}, {'metrics': {'m': [140, 140], 'k': [9]}},
+                             'pair 2')
+        self.assertNotEqual(moved['rows'][0]['gate'][0]['floor_factor'], once['rows'][0]['gate'][0]['floor_factor'])
+        self.assertEqual(moved['derived']['rows']['k'], [7, 9, 8.0])
+        self.assertEqual(moved['derived']['sha256'], JUDGE.derived_digest(moved['derived']['rows']))
+        base = JUDGE.base_table(once)
+        self.assertIsNone(base['derived'])
+        self.assertFalse([r for r in base['rows'] for k in ('a_recorded', 'a_spread', 'spread') if k in r])
 
     def test_section_eight_s_a_column_tolerance(self):
         self.assertTrue(JUDGE.a_column_close(310, 298))
@@ -561,13 +844,6 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(JUDGE.a_tolerance(table['rows'][0]), 0.20)
         self.assertEqual(self.answer(self.pair([140.0], [3.0]), table=table)['verdict'], 'INVALID')
 
-    def test_apply_floors_records_the_a_column_s_spread(self):
-        table = {'rows': [{'id': 'r', 'metric': 'm', 'a_section8': 10, 'gate': [{'abs_max': 5}]},
-                          {'id': 'q', 'metric': 'n', 'gate': [{'abs_max': 5}]}]}
-        floored = JUDGE.apply_floors(table, {'m': 0.3, 'n': 0.2})
-        self.assertEqual(floored['rows'][0]['a_spread'], 0.3)
-        self.assertNotIn('a_spread', floored['rows'][1])
-
 
 class OfficeModelTests(unittest.TestCase):
     def test_limit_req_is_nginx_s(self):
@@ -602,8 +878,27 @@ class OfficeModelTests(unittest.TestCase):
         calm = JUDGE.office_429s(zones, JUDGE.office_requests(model, measured))
         self.assertEqual(sum(calm.values()), 0, calm)
         typing = [(350 * i, 'POST', '/api/encounters/search') for i in range(30)]
-        busy = JUDGE.office_429s(zones, JUDGE.office_requests(model, {**measured, 'typing': typing}))
+        write = '"~^0:POST /(api|ops)/" $cpt_client;\n    default "";\n'
+        release1 = {**zones, 'maps': {**zones['maps'], 'cpt_write_key': write}}
+        busy = JUDGE.office_429s(release1, JUDGE.office_requests(model, {**measured, 'typing': typing}))
         self.assertGreater(busy['cpt_write'], 0, busy)  # in the write zone, 5 typists at 2.9 a second each pass it
+        exact = '"0:POST /api/encounters/search" "";\n    ' + write
+        r2_27 = {**zones, 'maps': {**zones['maps'], 'cpt_write_key': exact}}
+        calm = JUDGE.office_429s(r2_27, JUDGE.office_requests(model, {**measured, 'typing': typing}))
+        self.assertEqual(sum(calm.values()), 0, calm)  # R2-27: a search counts in the read zone only
+
+    def test_an_exact_empty_entry_wins_over_every_expression(self):
+        """judge[6]: nginx picks a map's exact string first, then its expressions in order, then the default, and an
+        empty key counts in no zone; the search was counted in the write zone despite R2-27's exact empty entry."""
+        write = '"~^0:POST /(api|ops)/" $cpt_client;\n    default "";\n'
+        maps = {'cpt_all_key': '"~^0:" $cpt_client;\n    default "";\n',
+                'cpt_write_key': '"0:POST /api/encounters/search" "";  # R2-27\n    ' + write}
+        self.assertEqual(JUDGE.zone_of(maps, 'POST', '/api/encounters/search'), ['cpt_all_key'])
+        self.assertEqual(JUDGE.zone_of(maps, 'GET', '/api/encounters'), ['cpt_all_key'])
+        for path in ('/api/encounters/<id>/answers', '/api/encounters/search/', '/ops/encounters/<id>/note'):
+            self.assertIn('cpt_write_key', JUDGE.zone_of(maps, 'POST', path), path)
+        mutated = {**maps, 'cpt_write_key': maps['cpt_write_key'].replace('search" ""', 'search" $cpt_client')}
+        self.assertIn('cpt_write_key', JUDGE.zone_of(mutated, 'POST', '/api/encounters/search'))
 
 
 DOC_A, DOC_B = '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'
