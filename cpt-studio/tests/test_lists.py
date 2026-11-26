@@ -584,12 +584,41 @@ def node_rows(rows, queries):
 
 
 def node_lowered() -> dict:
-    """{code point: [code points]} for every code point the page's JavaScript lower-cases (tests/frontend/lower_table.cjs,
-    run by node: the browser's tables, as the page's own rule reads them)."""
+    """{code point: [code points]} for every code point node's JavaScript lower-cases (tests/frontend/lower_table.cjs):
+    a stand-in for the page's browser, with node's own tables (its ICU, which the test host or CI's runner sets), never
+    a member's browser's, which may be newer (browser_lowered, CHROMIUM_153_NEWER)."""
     done = subprocess.run([shutil.which('node'), str(LOWER_TABLE)], capture_output=True, text=True, timeout=300,
                           check=False)
     assert done.returncode == 0, done.stderr[-2000:]
     return {int(point): pieces for point, pieces in json.loads(done.stdout)['lowered'].items()}
+
+
+def browser_lowered() -> tuple:
+    """({engine: {code point: [code points]}}, {engine: why it is absent}) for the Chromium builds present on the test
+    host - the walk's own and the newest installed in Playwright's browser folder (tests/frontend/lower_table.cjs
+    --browsers, each on a blank page with every request refused): the tables the page's own rule reads in them."""
+    done = subprocess.run([shutil.which('node'), str(LOWER_TABLE), '--browsers'], capture_output=True, text=True,
+                          timeout=600, check=False)
+    assert done.returncode == 0, done.stderr[-2000:]
+    found = json.loads(done.stdout)
+    return ({engine['name']: {int(point): pieces for point, pieces in engine['lowered'].items()}
+             for engine in found['engines']}, {engine['name']: engine['why'] for engine in found['absent']})
+
+
+# The 28 letters Chromium 153.0.8010.12 (ICU 78, Unicode 17.0) lower-cases that node 22.22.0 and Chromium 147 (ICU 77.1,
+# Unicode 16.0) do not - U+A7CE, U+A7D2, U+A7D4 and Beria Erfe's U+16EA0-U+16EB8 - each to the small letter it gives:
+# measured over every code point in lane S's refutation round 2 (search[0]) and again for this table. Committed, so
+# SearchLetterTests holds the server to them where no such browser is installed, CI among them (D-R2-42).
+CHROMIUM_153_NEWER = {
+    '꟎': '꟏', '꟒': 'ꟓ', '꟔': 'ꟕ',
+    '\U00016ea0': '\U00016ebb', '\U00016ea1': '\U00016ebc', '\U00016ea2': '\U00016ebd', '\U00016ea3': '\U00016ebe',
+    '\U00016ea4': '\U00016ebf', '\U00016ea5': '\U00016ec0', '\U00016ea6': '\U00016ec1', '\U00016ea7': '\U00016ec2',
+    '\U00016ea8': '\U00016ec3', '\U00016ea9': '\U00016ec4', '\U00016eaa': '\U00016ec5', '\U00016eab': '\U00016ec6',
+    '\U00016eac': '\U00016ec7', '\U00016ead': '\U00016ec8', '\U00016eae': '\U00016ec9', '\U00016eaf': '\U00016eca',
+    '\U00016eb0': '\U00016ecb', '\U00016eb1': '\U00016ecc', '\U00016eb2': '\U00016ecd', '\U00016eb3': '\U00016ece',
+    '\U00016eb4': '\U00016ecf', '\U00016eb5': '\U00016ed0', '\U00016eb6': '\U00016ed1', '\U00016eb7': '\U00016ed2',
+    '\U00016eb8': '\U00016ed3',
+}
 
 
 def database_lowered() -> dict:
@@ -688,11 +717,17 @@ class SearchPropertyTests(SearchCase):
 
 
 class SearchLetterTests(SearchCase):
-    """The page lower-cases with the browser's tables (node 22: Unicode 16.0), the search with PostgreSQL 17's pg_c_utf8
-    (Unicode 15.1). Compared over every code point, in both directions, they differ exactly where the search folds - the
-    capitals only the browser lower-cases (customer.SEARCH_NEWER) and U+0130, which both lower-case, differently - so an
-    upgrade of node, ICU or PostgreSQL fails here and names its letters; and each letter only the browser lower-cases is
-    found in either case, its partner taken from the browser's table, never from Python's (Unicode 15.0)."""
+    """The page lower-cases with its browser's tables, the search with PostgreSQL 17's pg_c_utf8 (Unicode 15.1). Read
+    over every code point in each engine present - node (a stand-in; here 22.22.0, Unicode 16.0), the walk's Chromium
+    (here 147, Unicode 16.0) and the newest Chromium installed (here 153, Unicode 17.0), one that is absent skipped by
+    name - and against a committed table of Chromium 153's newer letters (CHROMIUM_153_NEWER, held where no browser is
+    installed), each differs from the database only where the search folds: every letter it alone lower-cases is in
+    customer.SEARCH_NEWER, to the same small letter, and U+0130 is the one letter both lower-case, differently. An
+    engine on a later Unicode release, an ICU upgrade or a PostgreSQL upgrade fails here and names its letters. These
+    are the test host's engines, never a member's browser: one on a Unicode release newer than all of them can
+    lower-case a letter the search does not fold, until SEARCH_NEWER is extended (D-R2-42; API.md's known limits). And
+    each pair of SEARCH_NEWER - its partners the browsers' own, never Python's (Unicode 15.0) - is found in either case
+    by either letter."""
 
     def setUp(self):
         super().setUp()
@@ -700,15 +735,30 @@ class SearchLetterTests(SearchCase):
             self.skipTest('node is not here: the page cannot be run')
 
     def test_the_browser_and_the_database_lower_case_alike_except_where_the_search_folds(self):
-        page, database = node_lowered(), database_lowered()
-        only_page = {chr(point): ''.join(map(chr, page[point])) for point in set(page) - set(database)}
-        self.assertEqual(only_page, customer.SEARCH_NEWER,
-                         sorted(f'U+{ord(letter):04X}' for letter in set(only_page) ^ set(customer.SEARCH_NEWER)))
-        self.assertEqual(set(database) - set(page), set())  # nothing the database alone lower-cases
-        self.assertEqual({point for point in set(page) & set(database) if page[point] != database[point]}, {0x130})
-        self.assertEqual((page[0x130], database[0x130]), ([0x69, 0x307], [0x69]))  # i and the dot above, or i
-        # the dot above is the one character a lower case adds, so customer.search_length is the same before and after
-        self.assertEqual({point for point, pieces in page.items() if len(pieces) != 1}, {0x130})
+        database = database_lowered()
+        browsers, absent = browser_lowered()
+        for engine, page in {'node': node_lowered(), **browsers}.items():
+            with self.subTest(engine=engine):
+                only_page = {chr(point): ''.join(map(chr, page[point])) for point in set(page) - set(database)}
+                # each letter only this engine lower-cases is folded, to the letter it gives; an older engine
+                # lower-cases fewer, and its page finds fewer than the search, which "never fewer" allows
+                self.assertLessEqual(only_page.items(), customer.SEARCH_NEWER.items(), sorted(
+                    f'U+{ord(letter):04X}' for letter, small in only_page.items()
+                    if customer.SEARCH_NEWER.get(letter) != small))
+                self.assertEqual(set(database) - set(page), set())  # nothing the database alone lower-cases
+                self.assertEqual({point for point in set(page) & set(database) if page[point] != database[point]},
+                                 {0x130})
+                self.assertEqual((page[0x130], database[0x130]), ([0x69, 0x307], [0x69]))  # i and the dot above, or i
+                # the dot above is the one character a lower case adds, so customer.search_length is the same before
+                # and after
+                self.assertEqual({point for point, pieces in page.items() if len(pieces) != 1}, {0x130})
+        for engine, why in absent.items():  # an engine not installed on this host is skipped, by name
+            with self.subTest(engine=engine):
+                self.skipTest(why)
+        # Chromium 153's newer letters, committed: held where no such browser is installed (CI among them)
+        self.assertLessEqual(CHROMIUM_153_NEWER.items(), customer.SEARCH_NEWER.items(), sorted(
+            f'U+{ord(letter):04X}' for letter, small in CHROMIUM_153_NEWER.items()
+            if customer.SEARCH_NEWER.get(letter) != small))
         # the fold of words holding all of them: each letter of FROM to the letter at its place in TO, and the dot last,
         # past TO's end (dropped)
         fold_from, fold_to = customer.search_fold(''.join(customer.SEARCH_NEWER))
@@ -716,19 +766,20 @@ class SearchLetterTests(SearchCase):
         self.assertEqual((len(fold_from) - len(fold_to), fold_from[-1]), (1, '\u0307'))
 
     def test_each_letter_only_the_browser_lower_cases_is_found_in_either_case(self):
-        page, database = node_lowered(), database_lowered()
-        pairs = [(chr(point), ''.join(map(chr, page[point]))) for point in sorted(set(page) - set(database))]
-        self.assertEqual(len(pairs), 27)
+        pairs = sorted(customer.SEARCH_NEWER.items())  # each newer capital and its small letter, the browsers' (above)
+        titles = {}
         for capital, small in pairs:  # one title in each case
-            f.encounter(self.ws, self.reviewer, title=f'Synthetic {capital} letter note')
-            f.encounter(self.ws, self.reviewer, title=f'Synthetic {small} letter note')
+            titles[capital] = {str(f.encounter(self.ws, self.reviewer, title=f'Synthetic {letter} letter note').pk)
+                               for letter in (capital, small)}
         rows, _pages = self.walk()
-        queries = [letter for pair in pairs for letter in pair]
+        queries = [(letter, capital) for capital, small in pairs for letter in (capital, small)]
         membership = membership_of(self.reviewer)
-        for query, wanted in zip(queries, node_rows(rows, queries)['found']):
+        for (query, capital), node_found in zip(queries, node_rows(rows, [query for query, _ in queries])['found']):
             with self.subTest(letter=f'U+{ord(query):04X}'):
-                self.assertEqual(len(wanted), 2)  # the page's rule finds the letter's title in either case
-                self.assertLessEqual(set(wanted), set(searched(membership, query)))  # never fewer
+                found = set(searched(membership, query))
+                # the letter's title in either case: what the page's rule finds in a browser that lower-cases it
+                self.assertEqual(found, titles[capital])
+                self.assertLessEqual(set(node_found), found)  # and never fewer than node's rule finds
 
 
 class SearchTests(SearchCase):

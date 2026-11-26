@@ -361,13 +361,16 @@ def list_page(membership, which, before=None) -> dict:
 # (app.js parseIsoDate: four-digit years from 0100), else "Not entered". Matching is strpos over both sides lower-cased in
 # PostgreSQL's builtin pg_c_utf8 collation (PostgreSQL 17 or newer), the words a bound parameter, so nothing in them is a
 # wildcard. The browser lower-cases some letters otherwise - a final sigma by its neighbours, a dotted capital I into two
-# letters, and 27 capitals of Unicode 16.0 that PostgreSQL 17's tables (Unicode 15.1) leave as they are (SEARCH_NEWER:
-# U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65) - so when the words hold any of these, in either
-# case, or the combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital whose
-# letter the words hold to the browser's small letter, the combining dot dropped; search_fold), and the search never
-# finds fewer documents than the page's rule, more only there. The words are at most SEARCH_MAX_CHARS characters, not
-# counting the combining dot above (U+0307): the one letter whose lower case is longer (U+0130, to i and U+0307) adds
-# only that dot, so the count is the same before and after the page lower-cases the words (search_length).
+# letters, and capitals newer than PostgreSQL 17's tables (Unicode 15.1), which leave them as they are (SEARCH_NEWER: 27
+# of Unicode 16.0, U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65, and 28 of Unicode 17.0, U+A7CE,
+# U+A7D2, U+A7D4 and Beria Erfe's U+16EA0-U+16EB8) - so when the words hold any of these, in either case, or the
+# combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital whose letter the words
+# hold to the browser's small letter, the combining dot dropped; search_fold), and the search never finds fewer
+# documents than the page's rule, more only there. That holds in a browser whose newer letters SEARCH_NEWER holds: one
+# on a later Unicode release can lower-case a letter the search does not fold, until the table is extended (D-R2-42;
+# API.md's known limits). The words are at most SEARCH_MAX_CHARS characters, not counting the combining dot above
+# (U+0307): the one letter whose lower case is longer (U+0130, to i and U+0307) adds only that dot, so the count is the
+# same before and after the page lower-cases the words (search_length).
 # One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
 # (list_rows_of). The text needs each row's revision kind and whether it has a round (and, for an earlier system's row,
 # a file): each is looked up per row, as a one-row subquery, so the walk stops at the 51st match - a join made
@@ -378,11 +381,15 @@ def list_page(membership, which, before=None) -> dict:
 
 JS_WHITE_SPACE = ('\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f'
                   '\u205f\u3000\ufeff')  # what JavaScript's String.prototype.trim removes (measured on node 22)
-# Unicode 16.0 capitals the browser lower-cases and PostgreSQL 17's tables (Unicode 15.1) do not, each to the letter the
-# browser lowers it to (node 22.22.0 with ICU 77.1, and Chromium 147, against PostgreSQL 17.11's pg_c_utf8;
-# tests/test_lists.py compares the two tables over every code point)
+# The capitals a browser lower-cases and PostgreSQL 17's tables (Unicode 15.1) do not, each to the letter the browser
+# lowers it to, against PostgreSQL 17.11's pg_c_utf8: Unicode 16.0's (node 22.22.0 with ICU 77.1, and Chromium 147) and
+# Unicode 17.0's (Chromium 153 with ICU 78). tests/test_lists.py checks over every code point that each engine present
+# on its host, and a committed table of Chromium 153's, lower-cases no letter PostgreSQL leaves as it is that this table
+# does not map the same way; a browser on a later Unicode release needs its letters added here (API.md's known limits).
 SEARCH_NEWER = {'\u1c89': '\u1c8a', '\ua7cb': '\u0264', '\ua7cc': '\ua7cd', '\ua7da': '\ua7db', '\ua7dc': '\u019b',
-                **{chr(cp): chr(cp + 0x20) for cp in range(0x10d50, 0x10d66)}}  # and Garay's 22 capitals
+                **{chr(cp): chr(cp + 0x20) for cp in range(0x10d50, 0x10d66)},  # and Garay's 22 capitals
+                '\ua7ce': '\ua7cf', '\ua7d2': '\ua7d3', '\ua7d4': '\ua7d5',  # Unicode 17.0 (Chromium 153, ICU 78)
+                **{chr(cp): chr(cp + 0x1b) for cp in range(0x16ea0, 0x16eb9)}}  # and Beria Erfe's 25 capitals
 SEARCH_FOLDED = ('\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
                  + ''.join(SEARCH_NEWER) + ''.join(SEARCH_NEWER.values()))  # and the newer letters, in either case
 SEARCH_MAX_CHARS = 240  # not counting the combining dot above: a row's text is at most about 224 characters

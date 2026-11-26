@@ -122,9 +122,10 @@ Documents list of more than 200 documents and searches a smaller list itself, wi
 - The row's text is the page's: the title (or "Untitled document"), the kind, the insurance when it is shown, the
   state's label, and the service date as "6 Nov 2026" or "Not entered". The words match it as the page's own search
   does (lower-cased, trimmed), and nothing in them is a wildcard. Where a browser and the database lower-case a letter
-  differently (a final sigma, a dotted capital I, and 27 capitals new in Unicode 16.0 that PostgreSQL 17 does not
-  lower-case: U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65), the search finds those documents
-  too: never fewer than the page.
+  differently (a final sigma, a dotted capital I, 27 capitals new in Unicode 16.0 that PostgreSQL 17 does not
+  lower-case: U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65, and 28 new in Unicode 17.0: U+A7CE,
+  U+A7D2, U+A7D4 and Beria Erfe's U+16EA0-U+16EB8), the search finds those documents too: never fewer than the page,
+  in a browser of Unicode 17.0 or earlier (a later one: see "Known limits" below).
 - Text that is not text, or blank, answers `400 {"error": "Type the words to search for."}`; a text longer than 240
   characters, not counting the combining dot above (U+0307, which the page's lower-casing adds to a dotted capital I),
   or holding a character the database cannot store, an empty page; an unreadable `before` the list's `400`. A `GET`
@@ -330,3 +331,13 @@ denylist forbids in every other payload; a reader of this one exempts it.
 `active` (400), a reviewer or viewer (403), someone of another practice (404), the owner's own access or the practice's
 last active owner (409). A person left with no active membership is signed out everywhere, and loses the practice at
 their next request. Each change is an audit row naming the owner (`member.access_off`, `member.access_on`).
+
+## Known limits
+
+- **The search's letters** (release 2, R2-20; an accepted residual, D-R2-42). The search folds the letters a browser
+  lower-cases and PostgreSQL 17 does not, up to Unicode 17.0 (`customer.SEARCH_NEWER`). A browser on a later Unicode
+  release can lower-case a letter the server does not fold: its page's own rule then finds a document holding that
+  letter in the other case, and the search does not, until `SEARCH_NEWER` is extended. It applies only above 200
+  documents, where the page asks the server. `tests/test_lists.py` reads node and the Chromium builds of its host, and
+  a committed table of Chromium 153's letters - never a member's browser - so a newer engine there fails the test and
+  names its letters.
