@@ -31,13 +31,22 @@ ROOT = Path(__file__).resolve().parents[1]
 # release 2 (RELEASE-2-SPEC R2-24, D-R2-3): the build every copy names
 CURRENT_BUILD = 'customer-2026-11-26'
 # release 1's build (RELEASE-1-SPEC 3.6): what a page left open across release 2's switch sends. This module is the only
-# file of the tree that names it (OneValueTests.test_the_build_before_this_one_is_named_nowhere_else).
+# file of the tree that names it (OneValueTests.test_the_build_before_this_one_is_named_nowhere_else): another lane's
+# test or tool that must name it (a search refused to release 1's page, a bench of release 1) imports RELEASE_1_BUILD
+# from here, or reads the measured tree's own client_contract.VERSION.
 RELEASE_1_BUILD = 'customer-2026-11-24'
 # A later page's cursor as a list's `next` gives it (RELEASE-2-SPEC R2-19: the console's format, a UTC time to the
 # microsecond and an id, studio.console.CURSOR_RE)
 LATER_PAGE_CURSOR = '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17'
-# Generated or installed trees inside cpt-studio/ that are not the tree's own files
-NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv'}
+# Generated or installed trees inside cpt-studio/ that are not the tree's own files (cpt-studio/.gitignore and
+# deploy/.dockerignore list .runtime too)
+NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv', '.runtime'}
+# The sealed acceptance material (docs/gemini-migration/acceptance-a1), which this release's tooling never reads
+SEALED_FOLDERS = {'acceptance-a1'}
+# Records that name release 1's build because they record it, never a copy of the value: the decisions log, synced from
+# the working log, which names release 1's build where it was decided (refutation round 1, compat[1]); as release 1's
+# install declaration, outside this tree, is left as written.
+RECORDS = {'docs/gemini-migration/DECISIONS.md'}
 # RELEASE-2-SPEC section 7: every file that holds a copy of the value
 VERSION_COPIES = (
     'studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
@@ -150,12 +159,13 @@ class OneValueTests(SimpleTestCase):
         needle = RELEASE_1_BUILD.encode('ascii')
         found, seen = [], set()
         for folder, dirs, files in os.walk(ROOT):
-            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREES_OWN_FILES)
+            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREES_OWN_FILES | SEALED_FOLDERS)
             for name in files:
                 path = Path(folder) / name
-                seen.add(path.relative_to(ROOT).as_posix())
-                if path.resolve() != here and needle in path.read_bytes():
-                    found.append(path.relative_to(ROOT).as_posix())
+                relative = path.relative_to(ROOT).as_posix()
+                seen.add(relative)
+                if relative not in RECORDS and path.resolve() != here and needle in path.read_bytes():
+                    found.append(relative)
         # the walk read the tree (the page and the server among it), so an empty list is the tree's
         self.assertLessEqual({'studio/static/studio/app.js', 'studio/client_contract.py', 'API.md'}, seen)
         self.assertEqual(found, [])
