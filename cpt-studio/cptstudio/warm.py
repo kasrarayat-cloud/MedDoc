@@ -9,7 +9,9 @@ library; and the password rules. No request waits for any of it, and the workers
 Specification 2.4: it reads no database, starts no thread and needs no network (the image phase imports cptstudio.wsgi
 with no network). What is open in the master when a worker is forked is shared with that worker, and the master never
 serves a request, so it never holds a document's data. A part that cannot be loaded raises: a broken release stops at
-the image phase's smoke check or at the switch's first step (S1), never at a member's request.
+the image phase's smoke check or at the switch's first step (S1), never at a member's request. A missing static manifest
+is no error here - the storage reads it as empty, Django's own rule - and the switch's first step refuses such a web
+(the installer's smoke_web: its sign-in page then answers 500).
 """
 from pathlib import Path
 

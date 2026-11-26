@@ -2246,6 +2246,12 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   (`cptstudio/settings.py`) ends the wait, and the worker then serves while
   `/health/` reports the database.
   A database that refuses the connection, or is gone, fails it at once.
+- A database that goes silent without closing its connections (no FIN or
+  RST) holds each web process that queries it on a kept connection until
+  gunicorn's own request timeout (`deploy/gunicorn.conf.py`) ends that worker,
+  as release 1's web was held on a connection younger than its own, shorter
+  age. On this host the database is a container on the same bridge, so it
+  takes a host fault.
 - Release 2's web loads the application in gunicorn's master before gunicorn
   writes its first line (R2-5). A web whose application cannot load - a
   setting its environment refuses, a part of the warm-up that cannot load -
@@ -2259,8 +2265,10 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
 - Release 2's front door (R2-27): the documents' search
   (`POST /api/encounters/search`) is a read sent as a POST, so its words stay
   out of every address and log; it counts in the every-request zone alone,
-  never in the writes', so an office searching at once cannot get a
-  colleague's decision or answer refused. No zone's name, size or rate
+  never in the writes', so an office searching at once no longer spends the
+  write zone its decisions and answers need. Every request from one address
+  still shares the every-request zone (A1, above), so searching that outruns
+  it can still get a decision or answer refused. No zone's name, size or rate
   changed. The vhost is republished by `cert` and `https-vhost` before `app`,
   as any change under `deploy/nginx/` is (blue/green residual 10).
 - Release 1b, not in this release: least-privilege database roles (A10; the app

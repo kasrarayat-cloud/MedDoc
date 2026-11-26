@@ -137,7 +137,8 @@
   {# the shared timer, armed at load from the body's data-* - studio.sessions.page_config - then the warning, then the #}
   {# sign-out form); without script the page moves to the sign-in ten seconds after the session's own end (the idle #}
   {# limit or the cap, whichever comes first), when the session policy has already ended it. The script is named by its #}
-  {# own path, as the fonts above are, so a console page renders without the static manifest (WhiteNoise serves it). #}
+  {# own path (WhiteNoise serves it); the fonts above go through the static tag (R2-26), so a console page needs the #}
+  {# static manifest, as every member page does. #}
   {% if user.is_authenticated %}<script src="/static/studio/ops_session.js" defer></script>
   <noscript><meta http-equiv="refresh" content="{{ request.cpt_page.refresh_seconds|default:610 }};url=/login/?reason=idle"></noscript>{% endif %}
 </head>
