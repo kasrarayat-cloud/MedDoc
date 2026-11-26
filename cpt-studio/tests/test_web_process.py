@@ -815,11 +815,19 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         self.addCleanup(shadow.cleanup)
         (Path(shadow.name) / 'argon2.py').write_text("raise ImportError('lane W test: no hasher library')\n",
                                                     encoding='utf-8')
+        # and one that raises Exception itself, of no narrower class: a catch narrowed to the classes of the runs above
+        # would pass them and keep nothing here (cptstudio/wsgi.py catches Exception; refutation round 2)
+        other = tempfile.TemporaryDirectory(prefix='lane-w-argon2-')
+        self.addCleanup(other.cleanup)
+        (Path(other.name) / 'argon2.py').write_text("raise Exception('lane W test: the warm-up cannot load')\n",
+                                                   encoding='utf-8')
         runs = {
             # the settings refuse their environment (a relative state folder), inside get_wsgi_application
             'settings refused': {'CPT_STUDIO_STATE_DIR': 'relative/state'},
             # the warm-up fails after the application is built: its 'import argon2' finds a module that raises
             'warm-up failed': {'PYTHONPATH': shadow.name},
+            # any other exception the load raises
+            'warm-up failed, any exception': {'PYTHONPATH': other.name},
         }
         for what, environment in runs.items():
             with self.subTest(what=what):
