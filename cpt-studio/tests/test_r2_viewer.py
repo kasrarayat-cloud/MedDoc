@@ -131,6 +131,30 @@ class ViewTagTests(ViewerCase):
         self.assertEqual(len(self.inline_rows(self.enc)), 1)
         self.assertEqual(self.view(self.enc, tag=tag).status_code, 304)  # the control
 
+    def test_a_row_that_cannot_be_written_serves_no_request_shape_a_byte(self):
+        # integrated refutation round 1, failclosed-1: the page's own download is poll-marked, and once it is refused the
+        # viewer frames the browser's own viewer, whose load is a plain GET - no poll mark, no tag. Every shape the page
+        # and its frame send, for a stored PDF (the frame fallback exists only for one), answers 503 with no PDF byte
+        # and no row while the row cannot be written; the control serves each once the row can be.
+        tag = self.view(self.enc)['ETag']
+        rows = len(self.inline_rows(self.enc))
+        shapes = {'the frame\'s plain load': {}, 'the page\'s download': {'HTTP_X_CPT_POLL': '1'},
+                  'the page\'s re-open': {'HTTP_X_CPT_POLL': '1', 'HTTP_IF_NONE_MATCH': tag},
+                  'a tagged plain load': {'HTTP_IF_NONE_MATCH': tag}}
+        for what, headers in shapes.items():
+            with self.subTest(shape=what):
+                with write_fails():
+                    answer = self.member.get(self.view_url(self.enc), **headers)
+                self.assertEqual(answer.status_code, 503)
+                self.assertEqual(answer.json(), {'error': read_audit.NOT_RECORDED, 'details': {}})
+                self.assertNotIn(b'%PDF', answer.content)
+                self.assertNotIn('ETag', answer)
+                self.assertEqual(len(self.inline_rows(self.enc)), rows)
+        for what, headers in shapes.items():
+            with self.subTest(control=what):
+                served = self.member.get(self.view_url(self.enc), **headers)
+                self.assertEqual(served.status_code, 304 if 'HTTP_IF_NONE_MATCH' in headers else 200)
+
     def test_another_tag_star_another_sign_in_or_another_document_answers_200(self):
         tag = self.view(self.enc)['ETag']
         other_sign_in = member_client(self.reviewer)  # the same person, another sign-in

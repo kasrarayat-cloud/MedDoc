@@ -8,7 +8,9 @@
  * headers) - and after pagehide (on a page that saves data too), a late 404 and pagehide met while a document opens, and
  * the lists above 200 documents (an unchanged search never asked again; a failure said under its own list; the list's
  * last page, come under a search answer, searched in the page, the answer's rows kept). Fourteen tests; release 1's page
- * fails all fourteen. Skipped where Playwright is not installed
+ * fails all fourteen. A fifteenth (V13, integrated refutation round 1, failclosed-1): a view whose read cannot be
+ * recorded is never answered with PDF bytes, the frame the viewer falls back to included, and nothing is drawn - a path
+ * release 1's page has too, so it is outside that count. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -740,5 +742,56 @@ test('V12c, R2-22: above 200 documents, the list\'s last page that comes under a
     } finally {
       await context.close();
     }
+  }
+});
+
+// POST a control address of the preview (ops/dev_preview_server.cjs); its modes hold until the next reset.
+async function previewControl(route) {
+  const answer = await fetch(`${kit.base}/__preview__/${route}`, { method: 'POST' });
+  assert.equal(answer.status, 204, route);
+}
+
+test('V13, I1-6: a view whose read cannot be recorded (503) is never answered with PDF bytes - the click\'s re-open with its kept tag, the page\'s download, nor the frame the viewer falls back to - and nothing is drawn', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const { page, errors } = await open(context);
+    await listed(page);
+    await openRow(page, READY);  // drawn, and its copy kept for a re-open
+    assert.equal(await page.evaluate(view => state.keptViews?.has(view), viewOf(READY)), true, 'a copy kept');
+    await back(page);
+    await previewControl('unrecorded');  // from here the view's read record cannot be written (studio/api.py original)
+    const views = [];
+    page.on('response', async response => {
+      if (response.url() !== `${kit.base}${viewOf(READY)}`) return;
+      const request = response.request();
+      const answer = { status: response.status(), poll: request.headers()['x-cpt-poll'] || '', tag: request.headers()['if-none-match'] || '',
+        frame: request.frame() !== page.mainFrame(), head: '' };
+      views.push(answer);
+      try {
+        answer.head = (await response.body()).subarray(0, 5).toString('latin1');
+      } catch {
+        answer.head = '(no body)';
+      }
+    });
+    await page.click(`a.document-row[href="#doc/${READY}"]`);
+    // the page's own download is refused, so it falls back to the browser's own viewer in a frame, whose load is refused
+    // too - or, on a server that answered it, the page draws: either ends the wait, and the assertions below say which
+    await page.waitForFunction(() => (state.viewer?.mode === 'frame' && state.viewer.fallback === 'download')
+      || Boolean(document.querySelector('#documentViewer .pdf-page canvas, #documentViewer .pdf-text span')));
+    for (let turn = 0; turn < 200 && !views.some(view => view.frame); turn += 1) await page.waitForTimeout(25);
+    await page.waitForTimeout(500);
+    console.log(`V13 views ${JSON.stringify(views)}`);
+    assert.ok(views.some(view => !view.frame && view.poll === '1' && view.tag), `the click's re-open, with its kept tag: ${JSON.stringify(views)}`);
+    assert.ok(views.some(view => view.frame && !view.poll && !view.tag), `the frame's own plain load: ${JSON.stringify(views)}`);
+    assert.deepEqual(views.filter(view => view.status !== 503 || view.head.startsWith('%PDF')), [],
+      'every read of the view answered 503, none 200 or 304, no PDF byte');
+    assert.deepEqual(await page.evaluate(view => ({ canvas: Boolean(document.querySelector('#documentViewer .pdf-page canvas')),
+      text: Boolean(document.querySelector('#documentViewer .pdf-text span')), kept: state.keptViews.has(view) }), viewOf(READY)),
+    { canvas: false, text: false, kept: false }, 'nothing drawn, the kept copy dropped');
+    // the frame's refusal forbids framing (the site's headers), and the refused loads: the only errors in the page
+    assert.deepEqual(errors.filter(error => !/^Framing '[^']*' violates the following Content Security Policy directive: "frame-ancestors 'none'"|^Failed to load resource/.test(error)), []);
+  } finally {
+    await previewControl('reset');
+    await context.close();
   }
 });

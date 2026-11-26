@@ -29,7 +29,10 @@
 // (tests/frontend/app.test.cjs).
 // POST /__preview__/reset restarts the uploads and the retried documents; POST /__preview__/outdated makes every API
 // call answer 409 {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a
-// document fail (503) until the next reset, which shows the page's reconnecting line.
+// document fail (503) until the next reset, which shows the page's reconnecting line; POST /__preview__/unrecorded makes
+// every view of a document (?view=1) answer 503 with the server's sentence until the next reset - the server's answer
+// when the view's read record cannot be written (studio/api.py original: read_audit.NOT_RECORDED), whatever asks: the
+// page's own download, a re-open with its tag, the frame it falls back to (integrated refutation round 1, failclosed-1).
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
@@ -360,7 +363,8 @@ const uploads = new Map();  // '<session> <client_key>' -> encounter id
 // converted}: an uploaded or retried document, played forward
 const plays = new Map();
 const reports = new Map();
-const flags = { outdated: false, offline: false };
+const flags = { outdated: false, offline: false, unrecorded: false };
+const NOT_RECORDED = 'This could not be recorded, so nothing was shown.';  // studio/read_audit.py's, word for word
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[ch]));
@@ -562,6 +566,8 @@ async function handleApi(req, res, url) {
     if (!doc) return apiError(res, 404, 'Not found.');
     const view = url.searchParams.get('view') === '1';
     if (view && !doc.document.view_url) return apiError(res, 404, 'Not found.');
+    // the read is recorded before anything is served: a record that cannot be written serves nothing, to any request
+    if (view && flags.unrecorded) return apiError(res, 503, NOT_RECORDED);
     if (!view && !doc.document.original_url) return apiError(res, 404, 'This document was pasted, so there is no original file.');
     const name = documentFor(doc);
     const filename = doc.document.name || 'pasted-text.txt';
@@ -701,6 +707,7 @@ async function handle(req, res) {
     plays.clear();
     flags.outdated = false;
     flags.offline = false;
+    flags.unrecorded = false;
     return send(res, 204, '');
   }
   if (req.method === 'POST' && url.pathname === '/__preview__/outdated') {
@@ -709,6 +716,10 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/__preview__/offline') {
     flags.offline = true;
+    return send(res, 204, '');
+  }
+  if (req.method === 'POST' && url.pathname === '/__preview__/unrecorded') {
+    flags.unrecorded = true;
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {
