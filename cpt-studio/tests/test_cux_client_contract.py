@@ -23,11 +23,12 @@ import re
 import uuid
 from pathlib import Path
 
+from django.conf import settings
 from django.db import connection
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 
-from studio import client_contract, jobs, models
+from studio import client_contract, jobs, models, request_meta
 from tests.support import coding as f
 from tests.support import rounds as r
 
@@ -122,11 +123,26 @@ class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
     decide, one being coded to stop, a stopped one to resume, a failed round to retry, a whole paste, another coded
     document to export, an owner turning a member's access off), so a guard moved after the view shows. The last five
     were added in refutation round 2 (gates[0]). The page's POST /session/activity (views.activity_ping) is not an API
-    call: it is outside the contract by design and answers 200."""
+    call: it is outside the contract by design and answers 200.
+
+    Refutation round 2, gates[2]: before each call, the activity stamp of each signed-in page is made one write window
+    (SESSION_ACTIVITY_WRITE_SECONDS) old. Signed in moments before, a call counted as the person's activity would have
+    nothing to write (note_activity writes at most once a window), so a session write let through for a refused call
+    could not show; with the stamp aged it would be an UPDATE the write check sees. A control at the end shows a call
+    the contract lets through does write the aged stamp, so the aging cannot quietly stop working."""
     WATCHED = (models.AccessRecord, models.AccessRecordRepeat, models.Encounter, models.SourceRevision,
                models.CodingRound, models.Job, models.RateWindow, models.AuditEvent, models.SecurityEvent,
                models.CodeDecision)
     WRITES = ('INSERT', 'UPDATE', 'DELETE')
+
+    @staticmethod
+    def age_activity_stamps(*pages):
+        """Each page's activity stamp one write window old: a call counted as activity would write it."""
+        one_window_ago = request_meta.epoch_seconds() - settings.SESSION_ACTIVITY_WRITE_SECONDS
+        for signed_in in pages:
+            stamp = signed_in.session
+            stamp[request_meta.SESSION_LAST_ACTIVE] = one_window_ago
+            stamp.save()
 
     def test_every_call_of_a_release_1_page_is_refused_and_writes_nothing(self):
         coded = self.done()
@@ -174,6 +190,7 @@ class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
         }
         for name, call in calls.items():
             with self.subTest(call=name):
+                self.age_activity_stamps(page, owners_page)
                 before = {model.__name__: model.objects.count() for model in self.WATCHED}
                 with CaptureQueriesContext(connection) as ran:
                     response = call()
@@ -181,6 +198,15 @@ class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
                 self.assertEqual([query['sql'] for query in ran.captured_queries
                                   if query['sql'].lstrip().upper().startswith(self.WRITES)], [])
                 self.assertEqual({model.__name__: model.objects.count() for model in self.WATCHED}, before)
+        # the control: with the stamp aged the same way, a call the contract lets through writes it
+        for label, signed_in in (('reviewer', page), ('owner', owners_page)):
+            with self.subTest(control=label):
+                self.age_activity_stamps(signed_in)
+                with CaptureQueriesContext(connection) as ran:
+                    response = signed_in.get('/api/session', **{client_contract.WSGI_KEY: client_contract.VERSION})
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(any(query['sql'].lstrip().startswith('UPDATE "django_session"')
+                                    for query in ran.captured_queries))
 
 
 class OneValueTests(SimpleTestCase):
