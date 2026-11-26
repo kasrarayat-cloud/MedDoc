@@ -669,6 +669,68 @@ class BenchProxyCookieTests(unittest.TestCase):
         for secret in ('sess123', 'csrf456', 'dev789'):
             self.assertNotIn(secret, logged)
 
+    def test_the_proxy_logs_the_server_s_own_set_cookie_redacted_and_answers_it_as_set(self):
+        """records[8]: the answers' Set-Cookie carried the session key, the CSRF token and the device cookie in the
+        clear. They are logged as the request Cookie is (the session as its member's digest, so joins still work),
+        the attributes kept, every other cookie as set; the browser is still answered with the cookies as set."""
+        import http.client
+        import http.server
+        import socketserver
+        import threading
+        import urllib.request
+        listen, upstream, control = _free_ports(3)
+        set_cookies = ['cptstudio_session=sess123; HttpOnly; Path=/', 'cptstudio_csrf=csrf456; Path=/',
+                       'cptstudio_device=dev789; HttpOnly; Path=/', 'cpt-last-search=zqxword; Path=/']
+
+        class Answer(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length') or 0))
+                self.send_response(302)
+                self.send_header('Location', '/')
+                for line in set_cookies:
+                    self.send_header('Set-Cookie', line)
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Length', '2')
+                self.end_headers()
+                self.wfile.write(b'ok')
+
+            def log_message(self, *args):
+                pass
+        server = socketserver.TCPServer(('127.0.0.1', upstream), Answer)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        proxy = subprocess.Popen([NODE, str(BENCH / 'proxy.cjs'), '--listen', str(listen), '--upstream', str(upstream),
+                                  '--control', str(control)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(proxy.wait, 10)
+        self.addCleanup(proxy.terminate)
+        self.assertIn('proxy up', proxy.stdout.readline())
+        client = http.client.HTTPConnection('127.0.0.1', listen, timeout=10)  # a 302 is not followed
+        client.request('POST', '/login/', body=b'u=x', headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        answer = client.getresponse()
+        answer.read()
+        self.assertEqual(answer.status, 302)
+        self.assertEqual(answer.headers.get_all('Set-Cookie'), set_cookies)  # the browser gets them as set
+        client.close()
+        asked = urllib.request.Request(f'http://127.0.0.1:{listen}/x', headers={'Cookie': 'cptstudio_session=sess123'})
+        self.assertEqual(urllib.request.urlopen(asked, timeout=10).read(), b'ok')
+        entries = json.loads(urllib.request.urlopen(f'http://127.0.0.1:{control}/log?since=0', timeout=10).read())[
+            'entries']
+        for entry in entries:
+            for secret in ('sess123', 'csrf456', 'dev789'):
+                self.assertNotIn(secret, json.dumps(entry))
+        posted = next(e for e in entries if e['method'] == 'POST')
+        logged = posted['resHeaders']['set-cookie']
+        self.assertIn('cpt-last-search=zqxword; Path=/', logged)
+        followed = next(e for e in entries if e['method'] == 'GET')
+        self.assertEqual(logged[0], f'cptstudio_session=session:{followed["member"]}; HttpOnly; Path=/')
+        self.assertEqual(logged[1:3], ['cptstudio_csrf=<redacted>; Path=/',
+                                       'cptstudio_device=<redacted>; HttpOnly; Path=/'])
+
 
 NOTHING_DRAWN_DRIVER = r"""
 const http = require('http');

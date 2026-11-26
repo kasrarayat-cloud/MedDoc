@@ -10,7 +10,8 @@
 //   path with its query, status, the answer's body bytes, the request body's bytes, the request headers (the Cookie
 //   server's own cookies replaced: the session's by a short digest that names the member and nothing else, the CSRF
 //   and device cookies by <redacted>; any other cookie logged as sent, for the marker scan) and the answer's
-//   headers. The log is the bench's server-side truth for counts, in-flight requests, cache headers and the marker scan.
+//   headers, whose Set-Cookie is redacted the same way (records[8]: the server's own cookies as it sets them). The
+//   log is the bench's server-side truth for counts, in-flight requests, cache headers and the marker scan.
 // - Rules, set on the control port: `delay` holds a matching request `ms` before it is sent upstream (the planted-delay
 //   control); `hold` holds a matching request `ms` before it is sent (a hung document). Each applies `times` times.
 // - `upstream` flips where the next requests go (blue/green, X1 and X2). Requests already sent finish where they began.
@@ -40,6 +41,16 @@ function cookieLog(value, memberId) {
   return String(value).split(/;\s*/).map(pair => { const name = pair.split('=', 1)[0];
     if (/^(?:__Host-)?cptstudio_session$/.test(name)) return `${name}=session:${memberId}`;
     return /^(?:__Host-)?cptstudio_(?:csrf|device)$/.test(name) ? `${name}=<redacted>` : pair; }).join('; ');
+}
+
+// records[8]: the server's own cookies as it sets them: the same redaction, the attributes kept, a deletion's empty
+// value as sent; every other Set-Cookie as sent, for the marker scan
+function setCookieLog(lines) {
+  return [].concat(lines).map(line => { const head = line.split(';', 1)[0]; const at = head.indexOf('=');
+    const name = head.slice(0, at).trim(); const value = head.slice(at + 1).trim(); const tail = line.slice(head.length);
+    if (at < 0 || !value || value === '""') return line;
+    if (/^(?:__Host-)?cptstudio_session$/.test(name)) return `${name}=session:${member(`${name}=${value}`)}${tail}`;
+    return /^(?:__Host-)?cptstudio_(?:csrf|device)$/.test(name) ? `${name}=<redacted>${tail}` : line; });
 }
 
 function member(cookie) {
@@ -73,7 +84,8 @@ const server = http.createServer((req, res) => {
     const send = () => {
       const out = http.request({ host: '127.0.0.1', port: entry.upstream, method: req.method, path: req.url, headers, agent: false }, answer => {
         entry.status = answer.statusCode;
-        entry.resHeaders = answer.headers;
+        entry.resHeaders = { ...answer.headers };  // a copy: the browser is answered with the cookies as set
+        if (answer.headers['set-cookie']) entry.resHeaders['set-cookie'] = setCookieLog(answer.headers['set-cookie']);
         // hop-by-hop headers stay on their hop, as nginx keeps them: gunicorn's `Connection: close` must not close the
         // browser's kept-alive connection to this proxy
         const back = { ...answer.headers, 'x-bench-request-id': headers['x-request-id'] };
