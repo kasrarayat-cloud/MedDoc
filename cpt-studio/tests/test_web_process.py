@@ -234,7 +234,8 @@ import json, os
 from django.conf import settings
 lane_w_database = settings.DATABASES['default']
 print('LANE-W ' + json.dumps({'kept': [lane_w_database['CONN_MAX_AGE'], lane_w_database['CONN_HEALTH_CHECKS']],
-                              'web': os.environ.get('CPT_STUDIO_WEB')}))
+                              'web': os.environ.get('CPT_STUDIO_WEB'),
+                              'connect_timeout': lane_w_database.get('OPTIONS', {}).get('connect_timeout')}))
 '''
 # R2-5: what gunicorn's master holds once it has imported cptstudio.wsgi, and nothing else (R2-7's settings with it)
 WARMED_WEB_STEP = r'''
@@ -260,6 +261,7 @@ print('LANE-W ' + json.dumps({
     'validators': get_default_password_validators.cache_info().currsize,
     'open': sorted(alias for alias in connections if connections[alias].connection is not None),
     'kept': [lane_w_database['CONN_MAX_AGE'], lane_w_database['CONN_HEALTH_CHECKS']],
+    'connect_timeout': lane_w_database.get('OPTIONS', {}).get('connect_timeout'),
     'web': os.environ.get('CPT_STUDIO_WEB'),
     'os_threads': len(os.listdir('/proc/self/task')),  # the kernel's count: a thread below threading.Thread too
 }))
@@ -382,18 +384,18 @@ class OnlyTheWebKeepsItsConnectionsTests(SimpleTestCase):
     def test_the_web_keeps_its_connection_for_an_hour_and_checks_it(self):
         probe, report = lane_w_probe(WARMED_WEB_STEP)
         self.assertIsNone(probe['error'])
-        self.assertEqual((report['kept'], report['web']), ([3600, True], '1'))
+        self.assertEqual((report['kept'], report['connect_timeout'], report['web']), ([3600, True], 5, '1'))
 
     def test_the_worker_keeps_sixty_seconds_and_no_check(self):
         probe, report = lane_w_probe(WORKER_SETTINGS_STEP)
         self.assertIsNone(probe['error'])
         self.assertIn('studio.management.commands.run_worker', probe['loaded'])
-        self.assertEqual((report['kept'], report['web']), ([60, False], None))
+        self.assertEqual((report['kept'], report['connect_timeout'], report['web']), ([60, False], None, None))
 
     def test_a_management_command_keeps_sixty_seconds_and_no_check(self):
         probe, report = lane_w_probe(COMMAND_SETTINGS_STEP)
         self.assertIsNone(probe['error'])
-        self.assertEqual((report['kept'], report['web']), ([60, False], None))
+        self.assertEqual((report['kept'], report['connect_timeout'], report['web']), ([60, False], None, None))
 
 
 # --- a real gunicorn with the release's settings ---------------------------------------------------------------------
@@ -614,12 +616,34 @@ class RealGunicornTests(SimpleTestCase):
         self.assertEqual(server.stop(), 0)
 
     def test_the_workers_start_and_answer_when_the_database_does_not(self):
-        silent = free_test_port()  # nothing listens there: the database's address answers nothing
-        unreachable = {'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': str(silent)}
-        server = ReleaseGunicorn(self, environment=unreachable, exclude={silent}).start()
+        closed = free_test_port()  # nothing listens there, so the database's connection is refused at once
+        unreachable = {'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': str(closed)}
+        server = ReleaseGunicorn(self, environment=unreachable, exclude={closed}).start()
         self.assertAllAnswered(server.many(4, 2), 8, status=503)  # /health/ reports the database, and nothing hangs
         self.assertEqual(len(server.workers()), 4)
         self.assertNotIn('exited with code', server.text())
+        self.assertEqual(server.stop(), 0)
+
+    def test_the_workers_answer_soon_when_the_database_accepts_and_never_answers(self):
+        # a socket that listens and never accepts: the kernel completes each connection and nothing ever answers, as a
+        # hung database does. The web's own connect timeout (settings.DATABASES) ends every wait for it - each worker's
+        # connection at its start, which gunicorn never times out, and each request's - so /health/ reports the
+        # database long before gunicorn's or nginx's timeouts
+        silent = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(silent.close)
+        for port in random.sample(list(GUNICORN_TEST_PORTS), len(GUNICORN_TEST_PORTS)):
+            try:
+                silent.bind(('127.0.0.1', port))
+                break
+            except OSError:
+                continue
+        silent.listen(16)
+        port = silent.getsockname()[1]
+        hung = {'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': str(port)}
+        server = ReleaseGunicorn(self, environment=hung, exclude={port}).start()
+        started = time.monotonic()
+        self.assertAllAnswered(server.many(4, 1), 4, status=503)
+        self.assertLess(time.monotonic() - started, 30)
         self.assertEqual(server.stop(), 0)
 
 

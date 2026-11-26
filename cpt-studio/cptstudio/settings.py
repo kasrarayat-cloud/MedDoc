@@ -94,6 +94,11 @@ DATABASES = {'default': {
     # its provider slot's session lock across a send (studio.jobs._take_slot).
     'CONN_MAX_AGE': 3600 if _web_process else 60,
     'CONN_HEALTH_CHECKS': _web_process,
+    # The web waits at most 5 s for a new connection (refutation round 1 of R2-7), so a database that accepts and never
+    # answers holds no worker past it: a worker's connection at its start, which gunicorn never times out, and a
+    # request's both fail, and /health/ answers 503, inside gunicorn's and nginx's timeouts. The worker and the commands
+    # keep the driver's own default.
+    'OPTIONS': {'connect_timeout': 5} if _web_process else {},
     # One test database per concurrent test run: two runs sharing a name
     # destroy each other's database.
     'TEST': {'NAME': f"test_cptstudio_{_env('TEST_DB_SUFFIX', 'default')}"},

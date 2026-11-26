@@ -2242,8 +2242,9 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
 - A worker that hangs before its first heartbeat - while it opens its
   connection at start, against a database that accepts the connection and
   never answers - is not timed out by gunicorn 23, which times a worker out
-  only after its first heartbeat; the driver's own default connect timeout ends
-  the wait, and the worker then serves while `/health/` reports the database.
+  only after its first heartbeat; the web's own connect timeout
+  (`cptstudio/settings.py`) ends the wait, and the worker then serves while
+  `/health/` reports the database.
   A database that refuses the connection, or is gone, fails it at once.
 - Release 2's search (`POST /api/encounters/search`, R2-20) matches text in
   PostgreSQL's builtin `pg_c_utf8` collation, which PostgreSQL 17 introduced:
