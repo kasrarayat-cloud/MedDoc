@@ -658,7 +658,11 @@ def download_content(encounter, *, original=False, recorded=False) -> Optional[D
 
 
 def document_json(encounter) -> dict:
-    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view."""
+    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view. ``view_round``
+    names the coding round whose conversion a Word document's view serves (shown_view's number), null for any other
+    document and for a Word document with no view: a later round that converts the file again (R2-28 step 7, C8) serves
+    another PDF at the same view_url, so the page redraws its viewer whole when this changes (integrated refutation
+    round 1, viewer-0). shown_view is read once, as before: no statement is added."""
     base = f'/api/encounters/{encounter.pk}/original'
     source = original_file(encounter)
     if source is None:
@@ -666,15 +670,17 @@ def document_json(encounter) -> dict:
         text = revision.pasted_text if revision is not None and revision.kind == Revision.PASTE else None
         return {'name': None, 'media_type': TEXT, 'size': len(text.encode('utf-8')) if text is not None else None,
                 'kind': Revision.PASTE, 'original_url': None, 'view_url': f'{base}?view=1' if text is not None else None,
-                'view_media_type': TEXT if text is not None else None, 'converted': False}
-    view_type, converted = None, False
+                'view_media_type': TEXT if text is not None else None, 'converted': False, 'view_round': None}
+    view_type, converted, view_round = None, False, None
     if source.media_type in (PDF, TEXT):
         view_type = source.media_type
-    elif source.media_type == DOCX and shown_view(encounter) is not None:
-        view_type, converted = PDF, True
+    elif source.media_type == DOCX:
+        shown = shown_view(encounter)
+        if shown is not None:
+            view_type, converted, view_round = PDF, True, shown.number
     return {'name': source.original_name, 'media_type': source.media_type, 'size': source.size,
             'kind': Revision.UPLOAD, 'original_url': base, 'view_url': f'{base}?view=1' if view_type else None,
-            'view_media_type': view_type, 'converted': converted}
+            'view_media_type': view_type, 'converted': converted, 'view_round': view_round}
 
 
 # --- the round: progress, codes, questions -------------------------------------------------------------------------------------

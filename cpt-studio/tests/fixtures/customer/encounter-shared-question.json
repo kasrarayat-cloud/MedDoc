@@ -16,7 +16,8 @@
   "original_url": "/api/encounters/fd000000-0000-4000-8000-000000000001/original",
   "view_url": "/api/encounters/fd000000-0000-4000-8000-000000000001/original?view=1",
   "view_media_type": "text/plain",
-  "converted": false
+  "converted": false,
+  "view_round": null
  },
  "context": {
   "service_date": "2026-11-13",

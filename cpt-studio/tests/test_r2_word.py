@@ -2475,8 +2475,8 @@ class StoredConversionTests(r.CustomerCase, TestCase):
 
     def assert_refused_as_at_first_round(self, member, enc, data, tag, when):
         document, kept, fresh, download, word, added = self.doctors_page(member, enc, tag)
-        self.assertEqual((document['view_url'], document['view_media_type'], document['converted']), (None, None, False),
-                         when)
+        self.assertEqual((document['view_url'], document['view_media_type'], document['converted'], document['view_round']),
+                         (None, None, False, None), when)
         self.assertEqual((kept.status_code, fresh.status_code), (404, 404), f'{when}: no view, a kept tag included')
         self.assertNotIn(b'%PDF', kept.content + fresh.content, when)
         self.assertEqual(added, 0, f'{when}: nothing shown, from page memory or afresh')
@@ -2563,6 +2563,54 @@ class StoredConversionTests(r.CustomerCase, TestCase):
                          (f'/api/encounters/{enc.pk}/original?view=1', True))
         self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original?view=1').content, FRESH_PDF)
         self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original').content, FRESH_PDF)
+
+    # --- integrated refutation round 1, I1-12 (viewer-0): the document block names the round whose conversion the view
+    # serves (view_round), so a page kept open across a later round that converts the file again redraws its viewer whole
+    # and asks for the view with its kept copy's tag - answered 200 with the new bytes, or 304 for the same file
+
+    def test_the_document_names_the_round_whose_conversion_its_view_serves(self):
+        from tests.test_read_audit import member_client
+
+        member = member_client(self.reviewer)
+        # a later round converts the file again (C8, R2-30's shape): view_round moves to it, and the kept copy, asked with
+        # round 1's tag, is answered 200 with the new conversion under another tag
+        enc, rev, _, _ = self.stored(SHELLED_WORD)
+        base = f'/api/encounters/{enc.pk}'
+        first = member.get(f'{base}/original?view=1')
+        self.assertEqual((first.status_code, first.content), (200, STORED_PDF))
+        self.assertEqual(member.get(base).json()['document']['view_round'], 1)
+        with self.assertNumQueries(2):  # its first file and shown_view, read once: no statement added
+            self.assertEqual(customer.document_json(enc)['view_round'], 1)
+        round_, convert, _ = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
+        self.assertEqual((round_.number, round_.state), (2, Round.DONE))
+        convert.assert_called_once_with(SHELLED_WORD)
+        document = member.get(base).json()['document']
+        self.assertEqual((document['view_url'], document['converted'], document['view_round']),
+                         (f'{base}/original?view=1', True, 2))
+        kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((kept.status_code, kept.content), (200, FRESH_PDF))
+        self.assertNotEqual(kept['ETag'], first['ETag'])
+        # a later round that reads the same stored file again moves view_round too: the kept copy is answered 304
+        clean, clean_rev, name, digest = self.stored(CLEAN_WORD)
+        clean_base = f'/api/encounters/{clean.pk}'
+        held = member.get(f'{clean_base}/original?view=1')
+        self.assertEqual(member.get(clean_base).json()['document']['view_round'], 1)
+        round_, convert, _ = self.next_round(clean, clean_rev, Round.ANSWERS, self.answering())
+        convert.assert_not_called()
+        self.assertEqual((round_.number, round_.view_pdf_storage_name, round_.view_pdf_sha256), (2, name, digest))
+        self.assertEqual(member.get(clean_base).json()['document']['view_round'], 2)
+        again = member.get(f'{clean_base}/original?view=1', HTTP_IF_NONE_MATCH=held['ETag'])
+        self.assertEqual((again.status_code, again.content), (304, b''))
+        # a file a later round refused names none (I1-1); a first round still converting names none until it stores one
+        refused, refused_rev, _, _ = self.stored(IMPORTING_WORD)
+        round_, _, _ = self.next_round(refused, refused_rev, Round.ANSWERS, f.FakeCoder())
+        self.assertEqual((round_.number, round_.state, round_.failure_kind), (2, Round.FAILED, CONVERT))
+        self.assertEqual((customer.document_json(refused)['view_round'], customer.document_json(refused)['converted']),
+                         (None, False))
+        busy = f.encounter(self.ws, self.reviewer, title='Synthetic Word note')
+        f.upload(busy, self.reviewer, data=CLEAN_WORD, filename='synthetic-note.docx', media_type=DOCX)
+        jobs.start_round(busy, busy.current_revision, Round.UPLOAD, self.reviewer)
+        self.assertEqual(customer.document_json(busy)['view_round'], None)
 
 
 # --- refutation round 1, view[0] and loss[3]: a resumed Word round that recorded its own view reads, records and shows

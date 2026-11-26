@@ -2527,10 +2527,11 @@ function renderKey(doc) {
   return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
 }
 
-// What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original.
+// What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original - unless a
+// later round serves another conversion of a Word file (view_round, I1-12: the copy is asked with its tag).
 function viewerKey(doc) {
   const part = record(doc?.document);
-  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
+  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${Number.isInteger(part.view_round) ? part.view_round : ''} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
 }
 
 function renderDocument(doc, fresh, force = false) {

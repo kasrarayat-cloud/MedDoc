@@ -33,6 +33,11 @@
 // every view of a document (?view=1) answer 503 with the server's sentence until the next reset - the server's answer
 // when the view's read record cannot be written (studio/api.py original: read_audit.NOT_RECORDED), whatever asks: the
 // page's own download, a re-open with its tag, the frame it falls back to (integrated refutation round 1, failclosed-1).
+// POST /__preview__/reconvert begins a later coding review of the Word fixture, as another member's answers would, that
+// converts the file again (release 2, C8): its next reads play it forward (reading, checking, then the Word document's
+// codes, one quoting words only the new conversion has), and from its second read - once the round has stored its own
+// conversion, as the worker does before it sends anything - the view is that conversion (other bytes, another tag) and
+// document.view_round names the round; until the next reset (integrated refutation round 1, viewer-0).
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
@@ -138,6 +143,10 @@ const SYNTHETIC_DOCUMENTS = {
     ],
   },
 };
+
+// The words a later round's conversion of the Word fixture shows on page 1 that its first conversion does not (as R2-30's
+// QUOTE keeps a field's words release 1 lost): POST /__preview__/reconvert.
+const RECONVERTED_LINE = 'A further biopsy was taken from the descending colon, a separate site.';
 
 function pdfText(value) {
   return value.replace(/[\\()]/g, ch => `\\${ch}`);
@@ -245,8 +254,13 @@ function documentBytes(name) {
 
 // What the viewer is served of one synthetic document: the PDF or text as uploaded, and for a Word file the PDF of its
 // pages (the server serves the PDF the coding review read: the converted file).
-function viewBytes(name) {
-  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) return { bytes: syntheticPdf(SYNTHETIC_DOCUMENTS[name].pages), type: 'application/pdf' };
+function viewBytes(name, play = null) {
+  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) {
+    const [first, ...rest] = SYNTHETIC_DOCUMENTS[name].pages;
+    // a later round's own conversion, once that round has stored it (POST /__preview__/reconvert)
+    const pages = play?.reconverted && reconvertedNow(play) ? [[...first, RECONVERTED_LINE], ...rest] : [first, ...rest];
+    return { bytes: syntheticPdf(pages), type: 'application/pdf' };
+  }
   return documentBytes(name);
 }
 
@@ -463,14 +477,39 @@ const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const clone = value => JSON.parse(JSON.stringify(value));
 
 // What the viewer shows of a played document, as the server builds it: a PDF or a text as uploaded; a Word file nothing
-// until the coding review has converted it (here from its second read on), then that PDF.
+// until the coding review has converted it (here from its second read on), then that PDF, named by the round whose
+// conversion it is (view_round: a round records its own view as it begins, here the play's round; a reconverted play's
+// earlier round until its second read).
 function playedView(id, play) {
   const view = `/api/encounters/${id}/original?view=1`;
   if (play.mediaType !== DOCX_TYPE) {
-    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false };
+    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false, view_round: null };
   }
+  if (play.reconverted) return { view_url: view, view_media_type: 'application/pdf', converted: true, view_round: play.round + (reconvertedNow(play) ? 1 : 0) };
   play.converted = play.converted || play.reads > 1;
-  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true } : { view_url: null, view_media_type: null, converted: false };
+  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true, view_round: play.round + (play.answered ? 1 : 0) }
+    : { view_url: null, view_media_type: null, converted: false, view_round: null };
+}
+
+// Whether a reconverted play's round has stored its own conversion yet: from its second read.
+const reconvertedNow = play => play.reads >= 2;
+
+// The Word fixture's codes once its reconverted round has finished: the cecal biopsies' line also quotes the words only
+// the new conversion has.
+function reconvertedResults(word) {
+  const done = clone(word);
+  done.codes.find(code => code.code === '45380').quotes.push({ text: RECONVERTED_LINE, page: 1 });
+  return done;
+}
+
+// POST /__preview__/reconvert: the Word fixture's next coding review, begun elsewhere, converting the file again.
+function reconvert() {
+  const word = [...fixtures.byId.values()].find(doc => doc.document?.media_type === DOCX_TYPE && doc.document.converted === true);
+  startPlay(word.id, {
+    at: Date.parse(word.created_at), answers: word.answers || [], round: word.round.number, trigger: 'answers', answered: true,
+    reconverted: word, title: word.title, name: word.document.name, kind: word.document.kind, mediaType: word.document.media_type,
+    size: word.document.size, context: word.context,
+  });
 }
 
 // An uploaded or retried document, one stage further on each read of it (advance), with its times taken from the upload
@@ -480,7 +519,8 @@ function played(id, advance) {
   if (advance) play.reads += 1;
   const now = Date.now();
   const { reading, checking, asking, results } = fixtures;
-  const stages = play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
+  const stages = play.reconverted ? [[1, reading], [2, checking], [Infinity, reconvertedResults(play.reconverted)]]
+    : play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
   const base = clone(stages.find(([limit]) => play.reads <= limit)[1]);
   const done = !base.progress.busy;
   return {
@@ -576,7 +616,7 @@ async function handleApi(req, res, url) {
       return send(res, 200, bytes, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${filename}"` });
     }
     // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
-    const { bytes, type } = viewBytes(name);
+    const { bytes, type } = viewBytes(name, plays.get(match[1]));
     const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
     // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type
     const tag = type === 'application/pdf' ? viewTag(match[1], bytes) : '';
@@ -722,6 +762,10 @@ async function handle(req, res) {
     flags.unrecorded = true;
     return send(res, 204, '');
   }
+  if (req.method === 'POST' && url.pathname === '/__preview__/reconvert') {
+    reconvert();
+    return send(res, 204, '');
+  }
   if (req.method === 'GET' && url.pathname === '/') {
     // the shell as studio.views.index renders it, carrying the session GET /api/session would answer this request
     const session = req.headers['x-preview-session'] === 'agent' ? fixtures.agent : fixtures.session;
@@ -788,4 +832,4 @@ if (require.main === module) {
 }
 
 module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP,
-  viewTag, namesTag, listAnswer, searchAnswer, rowText };
+  viewTag, namesTag, listAnswer, searchAnswer, rowText, RECONVERTED_LINE };

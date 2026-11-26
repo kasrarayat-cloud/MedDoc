@@ -249,8 +249,12 @@ apart from the page script.
   scanned image), so nothing is marked."). Never a partial match.
 - The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
   passage chosen); it is painted again whenever its page is drawn again (a new width or zoom, scrolled back into view),
-  and a read of the document that only changes the codes never reloads the viewer. When another quote is chosen, what was
-  shown of the one before goes at once, before anything is waited on - its marks on every drawn page, the viewer's mark
+  and a read of the document that only changes the codes never reloads the viewer. A read whose Word conversion is
+  another round's does (`document.view_round`, integrated refutation round 1, viewer-0: a later round that converts the
+  file again serves another PDF at the same address); the viewer is drawn afresh, its kept copy asked for with its tag
+  (304 the same bytes, 200 new ones), so a round's codes are never shown beside another round's conversion. When
+  another quote is chosen, what was shown of the one before goes at once, before anything is waited on - its marks on
+  every drawn page, the viewer's mark
   state and the note - and nothing of it is painted on a page drawn while the new quote's pages are read; a quote whose
   pages are already read is shown in the same moment. Scrolling to it respects `prefers-reduced-motion`; where the pages
   are wider than the viewer (a zoom above fit width), the first mark is brought into view across too (by the least

@@ -96,7 +96,7 @@ function encounter(overrides = {}) {
     document: { name: 'gi-02.txt', media_type: 'text/plain', size: 10, kind: 'upload',
       original_url: '/api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original',
       view_url: '/api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original?view=1', view_media_type: 'text/plain',
-      converted: false },
+      converted: false, view_round: null },
     context: { service_date: '2026-10-14', insurance: 'medicare' },
     progress: { phase: 'done', busy: false, started_at: null, finished_at: null, server_time: '2026-11-20T10:05:30Z',
       message: '', can_stop: false, can_resume: false, can_retry: true, error: null },

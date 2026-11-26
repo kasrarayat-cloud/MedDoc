@@ -437,7 +437,7 @@ test('every customer fixture matches ops/verification/customer-contract.json exa
   const found = contractProblems(planted, CONTRACT.encounter, 'planted');
   assert.deepEqual(found.sort(), [
     'planted.codes[0].second_check.agrees: not boolean: "yes"',
-    'planted.document: keys kind,media_type,name,original_url,preview_type,size,view_media_type,view_url are not converted,kind,media_type,name,original_url,size,view_media_type,view_url',
+    'planted.document: keys kind,media_type,name,original_url,preview_type,size,view_media_type,view_round,view_url are not converted,kind,media_type,name,original_url,size,view_media_type,view_round,view_url',
     'planted.progress.phase: "finished" is not one of queued, reading, checking, done, failed, stopped, earlier',
   ]);
 });
@@ -495,6 +495,9 @@ test('the fixtures cover every state the page draws, and the list matches them, 
     const part = fixture(name).document;
     assert.deepEqual([part.view_media_type, part.converted], expectedView(part), name);
     assert.equal(part.view_url, part.view_media_type ? `/api/encounters/${fixture(name).id}/original?view=1` : null, name);
+    // I1-12: a Word document's view names the round whose conversion it serves (here its own finished round's), any
+    // other document none
+    assert.equal(part.view_round, part.converted ? fixture(name).round.number : null, name);
     return [name, part.view_media_type];
   }));
   assert.deepEqual([views['encounter-word.json'], views['encounter-earlier.json'], views['encounter-awaiting-answer.json'], views['encounter-no-codes.json']],
@@ -1242,8 +1245,9 @@ test('a page with no text to search says so, whatever the next page holds, and i
   assert.equal(app.markNote(run([['x']], { text: 'words', page: 1 })), 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.');
 });
 
-test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it', async () => {
+test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it - and a later round that serves another conversion of the Word file (I1-12) redraws it whole', async () => {
   const word = fixture('encounter-word.json');
+  assert.equal(word.document.view_round, word.round.number, 'the fixture: a Word document whose view is its own round\'s conversion');
   const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
   const saved = { viewer: app.state.viewer };
   try {
@@ -1261,7 +1265,8 @@ test('a read that changes the page never reloads the viewer: its mark stays, a n
       assert.equal(viewer.mark.key, 'L2#0', 'its mark stays');
       assert.equal(app.state.selectedQuote, 'L2#0');
       assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
-      // a newer coding review of the same document: the passage chosen and its mark go, the viewer stays
+      // a newer coding review of the same document whose view is still the same conversion (view_round unchanged: a
+      // PDF's, or a Word round that has not stored its own yet): the passage chosen and its mark go, the viewer stays
       const newer = clone(decided);
       newer.round = { ...newer.round, number: newer.round.number + 1 };
       app.renderDocument(newer, false);
@@ -1269,12 +1274,36 @@ test('a read that changes the page never reloads the viewer: its mark stays, a n
       assert.equal(viewer.mark, null);
       assert.equal(app.state.selectedQuote, '');
       assert.equal(find('#viewerMark').textContent, '');
+      // I1-12 (viewer-0): that round converted the Word file again (C8) and serves its own conversion at the same
+      // view_url - the detail names it (view_round) - so the page is redrawn whole: the viewer that drew the earlier
+      // conversion is closed, and a new one asks for the view (with the kept copy's tag: 304 the same bytes, 200 new ones)
+      const reconverted = clone(newer);
+      reconverted.document.view_round = newer.round.number;
+      assert.notEqual(app.viewerKey(reconverted), app.viewerKey(newer), 'the served conversion is in the viewer key');
+      app.renderDocument(reconverted, false);
+      assert.equal(viewer.mode, 'closed', 'the viewer of the earlier conversion is closed');
+      assert.notEqual(app.state.viewer, viewer, 'a new viewer');
+      assert.equal(app.state.viewerKey, app.viewerKey(reconverted));
+      // a later read of that round (a decision recorded): the new viewer stays
+      const drawn = app.state.viewer;
+      const again = clone(reconverted);
+      again.codes[1].reason = `${again.codes[1].reason} Once more.`;
+      app.renderDocument(again, false);
+      assert.equal(app.state.viewer, drawn, 'the same conversion: the same viewer');
       // another view of the document (another viewer key): the page is redrawn whole and the viewer closed
-      const other = clone(newer);
+      const other = clone(again);
       other.document.converted = false;
       app.renderDocument(other, false);
-      assert.equal(viewer.mode, 'closed', 'the old viewer is closed');
-      assert.notEqual(app.state.viewer, viewer);
+      assert.equal(drawn?.mode ?? 'closed', 'closed', 'the old viewer is closed');
+      assert.notEqual(app.state.viewer, drawn);
+      // the key reads view_round as the server sends it: a whole number, or nothing
+      for (const value of [null, undefined, '2', 2.5, -0.5, NaN, [2], { round: 2 }]) {
+        const odd = clone(word);
+        odd.document.view_round = value;
+        const none = clone(word);
+        delete none.document.view_round;
+        assert.equal(app.viewerKey(odd), app.viewerKey(none), String(value));
+      }
     });
   } finally {
     Object.assign(app.state, saved);
