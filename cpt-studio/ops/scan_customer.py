@@ -20,7 +20,9 @@ links, retrieval logs and rule ids out of every customer screen, API response an
   GET /api/encounters           the list's first page, against the contract's list keys, scanned; with --all also its
                                 later pages (?before=<the page's next>, release 2's paged list: R2-19, R2-24) until
                                 --limit documents are listed or none follows, each held to the contract and scanned -
-                                and the run fails when it listed fewer than GET /api/session counts (at most --limit)
+                                and the run fails when it listed fewer than GET /api/session counts (at most --limit).
+                                A later page counts toward the member's list limit (120 a minute, R2-21): one refused
+                                429 with Retry-After of 1-61 s is waited out and asked for again, at most twice a page
   for each encounter named (--encounter, repeatable) or listed (--all, at most --limit, newest first):
     GET /api/encounters/<id>             against the contract (every key listed, nothing else), scanned
     GET <document.original_url>          its status and headers only: the document is the customer's own
@@ -71,6 +73,7 @@ import platform
 import re
 import secrets
 import sys
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -103,6 +106,8 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 # An /api/ answer's ETag, when it has one (release 2, R2-15 and R2-24): a quoted UUID, W/ allowed - never a hash.
 API_ETAG = re.compile(r'(?:W/)?"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"')
 LIST_PATH = '/api/encounters'
+LIST_RETRIES, LIST_WAIT_MAX = 2, 61  # R2-21: a later page counts toward list.member; over it, 429 with Retry-After
+RETRY_AFTER = re.compile(r'[0-9]{1,3}')
 # Response headers that carry no customer-facing wording (as the walk's own list, ops/walk.cjs).
 UNSCANNED_HEADERS = frozenset({'set-cookie', 'date', 'etag', 'last-modified', 'content-length', 'content-security-policy',
                                'content-security-policy-report-only', 'strict-transport-security', 'permissions-policy',
@@ -766,6 +771,13 @@ class Scanner:
             seen.add(cursor)
             where = f'{LIST_PATH}?before={quote(cursor, safe="")}'
             answer, page = self.json_get(where, ctx)
+            for _retry in range(LIST_RETRIES):  # a 429 of the list limit: wait as it says, then the same page again
+                headers = answer.headers.items() if isinstance(answer.headers, dict) else answer.headers
+                wait = next((str(value).strip() for name, value in headers if name.lower() == 'retry-after'), '')
+                if answer.status != 429 or not RETRY_AFTER.fullmatch(wait) or not 1 <= int(wait) <= LIST_WAIT_MAX:
+                    break
+                time.sleep(int(wait))
+                answer, page = self.json_get(where, ctx)
             self.checks.append(check_contract(page, 'list', f'customer.list_contract.page{len(seen) + 1}')
                                if answer.status == 200 else
                                login.check(f'customer.list_contract.page{len(seen) + 1}', 'hard', False,

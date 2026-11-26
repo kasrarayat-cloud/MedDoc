@@ -599,6 +599,11 @@ class StubSite:
                 more = bool(self.leak.get('two_pages'))
                 return self.send(request, 200, {'encounters': [row], 'next': NEXT_PAGE if more else None,
                                                 'total': 2 if more else 1})
+            if self.leak.get('refused') and request.path != '/api/encounters':  # the list limit (R2-21): 429
+                self.leak['refused'] -= 1
+                wait = self.leak.get('retry_after', '1')
+                return self.send(request, 429, {'error': 'rate_limited', 'retry_after': 1},
+                                 headers=[('Retry-After', wait)] if wait is not None else [])
             if self.leak.get('two_pages') and parse_qs(request.path.split('?', 1)[1]) == {'before': [NEXT_PAGE]}:
                 return self.send(request, 200, {'encounters': [{**row, 'id': SECOND_ID}], 'next': None, 'total': None})
             return self.send(request, 400, {'error': 'That part of the list could not be read. Open the list again.',
@@ -730,6 +735,37 @@ class ScanRunTests(unittest.TestCase):
         self.assertEqual((code, self.statuses(evidence).get('customer.list_complete')), (0, 'pass'), printed)
         self.assertFalse([path for method, path in site.log if path.startswith('/api/encounters?')])
         self.assertEqual([item['id'] for item in evidence['encounters']], [ENCOUNTER_ID])
+
+    def test_all_waits_out_the_list_limit_on_a_later_page_and_asks_for_it_again(self):
+        # release 2 (R2-21): each later page counts toward the member's list limit (120 a minute), so a practice of more
+        # than about 6,000 documents meets a 429 inside a minute; the scan waits as Retry-After says and asks for the
+        # same page again - GET only, at most twice a page - and a correct server passes
+        later = f'/api/encounters?before={urllib.parse.quote(NEXT_PAGE, safe="")}'
+        waited = []
+        with unittest.mock.patch.object(sc.time, 'sleep', side_effect=waited.append):
+            code, evidence, printed, site = self.run_scan('--all', site=StubSite(two_pages=True, refused=1))
+        self.assertEqual(code, 0, printed)
+        statuses = self.statuses(evidence)
+        self.assertEqual((statuses.get('customer.list_contract.page2'), statuses.get('customer.list_complete')),
+                         ('pass', 'pass'))
+        self.assertEqual([path for method, path in site.log if path.startswith('/api/encounters?')], [later, later])
+        self.assertEqual(waited, [1])
+        self.assertTrue(evidence['only_get_beyond_sign_in_and_out'])
+        # refused three times, or with a Retry-After the scan does not wait out (none, 0, over 61 s): the page fails
+        for leak, gets, sleeps in (({'refused': 3}, 3, [1, 1]), ({'refused': 1, 'retry_after': None}, 1, []),
+                                   ({'refused': 1, 'retry_after': '0'}, 1, []),
+                                   ({'refused': 1, 'retry_after': '62'}, 1, [])):
+            with self.subTest(leak=leak):
+                waited.clear()
+                with unittest.mock.patch.object(sc.time, 'sleep', side_effect=waited.append):
+                    code, evidence, printed, site = self.run_scan('--all', site=StubSite(two_pages=True, **leak))
+                self.assertEqual(code, 1, printed)
+                statuses = self.statuses(evidence)
+                self.assertEqual((statuses.get('customer.list_contract.page2'), statuses.get('customer.list_complete')),
+                                 ('fail', 'fail'))
+                self.assertEqual([path for method, path in site.log if path.startswith('/api/encounters?')],
+                                 [later] * gets)
+                self.assertEqual(waited, sleeps)
 
     def test_all_fails_when_the_list_holds_fewer_documents_than_the_session_counts(self):
         code, evidence, printed, _site = self.run_scan('--all', site=StubSite(short_list=True))
