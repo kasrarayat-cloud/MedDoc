@@ -12,13 +12,14 @@ from datetime import timedelta, timezone as dt_timezone
 
 from django.contrib.sessions.models import Session
 from django.db import connection
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import api, models
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.support import rounds as r
+from tests.test_frontend import PLAIN_STATIC
 
 Membership, User = models.Membership, models.User
 CPT = 'cpt.quillmd.com'
@@ -108,6 +109,7 @@ class ListTests(MembersCase):
         self.assertFalse(signed_in(self.viewer).get('/api/session').json()['can_manage_team'])
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class AccessTests(MembersCase):
     def test_an_owner_turns_a_reviewer_off_who_loses_the_practice_at_the_next_request(self):
         reviewer = signed_in(self.reviewer)

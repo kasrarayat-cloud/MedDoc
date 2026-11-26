@@ -8,17 +8,19 @@ from datetime import timedelta
 from unittest import mock
 
 from django.conf import settings
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models, operator
 from tests.support import operator as ops
 from tests.support import rounds as r
 from tests.test_admin_console import use_throttle
+from tests.test_frontend import PLAIN_STATIC
 
 Run, Round = models.ProviderRun, models.CodingRound
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class ConsoleCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()

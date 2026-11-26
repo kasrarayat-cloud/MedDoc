@@ -14,7 +14,8 @@
 // way (reportAnswer). A PDF download is a one-page synthetic PDF made here, not the server's physician report.
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
-// "X-Preview-Encounters: empty" serves an empty document list.
+// "X-Preview-Encounters: empty" serves an empty document list, and "X-Preview-Encounters: <n>" a synthetic practice of n
+// documents made from the fixtures' rows (up to 20,000; its documents open no review: 404).
 // A new upload answers 201 with the reading fixture's id and plays it forward on each read of the document: reading,
 // then checking, then questions for you; sending answers plays a second coding review forward to ready for approval.
 // The same client_key from the same session answers with the same id and creates nothing. A retry the document offers
@@ -32,6 +33,16 @@
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
+// Release 2 (R2-19, R2-20): the lists a page at a time, as the server pages them - GET /api/encounters?list=documents|
+// queue|recent[&before=<cursor>] answers {encounters, next, total}, 50 rows a page (the recent 5), newest first by
+// created_at then id, the cursor '<UTC microseconds>~<id>', total on a first page of the documents or the queue, and
+// opens_pdf on each row (a first file that is a PDF of at most 1 MiB, R2-16; a fixture row's own value where it has
+// one); an unknown list or an unreadable cursor answers 400 with the server's sentences. POST /api/encounters/search
+// {text, before} answers the rows whose text - the page's own documentRow's, release 1's rule - holds the words, 50 at a
+// time, total null; blank words answer 400, words past 240 characters or holding a NUL or a lone surrogate an empty page.
+// Release 2 (R2-15): a PDF view carries an ETag shaped as the server's (a quoted UUID, never a hash of the file: here an
+// HMAC of this run's key, the document and its bytes), and a request whose If-None-Match names it (its weak form too,
+// never '*') is answered 304 with no body, as studio.api answers the copy a page holds.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -268,6 +279,82 @@ function loadFixtures() {
   };
 }
 
+// R2-19, R2-20: the lists' pages and the search, as the server answers them.
+const LIST_PAGE = 50;
+const RECENT_PAGE = 5;
+const QUEUE_STATES = new Set(['awaiting_answer', 'needs_review', 'ready']);
+const LIST_CURSOR = new RegExp(`^(\\d{1,20})~(${UUID})$`);
+const SEARCH_CHARS = 240;
+const LIST_UNKNOWN = 'That list is not available.';
+const CURSOR_UNREADABLE = 'That part of the list could not be read. Open the list again.';
+const SEARCH_BLANK = 'Type the words to search for.';
+let pageScript = null;
+
+// Whether a fixture's document opens as a PDF of at most 1 MiB (R2-16's opens_pdf): its first file is an uploaded PDF.
+function opensPdf(id) {
+  const part = fixtures.byId.get(id)?.document;
+  return Boolean(part) && part.kind === 'upload' && part.media_type === 'application/pdf' && Number.isInteger(part.size) && part.size <= 1048576;
+}
+
+// The practice the request reads: the fixtures' rows (each with opens_pdf), none, or a synthetic practice of n rows.
+function practiceRows(req) {
+  const asked = String(req.headers['x-preview-encounters'] || '');
+  if (asked === 'empty') return [];
+  const rows = fixtures.encounters.encounters.map(row => ({ ...row, opens_pdf: Object.hasOwn(row, 'opens_pdf') ? row.opens_pdf : opensPdf(row.id) }));
+  if (!/^\d{1,5}$/.test(asked)) return rows;
+  const start = Date.parse('2026-11-20T10:00:00Z');
+  return Array.from({ length: Math.min(Number(asked), 20000) }, (_, n) => {
+    const from = rows[n % rows.length];
+    const id = `5e${(n % rows.length).toString(16).padStart(6, '0')}-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+    return { ...from, id, title: `${from.title} (${n + 1})`, created_at: iso(start - n * 60000) };
+  });
+}
+
+const placeOf = row => [Date.parse(row.created_at) * 1000, row.id];
+const newestFirst = (a, b) => {
+  const [timeA, idA] = placeOf(a);
+  const [timeB, idB] = placeOf(b);
+  return timeB - timeA || (idB > idA ? 1 : idB < idA ? -1 : 0);
+};
+
+// [status, payload] of one page of `rows` (already the list's), from the place `before` names (null: the first page).
+function listAnswer(rows, which, before) {
+  const ordered = rows.slice().sort(newestFirst);
+  let start = 0;
+  if (before !== null) {
+    const match = LIST_CURSOR.exec(before);
+    if (!match) return [400, { error: CURSOR_UNREADABLE }];
+    const [time, id] = [Number(match[1]), match[2]];
+    start = ordered.findIndex(row => { const [rowTime, rowId] = placeOf(row); return rowTime < time || (rowTime === time && rowId < id); });
+    if (start < 0) start = ordered.length;
+  }
+  const size = which === 'recent' ? RECENT_PAGE : LIST_PAGE;
+  const shown = ordered.slice(start, start + size);
+  const more = which !== 'recent' && start + size < ordered.length;
+  const last = shown[shown.length - 1];
+  return [200, { encounters: shown, next: more ? `${placeOf(last)[0]}~${last.id}` : null,
+    total: which !== 'recent' && before === null ? rows.length : null }];
+}
+
+// The text the page's search reads of a row: its own documentRow's (release 1's rule), as the server rebuilds it.
+function rowText(row) {
+  pageScript = pageScript || require(path.join(STATIC, 'app.js'));
+  return pageScript.documentRow(row).replace(/<[^>]*>/g, '')
+    .replace(/&(?:amp|lt|gt|quot|#x27|#x60);/g, entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'", '&#x60;': '`' })[entity]);
+}
+
+// [status, payload] of POST /api/encounters/search.
+function searchAnswer(rows, body) {
+  const words = body?.text;
+  if (typeof words !== 'string' || !words.trim()) return [400, { error: SEARCH_BLANK }];
+  const before = body.before ?? null;
+  if (before !== null && typeof before !== 'string') return [400, { error: CURSOR_UNREADABLE }];
+  if ([...words].length > SEARCH_CHARS || words.includes('\u0000') || /\p{Cs}/u.test(words)) return [200, { encounters: [], next: null, total: null }];
+  const wanted = words.toLowerCase();
+  const [status, payload] = listAnswer(rows.filter(row => rowText(row).toLowerCase().includes(wanted)), 'documents', before);
+  return [status, status === 200 ? { ...payload, total: null } : payload];
+}
+
 const uploads = new Map();  // '<session> <client_key>' -> encounter id
 // encounter id -> {reads, at, started, answered, round, trigger, title, name, kind, mediaType, size, context, answers,
 // converted}: an uploaded or retried document, played forward
@@ -333,6 +420,18 @@ function readBody(req) {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+
+// R2-15: a PDF view's tag, shaped as studio.api.view_tag's: a quoted UUID, bound to this run and the document.
+function viewTag(id, bytes) {
+  const hex = crypto.createHmac('sha256', CSRF).update(`${id}:`).update(crypto.createHash('sha256').update(bytes).digest('hex')).digest('hex');
+  return `"${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}"`;
+}
+
+// Whether an If-None-Match header names `tag`, as studio.api._held reads it (django.utils.http.parse_etags): the weak form
+// counts, '*' never does.
+function namesTag(header, tag) {
+  return String(header || '').split(',').map(item => item.trim().replace(/^W\//, '')).some(item => item !== '*' && item === tag);
 }
 
 function parseJson(buffer) {
@@ -414,7 +513,16 @@ async function handleApi(req, res, url) {
   const session = agent ? fixtures.agent : fixtures.session;
   if (method === 'GET' && route === '/api/session') return json(res, 200, session);
   if (method === 'GET' && route === '/api/encounters') {
-    return json(res, 200, req.headers['x-preview-encounters'] === 'empty' ? fixtures.empty : fixtures.encounters);
+    const which = url.searchParams.has('list') ? url.searchParams.get('list') : 'documents';
+    if (!['documents', 'queue', 'recent'].includes(which)) return json(res, 400, { error: LIST_UNKNOWN });
+    const rows = practiceRows(req);
+    const [status, payload] = listAnswer(which === 'queue' ? rows.filter(row => QUEUE_STATES.has(row.state)) : rows, which, url.searchParams.get('before'));
+    return json(res, status, payload);
+  }
+  if (route === '/api/encounters/search') {
+    if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
+    const [status, payload] = searchAnswer(practiceRows(req), parseJson(await readBody(req)));
+    return json(res, status, payload);
   }
   if (method === 'POST' && route === '/api/encounters') {
     const body = (await readBody(req)).toString('latin1');
@@ -464,8 +572,14 @@ async function handleApi(req, res, url) {
     // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
     const { bytes, type } = viewBytes(name);
     const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
+    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type
+    const tag = type === 'application/pdf' ? viewTag(match[1], bytes) : '';
+    if (tag && namesTag(req.headers['if-none-match'], tag)) {
+      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP });
+    }
     return send(res, 200, bytes, {
       'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
+      ...(tag ? { ETag: tag } : {}),
     });
   }
   match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);
@@ -662,4 +776,5 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP,
+  viewTag, namesTag, listAnswer, searchAnswer, rowText };

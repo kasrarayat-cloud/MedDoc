@@ -6,13 +6,14 @@ but carrying another code holds that line even beside the line's own agreement. 
 "agree" nor exactly "disagree" reads as no clear verdict, never as a disagreement. A checker-added line says the status
 the checker gave it, and the operator console lists every review that belongs to no line in full. Synthetic answers
 only; nothing reaches the network."""
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import customer, physician_report
 from studio.fable import result
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.support import rounds as r
+from tests.test_frontend import PLAIN_STATIC
 
 NOTE = 'The second check made a comment that could not be tied to one line'
 UNCLEAR = 'The second check did not give a clear verdict.'
@@ -195,6 +196,7 @@ class UnplacedPipelineTests(r.CustomerCase, TestCase):
         self.assertIn('listed it as needing an answer', draft.partition('02 45380 / ')[2])  # the M1 line's reasons
 
 
+@override_settings(STORAGES=PLAIN_STATIC)  # R2-26: the console names its fonts by the static tag
 class OperatorListTests(r.CustomerCase, TestCase):
     """LINES-8: the operator console listed no unmatched review and called a line one reached "not reviewed"."""
 
