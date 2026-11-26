@@ -527,6 +527,37 @@ class ObjectAndControlTests(ReleaseOneCase):
                     self.assert_release_1_package(data)
 
 
+class ImportHoldingNothingTests(ReleaseOneCase):
+    """C9: a w:altChunk that holds nothing - the critic's shapes - is removed as release 1 removes it, so the package is
+    release 1's, byte for byte (read from git); an External one and a w:subDoc are refused on purpose."""
+
+    def test_an_import_that_holds_nothing_gives_release_1s_package(self):
+        alt = '<w:altChunk r:id="rIdChunk"/>'
+        shapes = {
+            'no r:id': package(BEFORE + '<w:altChunk/>' + AFTER),
+            'an r:id that names no relationship': package(BEFORE + '<w:altChunk r:id="rIdNone"/>' + AFTER),
+            'a part that is missing': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),)),
+            'an empty text part': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'empty.txt'),),
+                                          (('word/empty.txt', b''),)),
+            'an empty part with an Override': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'empty.txt'),),
+                                                      (('word/empty.txt', b''),),
+                                                      (override('word/empty.txt', 'text/plain'),)),
+        }
+        for label, data in shapes.items():
+            with self.subTest(label):
+                removed = docx_package._safe_package(data)[1]
+                self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 1})
+                self.assert_release_1_package(data)
+        for label, data in (('External', package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk',
+                                                                            'file:///synthetic/x.docx',
+                                                                            'External'),))),
+                            ('a w:subDoc, External', package(BEFORE + '<w:p><w:subDoc r:id="rIdSub"/></w:p>' + AFTER,
+                                                             (rel('rIdSub', 'subDocument', 'file:///synthetic/c.docx',
+                                                                  'External'),)))):
+            with self.subTest(f'refused on purpose: {label}'), self.assertRaises(docx_package.ContentNotShown):
+                docx_package._safe_package(data)
+
+
 # --- R2-30: a removed field inside another field's result stays a field ----------------------------------------------
 
 QUOTE_BEGIN = '<w:r><w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>'
