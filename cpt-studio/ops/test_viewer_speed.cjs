@@ -504,6 +504,7 @@ test('V12b, R2-22: above 200 documents, the list\'s last page that comes while a
   try {
     const { page, calls, errors } = await open(context);
     await listed(page);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector('#listMore'))), true, 'the list\'s end, watched');
     const toEnd = () => page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     for (const expected of [100, 150, 200]) {
       await toEnd();
