@@ -24,10 +24,13 @@ the requests are unchanged, so this module holds them to release 1's, three ways
    release could change what it SENDS from the same arguments (an effort clamped, a fallback dropped) and leave the
    request pin as it was. So each request also goes through the shipped LiveCoder - its own client construction, the
    SDK's token count, then its stream - over an in-memory httpx2.MockTransport that answers 400, and each HTTP request
-   the SDK built is pinned: its method and path, its anthropic-beta header and the sha256 of its body (release 1's,
-   measured with requirements.txt's anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4). Nothing leaves the process:
-   the base URL is a closed local port as a second guard, the key is synthetic, and the credentials loader is replaced,
-   so no credentials file is read.
+   the SDK built is pinned: its method and path, its anthropic-beta and anthropic-version headers, the sha256 of its
+   body, and the credentials' workspace as anthropic-workspace-id, run without one and with one (release 1's, measured
+   with requirements.txt's anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4). A retryable answer (529) and a read
+   that times out leave the same one count and one send on the wire: release 1 sends nothing again automatically
+   (refutation round 2, pins[0] to pins[2]). The SDK's x-stainless-* telemetry is not pinned. Nothing leaves the
+   process: the base URL is a closed local port as a second guard, the key is synthetic, and the credentials loader
+   is replaced, so no credentials file is read.
 3. The blob gate (specification 2.1). The seven files that are what the coder is asked and how its answer is read and
    priced keep the git blob ids they had at 9ee0c85be: each file on disk hashed as git hashes a blob (so an edit that
    was never committed fails too), and - in a git checkout - git's own HEAD naming the same blobs. The image has no
@@ -275,12 +278,13 @@ RELEASE_1_REQUESTS = {
 }
 
 # Refutation round 1, gates[2]: the HTTP requests the SDK builds for each request above, as the shipped LiveCoder
-# makes them - the token count, then the send: each one's method, path and anthropic-beta header, the same for every
-# request, and per request (role, sha256 of the count's body, sha256 of the send's body). Release 1's, measured on
-# 93c33dc1d's cpt-studio exported read-only, with requirements.txt's anthropic 2.11.0, httpx2 2.16.2 and pydantic
-# 2.14.4.
-COUNT_ON_THE_WIRE = ('POST /v1/messages/count_tokens', 'server-side-fallback-2026-07-01,token-counting-2024-11-01')
-SEND_ON_THE_WIRE = ('POST /v1/messages', 'server-side-fallback-2026-07-01')
+# makes them - the token count, then the send: each one's method and path, its anthropic-beta and anthropic-version
+# headers (round 2, pins[0]), the same for every request, and per request (role, sha256 of the count's body, sha256 of
+# the send's body). Release 1's, measured on 93c33dc1d's cpt-studio exported read-only, with requirements.txt's
+# anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4.
+COUNT_ON_THE_WIRE = ('POST /v1/messages/count_tokens', 'server-side-fallback-2026-07-01,token-counting-2024-11-01',
+                     '2026-10-21')
+SEND_ON_THE_WIRE = ('POST /v1/messages', 'server-side-fallback-2026-07-01', '2026-10-21')
 RELEASE_1_WIRE = {
     'txt': (
         ('reader', 'e8753cd2e2c9580f11f91260b2d83d61ac7931ac350138168fa326e1bb3bcfa1',
@@ -345,6 +349,11 @@ RELEASE_1_WIRE = {
 }
 # A key no vendor would take, for the credentials loader this module replaces: no credentials file is read.
 SYNTHETIC_CREDENTIALS = SimpleNamespace(api_key='synthetic-key-for-the-wire-pin-not-a-credential', workspace_id='')
+# Release 1 sends the credentials' optional workspace as anthropic-workspace-id on the count and on the send
+# (studio.fable.client: LiveCoder.client's default_headers, which anthropic 2.11.0 keeps on every request), so the wire
+# pin runs each request without one and with this one (refutation round 2, pins[1]).
+SYNTHETIC_WORKSPACE = 'wrkspc_synthetic_wire_pin'
+WORKSPACE_CREDENTIALS = SimpleNamespace(api_key=SYNTHETIC_CREDENTIALS.api_key, workspace_id=SYNTHETIC_WORKSPACE)
 
 # Specification 2.1: the files of the coding path that keep the blob ids they have at 9ee0c85be (the request's prompts,
 # its pricing, the reading of its answer, the credentials it is sent with, the package's kinds, the client, and the
@@ -388,15 +397,28 @@ def requests_sent(ws, user, case) -> tuple:
     return sent, final
 
 
-def on_the_wire(request) -> tuple:
+def overloaded_answer(http_request):
+    """A retryable answer, 529 (the API overloaded): the SDK would send again unless told not to (max_retries=0)."""
+    return httpx2.Response(529, json={'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'in memory'}})
+
+
+def timed_out_answer(http_request):
+    """A read that times out, which the SDK's exception branch would retry unless told not to."""
+    raise httpx2.ReadTimeout('in memory', request=http_request)
+
+
+def on_the_wire(request, credentials=SYNTHETIC_CREDENTIALS, answer=None) -> tuple:
     """What the SDK puts on the wire for ``request`` through the shipped LiveCoder - its own client construction, the
-    token count, then the send - over an in-memory httpx2.MockTransport that answers 400. Nothing leaves the process:
-    the base URL is a closed local port as a second guard, the key is synthetic and the credentials loader is replaced.
-    ((method and path, sha256 of the body, anthropic-beta) of each HTTP request, the send's status, the count)."""
+    token count, then the send - over an in-memory httpx2.MockTransport that answers 400, or as ``answer`` does.
+    Nothing leaves the process: the base URL is a closed local port as a second guard, the key is synthetic and the
+    credentials loader is replaced (it hands over ``credentials``). ((method and path, sha256 of the body,
+    anthropic-beta, anthropic-version, anthropic-workspace-id) of each HTTP request, the send's status, the count)."""
     captured = []
 
     def refuse(http_request):
         captured.append(http_request)
+        if answer is not None:
+            return answer(http_request)
         return httpx2.Response(400, json={'type': 'error', 'error': {
             'type': 'invalid_request_error', 'message': 'in memory: nothing was sent'}})
 
@@ -408,13 +430,14 @@ def on_the_wire(request) -> tuple:
     quiet = logging.root.manager.disable
     logging.disable(logging.CRITICAL)  # the transport's request lines and the coder's warnings about the 400s
     try:
-        with mock.patch.object(fable_client.fable_credentials, 'load', return_value=SYNTHETIC_CREDENTIALS):
+        with mock.patch.object(fable_client.fable_credentials, 'load', return_value=credentials):
             counted = coder.count_input_tokens(request)
             outcome = coder.send(request)
     finally:
         logging.disable(quiet)
     wire = tuple((f'{sent.method} {sent.url.raw_path.decode()}', hashlib.sha256(sent.content).hexdigest(),
-                  sent.headers.get('anthropic-beta', '')) for sent in captured)
+                  sent.headers.get('anthropic-beta', ''), sent.headers.get('anthropic-version', ''),
+                  sent.headers.get('anthropic-workspace-id')) for sent in captured)
     return wire, outcome.http_status, counted
 
 
@@ -456,11 +479,22 @@ class TheCoderIsSentWhatRelease1SentTests(TestCase):
                 self.assertEqual(final, models.CodingRound.DONE)
                 sent = []
                 for role, request in calls:
-                    wire, status, counted = on_the_wire(request)
-                    # the in-memory transport answered both (a 400: no count, a failed send), so it saw all there was
-                    self.assertEqual((status, counted), (400, None))
-                    self.assertEqual([(where, beta) for where, _, beta in wire], [COUNT_ON_THE_WIRE, SEND_ON_THE_WIRE])
-                    sent.append((role, wire[0][1], wire[1][1]))
+                    plain = on_the_wire(request)
+                    named = on_the_wire(request, WORKSPACE_CREDENTIALS)
+                    for (wire, status, counted), workspace in ((plain, None), (named, SYNTHETIC_WORKSPACE)):
+                        # the in-memory transport answered both (a 400: no count, a failed send): it saw all there was
+                        self.assertEqual((status, counted), (400, None))
+                        self.assertEqual([(where, beta, version) for where, _, beta, version, _ in wire],
+                                         [COUNT_ON_THE_WIRE, SEND_ON_THE_WIRE])
+                        self.assertEqual([named_as for *_, named_as in wire], [workspace, workspace])
+                    # the workspace is a header only: the bodies are the same either way
+                    self.assertEqual([body for _, body, *_ in named[0]], [body for _, body, *_ in plain[0]])
+                    sent.append((role, plain[0][0][1], plain[0][1][1]))
+                    # nothing is sent again automatically: a 529 and a timeout leave the same one count and one send
+                    for answer, expected in ((overloaded_answer, (529, None)), (timed_out_answer, (None, None))):
+                        again, status, counted = on_the_wire(request, answer=answer)
+                        self.assertEqual((status, counted), expected)
+                        self.assertEqual(again, plain[0])
                 self.assertEqual(tuple(sent), RELEASE_1_WIRE[case])
 
 
