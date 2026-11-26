@@ -42,12 +42,13 @@ before it waits on it, so the parent's finally kills that group as well as the c
   and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or pointer that would leave no
   picture - a v:imagedata or a:blip naming a part that is sent - in its place (R2-29); a field kept, not HYPERLINK or
   TOC, whose stored result holds something a reader sees outside the fields in it while a removed field stood in its
-  instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
-  missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A removed field in another
-  field's result, and in no field's instruction, stays a field whose instruction is QUOTE - a type LibreOffice shows by
-  its stored result - unless it is INCLUDEPICTURE (R2-30). Everything else is edited as release 1 edits it, so a Word
-  file that needs no refusal and no QUOTE gives exactly release 1's package. check_in_child runs the same check on a
-  Word file whose conversion a round stored, before that conversion is read again (R2-28 step 7, C8).
+  instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming
+  no relationship, a missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A
+  removed field in another field's result, and in no field's instruction, stays a field whose instruction is QUOTE -
+  a type LibreOffice shows by its stored result - unless it is INCLUDEPICTURE (R2-30). Everything else is edited as
+  release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's package.
+  check_in_child runs the same check on a Word file whose conversion a round stored, before that conversion is read
+  again (R2-28 step 7, C8).
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
