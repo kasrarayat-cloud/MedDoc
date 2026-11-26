@@ -431,6 +431,24 @@ class R2ListRecordTests(ReadCase):
         self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=later.pk).repeats, 1)
         self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats, 1)
 
+    def search(self, before=None, words='synthetic page note'):
+        return self.member.post('/api/encounters/search', data=json.dumps({'text': words, 'before': before}),
+                                content_type='application/json')
+
+    def test_a_search_and_its_later_page_write_one_row_each_naming_exactly_their_documents(self):
+        started = timezone.now()
+        first = self.search().json()
+        later = self.search(first['next']).json()
+        rows = [row for row in self.lists() if row.filters['list'] == 'search']
+        self.assertEqual([(row.encounter_ids, row.count, row.filters) for row in rows], [
+            ([item['id'] for item in first['encounters']], 50, {'list': 'search', 'before': None}),
+            ([item['id'] for item in later['encounters']], 8, {'list': 'search', 'before': first['next']})])
+        for row in rows:
+            self.assertTrue(started <= row.as_of <= row.created_at)
+            self.assertEqual((row.view, row.outcome, row.workspace_id), (read_audit.MEMBER_LIST, read_audit.SERVED,
+                                                                         self.ws.pk))
+        self.assertNotIn('page note', json.dumps([row.filters for row in Record.objects.all()]))  # never the words
+
     def test_two_pages_of_one_size_are_two_records_and_a_new_document_is_named(self):
         # the finding's reproduction (R2-21), by GETs: page A; a new document arrives first, the fiftieth leaves: page B,
         # page B again; the new document is destroyed: page A again. Release 1's rule (count and filters alike) made it
@@ -488,8 +506,13 @@ class R2ListRecordTests(ReadCase):
                     self.assertEqual((answer.status_code, answer.json()), (503, {'error': read_audit.NOT_RECORDED,
                                                                                  'details': {}}))
                     self.assertNotIn(TITLE_MARKER.encode(), answer.content)
+            answer = self.search(words='synthetic')  # a search, whose titles would hold the marker
+            self.assertEqual((answer.status_code, answer.json()), (503, {'error': read_audit.NOT_RECORDED,
+                                                                         'details': {}}))
+            self.assertNotIn(TITLE_MARKER.encode(), answer.content)
         self.assertFalse(Record.objects.exists())
         self.assertEqual(self.member.get(f'{LIST}?before={first["next"]}').status_code, 200)  # the control
+        self.assertEqual(self.search(words='synthetic').status_code, 200)
 
     def test_later_pages_over_the_members_limit_are_refused_unread_and_unrecorded(self):
         start = self.start()  # every read at one moment: one UTC day, and one window of the limit

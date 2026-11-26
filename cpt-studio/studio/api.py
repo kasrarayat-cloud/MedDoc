@@ -11,6 +11,8 @@ record - runs, models, usage, hashes, the coding review's whole answers - is a p
     GET  /api/encounters[?list=documents|queue|recent][&before=<cursor>]
                                                     customer.list_page: one page of a list (release 2, R2-19), with the
                                                     next page's cursor and, on a first page, the list's total
+    POST /api/encounters/search                     {text, before}: customer.search_page, one page of the practice's
+                                                    documents whose row holds the words (R2-20)
     POST /api/encounters                            an upload or a paste (multipart); starts coding round 1
     GET  /api/encounters/<id>                       customer.encounter_json
     POST /api/encounters/<id>/answers               {answers: [{question_id, text}]} -> a new round
@@ -367,6 +369,43 @@ def encounters(request):
     except ValidationError as exc:  # intake's and storage's own sentences about the file
         raise ApiError(400, ' '.join(exc.messages))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
+
+
+# --- the search (release 2, R2-20 and R2-21) --------------------------------------------------------------------------
+# POST /api/encounters/search {"text": the words, "before": a cursor or null} answers one page of the practice's
+# documents whose row holds the words (customer.search_page), in the list's shape with total null. It is a POST, so the
+# words - possibly a name - never sit in an address, a query string or an access log; the middleware enforces CSRF and
+# the request's body limit. Text that is not text, or blank once trimmed as the page trims, is answered 400; text longer
+# than customer.SEARCH_MAX_CHARS, or holding a character PostgreSQL text cannot hold (UNSTORABLE), is an empty page,
+# recorded with count 0. Every search first counts toward the member's limit (list.member), then is recorded as a
+# member.list row naming the documents found, with the filters {"list": "search", "before": cursor} - never the words.
+
+SEARCH_TEXT_REQUIRED = 'Type the words to search for.'
+
+
+@require_POST
+@api_view
+@read_audit.phi_read(read_audit.MEMBER_LIST)
+def search_encounters(request):
+    """One page of a search (see above), recorded before it is served."""
+    membership = active_membership(request.user)
+    data = _payload(request)
+    text, before = data.get('text'), data.get('before')
+    words = customer.search_words(text) if isinstance(text, str) else ''
+    if not words:
+        raise ApiError(400, SEARCH_TEXT_REQUIRED)
+    if before is not None and (not isinstance(before, str) or _cursor_read(before) is None):
+        raise ApiError(400, LIST_CURSOR_UNREADABLE)
+    _later_page_counted(request, membership)
+    as_of = timezone.now()
+    if len(words) > customer.SEARCH_MAX_CHARS or UNSTORABLE.search(words):
+        page = {'encounters': [], 'next': None, 'total': None}  # no row's text holds such words
+    else:
+        page = customer.search_page(membership, words, before)
+    shown = [row['id'] for row in page['encounters']]
+    _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
+              count=len(shown), as_of=as_of, filters={'list': 'search', 'before': before})
+    return JsonResponse(page)
 
 
 @require_GET

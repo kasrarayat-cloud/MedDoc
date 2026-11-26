@@ -473,4 +473,344 @@ class ListPlanTests(TestCase):
                 self.assertIn(index, rows_plan)
                 for sql, plan in found:
                     for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile'):
-                        self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan))
+                        self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan[:1500]))
+
+
+# --- the search (R2-20) --------------------------------------------------------------------------------------------
+
+import logging  # noqa: E402 - this section's own imports
+import random  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+from pathlib import Path  # noqa: E402
+from unittest import mock  # noqa: E402
+
+from django.conf import settings  # noqa: E402
+
+SEARCH = '/api/encounters/search'
+ROW_TEXT = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'row_text.cjs'
+# Awkward rows (R2-20's property test): titles a browser and PostgreSQL may lower-case or trim differently, SQL's own
+# characters, ligatures, emoji, JavaScript's white space at either end, the longest title; dates that are and are not a
+# calendar date the page reads; insurance and user_values of every odd shape.
+AWKWARD_TITLES = ['Synthetic EGD report', 'ÉCHO Müller', 'straße 12', 'ΑΣΚΛΗΠΙΟΣ σημείωση', 'İstanbul note',
+                  'ÅNGSTRÖM', 'KKelvin', 'a%b_c\\d', "O'Neil <b>&amp; \"quoted\" `tick`", '  ', '', '﻿BOM title﻿',
+                  'polyp', 'x' * 160, 'Ready for approval copy', 'note 2026-11-06', 'ﬁne ligature', 'ＦＵＬＬ', 'tab\tinside',
+                  'emoji 🙂 note', 'naïve Café', 'ǅ title', 'Ω Ohm', 'ſ long s', 'ŉ', 'ΰ', 'Ⅷ roman', 'Ⓐ circled',
+                  '　ideographic ', '᠎mongolian᠎', 'Σ', 'όροςΣ', 'i̇ dotted', "'; DROP TABLE x; --"]
+AWKWARD_DATES = ['2026-11-06', '2026-02-28', '2024-02-29', '2026-02-29', '2026-02-30', '2026-04-31', '2026-12-31',
+                 '1999-01-01', '0099-01-01', '0100-01-01', '0001-01-01', '2000-02-29', '1900-02-29', '20261106',
+                 '2026-W45-5', 'not a date', '', None, 20261106, {'a': 1}, ' 2026-11-06', '2026-11-06 ', '2026-13-01',
+                 '2026-00-10', '2026-10-00', '٢٠٢٦-١١-٠٦', '9999-12-31', '2026-11-6', '2026-11-06\n', '1000-10-10']
+AWKWARD_INSURANCE = ['medicare', 'medicaid', 'commercial', 'unknown', None, 'MEDICARE', 5, 'other', ['medicare']]
+
+
+def awkward_practice(ws, by, count, seed=20261126):
+    """``count`` live documents of every awkward shape (and a few tombstones), made one after another."""
+    chance = random.Random(seed)
+    states = list(customer.state.LABELS)
+    for index in range(count + count // 20):
+        values = {}
+        if chance.random() < .9:
+            values['service_date'] = chance.choice(AWKWARD_DATES)
+        if chance.random() < .9:
+            values['insurance'] = chance.choice(AWKWARD_INSURANCE)
+        if chance.random() < .04:
+            values = chance.choice([[], 'text', 5, ['service_date']])
+        title = (chance.choice(AWKWARD_TITLES) + chance.choice(['', '', f' {index}', ' up', ' P']))[:160]
+        enc = models.Encounter.objects.create(workspace=ws, title=title, created_by=by, user_values=values)
+        kind = chance.choice(['upload', 'paste', 'addendum', None])
+        source = stored_file(enc, by, PDF, 1673) if chance.random() < .4 else None
+        rev = revision(enc, by, kind, source if kind == 'upload' else None) if kind else None
+        if rev is not None and chance.random() < .7:
+            coding_round(enc, rev, chance.choice(states))
+        if index % 21 == 20:
+            models.Encounter.objects.filter(pk=enc.pk).update(destroyed_at=timezone.now(), state='destroyed')
+
+
+def node_rows(rows, queries):
+    node = shutil.which('node')
+    done = subprocess.run([node, str(ROW_TEXT)], input=json.dumps({'rows': rows, 'queries': queries}),
+                          capture_output=True, text=True, timeout=300, check=False)
+    assert done.returncode == 0, done.stderr[-2000:]
+    return json.loads(done.stdout)
+
+
+def sql_row_texts(ws) -> dict:
+    """{id: the row's text as the search reads it} for every live document of ``ws`` (customer.search_row_text_sql)."""
+    with connection.cursor() as cursor:
+        cursor.execute(f'SELECT e.id, {customer.search_row_text_sql()} FROM {customer.search_from_sql()} '
+                       'WHERE e.workspace_id = %(workspace)s AND e.destroyed_at IS NULL',
+                       {'workspace': ws.pk, 'space': customer.JS_WHITE_SPACE})
+        return {str(pk): text for pk, text in cursor.fetchall()}
+
+
+def searched(membership, words) -> list:
+    """Every page of a search for ``words``, joined: the ids found, newest first."""
+    out, before = [], None
+    while True:
+        page = customer.search_page(membership, words, before)
+        assert page['total'] is None
+        out += [row['id'] for row in page['encounters']]
+        before = page['next']
+        if before is None:
+            return out
+
+
+class SearchCase(ListCase):
+    def search(self, text, before=None, client=None, status=200, **extra):
+        body = {'text': text, 'before': before, **extra}
+        answer = (client or self.member).post(SEARCH, data=json.dumps(body), content_type='application/json')
+        self.assertEqual(answer.status_code, status, answer.content[:300])
+        self.assertEqual(answer['Cache-Control'], 'no-store')
+        return answer.json()
+
+
+class SearchPropertyTests(SearchCase):
+    """The server's row text is the page's own (app.js documentRow, run by node over the rows the API served), and for
+    random pieces of those texts the server finds what the page's rule finds - or more, only on rows or words holding a
+    sigma or a dotted I - and never fewer."""
+
+    def setUp(self):
+        super().setUp()
+        if shutil.which('node') is None:
+            self.skipTest('node is not here: the page cannot be run')
+
+    def test_the_server_reads_the_pages_text_and_finds_what_its_rule_finds(self):
+        awkward_practice(self.ws, self.reviewer, 300)
+        rows, _pages = self.walk()
+        self.assertEqual(len(rows), 300)
+        chance = random.Random(1450)
+        page_texts = node_rows(rows, [])['texts']
+        queries = set()
+        for text in page_texts:
+            for _ in range(2):
+                start = chance.randrange(len(text))
+                piece = text[start:min(len(text), start + chance.randint(1, 14))]
+                queries.add(chance.choice([piece, piece.upper(), piece.lower(), piece.title(), f' {piece} ']))
+        queries |= {'c', 'polyp', 'polypu', 'copyuploaded', 'medicareready', 'reviewnot entered', '6 nov 2026',
+                    'nov 2026', '29 feb 2024', '29 feb 2026', '30 feb 2026', '1 jan 100', '10 oct 1000', 'i̇', 'istanbul',
+                    'İSTANBUL', 'ασ', 'ας', 'ΑΣΚΛΗΠΙΟΣ', 'σ', 'ς', 'Σ', 'zzz', '%', '_', '\\', "'", '<b>', '&amp;', '·',
+                    ' · ', 'ss', 'ß', 'k', 'ﬁ', 'fi', 'ＦＵＬＬ', 'full', '🙂', 'x' * 161, 'ω', 'ŉ', 'ʼn', 'ⅷ', 'ⓐ', 'ǆ',
+                    'untitled document', 'earlier review', 'not entered', "drop table", '᠎', 'mongolian',
+                    '`tick`', '"quoted"', 'ideographic'}
+        queries = sorted(query for query in queries if customer.search_words(query))
+        page = node_rows(rows, queries)
+        self.assertEqual(page['texts'], page_texts)
+        server = sql_row_texts(self.ws)
+        computed = {row['id'] for row in rows if row['state'] not in customer.state.LABELS and row['state'] != 'earlier'}
+        self.assertFalse(computed)  # every stored state is one of today's: the text is the page's exactly
+        self.assertEqual({row['id']: server[row['id']] for row in rows},
+                         {row['id']: text for row, text in zip(rows, page_texts)})
+        membership = membership_of(self.reviewer)
+        order = [row['id'] for row in rows]
+        texts = dict(zip(order, page_texts))
+        exact = more = 0
+        for query, wanted in zip(queries, page['found']):
+            words = customer.search_words(query)
+            if len(words) > customer.SEARCH_MAX_CHARS:
+                continue
+            with self.subTest(query=query):
+                found = searched(membership, words)
+                self.assertEqual(found, [item for item in order if item in set(found)])  # newest first, each once
+                self.assertLessEqual(set(wanted), set(found))  # never fewer than the page's rule
+                extra = set(found) - set(wanted)
+                for item in extra:  # more only where a letter lower-cases by its neighbours or into two
+                    self.assertTrue(any(ch in texts[item] + words for ch in customer.SEARCH_FOLDED), (query, texts[item]))
+                exact, more = exact + (not extra), more + bool(extra)
+        self.assertGreater(exact, 400)
+        self.assertGreater(more, 0)  # the superset was met, so the rule above was tested
+
+
+class SearchTests(SearchCase):
+    def test_the_answer_is_the_lists_shape_newest_first_with_no_total(self):
+        made = mixed_practice(self.ws, self.reviewer, 30)
+        answer = self.search('list note')
+        self.assertEqual(set(answer), {'encounters', 'next', 'total'})
+        self.assertEqual((answer['next'], answer['total']), (None, None))
+        joined, _pages = self.walk()
+        self.assertEqual(answer['encounters'], joined)  # every row holds the words: the whole list, rows identical
+        self.assertEqual(len(answer['encounters']), len(made))
+
+    def test_results_page_by_50_from_the_cursor_each_once(self):
+        mixed_practice(self.ws, self.reviewer, 120)
+        mixed_practice(self.ws, self.reviewer, 10, title='Synthetic other words')
+        pages, before = [], None
+        while True:
+            page = self.search('list note', before)
+            pages.append(page)
+            before = page['next']
+            if before is None:
+                break
+        self.assertEqual([len(page['encounters']) for page in pages], [50, 50, 20])
+        ids = [row['id'] for page in pages for row in page['encounters']]
+        self.assertEqual(len(ids), len(set(ids)))
+        listed, _ = self.walk()
+        self.assertEqual(ids, [row['id'] for row in listed if 'list note' in row['title'].lower()])
+        self.assertTrue(all(page['total'] is None for page in pages))
+
+    def test_another_practice_and_tombstones_are_never_found(self):
+        mine = f.encounter(self.ws, self.reviewer, title='Synthetic polypectomy note')
+        f.encounter(self.other_ws, self.outsider, title='Synthetic polypectomy note of another practice')
+        gone = f.encounter(self.ws, self.reviewer, title='Synthetic polypectomy note destroyed')
+        models.Encounter.objects.filter(pk=gone.pk).update(destroyed_at=timezone.now())  # its title kept, for the test
+        self.assertEqual([row['id'] for row in self.search('polypectomy')['encounters']], [str(mine.pk)])
+        their_cursor = paging.cursor_of(timezone.now() + timedelta(days=1), uuid.uuid4())
+        self.assertEqual([row['id'] for row in self.search('polypectomy', their_cursor)['encounters']], [str(mine.pk)])
+
+    def test_words_made_of_sql_match_only_themselves(self):
+        plain = f.encounter(self.ws, self.reviewer, title='Synthetic plain note')
+        marked = f.encounter(self.ws, self.reviewer, title="Synthetic 50% _x_ a\\b O'Neil note")
+        for words, expected in (('%', [marked]), ('_', [marked]), ('\\', [marked]), ("'", [marked]),
+                                ("O'Neil", [marked]), ('%x%', []), ('_x_', [marked]), ("' OR '1'='1", []),
+                                ('note', [marked, plain]), ('*', []), ('.', [])):
+            with self.subTest(words=words):
+                self.assertEqual([row['id'] for row in self.search(words)['encounters']],
+                                 [str(enc.pk) for enc in expected])
+
+    def test_blank_or_non_text_words_answer_400_and_record_nothing(self):
+        f.encounter(self.ws, self.reviewer, title='Synthetic note')
+        required = {'error': 'Type the words to search for.', 'details': {}}
+        before = (Record.objects.count(), models.RateWindow.objects.count())
+        for text in ('', '   ', '　 ﻿', None, 5, ['note'], {'text': 'note'}, True):
+            with self.subTest(text=text):
+                self.assertEqual(self.search(text, status=400), required)
+        answer = self.member.post(SEARCH, data=json.dumps({'before': None}), content_type='application/json')
+        self.assertEqual((answer.status_code, answer.json()), (400, required))
+        for body, content_type in (('note', 'text/plain'), ('[1, 2]', 'application/json'), ('{', 'application/json')):
+            with self.subTest(body=body):
+                self.assertEqual(self.member.post(SEARCH, data=body, content_type=content_type).status_code, 400)
+        unreadable = {'error': 'That part of the list could not be read. Open the list again.', 'details': {}}
+        for cursor in ('yesterday', 5, '', ['20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17']):
+            with self.subTest(cursor=cursor):
+                self.assertEqual(self.search('note', cursor, status=400), unreadable)
+        self.assertEqual((Record.objects.count(), models.RateWindow.objects.count()), before)
+
+    def test_too_long_or_unstorable_words_are_an_empty_page_recorded_with_count_0(self):
+        f.encounter(self.ws, self.reviewer, title='Synthetic note')
+        for words in ('n' * 241, 'note\x00', 'note\ud800', '\ud800'):
+            with self.subTest(words=repr(words)), mock.patch.object(customer, 'search_page') as asked:
+                self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                asked.assert_not_called()
+        with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
+            self.assertEqual(self.search('n' * 240)['encounters'], [])  # at the bound: searched
+        asked.assert_called_once()
+        # each an empty page recorded with count 0 - the same page each time, so one row and its repeats
+        (row,) = Record.objects.filter(view=read_audit.MEMBER_LIST)
+        self.assertEqual((row.count, row.encounter_ids, row.filters), (0, [], {'list': 'search', 'before': None}))
+        self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats, 4)
+
+    def test_a_get_or_head_answers_405_and_the_search_needs_the_csrf_token(self):
+        self.assertEqual(self.member.get(SEARCH).status_code, 405)
+        self.assertEqual(self.member.head(SEARCH).status_code, 405)
+        strict = member_client(self.reviewer, enforce_csrf_checks=True)
+        refused = strict.post(SEARCH, data=json.dumps({'text': 'note'}), content_type='application/json')
+        self.assertEqual(refused.status_code, 403)
+        self.assertFalse(Record.objects.filter(view=read_audit.MEMBER_LIST).exists())
+
+    def test_a_marker_searched_for_is_in_no_record_event_log_or_header(self):
+        f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
+        seen = []
+
+        class Keep(logging.Handler):
+            def emit(self, record):
+                seen.append(f'{record.getMessage()} {record.args!r}')
+        keep = Keep(level=logging.DEBUG)
+        root = logging.getLogger()
+        root.addHandler(keep)
+        previous = root.level
+        root.setLevel(logging.DEBUG)
+        try:
+            found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
+                                     content_type='application/json')
+            with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(1, 60)):  # and a refused one
+                refused = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker'}),
+                                           content_type='application/json')
+        finally:
+            root.removeHandler(keep)
+            root.setLevel(previous)
+        self.assertEqual((found.status_code, refused.status_code), (200, 429))
+        self.assertEqual(len(found.json()['encounters']), 1)
+        stored = json.dumps([[str(value) for value in row.__dict__.values()] for row in
+                             [*Record.objects.all(), *models.SecurityEvent.objects.all(), *models.RateWindow.objects.all()]])
+        for answer in (found, refused):
+            stored += json.dumps(dict(answer.items()))
+        stored += json.dumps(seen)
+        self.assertTrue(models.SecurityEvent.objects.filter(event='list.rate_limited').exists())
+        for marker in ('zz-search-marker', 'ZZ-SEARCH-MARKER', 'search-marker'):
+            self.assertNotIn(marker, stored)
+
+    def test_searches_count_toward_the_members_limit_and_a_first_page_does_not(self):
+        f.encounter(self.ws, self.reviewer, title='Synthetic note')
+        moment = timezone.now()
+        with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(2, 60)), mock.patch.object(timezone, 'now', return_value=moment):
+            self.search('note')
+            self.search('note')
+            answer = self.member.post(SEARCH, data=json.dumps({'text': 'note'}), content_type='application/json')
+            listed = self.member.get(LIST)
+        self.assertEqual((answer.status_code, answer.json()['error'], listed.status_code), (429, 'rate_limited', 200))
+        self.assertEqual(models.SecurityEvent.objects.filter(event='list.rate_limited').count(), 1)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class SearchStatementTests(ListStatementTests):
+    """C1: a search is at most 14 statements per request, a first page and a later one, the same at 51 and 5,000
+    documents; its builder's own (customer.search_page) at most 4."""
+
+    def test_each_page_is_the_same_number_of_statements_at_51_and_5000_documents(self):  # the lists' own, not run here
+        pass
+
+    def test_a_whole_list_on_its_first_page_pays_no_count(self):  # likewise
+        pass
+
+    def searches(self, client, before=None):
+        with CaptureQueriesContext(connection) as seen:
+            answer = client.post(SEARCH, data=json.dumps({'text': 'Synthetic bulk', 'before': before}),
+                                 content_type='application/json')
+        self.assertEqual(answer.status_code, 200)
+        return len(seen.captured_queries), answer.json()
+
+    def test_a_search_is_the_same_number_of_statements_at_51_and_5000_documents(self):
+        counted = {}
+        for name, user in (('small', self.small_user), ('large', self.large_user)):
+            client = member_client(user)
+            first, page = self.searches(client)
+            later, _ = self.searches(client, page['next'])
+            membership = membership_of(user)
+            with CaptureQueriesContext(connection) as own:
+                customer.search_page(membership, 'Synthetic bulk', page['next'])
+            counted[name] = {'first': first, 'later': later, 'builder': len(own.captured_queries)}
+        self.assertEqual(counted['small'], counted['large'])
+        self.assertLessEqual(counted['large']['first'], 14)
+        self.assertLessEqual(counted['large']['later'], 14)
+        self.assertEqual(counted['large']['builder'], 3)  # the search, then the page's rounds and files
+
+
+class SearchPlanTests(ListPlanTests):
+    def test_every_statement_of_a_list_page_reads_an_index(self):  # ListPlanTests' own, not run again here
+        pass
+
+    def test_the_search_reads_studio_enc_ws_time_and_scans_no_table(self):
+        membership = membership_of(self.user)
+        for words in ('zzz-no-such-words', 'Synthetic bulk note 1', 'σ'):
+            with self.subTest(words=words):
+                with CaptureQueriesContext(connection) as seen:
+                    customer.search_page(membership, words)
+                sql = seen.captured_queries[0]['sql']
+                self.assertIn('strpos(', sql)
+                with connection.cursor() as cursor:
+                    cursor.execute('EXPLAIN ' + sql)
+                    plan = '\n'.join(row[0] for row in cursor.fetchall())
+                shape = '\n'.join(line for line in plan.splitlines() if 'Filter:' not in line)[:2000]  # the nodes only
+                self.assertIn('studio_enc_ws_time', plan, shape)
+                for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile', 'studio_sourcerevision'):
+                    self.assertNotIn(f'Seq Scan on {table}', plan, shape)
+
+
+class SearchOutdatedPageTests(SearchCase):
+    def test_release_1s_page_is_told_to_reload_on_the_search_before_any_read(self):
+        f.encounter(self.ws, self.reviewer, title='Synthetic note')
+        old = member_client(self.reviewer, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
+        before = (Record.objects.count(), models.RateWindow.objects.count())
+        answer = old.post(SEARCH, data=json.dumps({'text': 'note'}), content_type='application/json')
+        self.assertEqual((answer.status_code, answer.json()), (409, client_contract.OUTDATED))
+        self.assertEqual((Record.objects.count(), models.RateWindow.objects.count()), before)

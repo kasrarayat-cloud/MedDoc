@@ -4,6 +4,7 @@ built from stored rows on each request.
 - session_json: GET /api/session.
 - list_page: GET /api/encounters - one page of a list (release 2, R2-19: Documents and the Review queue 50 rows a page,
   the Overview's recent 5), newest first, with the cursor of the next page and, on a first page, the list's total.
+- search_page: POST /api/encounters/search - one page of the practice's documents whose row holds the words (R2-20).
 - encounter_json: GET /api/encounters/<id> - the document and its in-page view, the practice's context, the progress of
   the latest coding round, its code lines (each with its line, the second check's verdict, its quotes, its current
   decision - with the id an undo names - and the decisions the member may record), its questions (each naming the
@@ -44,6 +45,7 @@ from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
+from django.db import connection
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
@@ -342,6 +344,121 @@ def list_page(membership, which, before=None) -> dict:
         total = listed.count() if more else len(shown)
     return {'encounters': list_rows_of(shown),
             'next': paging.cursor_of(shown[-1]['created_at'], shown[-1]['pk']) if more else None, 'total': total}
+
+
+# --- the search (release 2, R2-20) -------------------------------------------------------------------------------------
+# POST /api/encounters/search pages the practice's live documents whose row, as the page draws it, holds the words: the
+# page's own rule (app.js applySearch: the row's text, lower-cased, includes the words, trimmed), read in SQL. The row's
+# text is documentRow's, rebuilt from the stored row: the title trimmed of JavaScript's white space, or "Untitled
+# document"; the kind's label; " · " and the insurance's label when the insurance is shown; the state's label, or "Earlier
+# review" for a document with no coding round; the service date as "6 Nov 2026" when it is a calendar date the page reads
+# (app.js parseIsoDate: four-digit years from 0100), else "Not entered". Matching is strpos over both sides lower-cased in
+# PostgreSQL's builtin pg_c_utf8 collation (PostgreSQL 17 or newer), the words a bound parameter, so nothing in them is a
+# wildcard. The browser lower-cases two letters otherwise - a final sigma by its neighbours, a dotted capital I into two
+# letters - so when the words hold either (or the combining dot), both sides are also folded (translate: final sigma to
+# sigma, the combining dot dropped), and the search never finds fewer documents than the page's rule, more only there.
+# One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
+# (list_rows_of). Each round and file is looked up per document, as a one-row subquery (never a hash of every practice's
+# rows; in_queue says why). A document whose stored state is none of today's would match by its stored word, where the
+# page draws it computed; none exists once the app phase has recomputed the states (R2-19's recorded risk).
+
+JS_WHITE_SPACE = ('\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f'
+                  '\u205f\u3000\ufeff')  # what JavaScript's String.prototype.trim removes (measured on node 22)
+SEARCH_FOLDED = '\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
+SEARCH_FOLD_FROM, SEARCH_FOLD_TO = '\u03c2\u0307', '\u03c3'
+SEARCH_MAX_CHARS = 240  # a row's text is at most about 224 characters
+# app.js's own words for the row (KIND_LABELS, INSURANCE_SHOWN, MONTHS' first three letters); tests/test_lists.py holds the
+# rebuilt text to the shipped documentRow's (tests/frontend/row_text.cjs)
+SEARCH_KIND_TEXT = {Revision.UPLOAD: 'Uploaded file', Revision.PASTE: 'Pasted text'}
+SEARCH_INSURANCE_TEXT = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other'}
+SEARCH_MONTHS = 'JanFebMarAprMayJunJulAugSepOctNovDec'
+
+
+def search_words(text) -> str:
+    """The words a search looks for: ``text`` trimmed as the page trims what was typed (JavaScript's trim)."""
+    return text.strip(JS_WHITE_SPACE)
+
+
+def _sql_text(value) -> str:
+    """A constant of this module as an SQL string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def search_row_text_sql() -> str:
+    """The SQL expression of a row's text (documentRow's, as above) over studio_encounter e, its current revision's kind
+    d.kind and its service date d.sd (search_from_sql) - the one expression the search matches and tests/test_lists.py
+    compares with the page's."""
+    rounds, files = models.CodingRound._meta.db_table, models.SourceFile._meta.db_table
+    has_round = f'(SELECT 1 FROM {rounds} r WHERE r.encounter_id = e.id LIMIT 1) IS NOT NULL'
+    has_file = f'(SELECT 1 FROM {files} s WHERE s.encounter_id = e.id LIMIT 1) IS NOT NULL'
+    title = f"COALESCE(NULLIF(btrim(e.title, %(space)s), ''), {_sql_text('Untitled document')})"
+    upload, paste = (_sql_text(SEARCH_KIND_TEXT[kind]) for kind in (Revision.UPLOAD, Revision.PASTE))
+    kind = (f"(CASE d.kind WHEN {_sql_text(Revision.UPLOAD)} THEN {upload} WHEN {_sql_text(Revision.PASTE)} THEN "
+            f"{paste} ELSE (CASE WHEN {has_file} THEN {upload} ELSE {paste} END) END)")
+    shown = ' '.join(f'WHEN {_sql_text(key)} THEN {_sql_text(" · " + label)}'
+                     for key, label in SEARCH_INSURANCE_TEXT.items())
+    insurance = f"(CASE e.user_values ->> 'insurance' {shown} ELSE '' END)"
+    labels = ' '.join(f'WHEN {_sql_text(key)} THEN {_sql_text(label)}' for key, label in state.LABELS.items())
+    label = f'(CASE WHEN {has_round} THEN (CASE e.state {labels} ELSE e.state END) ELSE {_sql_text(STATE_LABELS[EARLIER])} END)'
+    day, month, year = 'substr(d.sd, 9, 2)', 'substr(d.sd, 6, 2)', 'substr(d.sd, 1, 4)'
+    leap = f'mod({year}::int, 4) = 0 AND (mod({year}::int, 100) <> 0 OR mod({year}::int, 400) = 0)'
+    calendar = (f"{day} <= '28' OR ({month} = '02' AND {day} = '29' AND {leap}) OR ({month} <> '02' AND ({day} <= '30' "
+                f"OR {month} IN ('01', '03', '05', '07', '08', '10', '12')))")
+    written = (f"ltrim({day}, '0') || ' ' || substr({_sql_text(SEARCH_MONTHS)}, {month}::int * 3 - 2, 3) || ' ' || "
+               f"ltrim({year}, '0')")
+    date = (f"(CASE WHEN d.sd ~ '^[0-9]{{4}}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' AND d.sd >= '0100' THEN "
+            f"(CASE WHEN {calendar} THEN {written} ELSE 'Not entered' END) ELSE 'Not entered' END)")
+    return f'({title} || {kind} || {insurance} || {label} || {date})'
+
+
+def search_from_sql() -> str:
+    """What the row text is read over: studio_encounter e, with d.kind - its current revision's kind, looked up per
+    document by its primary key (a join let PostgreSQL hash every practice's revisions instead of walking
+    studio_enc_ws_time) - and d.sd, the service date when it is a JSON string (service_date's rule), else NULL."""
+    encounters, revisions = models.Encounter._meta.db_table, Revision._meta.db_table
+    service_date = ("CASE WHEN jsonb_typeof(e.user_values -> 'service_date') = 'string' THEN "
+                    "e.user_values ->> 'service_date' END")
+    kind = f'(SELECT v.kind FROM {revisions} v WHERE v.id = e.current_revision_id)'
+    return f'{encounters} e CROSS JOIN LATERAL (SELECT {kind} AS kind, {service_date} AS sd) d'
+
+
+def _search_sql(fold, later) -> str:
+    """The search's one statement: the practice's live documents, newest first along studio_enc_ws_time, from the
+    cursor's position when ``later``, whose row text holds the words; folded both sides when ``fold``."""
+    hay = f'lower({search_row_text_sql()} COLLATE "pg_c_utf8")'
+    needle = 'lower(CAST(%(words)s AS text) COLLATE "pg_c_utf8")'
+    if fold:
+        hay, needle = (f'translate({side}, %(fold_from)s, %(fold_to)s)' for side in (hay, needle))
+    keyset = (' AND e.created_at <= %(moment)s AND (e.created_at < %(moment)s OR (e.created_at = %(moment)s AND '
+              'e.id < %(key)s))') if later else ''
+    return (f'SELECT e.id, e.title, e.state, e.user_values, e.created_at, d.kind FROM {search_from_sql()} '
+            f'WHERE e.workspace_id = %(workspace)s AND e.destroyed_at IS NULL{keyset} AND strpos({hay}, {needle}) > 0 '
+            f'ORDER BY e.created_at DESC, e.id DESC LIMIT %(limit)s')
+
+
+def search_page(membership, words, before=None) -> dict:
+    """One page of POST /api/encounters/search (see above) of ``membership``'s practice: the documents whose row holds
+    ``words`` (search_words', at most SEARCH_MAX_CHARS, storable - the API reads them first), 50 a page from the cursor
+    ``before`` (None: the first page). {'encounters': rows, 'next': the next page's cursor or None, 'total': None}."""
+    position = paging.parse(before) if before is not None else None
+    if not isinstance(words, str) or not words or len(words) > SEARCH_MAX_CHARS or '\x00' in words or (
+            before is not None and position is None):
+        raise ValueError('search_page is given words and a cursor the API has read.')
+    params = {'workspace': membership.workspace_id, 'words': words, 'space': JS_WHITE_SPACE,
+              'fold_from': SEARCH_FOLD_FROM, 'fold_to': SEARCH_FOLD_TO, 'limit': LIST_PAGE_ROWS + 1}
+    if position is not None:
+        params['moment'], params['key'] = position
+    with connection.cursor() as cursor:
+        cursor.execute(_search_sql(any(ch in words for ch in SEARCH_FOLDED), position is not None), params)
+        found = [dict(zip(LIST_FIELDS, row)) for row in cursor.fetchall()]
+    values = models.Encounter._meta.get_field('user_values')
+    for row in found:  # jsonb comes back as its text, as for any JSONField read: decoded by the field itself
+        if isinstance(row['user_values'], str):
+            row['user_values'] = values.from_db_value(row['user_values'], None, connection)
+    shown = found[:LIST_PAGE_ROWS]
+    more = len(found) > LIST_PAGE_ROWS
+    return {'encounters': list_rows_of(shown),
+            'next': paging.cursor_of(shown[-1]['created_at'], shown[-1]['pk']) if more else None, 'total': None}
 
 
 # --- the document and its view ----------------------------------------------------------------------------------------------

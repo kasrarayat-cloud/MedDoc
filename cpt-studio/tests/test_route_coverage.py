@@ -16,6 +16,7 @@ URLCONFS = ('cptstudio.urls', 'cptstudio.urls_admin')
 # Each view that reads PHI, by its dotted name, and the kind its phi_read mark names.
 PHI_ROUTES = {
     'studio.api.encounters': read_audit.MEMBER_LIST,
+    'studio.api.search_encounters': read_audit.MEMBER_LIST,  # release 2 (R2-20): a page of a search
     'studio.api.encounter_detail': read_audit.MEMBER_DETAIL,
     'studio.api.original': read_audit.MEMBER_DOWNLOAD,  # and member.inline, for view=1
     'studio.api.download_report': read_audit.MEMBER_REPORT_DOWNLOAD,
