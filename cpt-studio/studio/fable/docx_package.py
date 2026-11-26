@@ -675,6 +675,7 @@ _VML_PREFIX = f'{VML_NAMESPACE} '
 _TRIGGER = re.compile(rb'<(?:[^\s<>/:!?"\'=]+:)?(?:fldChar|fldSimple|instrText|delInstrText|object|control|altChunk'
                       rb'|OLEObject|objectEmbed|objectLink|subDoc)[\s/>]')
 _DOCTYPE = re.compile(rb'<!DOCTYPE')
+_REFERENCE_IN_VALUE = re.compile(rb'=\s*(?:"[^"<]*&|\'[^\'<]*&)')  # an attribute value holding a reference
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
 _ATTRIBUTE = re.compile(rb'([^\s=/>"\']+)\s*=\s*("[^"]*"|\'[^\']*\')')  # one attribute of a tag, and its quoted value
@@ -1377,7 +1378,12 @@ def _still_named(data, values):
             if re.search(rb'=\s*(["\'])' + re.escape(form.encode('utf-8')) + rb'\1', data):
                 found.add(value)
     missing, parsed = set(values) - found, set()
-    if missing:
+    # expat reads an attribute otherwise than its bytes only through a reference in its value or by normalizing white
+    # space (an edited part declares no DTD), so the parse - a Python call per element - runs only where either can
+    # be; elsewhere the byte search decides alone, as release 1's did (refutation round 3, rounds[2]: a clean file
+    # release 1 checked in time went past PACKAGE_SECONDS, and every round of it was busy)
+    if missing and (any(space in value for value in missing for space in ' \t\r\n')
+                    or (b'&' in data and _REFERENCE_IN_VALUE.search(data) is not None)):
         parser = expat.ParserCreate(namespace_separator=' ')
         parser.StartElementHandler = lambda name, attrs: parsed.update(missing.intersection(attrs.values()))
         parser.Parse(data, True)

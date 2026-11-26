@@ -1073,6 +1073,45 @@ class CharacterReferenceTests(ReleaseOneCase):
                 with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(data)[0])) as archive:
                     self.assertNotIn('word/media/image1.png', archive.namelist())  # the bad shape: release 1 lost it
 
+    def test_an_id_a_kept_attribute_writes_with_white_space_expat_normalizes_keeps_its_relationship(self):
+        # refutation round 3, rounds[2]: the id 'rId 5', which a kept attribute writes 'rId<TAB>5' - expat reads it
+        # 'rId 5' - is found by the parse the guard runs for an id holding white space
+        removed = p(fc('begin'), instr(INC), '<w:r>' + drawing('rId 5') + '</w:r>', fc('separate'),
+                    t('Kept result words.'), fc('end'))
+        data = package(BEFORE + removed + p('<w:r>' + drawing('rId\t5') + '</w:r>') + AFTER,
+                       (rel('rId 5', 'image', 'media/image1.png'),), (('word/media/image1.png', PNG_BYTES),))
+        out, removed_counts = docx_package._safe_package(data)
+        self.assertEqual(removed_counts['fields'], 1)
+        with zipfile.ZipFile(io.BytesIO(out)) as archive:
+            self.assertIn('Id="rId 5"', archive.read('word/_rels/document.xml.rels').decode('utf-8'))
+            self.assertEqual(archive.read('word/media/image1.png'), PNG_BYTES)
+        with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(data)[0])) as archive:
+            self.assertNotIn('word/media/image1.png', archive.namelist())  # the bad shape: release 1 lost it
+
+    def test_the_parse_runs_only_where_an_attribute_can_spell_an_id_otherwise(self):
+        # refutation round 3, rounds[2]: a clean file holding an object - its removed OLEObject's id named nowhere else,
+        # no reference in any attribute - makes no parse in _still_named (a Python call per element: a large part went
+        # past PACKAGE_SECONDS); a reference or a white-space id does
+        parses, real = [], docx_package._still_named
+
+        def counted(data, values):
+            with mock.patch.object(docx_package.expat, 'ParserCreate', wraps=docx_package.expat.ParserCreate) as create:
+                result = real(data, values)
+            parses.append(create.call_count)
+            return result
+        clean = dict((label, data) for label, data, _ in object_packages())['B01 object, EMF preview, xlsx']
+        with mock.patch.object(docx_package, '_still_named', counted):
+            self.assertEqual(docx_package._safe_package(clean)[1]['objects'], 1)
+        self.assertEqual(parses, [0])
+        for label, data, values, found in (
+                ('no reference, no white space', b'<a x="rId1"/>', {'rId2'}, set()),
+                ('a reference in a value', b'<a x="&#114;Id2"/>', {'rId2'}, {'rId2'}),
+                ('a white-space id', b'<a x="rId\t5"/>', {'rId 5'}, {'rId 5'})):
+            with self.subTest(label), mock.patch.object(docx_package.expat, 'ParserCreate',
+                                                        wraps=docx_package.expat.ParserCreate) as create:
+                self.assertEqual(real(data, values), (found, found))
+                self.assertEqual(create.call_count, 0 if label.startswith('no') else 1)
+
     def test_written_literally_or_not_named_by_what_goes_the_package_is_release_1s(self):
         for label, data in (('literal', self.shape('rIdPic')),
                             ('the removed field names nothing', self.shape('&#114;IdPic', named=False)),
