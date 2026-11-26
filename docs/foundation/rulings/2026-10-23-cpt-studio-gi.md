@@ -4464,3 +4464,15 @@ Decided under D422 ("Stop asking my Yes just do what ever we need it to have to 
 choice. No money, keys, deletion of data or product decision without precedent is involved. The new Word refusals take away
 something release 1 did (convert such a file with the part missing): that is class b, and the owner is told once in plain
 words with the plan, recorded as D428.
+
+### Session record, 2026-11-26 (738699b2) — release 2's new Word refusals told to the owner once (class b) — DECISIONS D428
+
+At 00:01:51Z, in the release-2 plan message, the owner was told, not asked: "Some Word files are now refused, with a sentence
+asking for a PDF: a file with another document inserted in it; a file that links to outside documents; a file with an
+embedded object that has no picture. Release 1 coded these files with that part missing and didn't say so. The cost is that
+such files no longer go through at all. Word files that are already uploaded get the same check if they're coded again."
+Release 1 converted such files with the part missing; release 2 refuses them with a sentence (R2-28, R2-29, D-R2-23, and the
+critics' C8 and C9). That is an accepted-capability loss (class b), recorded as told under D422 ("Stop asking my Yes just do
+what ever we need it to have to do"). The Word corpus run on the image's LibreOffice 7.4 the same night showed one more case
+(a removed field inside another field's instruction with a plain stored result, whose words 7.4 drops with or without
+release 2's change): it takes R2-30's fallback, a refusal, and the owner is told that one sentence before the install.
