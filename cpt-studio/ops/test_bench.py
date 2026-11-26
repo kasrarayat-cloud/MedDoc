@@ -1338,6 +1338,13 @@ class BenchBrowserFlowPinsTests(unittest.TestCase):
         # records[1] (round 2): the held document's detail is held 300 ms right before its kept re-open
         self.assertIn("await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['control-held'].id}$`, ms: 300, "
                       "times: 1 });\n    seen.detail_kept = await openNoWait(s, 'control-held');", closed)
+        # records[3] (round 2): a column or text layer drawn counts in the fail-closed arms, access ended and two tabs
+        self.assertIn("'detail'].filter(k => seen[k].canvasDark || seen[k].textDrawn || "
+                      "(k.startsWith('detail') && seen[k].columnDrawn));", closed)
+        correct = source[source.index('async function flowCorrect('):]
+        self.assertIn('ok: ends.every(m => !ended[m].canvasDark && !ended[m].columnDrawn && !ended[m].textDrawn)',
+                      correct)
+        self.assertIn('ok: !first.canvasDark && !first.columnDrawn && !first.textDrawn, first };', correct)
         # records[2] (round 2): every end of the left-behind flow follows a search typed and cleared
         left = source[source.index('async function flowLeftBehind('):]
         self.assertIn("await s.page.locator('#documentSearch').click();\n"
