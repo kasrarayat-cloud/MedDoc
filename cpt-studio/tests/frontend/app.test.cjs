@@ -5929,7 +5929,8 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
   assert.match(source, /function closeViewer\(\) \{[^}]*stopPdf\(viewer\);\n  viewer\.mode = 'closed';\n  scheduleStandby\(PDF_STANDBY\.next\);\n\}/);
   assert.match(source, /    page\.drawn = key;\n    scheduleStandby\(PDF_STANDBY\.next\);\n/);
   assert.match(source, /window\.addEventListener\('pageshow', event => \{ if \(event\.persisted\) scheduleStandby\(PDF_STANDBY\.next\); \}\);/);
-  assert.match(source, /window\.addEventListener\('pagehide', forgetMemory\);/);
+  // registered unconditionally, at boot's top level (Chromium's V10, ops/test_viewer_speed.cjs, fires it)
+  assert.match(source, /\n  window\.addEventListener\('pagehide', forgetMemory\);\n/);
 });
 
 test('R2 V1: leaving a document while its worker starts never makes the page forget a working library', async t => {

@@ -2,8 +2,10 @@
 /*
  * The viewer's speed (release 2: RELEASE-2-SPEC R2-10 to R2-18), through the shipped page in Chromium, against
  * ops/dev_preview_server.cjs's mock: what a page load and an opening ask the server for, what fades, the worker made ready
- * ahead, the re-open answered 304 and drawn from page memory, the view asked for with the click, and what is left after
- * another tab's sign-out. Five tests; release 1's page fails all five. Skipped where Playwright is not installed
+ * ahead, the re-open answered 304 and drawn from page memory (three times over, and after a re-open left while it was
+ * answered), the view asked for with the click, what is left after another tab's sign-out and after pagehide, and the
+ * lists above 200 documents (an unchanged search never asked again; a failure said under its own list). Eight tests;
+ * release 1's page fails all eight. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -151,7 +153,7 @@ test('V1, V6, V8: a page load asks for no session, fades in once and makes one w
   }
 });
 
-test('V2, V3: an opening asks for the document and its view alone; a re-open is answered 304 with no body and draws the same pixels', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+test('V2, V3: an opening asks for the document and its view alone; a re-open, three times over, is answered 304 with no body and draws the same pixels', { skip: SKIP, timeout: LIMIT_MS }, async () => {
   const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const { page, calls, errors } = await open(context);
@@ -163,16 +165,20 @@ test('V2, V3: an opening asks for the document and its view alone; a re-open is 
     assert.deepEqual(api(), [[`/api/encounters/${READY}`, 200], [viewOf(READY), 200]].sort(), 'the details and the view: two requests');
     assert.equal(calls.find(call => call.url === viewOf(READY)).condition, '', 'nothing held yet: nothing asked of the server');
     const first = await pixels(page);
-    await back(page);
-    calls.length = 0;
-    await openRow(page, READY);
-    await settled(calls);
-    const again = calls.filter(call => call.url === viewOf(READY));
-    assert.equal(again.length, 1, 'the view asked for once: one record');
-    assert.match(again[0].condition, /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/, 'with the tag the page holds');
-    assert.deepEqual([again[0].status, again[0].body, again[0].poll], [304, 0, '1'], 'answered 304, no body, as the page\'s own read');
-    assert.deepEqual(api(), [[`/api/encounters/${READY}`, 200], [viewOf(READY), 304]].sort());
-    assert.equal(await pixels(page), first, 'the same pixels, drawn from page memory');
+    // three times over: the kept copy is never the array the library is given (which it takes away), so each re-open
+    // draws from it again
+    for (let reopen = 1; reopen <= 3; reopen += 1) {
+      await back(page);
+      calls.length = 0;
+      await openRow(page, READY);
+      await settled(calls);
+      const again = calls.filter(call => call.url === viewOf(READY));
+      assert.equal(again.length, 1, `re-open ${reopen}: the view asked for once, one record`);
+      assert.match(again[0].condition, /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/, `re-open ${reopen}: with the tag the page holds`);
+      assert.deepEqual([again[0].status, again[0].body, again[0].poll], [304, 0, '1'], `re-open ${reopen}: answered 304, no body, as the page's own read`);
+      assert.deepEqual(api(), [[`/api/encounters/${READY}`, 200], [viewOf(READY), 304]].sort());
+      assert.equal(await pixels(page), first, `re-open ${reopen}: the same pixels, drawn from page memory`);
+    }
     assert.deepEqual(errors, []);
   } finally {
     await context.close();
@@ -272,6 +278,107 @@ test('V9: another tab\'s sign-out wipes this tab\'s kept copies and ends its wor
     assert.deepEqual(wiped, { copies: 1, zeroed: true, kept: 0, waited: 'a worker', waiting: false, viewer: false }, 'overwritten, dropped, the waiting worker ended');
     assert.deepEqual(await stored(two.page), [0, 0, 0, 0]);
     assert.deepEqual(one.errors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('V10, R2-18: pagehide - the back-forward cache included - overwrites and drops the kept copies and the hints, and ends the waiting worker', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const { page, errors } = await open(context);
+    await listed(page);
+    await openRow(page, READY);
+    assert.equal(await page.evaluate(() => state.keptViews?.size ?? 0), 1, 'a copy kept for a re-open');
+    await page.waitForFunction(() => Boolean(state.pdfStandby?.thread));  // a worker waiting for the next document
+    // Playwright's Chromium runs with --disable-back-forward-cache and the no-store shell is never cached here, so the
+    // event the browser fires as the page goes into the cache is dispatched to the page's own listener, and what is left
+    // is read back in the same task
+    const left = await page.evaluate(() => {
+      const copies = [...state.keptViews.values()].map(item => item.data);
+      const thread = state.pdfStandby.thread;
+      const terminate = thread.terminate.bind(thread);
+      let ended = false;
+      thread.terminate = () => { ended = true; terminate(); };
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      return { copies: copies.length, zeroed: copies.every(copy => copy.every(byte => byte === 0)), kept: state.keptViews.size,
+        hints: state.viewHints.size, waiting: Boolean(state.pdfStandby), ended };
+    });
+    assert.deepEqual(left, { copies: 1, zeroed: true, kept: 0, hints: 0, waiting: false, ended: true },
+      'overwritten, dropped, the hints gone, the waiting worker ended');
+    assert.deepEqual(errors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('V11, R2-15: a re-open left while it is answered - the page aborts its own request - keeps the copy whole; the next re-open is answered 304 from it', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const { page, calls, errors } = await open(context);
+    await listed(page);
+    await openRow(page, READY);
+    assert.equal(await page.evaluate(() => state.keptViews?.size ?? 0), 1, 'a copy kept for a re-open');
+    await back(page);
+    // the re-open's answer is held; the member leaves before it comes
+    let held = null;
+    const pattern = `**${viewOf(READY)}`;
+    await page.route(pattern, route => { held = route; });
+    await page.click(`a.document-row[href="#doc/${READY}"]`);
+    for (let turn = 0; turn < 200 && !held; turn += 1) await page.waitForTimeout(25);
+    assert.ok(held, 'the re-open was asked for');
+    await page.evaluate(() => { location.hash = 'documents'; });
+    await listed(page);
+    await held.abort().catch(() => {});  // the page has aborted it already
+    await page.unroute(pattern);
+    const left = await page.evaluate(view => {
+      const item = state.keptViews.get(view);
+      return [state.keptViews.size, Boolean(item) && item.data.length > 0 && item.data.some(byte => byte !== 0)];
+    }, viewOf(READY));
+    assert.deepEqual(left, [1, true], 'kept, and not overwritten');
+    calls.length = 0;
+    await openRow(page, READY);
+    await settled(calls);
+    const again = calls.filter(call => call.url === viewOf(READY));
+    assert.equal(again.length, 1);
+    assert.deepEqual([/^"[0-9a-f-]{36}"$/.test(again[0].condition), again[0].status, again[0].body], [true, 304, 0], 'asked with its tag, answered 304');
+    assert.deepEqual(errors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('V12, R2-22: above 200 documents a key that leaves the search words unchanged asks nothing and keeps the results loaded; a failure is said under its own list alone', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'X-Preview-Encounters': '400' } });
+  try {
+    // the list's own later pages are refused; the search and its pages are answered
+    await context.route(/\/api\/encounters\?list=documents&before=/, route => route.fulfill({ status: 503, contentType: 'application/json',
+      body: JSON.stringify({ error: 'The service is not available right now.' }) }));
+    const { page, calls, errors } = await open(context);
+    await listed(page);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector('#listMore'))), true, 'the list\'s end, watched');
+    const rows = () => page.evaluate(() => document.querySelectorAll('#documentsTable .document-row').length);
+    const more = () => page.evaluate(() => document.querySelector('#listMore')?.textContent || '');
+    const toEnd = () => page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const searches = () => calls.filter(call => call.url === '/api/encounters/search').length;
+    await toEnd();
+    await page.waitForFunction(() => /could not be loaded/.test(document.querySelector('#listMore')?.textContent || ''));
+    assert.match(await more(), /Documents could not be loaded\. The service is not available right now\./, 'the list\'s failed page, under the list');
+    await page.fill('#documentSearch', 'synthetic');
+    await page.waitForFunction(() => state.list?.found?.query === 'synthetic' && !state.list.searching);
+    assert.doesNotMatch(await more(), /could not be loaded/, 'not under the search\'s answer');
+    for (const expected of [100, 150, 200]) {
+      await toEnd();
+      await page.waitForFunction(count => document.querySelectorAll('#documentsTable .document-row').length === count && !state.list.loading, expected);
+    }
+    const asked = searches();
+    await page.type('#documentSearch', ' ');  // a key that leaves the words unchanged
+    await page.waitForTimeout(1000);
+    assert.deepEqual([searches(), await rows()], [asked, 200], 'nothing asked again; the results loaded stay');
+    await page.fill('#documentSearch', '');
+    await page.waitForFunction(() => state.list && !state.list.found);
+    assert.match(await more(), /Documents could not be loaded\. The service is not available right now\./, 'cleared: the list\'s own failure, said again');
+    assert.deepEqual(errors.filter(error => !/Failed to load resource/.test(error)), [], 'no error in the page but the refused pages\' own');
   } finally {
     await context.close();
   }
