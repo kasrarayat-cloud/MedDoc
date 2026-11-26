@@ -2221,6 +2221,11 @@ async function loadMore(list, why) {
     hintRows(page.rows);
     if (shown) appendRows(list, page.rows);
     if (source.next && source.auto >= AUTO_PAGES) source.button = true;
+    // the list's last page, a search answer shown: the whole list is on the page, and searched there (C2)
+    if (source === list.browse && !source.next && list.found) {
+      list.found = null;
+      $('#documentsTable').innerHTML = listBody(list.name, list.browse.rows);
+    }
   } else {
     source.problem = `Documents could not be loaded. ${failure}`;  // said while its own list is shown
     if (why !== 'button') Object.assign(source, { failed: true, button: true });
@@ -2346,6 +2351,7 @@ async function searchDocuments(list) {
     else filterRows();
     return;
   }
+  if (!list.browse.next) return filterRows();  // the list's last page came meanwhile: searched in the page (C2)
   if (page) {
     list.refused = '';
     list.found = { query, words, rows: page.rows, next: page.next, auto: 0, failed: false, problem: '',

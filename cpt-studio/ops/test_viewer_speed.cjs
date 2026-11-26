@@ -6,7 +6,8 @@
  * answered), the view asked for with the click, what is left after another tab's sign-out, after a session ended or a
  * password to change met first at the framed viewer's load (refused with the site's own headers) and after pagehide (on
  * a page that saves data too), and the lists above 200 documents (an unchanged search never asked again; a failure said
- * under its own list). Ten tests; release 1's page fails all ten. Skipped where Playwright is not installed
+ * under its own list; the list's last page, come under a search answer, searched in the page). Eleven tests; release 1's
+ * page fails all eleven. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -493,6 +494,46 @@ test('V12, R2-22: above 200 documents a key that leaves the search words unchang
     await page.waitForFunction(() => state.list && !state.list.found);
     assert.match(await more(), /Documents could not be loaded\. The service is not available right now\./, 'cleared: the list\'s own failure, said again');
     assert.deepEqual(errors.filter(error => !/Failed to load resource/.test(error)), [], 'no error in the page but the refused pages\' own');
+  } finally {
+    await context.close();
+  }
+});
+
+test('V12b, R2-22: above 200 documents, the list\'s last page that comes while a search answer is shown puts the whole list on the page: narrower words ask nothing, and their match is shown', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'X-Preview-Encounters': '230' } });
+  try {
+    const { page, calls, errors } = await open(context);
+    await listed(page);
+    const toEnd = () => page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    for (const expected of [100, 150, 200]) {
+      await toEnd();
+      await page.waitForFunction(count => document.querySelectorAll('#documentsTable .document-row').length === count && !state.list.loading, expected);
+    }
+    // the list's last page, asked for by the button, held while a search answer is drawn
+    let held = null;
+    const pattern = /\/api\/encounters\?list=documents&before=/;
+    await page.route(pattern, route => { held = route; });
+    await page.click('[data-action="more-documents"]');
+    for (let turn = 0; turn < 200 && !held; turn += 1) await page.waitForTimeout(25);
+    assert.ok(held, 'the list\'s last page, asked for');
+    await page.fill('#documentSearch', 'synthetic');
+    await page.waitForFunction(() => state.list?.found?.query === 'synthetic' && !state.list.searching);
+    await held.continue();
+    await page.unroute(pattern);
+    await page.waitForFunction(() => !state.list.loading && state.list.browse.next === null);
+    // narrower words: one document of the last page, named by its title (each ends in its own number)
+    const title = await page.evaluate(() => state.list.browse.rows.slice(200).find(row => /synthetic/i.test(row.title)).title);
+    const searches = () => calls.filter(call => call.url === '/api/encounters/search').length;
+    const asked = searches();
+    await page.fill('#documentSearch', title);
+    await page.waitForTimeout(1000);
+    const left = await page.evaluate(words => ({
+      rows: document.querySelectorAll('#documentsTable .document-row').length,
+      shown: [...document.querySelectorAll('#documentsTable .document-row')].filter(row => !row.hidden).map(row => row.textContent.toLowerCase().includes(words.toLowerCase())),
+      said: document.querySelector('#searchEmpty')?.textContent || null, found: Boolean(state.list.found) }), title);
+    assert.deepEqual([searches() - asked, left.found, left.rows, left.shown, left.said], [0, false, 230, [true], null],
+      'the whole list on the page: nothing asked, its match shown, never "No documents match your search."');
+    assert.deepEqual(errors, []);
   } finally {
     await context.close();
   }
