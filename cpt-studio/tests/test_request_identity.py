@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 from unittest import mock
 
@@ -166,15 +167,36 @@ PDF = synthetic_pdf()
 # The fixture's own identity: a change to synthetic_pdf fails here, before it can read as a changed request.
 PDF_SHA256 = '094d41072aae677ca5c1c5cf2fa57a865c43fdb0350364105f063f9ddc790d23'
 
-# label -> (the upload, or None for the paste) as the member made it
+# Refutation round 1, item A: the normalisation the document step gives a text before the coder reads it
+# (studio.fable.document, which lane D's Word changes edit beside: CRLF and CR line ends become LF, a leading
+# byte-order mark is dropped, Unicode becomes NFC), reached by text files and a paste.
+LINES = ('SYNTHETIC NOTE', 'Procedure: colonoscopy to the cecum.',
+         'Findings: one 6 mm polyp in the sigmoid colon, removed by cold snare.')
+ACCENTED = 'SYNTHETIC NOTE: a caf\u00e9-au-lait macule on the flank; one polyp removed by cold snare.'
+
+
+def text_file(text: str, filename: str) -> dict:
+    return {'data': text.encode('utf-8'), 'filename': filename, 'media_type': 'text/plain'}
+
+
+# label -> the upload as the member made it, or {'paste': its text}. Item A's equal pins are what the normalisation
+# does: the CRLF and CR files equal the LF one, the file with a BOM equals 'txt', the NFD file equals the NFC one,
+# and the CRLF paste equals 'paste'.
 CASES = {
     'txt': {'data': TEXT_FILE, 'filename': 'n.txt', 'media_type': 'text/plain'},
-    'paste': None,
+    'paste': {'paste': PASTED},
     'pdf': {'data': PDF, 'filename': 'a.pdf', 'media_type': 'application/pdf'},
+    'txt-lf': text_file('\n'.join(LINES) + '\n', 'lines.txt'),
+    'txt-crlf': text_file('\r\n'.join(LINES) + '\r\n', 'lines.txt'),
+    'txt-cr': text_file('\r'.join(LINES) + '\r', 'lines.txt'),
+    'txt-bom': {'data': b'\xef\xbb\xbf' + TEXT_FILE, 'filename': 'n.txt', 'media_type': 'text/plain'},
+    'txt-nfc': text_file(unicodedata.normalize('NFC', ACCENTED), 'accent.txt'),
+    'txt-nfd': text_file(unicodedata.normalize('NFD', ACCENTED), 'accent.txt'),
+    'paste-crlf': {'paste': PASTED.replace('\n', '\r\n')},
 }
 # label -> each request the coder was sent, in order: (role, request.sha256, sha256 of the exact parameters, attempts).
-# Release 1's, measured on tree bc0729bb9596 (lane F's PROOFS.md); a text request carries no base64, so its two hashes
-# are equal.
+# Release 1's, measured on tree bc0729bb9596 (lane F's PROOFS.md; item A's cases on 93c33dc1d's cpt-studio, exported
+# read-only, in refutation round 1); a text request carries no base64, so its two hashes are equal.
 RELEASE_1_REQUESTS = {
     'txt': (
         ('reader', '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9',
@@ -193,6 +215,48 @@ RELEASE_1_REQUESTS = {
          'dcc365c8433ca018705239a1e045c88d097b41aa41248ea49a859f68078bc005', 2),
         ('checker', '10d38279f1abe56181fb27f60e5d60a25b2dac9092020f956ac5498c41854445',
          '7b9733e964e32fa4f21f534515a93123abe1655212ae46081e6b6e201f2ed43d', 2),
+    ),
+    'txt-lf': (
+        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
+         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
+        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
+         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+    ),
+    'txt-crlf': (
+        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
+         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
+        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
+         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+    ),
+    'txt-cr': (
+        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
+         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
+        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
+         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+    ),
+    'txt-bom': (
+        ('reader', '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9',
+         '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9', 2),
+        ('checker', '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906',
+         '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906', 2),
+    ),
+    'txt-nfc': (
+        ('reader', '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f',
+         '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f', 2),
+        ('checker', 'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55',
+         'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55', 2),
+    ),
+    'txt-nfd': (
+        ('reader', '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f',
+         '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f', 2),
+        ('checker', 'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55',
+         'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55', 2),
+    ),
+    'paste-crlf': (
+        ('reader', '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b',
+         '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b', 2),
+        ('checker', '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695',
+         '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695', 2),
     ),
 }
 
@@ -220,8 +284,8 @@ def requests_sent(ws, user, case) -> tuple:
     request the coder was sent, in order, as (role, request.sha256, sha256 of the exact parameters, attempts), and the
     round's final state."""
     enc = f.encounter(ws, user, service_date='2026-11-02', insurance='medicare', title='Request identity case')
-    upload = CASES[case]
-    revision = f.upload(enc, user, **upload) if upload else f.paste(enc, user, text=PASTED)
+    made = CASES[case]
+    revision = f.paste(enc, user, text=made['paste']) if 'paste' in made else f.upload(enc, user, **made)
     jobs.start_round(enc, revision, models.CodingRound.UPLOAD, user)
     fake = f.FakeCoder(reader=f.succeeded(r.reader_message(RELEASE_1_READER)),
                        checker=f.succeeded(r.checker_message(RELEASE_1_CHECKER)))
