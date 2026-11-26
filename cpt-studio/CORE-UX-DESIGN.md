@@ -466,9 +466,12 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   never a Blob, the Cache API, IndexedDB or Web Storage. A re-open sends the tag (`If-None-Match`) and draws the kept
   bytes only when the server answers 304, which it records as it records any view; any other answer, or none, drops the
   copy and overwrites it.
-- **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401, another tab's sign-out, a forced
-  password change, a document refused with 404, and the page left (`pagehide`, the back-forward cache included) each
-  drop the view asked for with the click, overwrite and drop the kept copies, and end the worker made ready ahead.
+- **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
+  the page meets it (the view's own download and the framed viewer's load included), another tab's sign-out, a
+  document refused with 404 (on its first read, a poll or a refresh, the page out of date or not), and the page left
+  (`pagehide`, the back-forward cache included) each drop the view asked for with the click, overwrite and drop the
+  kept copies, and end the worker made ready ahead. A first read refused because the page is out of date drops the
+  click's view too.
 
 ## 9. Install and verify
 

@@ -2394,7 +2394,13 @@ async function loadDocument(id, serial, silent, poll = false) {
   try {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
-    if (serial !== state.routeSerial || state.outdated || older()) return;
+    if (serial !== state.routeSerial || older()) return;
+    // a document refused (another practice's, or access ended) is an end (R2-18): on its first read, a poll or a refresh
+    if (error.status === 404) forgetMemory();
+    if (state.outdated) {
+      dropEarly();  // R2-16: a first read refused as outdated drops the click's early view too
+      return;
+    }
     if (silent && state.doc) {
       if (shouldPoll(state.doc)) {
         state.poll.errors += 1;
@@ -2406,8 +2412,6 @@ async function loadDocument(id, serial, silent, poll = false) {
       return;
     }
     dropEarly();
-    // a document refused (another practice's, or access ended) is an end (R2-18)
-    if (error.status === 404) forgetMemory();
     window.scrollTo({ top: 0, behavior: 'instant' });
     $('#main').innerHTML = error.status === 404
       ? messageView('This document is not available.', 'It does not exist, or it is not in your workspace.')
@@ -2919,6 +2923,8 @@ async function downloadDocument(view, signal, moved) {
     return { data: held.data.slice(0), tag: held.tag, held: true };
   }
   dropView(view, held);
+  // a 401 (the session ended) or a 403 (its password must change) is an end (R2-18)
+  if (response.status === 401 || response.status === 403) forgetMemory();
   if (!response.ok) throw new Error(`The document's download was answered ${response.status}.`);
   const tag = VIEW_TAG.exec(response.headers?.get?.('ETag') || '')?.[1] || '';
   const chunks = [];
@@ -3859,6 +3865,7 @@ function noteRefusedFrame(frame) {
     status = undefined;
   }
   if (!Number.isInteger(status) || status === 0 || status === 200) return;
+  if (status === 401 || status === 403) forgetMemory();  // an end (R2-18), as at the viewer's own download
   frame.dataset.refused = String(status);
   setMarkNote(status === 429 ? FRAME_LIMIT_TEXT : FRAME_REFUSED_TEXT, true);
 }

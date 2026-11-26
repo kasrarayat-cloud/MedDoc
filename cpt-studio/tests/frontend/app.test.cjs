@@ -5600,6 +5600,19 @@ test('The framed viewer of a PDF says when the server refused the document it wa
     marks.push(note.textContent);
     assert.deepEqual(marks, [app.FRAME_LIMIT_TEXT, app.FRAME_REFUSED_TEXT, ''], 'an answer of 200 says nothing');
     assert.equal(note.classList.contains('is-missing'), true, 'said as the viewer says what it could not do');
+    // R2-18: a 401 (the session ended) or a 403 (its password must change) at the frame's load is an end - the kept
+    // copies overwritten and dropped, the hints gone; any other refusal keeps them
+    for (const status of [401, 403, 429, 503]) {
+      const data = Uint8Array.from([37, 80]);
+      app.keepView(OTHER_VIEW, 'abcdef00-0000-4000-8000-000000000000', data);
+      app.state.viewHints = new Map([[OTHER_ID, true]]);
+      note.textContent = '';
+      app.noteRefusedFrame(framed(status));
+      const end = status === 401 || status === 403;
+      assert.deepEqual([note.textContent, app.state.keptViews.size, [...data], app.state.viewHints.size],
+        [status === 429 ? app.FRAME_LIMIT_TEXT : app.FRAME_REFUSED_TEXT, end ? 0 : 1, end ? [0, 0] : [37, 80], end ? 0 : 1], `the frame answered ${status}`);
+      app.forgetMemory();
+    }
   } finally {
     global.document = saved;
   }
@@ -6066,6 +6079,9 @@ test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text rea
 // (R2-15, R2-16, R2-18).
 
 const VIEW_TAG_A = '"0f0e0d0c-0b0a-4908-8706-050403020100"';
+// another document, whose copy and hint only an end wipes
+const OTHER_ID = 'fe000000-0000-4000-8000-0000000000aa';  // no fixture's
+const OTHER_VIEW = `/api/encounters/${OTHER_ID}/original?view=1`;
 const VIEW_TAG_B = '"1f0e0d0c-0b0a-4908-8706-050403020100"';
 // A view's answer with its headers: `tag` as the ETag the server sent, if any.
 const taggedView = (status, chunks, tag) => Promise.resolve({ ...viewResponse({ status, chunks }), headers: { get: name => (name === 'ETag' && tag ? tag : null) } });
@@ -6108,13 +6124,21 @@ test('R2 V3: a re-open asks with the tag it holds and draws the kept bytes on a 
         ['429', () => taggedView(429, [], '')], ['503', () => taggedView(503, [], '')], ['offline', () => Promise.reject(new TypeError('Failed to fetch'))]]) {
         const data = Uint8Array.from([37, 80]);
         app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);
+        // another document's copy and a hint: wiped at an end alone - a 401, or a forced password change's 403 (R2-18)
+        const other = Uint8Array.from([37, 80, 68]);
+        app.keepView(OTHER_VIEW, 'abcdef01-0000-4000-8000-000000000000', other);
+        app.state.viewHints = new Map([[OTHER_ID, true]]);
         answer = refuse;
         const viewer = await mount(word, find, made => made.mode === 'frame');
         assert.equal(viewer.fallback, 'download', what);
-        assert.equal(app.state.keptViews.size, 0, `${what}: the copy is dropped`);
+        assert.equal(app.state.keptViews.has(view), false, `${what}: the copy is dropped`);
         assert.deepEqual([...data], [0, 0], `${what}: and overwritten`);
+        const end = what === '401' || what === '403';
+        assert.deepEqual([app.state.keptViews.size, [...other], app.state.viewHints.size], end ? [0, [0, 0, 0], 0] : [1, [37, 80, 68], 1],
+          `${what}: ${end ? 'an end: the other copies overwritten and dropped, the hints gone' : 'no end: the other copies and the hints stay'}`);
         assert.equal(opened.length, 3, `${what}: nothing drawn`);
         app.closeViewer();
+        app.forgetMemory();
         t.mock.timers.tick(app.PDF_VIEW.limitMs);  // that wait gives up, concluding nothing about the library
         await settle(() => false);
         assert.ok(app.state.pdfLibrary, `${what}: the library is kept`);
@@ -6308,8 +6332,9 @@ test('R2 V4: the view is asked for with the click only once the library has star
     assert.equal(app.state.early, null);
     app.forgetMemory();
   }, (url, init) => (url.endsWith('?view=1') ? new Promise(() => {}) : Promise.resolve(response({ status: 404, body: { error: 'Not found.' } }))));
-  // a first read that fails drops it; a document that is not a PDF drops it
+  // a first read that fails drops it (refused as out of date too); a document that is not a PDF drops it
   for (const [what, detail] of [['a first read that fails', () => Promise.resolve(response({ status: 503, body: { error: 'Unavailable.' } }))],
+    ['a first read refused as out of date', () => Promise.resolve(response({ status: 409, body: { error_code: 'client_outdated', error: 'Reload.' } }))],
     ['a text document', () => Promise.resolve(response({ status: 200, body: fixture('encounter-awaiting-answer.json') }))]]) {
     await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
       const doc = what === 'a text document' ? fixture('encounter-awaiting-answer.json') : fixture('encounter-ready.json');
@@ -6322,8 +6347,29 @@ test('R2 V4: the view is asked for with the click only once the library has star
       assert.equal(signal.aborted, true, what);
       assert.equal(app.state.early, null, what);
       app.forgetMemory();
+      app.state.outdated = false;
     }, (url, init) => (url.endsWith('?view=1') ? new Promise(() => {}) : detail(url, init)));
   }
+  // a superseded route's first read, refused as out of date after the next route's view was asked for, leaves that view
+  let release = null;
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+    const first = fixture('encounter-ready.json');
+    const next = fixture('encounter-same-code.json');
+    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true,
+      viewHints: new Map([[first.id, true], [next.id, true]]) });
+    global.location.hash = `#doc/${first.id}`;
+    app.route();
+    global.location.hash = `#doc/${next.id}`;
+    app.route();
+    const view = fetches.find(item => item.url === `/api/encounters/${next.id}/original?view=1`);
+    await settle(() => release !== null);
+    release(response({ status: 409, body: { error_code: 'client_outdated', error: 'Reload.' } }));
+    await settle(() => false);
+    assert.deepEqual([view.init.signal.aborted, app.state.early?.view], [false, `/api/encounters/${next.id}/original?view=1`], 'the next route\'s view stands');
+    app.forgetMemory();
+    app.state.outdated = false;
+  }, url => (url.endsWith('?view=1') ? new Promise(() => {}) : url.endsWith('f5000000-0000-4000-8000-000000000001')
+    ? new Promise(resolve => { release = resolve; }) : new Promise(() => {})));
 });
 
 test('R2-18: a document the server refuses (404: another practice\'s, or access ended) wipes page memory - the copies, the hints and the worker made ready ahead', async () => {
@@ -6339,6 +6385,29 @@ test('R2-18: a document the server refuses (404: another practice\'s, or access 
     assert.match(element('#main').innerHTML, /This document is not available\./);
     assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated], [0, [0, 0], 0, null, true]);
   });
+  // ... and a 404 on a poll of the open document, on a refresh of it, or on a first read of a page out of date
+  const busy = fixture('encounter-reading.json');
+  const done = fixture('encounter-ready.json');
+  assert.deepEqual([app.shouldPoll(busy), app.shouldPoll(done)], [true, false]);
+  for (const [what, doc, run] of [['a poll', busy, () => app.loadDocument(busy.id, 21, true, true)], ['a refresh', done, () => app.loadDocument(done.id, 21, true)],
+    ['a first read, the page out of date', done, () => app.loadDocument(done.id, 21, false)]]) {
+    await withPage({ answers: [{ match: (method, url) => url === `/api/encounters/${doc.id}`, status: 404, body: { error: 'Not found.' } }] }, async () => {
+      const data = Uint8Array.from([37, 80]);
+      app.keepView(`/api/encounters/${doc.id}/original?view=1`, 'abcdef00-0000-4000-8000-000000000000', data);
+      app.state.viewHints = new Map([[doc.id, true]]);
+      const thread = { terminated: false, terminate() { this.terminated = true; } };
+      app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+      const outdated = what.endsWith('out of date');
+      Object.assign(app.state, { route: { name: 'doc', id: doc.id }, routeSerial: 21, doc: outdated ? null : doc, outdated });
+      try {
+        await run();
+        assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated], [0, [0, 0], 0, null, true], what);
+      } finally {
+        clearTimeout(app.state.poll.timer);
+        app.state.poll.errors = 0;
+      }
+    });
+  }
 });
 
 test('R2-15: the dev preview tags a PDF view as the server does - a quoted UUID bound to the document, never the file\'s hash - and reads If-None-Match as studio.api does', () => {
