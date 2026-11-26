@@ -757,6 +757,25 @@ class AcceptanceTableTests(unittest.TestCase):
         self.assertGreaterEqual(len(produced), 30)  # a pattern that matched nothing would pass vacuously
         self.assertEqual(produced - judged, set())
 
+    def test_every_no_worse_than_a_gate_carries_the_floor_of_its_recorded_spread(self):
+        """C5: every "no worse than A" limit is at least A x (1 + 2 x its metric's A/A spread), written here from lane
+        M's recorded A/A before any B was measured and never moved: each floor is exactly its recorded spread's."""
+        spread = self.table.get('spread') or {}
+        recorded = spread.get('metrics') or {}
+        self.assertTrue(recorded and spread.get('source'), 'acceptance.json carries no recorded A/A spread')
+        floored = 0
+        for row in self.table['rows']:
+            for gate in row.get('gate', []):
+                if JUDGE.needs_floor(gate):
+                    self.assertIn(row['metric'], recorded, row['id'])
+                    self.assertEqual(gate.get('spread'), recorded[row['metric']], row['id'])
+                    self.assertEqual(gate.get('floor_factor'), JUDGE.floor_factor(recorded[row['metric']]), row['id'])
+                    floored += 1
+            if row.get('gain'):
+                self.assertIsNotNone(row.get('spread'), row['id'])
+                self.assertEqual(row['spread'], recorded.get(row['metric']), row['id'])
+        self.assertGreaterEqual(floored, 15)  # section 8's no-worse-than-A gates: none may lose its floor unseen
+
 
 class BenchNeverShipsTests(unittest.TestCase):
     def test_the_image_build_leaves_ops_out(self):
