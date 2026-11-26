@@ -4476,3 +4476,184 @@ critics' C8 and C9). That is an accepted-capability loss (class b), recorded as 
 what ever we need it to have to do"). The Word corpus run on the image's LibreOffice 7.4 the same night showed one more case
 (a removed field inside another field's instruction with a plain stored result, whose words 7.4 drops with or without
 release 2's change): it takes R2-30's fallback, a refusal, and the owner is told that one sentence before the install.
+
+### Owner input, 2026-11-26 (738699b2) — a doctor's test, the auditor-agent idea, CommandHealth; a report before any new task — DECISIONS D429
+
+D429 — 2026-11-26 ~03:50Z — OWNER INPUT: a doctor's test, the auditor-agent idea, CommandHealth; a report before any new task (session 738699b2), verbatim
+
+> 2 task actully one lemme telling you one fo the doctors check my website and he said its accuracy 100 uplaod multiple files pdf of his clients i chenged the to syntetchi he alrtead had cpt billed numbers and bingo my web site briung as same as the bill one so he told me its 100 accuracy and eprfect in one of the uploads file name is [a file name, withheld from the tracked copy] asked 2 question one for date which i  intentially put the wrong date for testing and for first question asking doctor liek it because it ask a perfect good question he said it mostly like because we dont have ICD-10 because it related to ICD-10 and also he gave me a tip like doctors never ever liek to login and doing thier own pdf uplaod and check so we have to put an auditor agent to which ahs pwoer to search even in pdf or on internet to find a anwser for question which is possibly agent can find even with out the doctor for specefic question which needs dotor  we still have that ioption to ask a right one do you agree with me? i want you to report me what do you sugesst and what do you think before start any new task also they like to connect to their command helath which when doctor finish dictation on that site it goes autoamticlly into his login credential in our website and all the process should gone autoamticcly the doctors liek eveyrhing beinmg automatic so before anythign run any tas run i need you to give me a report
+  - Read as: no NEW task starts until he has the report and answers it; release 2 (already running) continues. Product
+    decisions (class a) are his: the auditor agent, ICD-10, the CommandHealth connection. The session did not open the
+    uploaded documents (live data; "[a file name, withheld from the tracked copy]" is named only as he named it).
+  - Flag for the report: documents made from a doctor's real charts may still hold identifiers (dates, record numbers);
+    no Anthropic BAA is signed yet, release 1b's security items are not done, and the site is set to synthetic-only.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5; one uploaded file name is withheld from this tracked copy.)
+
+### Owner decision, 2026-11-26 (738699b2) — reuse ICD-10 and add an auto-answer agent (release 3) — DECISIONS D430
+
+D430 — 2026-11-26 ~04:30Z — OWNER DECISION: reuse ICD-10 and add an auto-answer agent (session 738699b2), verbatim
+
+> So we reuse the ICD 10 and added a auto anwser agent right?
+  - In reply to the session's summary (QuillMD, the other product in the repository, already holds the official ICD-10-CM
+    code lists for 2026 and 2027; CPT Studio's AI has a reader and a checker, and every question goes to the doctor).
+    Read as a product decision (class a): CPT Studio gains (1) ICD-10 diagnosis codes, reusing QuillMD's code lists, and
+    (2) an auto-answer agent that answers its own questions from the documents with a quote before asking the doctor.
+  - Applied: the design starts now (workflow, documents and code reading only, synthetic documents, no provider call, no
+    live data). Building starts after release 2 is installed, because both change the AI coder's request, which release
+    2 freezes (D358's pins, R2-3); the change is deliberate under this decision and gets new pins. Paid tests run one pair
+    at a time with his go (2026-11-15 rule). Both add AI cost per document; the design measures it.
+  - The guardrails the session stated and keeps: an automatic answer only with a quote and its place; never a guess; the
+    doctor sees and can change every automatic answer; internet only for coding rules, never with patient details.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (738699b2) — a complete, organised, accurate Spending tab in the console — DECISIONS D431
+
+D431 — 2026-11-26 ~04:50Z — OWNER DIRECTION: a complete, organised, accurate Spending tab in the console (session 738699b2), verbatim
+
+> perfect that good also in admin dashboard usage i want you to add proper plugin and redesign or add spending tab its tonsimple and sassy like i want something better because usage is most importsnt part and it shouldnt like fail or show false informstion like i saw last date was on 2026/11/26 which is now 2026/11/25 make sure we have complete organazided spending tab llease its importsnt
+  - The date he saw: the console's Spending page sums runs by the UTC day they were sent (studio/console.py spending():
+    "summed by day (UTC ...)"; ops_spending.html: "by the day a run was sent (UTC)"). Runs sent after 16:00 Pacific on
+    2026-11-25 fall on the UTC day 2026-11-26. The figure was not false, but the page spoke in a time zone he does not
+    use: read as a defect to fix (dates and times in his time zone, labelled).
+  - Applied under D422: the session decides the design (his time zone, America/Los_Angeles, labelled; charts from a
+    library served from our own static files, never a CDN, within the console's CSP; every total cross-checked against
+    every other view; estimates and unknown costs shown as such, never as exact or zero). Design now (workflow),
+    built in its own lane beside release 2; shipped with release 2 if ready at the rehearsal, otherwise as a small
+    release right after. Reconciling with Anthropic's own billing would need an Anthropic admin key (class d: his).
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner input, 2026-11-26 (738699b2) — a flat $7 per patient note; lower the AI cost, keep the quality — DECISIONS D432
+
+D432 — 2026-11-26 ~05:20Z — OWNER INPUT: a flat $7 per patient note; lower the AI cost, keep the quality (session 738699b2), verbatim
+
+> Like we know now at least we have morethan 90% accuracy i believ its 100 but meh lets say 90% cost is not high but i belive we can lower the cost and keep the quality so i propbably goign to flat the price on 7$ per each Patitn note and i want you to give me a idea e good one to reduce the cost but keep the quality
+  - Facts used for the answer: the audit's measured AI cost per document is $2.63 mean ($1.73-$4.78), 95% of it output
+    tokens (thinking included) at effort "max" on claude-fable-5-2 ($8 in / $40 out per million); 4 calls per document
+    (2 free token counts, 2 paid passes: reader and checker); no prompt caching (studio/fable/client.py sends none).
+    Anthropic's guidance for this model (claude-api skill, Thinking & Effort): start at "high"; gains above it are uneven;
+    keep "max" for measuring the ceiling. Message Batches: 50% off every token; server-side fallbacks are rejected there.
+  - Session's recommendation (no change made; release 2 freezes the coder's request): run both passes at "high" and
+    re-run at "max" only the documents where the checker disputes the reader; Batches for documents nobody is waiting
+    on (the CommandHealth flow, overnight); caching the document for the checker is a small extra. Proved first on the
+    synthetic test set with paid tests, one pair at a time, with his go (money: class d).
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner approval, 2026-11-26 (738699b2) — a paid test of five files; change the setting if the quality holds — DECISIONS D433
+
+D433 — 2026-11-26 ~05:30Z — OWNER APPROVAL: a paid test of five files; change the setting if the quality holds (session 738699b2), verbatim
+
+> i approve do it but you dont have to do run full like just test 5 files as long as it keep the quality we cang change it and i give you permission for that
+  - In reply to D432's recommendation (both passes at effort "high", re-run at "max" only where the checker disputes the
+    reader; Batches for documents nobody waits on) and its question (the first paid pair about $3-5; 10-20 notes about
+    $30-60). Read as: money approved (class d) for a paid test on five synthetic files, current setting against the
+    proposed one; and authority to change the production setting if the quality holds (no code coded worse than today
+    on those files). Not read as approval to test on real documents, or to skip release 2's gates for the change.
+  - Applied: the test runs on synthetic documents with known codes, one document at a time (his 2026-11-15 rule), by
+    the lead (provider calls are the lead's; credentials by path only). The production change follows its own gates.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Session record, 2026-11-26 (738699b2) — the effort test's result, and the coding effort changed to "high" under D433 — DECISIONS D434
+
+D434 — 2026-11-26 ~06:40Z — CPT Studio: the effort test's result, and the coding effort changed to "high" (session 738699b2, under D433)
+
+  - The paid test D433 approved ran 04:49-06:3xZ on a throwaway container of the live image (sha256:4c81cc..., revision
+    816045c72644) with its own empty database, the five synthetic GI documents gi-01, gi-03, gi-04, gi-07 and gi-10
+    (ops/verification), each coded once at effort "max" and once at "high", one at a time. Results:
+    /home/claude/cpt-cost-20261126/results-20261126T044952Z.jsonl (10 lines); comparison by harness/compare.py.
+  - Same codes, units and modifiers at "high" as at "max" on all five; no must-not-code coded ready in either; the same
+    questions on gi-07 (the note missing facts); both match the author's expected codes except gi-07's two
+    needs_answer codes, identical in both arms. Differences: close calls listed as not supported (informational), and
+    one checker review at "max" on gi-04 (43239 needs_review; "high" agreed; the author expects 43239).
+  - Cost: "max" $12.05 ($2.41 a document), "high" $1.96 ($0.39 a document): 83.8% less. Time: "max" 2,826 s (9.4 min a
+    document), "high" 384 s (77 s a document): 86.4% less. Spent in all: $14.01.
+  - Decided under D433 ("as long as it keep the quality we cang change it and i give you permission for that"): the
+    coding effort becomes "high" (ops/install.py CODING_EFFORT and settings.CODING_EFFORT), as release 2's last item
+    (R2-33), after every lane merges, with R2-3's pins re-measured on purpose at "high" and the change in release 2's
+    declaration. The re-run at "max" where the checker disputes (D432's idea) is not built now: no dispute occurred at
+    "high" in this test; it is kept for release 3 with its own test. Batches (50% off) stay for the CommandHealth flow.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner answers, 2026-11-26 (738699b2) — release 3's four questions — DECISIONS D435
+
+D435 — 2026-11-26 ~07:55Z — OWNER ANSWERS: release 3's four questions (session 738699b2), as selected
+
+  - Asked in one batch (AskUserQuestion), with release 3's design summary; his choices, verbatim as selected:
+    1. Test budget: "Up to $100 (Recommended)" - release 3's paid tests on synthetic notes, one pair at a time, each
+       pair's cost reported to him; a ceiling of $100 (expected about $25-40 at effort "high").
+    2. Answer key: "No, AI-made answers" - no person codes the 20 synthetic GI notes; the answer key is made by AI agents
+       (blind to the builders, sealed), and the accuracy proof is stated as the weaker kind (the AI checks itself).
+    3. Who answers: "Keep today's rule (Recommended)" - owners and reviewers may answer the coder's questions; every
+       answer records who gave it.
+    4. ICD-10 check: "Yes, check and show (Recommended)" - each ICD-10-CM code the AI writes is checked against the official
+       list for the date of service, its validity shown to the doctor and given to the AI's second check; it never changes
+       a code by itself. Read as his own exception to D358's "vocabulary check" for this identity fact only.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (799ffbc5) — release 3's paid tests get $15-20, not $100; continue every job after the host restart — DECISIONS D436
+
+D436 — 2026-11-26 06:53:44Z — OWNER DIRECTION: release 3's paid tests get $15-20, not $100; continue every job after the host restart (session 799ffbc5), verbatim
+
+> continue all the jobs and also for test audit agent icd-10 we belive put up too $100 but i assume as long as we care the question ehich ai can handled is enough i mesnt like $100 way to much big for testing for this side like $15 or $20 is enough as long as it succefully audit it and handle it other jobs just continue all of them
+  - Read as: (1) D435's first answer ("Up to $100") is replaced. Release 3's paid tests (ICD-10 and the auto-answer
+    agent) get a hard ceiling of $20, aiming at about $15. The program covers every kind of question the auto-answer
+    agent can answer and every kind it must not answer, at least once each, instead of a large sample; one pair at a
+    time, each pair's cost and the running total reported to him; stop as soon as it works (2026-11-15 rule). A pair
+    that would take the total past $20 is not sent: he is told instead. (2) Every job that was running when the host
+    went down continues.
+  - The host went down at 06:17Z and booted at 06:47Z (`last -x reboot`, `who -b`). Every agent, workflow and
+    background job of session 738699b2 ended then; files and commits survived, /tmp did not. Live CPT Studio
+    (816045c72644) and the rebuild answered 200 after the boot (preflight 20261126T065627Z, GO). What was running and how
+    each job was resumed: /home/claude/cpt-r2-20261125/lead/STATE.md, section "Reboot recovery".
+  - Times, corrected from the artifact (session 738699b2's transcript; the entries above keep their text): D429's message
+    was queued at 03:17:56Z (recorded "~03:50Z"); D430 03:37:54Z ("~04:30Z"); D431 03:53:27Z ("~04:50Z"); D432
+    04:04:32Z ("~05:20Z"); D433 04:09:19Z ("~05:30Z"); D434's test started 04:49:52Z (its results file's name) and its
+    result was told at 05:46:26Z ("~06:40Z", "ran 04:49-06:3xZ"); D435's answers arrived at 06:13:10Z ("~07:55Z").
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (799ffbc5) — an Excel download of approved codes; a question on our own dictation — DECISIONS D437
+
+D437 — 2026-11-26 18:22:26Z — OWNER DIRECTION: an Excel download of approved codes; and a question on our own dictation (session 799ffbc5), verbatim
+
+> I've got a new task for ya we have to add a clear simple excel foramt downlado for site because they told me doctor msotly need excel after they codes are approved on our web site and also i jsut wnated to ask your opinion insteand of dealing with command health to get api for dictiation are we able to make ours? with fable agents? is it cost us a lot of time and do you think its worth it to have it? since we got a good accurate cpt do you think our dictaiton with ai would be possibly doing perfect?
+  - (1) Read as a new owner direction (class a, made by him): CPT Studio gains an Excel (.xlsx) download of approved
+    codes. It amends D388 ("the PDF is the only report") for Excel only; TXT and CSV stay refused. Under D422 the
+    session decides the design and records it:
+    (a) approved codes only, never a draft: a spreadsheet goes straight into billing, and a draft's lines are not
+        approved (his words: "after their codes are approved");
+    (b) one file per document, offered beside the approved PDF, carrying the same lines and values as that PDF
+        (customer.approved_lines), from the same snapshot;
+    (c) stored once as an immutable ExportArtifact (fmt 'xlsx') with its sha256 and an export.created audit row, served
+        as stored, reused under release 1's C5 rule, recorded like every other read;
+    (d) no patient identifier (as the PDF), a generic file name, no document words in a URL or header;
+    (e) every text cell a string, never a formula;
+    (f) a new dependency only if the design shows one is needed.
+    Built in its own lane beside release 2 (design now, a workflow; documents and code only); it ships with release 2
+    if built, refuted and full-suite green by the rehearsal, otherwise as a small release right after. Not built now:
+    one spreadsheet for several documents (offered to him in one line as the next step).
+  - (2) A question for the session's opinion, no task: answered in the reply. Facts used: Claude reads text, images
+    and PDFs, not audio (platform.claude.com features overview, fetched 2026-11-26); QuillMD's rebuild in this
+    repository already records a visit, transcribes it with Deepgram and writes the note with Anthropic, on synthetic
+    data (rebuild/README.md, rebuild/core/audio.py); the CommandHealth connection (D429) stays his product decision.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner question, 2026-11-26 (799ffbc5) — connect CommandHealth rather than build our own dictation? — DECISIONS D438
+
+D438 — 2026-11-26T18:58:55Z — OWNER QUESTION: connect CommandHealth rather than build our own dictation? (session 799ffbc5), verbatim
+
+> So you rather to have API install through our site into Command health but making a new dictation?
+  - Read as a question confirming the session's recommendation in its answer to D437 (2), not yet his decision: the
+    CommandHealth connection stays his product decision (class a, D429). Answered: yes, connect CommandHealth so each
+    finished dictation reaches the doctor's CPT Studio account and is coded with no upload; our own dictation stays an
+    option after release 3. What the build needs from CommandHealth: its developer documents (a webhook or a feed of
+    finished notes), a test account with made-up patients, and how a doctor's CommandHealth account is matched to ours.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
