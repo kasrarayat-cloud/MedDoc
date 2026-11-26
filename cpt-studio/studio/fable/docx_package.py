@@ -41,8 +41,8 @@ before it waits on it, so the parent's finally kills that group as well as the c
   story or namespace form, and - on purpose, although the file holds nothing of it - one whose relationship is External,
   and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or pointer that would leave no
   picture - a v:imagedata or a:blip naming a part that is sent - in its place (R2-29); a field kept, not HYPERLINK or
-  TOC, whose stored result holds what a reader sees and no field while a removed field stood in its instruction, which
-  LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
+  TOC, whose stored result holds something a reader sees outside the fields in it while a removed field stood in its
+  instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
   missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A removed field in another
   field's result, and in no field's instruction, stays a field whose instruction is QUOTE - a type LibreOffice shows by
   its stored result - unless it is INCLUDEPICTURE (R2-30). Everything else is edited as release 1 edits it, so a Word
@@ -681,15 +681,15 @@ class _Field:
     'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
     left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
     __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction', 'holds_removed',
-                 'watched', 'result_field', 'result_shown')
+                 'watched', 'result_shown')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
         self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
         # R2-30's fallback: a removed field stood in this field's instruction; its result is read (from its first
-        # separate), and holds a field, or something a reader sees outside any field
-        self.holds_removed = self.watched = self.result_field = self.result_shown = False
+        # separate); it holds something a reader sees outside the fields in it
+        self.holds_removed = self.watched = self.result_shown = False
 
     def feed(self, text, name=None, deleted=False):
         """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
@@ -732,11 +732,12 @@ class _Field:
 
     def loses_its_result(self) -> bool:
         """R2-30's fallback, read at a kept field's end once a removed field stood in its instruction: a type every
-        reading names other than HYPERLINK or TOC, and a stored result that holds something a reader sees and no field -
-        7.4's 'H01' shape, whose result LibreOffice 7.4 drops, with or without R2-30's QUOTE."""
+        reading names other than HYPERLINK or TOC, and a stored result that holds, outside the fields in it, something a
+        reader sees - 7.4's 'H01' shape, whose plain result LibreOffice 7.4 drops, with or without R2-30's QUOTE. A
+        result that is fields alone keeps every word on 7.4 (H02-H04, I01, I02: the QUOTE keeps a removed one)."""
         types = self._types()
         exempt = len(types) == 1 and next(iter(types)) in _EXEMPT_OUTER_TYPES
-        return bool(self.separates) and self.result_shown and not self.result_field and not exempt
+        return bool(self.separates) and self.result_shown and not exempt
 
 
 class _PartReader:
@@ -831,8 +832,6 @@ class _PartReader:
             if kind == 'begin':
                 if open_type:
                     field.nested()
-                if field is not None and field.watched:
-                    field.result_field = True  # R2-30's fallback: a field in the result being read
                 self.fields.append(_Field(element, list(self.stack)))
                 self.instructions += 1
             elif kind == 'separate' and field is not None:
@@ -850,8 +849,6 @@ class _PartReader:
         elif role == _FLDSIMPLE:
             if open_type:
                 field.nested()
-            if field is not None and field.watched:
-                field.result_field = True
             element[_CHILDREN] = []
             element[_INSTRUCTION] = next((attrs[key] for key in _INSTR if key in attrs), '')
         elif role in _CONTAINERS:

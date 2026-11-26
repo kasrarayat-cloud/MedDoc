@@ -3,8 +3,9 @@
 - R2-29: an object or a control keeps a picture in its place, or the file is refused (ContentNotShown): the Word area's
   shape tables B01-B27, C01-C09, E01-E16 and E22, rebuilt here; a preview is a part that is sent.
 - R2-30: a removed field in another field's result stays a field whose instruction is QUOTE, byte for byte; its
-  fallback refuses a field kept, not HYPERLINK or TOC, whose stored result holds what a reader sees and no field while a
-  removed field stood in its instruction (the 7.4 corpus's H01 shape), and nothing else; a seeded fuzz.
+  fallback refuses a field kept, not HYPERLINK or TOC, whose stored result holds something a reader sees outside the
+  fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and nothing else; a seeded
+  fuzz.
 - Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package: the reference is release 1's
   own docx_package.py, read from the repository by its git blob id (RELEASE_1_PACKAGE_BLOB, immutable); where there is
   no git (the image has no .git) those comparisons say so and are skipped, and every other check still runs.
@@ -678,9 +679,12 @@ def nested_in_instruction(before, after, result, *, nested_result=None, nested=N
 
 def fallback_shapes():
     """(label, a Word file, the fields its refusal counts or 0 when it is coded): R2-30's fallback, set from the 7.4
-    corpus - shapes 156 and 160 (H01) lose their stored result on 7.4 with or without the QUOTE, and H02-H04, I01 and
-    I02, whose stored result holds a field, keep every word - and the variants the specification names (outer REF,
-    DOCPROPERTY, DATE, ASK and PAGE with a plain result), which the lead's 7.4 corpus run measures."""
+    corpus - shapes 156 and 160 (H01) lose their plain stored result on 7.4 with or without the QUOTE, and H02-H04, I01
+    and I02, whose stored result is a field alone, keep every word - and the variants the specification names (outer
+    REF, DOCPROPERTY, DATE, ASK and PAGE with a plain result), which the lead's 7.4 corpus run measures. A stored result
+    of text beside a field is refused: 7.4 drops the plain text of such a result (G10's IF shows its field alone), and
+    without the removed field in the instruction nothing else shows it - Word's flattened result of an included text
+    that holds a field."""
     plain = t('INCLUDED TEXT')
     if_before, if_after = ' IF 1 = 1 "', '" "" '
     return [
@@ -699,11 +703,15 @@ def fallback_shapes():
         ('outer IF, a removed simple field in its instruction', nested_in_instruction(
             if_before, if_after, plain, nested='<w:fldSimple w:instr=\' INCLUDETEXT "SECRET" \'>' + t('INCLUDED')
                                                + '</w:fldSimple>'), 1),
+        ('outer IF, its stored result text beside a field', nested_in_instruction(
+            if_before, if_after, t('INCLUDED ') + field(' PAGE ', '3') + t(' TEXT')), 1),
+        ('outer IF, its stored result a field, then text', nested_in_instruction(
+            if_before, if_after, field(' PAGE ', '3') + t(' INCLUDED TEXT')), 1),
         ('two outer fields, one in the other\'s instruction, each a plain result', package(BEFORE + p(
             fc('begin'), instr(' IF 1 = 1 "'), fc('begin'), instr(' QUOTE "'), field(INC, 'INCLUDED'), instr('" '),
             fc('separate'), t('QUOTED'), fc('end'), instr('" "" '), fc('separate'), t('IF RESULT'), fc('end'))
             + AFTER), 2),
-        # coded: the stored result holds a field, which LibreOffice shows (the QUOTE keeps a removed one)
+        # coded: the stored result is fields alone, which LibreOffice shows (the QUOTE keeps a removed one)
         ('H02 IF "{INCLUDETEXT}", result nested field', nested_in_instruction(if_before, if_after,
                                                                                field(INC, 'INCLUDED TEXT')), 0),
         ('H03 IF with MERGEFIELD condition and INCLUDETEXT branch', package(BEFORE + p(
@@ -740,12 +748,12 @@ def fallback_shapes():
 
 class FieldFallbackTests(ReleaseOneCase):
     """R2-30's fallback (D-R2-36): a field kept, not HYPERLINK or TOC, with a removed field (not INCLUDEPICTURE) in its
-    instruction and a stored result that holds what a reader sees and no field, is refused like R2-29, under its own
-    count ('fields', the sentence of an embedded object); every other file is coded as before."""
+    instruction and a stored result that holds something a reader sees outside the fields in it, is refused like
+    R2-29, under its own count ('fields', the sentence of an embedded object); every other file is coded as before."""
 
     def test_a_removed_field_in_an_instruction_with_a_plain_stored_result_is_refused(self):
         shapes = fallback_shapes()
-        self.assertEqual(sum(1 for *_, fields in shapes if fields), 11)
+        self.assertEqual(sum(1 for *_, fields in shapes if fields), 13)
         for label, data, fields in shapes:
             with self.subTest(label):
                 if fields:
