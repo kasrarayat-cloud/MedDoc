@@ -40,8 +40,10 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseNotModified, JsonResponse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
+from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET, require_POST
 
 from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, paging, rate, read_audit
@@ -540,6 +542,35 @@ def download_report(request, report_id):
     return response
 
 
+# --- the in-page view's validator (release 2, R2-15; D-R2-6, D-R2-7) ---------------------------------------------------
+# A PDF view of a stored file carries ETag "<tag>": a UUID-shaped value derived with the site's key from the sign-in
+# reference, the document and the stored file's recorded sha256 - so it names no hash, is bound to the sign-in, and is
+# made without reading the file. A re-open that names it in If-None-Match (the page sends it only for a view it holds in
+# its memory) writes its member.inline row first, with the filters {"shown_from": "page_memory"}, and is answered 304
+# with no body and no stored file read; a row that cannot be written answers 503 and nothing else. Anything else - another
+# tag, '*', another sign-in, a text or a paste (never tagged), a stored file whose recorded hash changed - is a 200 with
+# the bytes, recorded as today. Both stay no-store (access.SecurityHeadersMiddleware): nothing is kept by a proxy.
+
+SHOWN_FROM_PAGE_MEMORY = {'shown_from': 'page_memory'}  # a 304's record: the page drew its own copy
+
+
+def view_tag(request, encounter, shown):
+    """The ETag value of ``shown`` (customer.view_source) for this request's sign-in, or None: only a PDF view of a stored
+    file, in a session that carries a sign-in reference, is tagged."""
+    sign_in = request_meta.sign_in_ref(request)
+    stored = shown.stored
+    if stored is None or shown.content_type != customer.PDF or sign_in is None or not getattr(stored, 'sha256', None):
+        return None
+    return str(uuid.UUID(salted_hmac('studio.api.view_tag', f'{sign_in}:{encounter.pk}:{stored.sha256}',
+                                     algorithm='sha256').hexdigest()[:32]))
+
+
+def _held(request, tag) -> bool:
+    """Whether the request's If-None-Match names ``tag``, in its strong or its weak form ('*' never does)."""
+    header = request.META.get('HTTP_IF_NONE_MATCH', '')
+    return bool(header) and any(item != '*' and item.removeprefix('W/') == f'"{tag}"' for item in parse_etags(header))
+
+
 @require_GET
 @api_view(contract=False)
 @read_audit.phi_read(read_audit.MEMBER_DOWNLOAD)  # and member.inline, for view=1
@@ -547,24 +578,33 @@ def original(request, encounter_id):
     """The upload as a download (customer.download_content, release 1 C6: a Word document's is the PDF its coding review
     read; the Word file itself only with format=original, which the page asks for after its warning, and the only one
     a Word document with no PDF yet has), recorded as member.download with the format it served; with view=1, what the
-    in-page viewer shows (customer.view_content: the PDF or text, the pasted text, a Word document's converted PDF),
-    inline and framable by CPT Studio's own page only, recorded as member.inline. Each row is written before the bytes
-    are sent."""
+    in-page viewer shows (customer.view_source: the PDF or text, the pasted text, a Word document's converted PDF),
+    inline and framable by CPT Studio's own page only, recorded as member.inline - or, for a PDF view the page holds
+    (its ETag in If-None-Match; release 2, R2-15), a 304 recorded as shown from the page's memory. Each row is written
+    before anything is sent."""
     inline = request.GET.get('view') == '1'
     view = read_audit.MEMBER_INLINE if inline else read_audit.MEMBER_DOWNLOAD
     encounter, _ = _scoped(request, encounter_id, view)
     record = {'workspace_id': encounter.workspace_id, 'encounter_ids': [encounter.pk]}
     try:
         if inline:
-            found = customer.view_content(encounter)
-            if found is None:
+            shown = customer.view_source(encounter)
+            if shown is None:
                 raise Http404()
-            data, content_type, filename = found
+            tag = view_tag(request, encounter, shown)
+            if tag is not None and _held(request, tag):
+                _recorded(request, view, filters=SHOWN_FROM_PAGE_MEMORY, **record)
+                held = HttpResponseNotModified()
+                held['ETag'] = f'"{tag}"'
+                return held
+            data = customer.view_bytes(encounter, shown)
             _recorded(request, view, **record)
-            response = HttpResponse(data, content_type=content_type)
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            response = HttpResponse(data, content_type=shown.content_type)
+            response['Content-Disposition'] = f'inline; filename="{shown.filename}"'
             response['X-Frame-Options'] = 'SAMEORIGIN'
             response['Content-Security-Policy'] = VIEW_CSP
+            if tag is not None:
+                response['ETag'] = f'"{tag}"'
             return response
         try:
             found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)

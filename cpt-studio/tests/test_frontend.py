@@ -81,6 +81,7 @@ CODE_KEYS = set(CONTRACT['types']['code']['keys'])
 SESSION_KEYS = set(CONTRACT['session']['keys'])
 ROW_KEYS = set(CONTRACT['types']['list_row']['keys'])
 STATES = set(CONTRACT['types']['state']['enum'])
+PDF_TYPE = 'application/pdf'  # a document block's media_type of a PDF upload
 # What a customer surface never names (the build specification, section 0): vendor and model names, and the words the
 # customer copy never uses.
 FORBIDDEN = re.compile(r'(?<![a-z0-9])(?:corti|astra|fable|openai|anthropic|claude|gemini|google)(?![a-z0-9])'
@@ -345,6 +346,23 @@ class CustomerFixtureTests(SimpleTestCase):
         self.assertEqual({row['id'] for row in rows}, {doc['id'] for doc in self.encounters().values()})
         for row in rows:
             self.assertEqual(set(row), ROW_KEYS, row['id'])
+
+    def test_the_list_fixtures_are_a_first_page_with_its_total_and_each_rows_opens_pdf(self):
+        # release 2 (R2-19, R2-16, R2-24): a list answer is one page - its rows, the next page's cursor (none: the whole
+        # list is on it) and the list's total - and a row says opens_pdf when its document's first stored file is a PDF
+        # of at most 1 MiB, which is what each encounter fixture's document block shows
+        self.assertEqual(set(CONTRACT['list']['keys']), {'encounters', 'next', 'total'})
+        listing = _customer('encounters.json')
+        self.assertEqual(set(listing), set(CONTRACT['list']['keys']))
+        self.assertEqual((listing['next'], listing['total']), (None, len(listing['encounters'])))
+        documents = {doc['id']: doc['document'] for doc in self.encounters().values()}
+        for row in listing['encounters']:
+            document = documents[row['id']]
+            with self.subTest(row['id']):
+                self.assertIs(row['opens_pdf'], document['kind'] == 'upload' and document['media_type'] == PDF_TYPE
+                              and document['size'] <= 1024 * 1024)
+        self.assertEqual({row['opens_pdf'] for row in listing['encounters']}, {True, False})
+        self.assertEqual(_customer('encounters-empty.json'), {'encounters': [], 'next': None, 'total': 0})
 
     def test_every_code_row_names_its_line(self):
         # the fix pass, section 1: the coding review's codes are lines L1..Ln in its order, the codes the second check

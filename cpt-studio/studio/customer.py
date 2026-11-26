@@ -13,7 +13,8 @@ built from stored rows on each request.
   decision named by its line and its code).
 - view_content: what GET /api/encounters/<id>/original?view=1 serves - the original PDF or text, a pasted text, or for
   a Word document the PDF the coding review read (CodingRound.view_pdf_*: the converted file, so the pages the quotes
-  name are the pages shown).
+  name are the pages shown); since release 2 (R2-15) built from view_source (what is shown, read from the rows alone,
+  so a re-open the page holds can be answered 304 with no stored file read) and view_bytes (its bytes, checked).
 
 Only the latest round is shown: while it is queued or running, failed or stopped, it has no codes. Every code row is a
 line of its own (FIX-SPEC 1: L1.. the reader's, M1.. the second check's additions), and its decision, quotes and
@@ -497,26 +498,56 @@ def _converted_file(view):
     return SimpleNamespace(storage_name=view.view_pdf_storage_name, sha256=view.view_pdf_sha256)
 
 
-def view_content(encounter):
-    """(bytes, content type, file name) the in-page viewer shows, or None when there is nothing to show: the original
-    PDF or text file, the pasted text, or for a Word document the PDF the coding review read. A stored file that no
-    longer matches its sha256 raises storage.OriginalCorrupted."""
+class Shown(NamedTuple):
+    """What the in-page viewer shows (release 2, R2-15), read from the rows alone: the stored file it serves (a
+    SourceFile, or a Word document's converted view: anything with storage_name and sha256) - or None for a paste, whose
+    ``text`` it is - the content type it is served as and its file name."""
+    stored: object
+    text: Optional[str]
+    content_type: str
+    filename: str
+
+
+def view_source(encounter) -> Optional[Shown]:
+    """What GET /api/encounters/<id>/original?view=1 shows, by view_content's own branches, or None when there is
+    nothing to show - reading no stored file: the original PDF or text file, the pasted text, or for a Word document the
+    PDF the coding review read (converted_view)."""
     source = original_file(encounter)
     if source is None:
         revision = _root_revision(encounter)
         if revision is None or revision.kind != Revision.PASTE:
             return None
-        return (revision.pasted_text or '').encode('utf-8'), TEXT_SERVED, 'pasted-text.txt'
+        return Shown(None, revision.pasted_text or '', TEXT_SERVED, 'pasted-text.txt')
     if source.media_type == PDF:
-        return read_own_original(encounter.workspace_id, source), PDF, safe_name(source.original_name)
+        return Shown(source, None, PDF, safe_name(source.original_name))
     if source.media_type == TEXT:
-        return read_own_original(encounter.workspace_id, source), TEXT_SERVED, safe_name(source.original_name)
+        return Shown(source, None, TEXT_SERVED, safe_name(source.original_name))
     if source.media_type == DOCX:
         view = converted_view(encounter)
         if view is None:
             return None
-        return read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source)
+        return Shown(_converted_file(view), None, PDF, converted_name(source))
     return None
+
+
+def view_bytes(encounter, shown) -> bytes:
+    """The bytes of ``shown`` (view_source's): its stored file read and checked against its recorded sha256
+    (read_own_original: storage.OriginalCorrupted when it no longer matches, OSError when it cannot be read), or the
+    pasted text as UTF-8."""
+    if shown.stored is None:
+        return shown.text.encode('utf-8')
+    return read_own_original(encounter.workspace_id, shown.stored)
+
+
+def view_content(encounter):
+    """(bytes, content type, file name) the in-page viewer shows, or None when there is nothing to show: the original
+    PDF or text file, the pasted text, or for a Word document the PDF the coding review read. A stored file that no
+    longer matches its sha256 raises storage.OriginalCorrupted. Built from view_source and view_bytes (release 2,
+    R2-15); the record bundle reads it."""
+    shown = view_source(encounter)
+    if shown is None:
+        return None
+    return view_bytes(encounter, shown), shown.content_type, shown.filename
 
 
 # --- the document's download (release 1, C6) --------------------------------------------------------------------------

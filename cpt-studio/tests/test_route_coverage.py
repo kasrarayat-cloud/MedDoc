@@ -36,8 +36,9 @@ OTHER_LANES = {
 ACT = 'an act: it changes something and answers a redirect, a status or the act\'s own result, never a document'
 NO_PHI_ROUTES = {
     # the doctors' host
-    'studio.views.index': 'the doctors\' app shell: the page and its scripts; every document it shows comes through '
-                          'the API\'s recorded reads',
+    'studio.views.index': 'the doctors\' app shell: the page and its scripts, and since release 2 (R2-17) the session\'s '
+                          'payload - who is signed in, the practice and counts, no document; every document it shows '
+                          'comes through the API\'s recorded reads',
     'studio.views.health': 'the service\'s health: no account and no data',
     'studio.views.login_view': 'the sign-in page',
     'studio.views.logout_view': 'signing out: it ends the session and redirects',
