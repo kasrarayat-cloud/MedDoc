@@ -7274,6 +7274,46 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
   });
 });
 
+// Release 1's web after a switch-back has no search route: Django's own HTML 404, as measured on 816045c7 (rollback-0).
+const RELEASE_1_NOT_FOUND = { status: 404, type: 'text/html; charset=utf-8', body: '\n<!doctype html>\n<html lang="en">\n<head>\n  <title>Not Found</title>\n</head>\n<body>\n  <h1>Not Found</h1><p>The requested resource was not found on this server.</p>\n</body>\n</html>\n' };
+
+test('I1-3 (rollback-0): after a switch-back, release 1\'s HTML 404 to a search reads as an update - the notice, the list\'s rows kept, never "Not found" - while release 2\'s own JSON 404 and an HTML 404 elsewhere stay not found', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260);
+  let flipped = false;  // release 1's web takes over once the first page is drawn: 409 to every API call, its 404 to the search
+  const server = pagedServer(rows, { refuse: (method, url) => (!flipped ? null : url === app.SEARCH_URL ? RELEASE_1_NOT_FOUND
+    : { status: 409, body: { error_code: 'client_outdated', error: 'Reload.' } }) });
+  await withListPage(server, async ({ calls, element, more, type, shown }) => {
+    app.state.routeSerial = 31;
+    await app.showList('documents', 31);
+    assert.equal(app.state.list.local, false, 'above 200 documents: the server is asked');
+    element('#updateNotice').hidden = true;
+    flipped = true;
+    type('polyp report 99');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.refused !== '');
+    assert.deepEqual(calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body), [{ text: 'polyp report 99', before: null }]);
+    assert.deepEqual([app.state.outdated, element('#updateNotice').hidden], [true, false], 'the update notice');
+    assert.equal(app.state.list.refused, app.OUTDATED_TEXT);
+    assert.ok(!more.innerHTML.includes('Not found'), 'never "Not found" about a document that is in the practice');
+    assert.equal(shown().length, rows.slice(0, 50).filter(row => listText(row).includes('polyp report 99')).length, 'the page\'s own matches stay');
+  });
+  app.state.outdated = false;
+  // the search's later page meets it the same way; release 2's own JSON 404, and an HTML 404 anywhere else, are not found
+  for (const [what, path, answer, said] of [['a later page of the search', app.SEARCH_URL, RELEASE_1_NOT_FOUND, app.OUTDATED_TEXT],
+    ['release 2\'s own 404 to the search', app.SEARCH_URL, { status: 404, body: { error: 'Not found.' } }, 'Not found.'],
+    ['an HTML 404 to another address', '/api/encounters/x', RELEASE_1_NOT_FOUND, 'Not found, or not in your workspace.']]) {
+    const outdated = said === app.OUTDATED_TEXT;
+    await withPage({ elements: { updateNotice: fakeElement({ hidden: true }) }, answers: [{ match: () => true, ...answer }] }, async ({ element }) => {
+      const method = path === app.SEARCH_URL ? 'POST' : 'GET';
+      await assert.rejects(app.api(path, { method, json: method === 'POST' ? { text: 'x', before: 'c50' } : undefined }),
+        { message: said }, what);
+      assert.deepEqual([app.state.outdated, element('#updateNotice').hidden], [outdated, !outdated], what);
+    });
+    app.state.outdated = false;
+  }
+});
+
 test('R2-22, C2: above 200 documents, words in the box load no more of the list\'s pages, however near its end comes; a search\'s own pages and the list\'s, once cleared, do', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const rows = listRowsOf(400);

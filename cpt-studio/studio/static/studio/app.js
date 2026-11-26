@@ -1823,7 +1823,8 @@ async function api(path, { method = 'GET', json, form, poll = false } = {}) {
     goToAccount();
     throw new ApiError('Choose a new password to continue.', 403, data);
   }
-  if (isClientOutdated(response.status, data)) {
+  // a 404 to the search that is no JSON is release 1's web after a switch-back, which has no search (I1-3)
+  if (isClientOutdated(response.status, data) || (response.status === 404 && !isJson && path === SEARCH_URL)) {
     showUpdateNotice();
     throw new ApiError(OUTDATED_TEXT, 409, data);
   }
@@ -3030,22 +3031,15 @@ function pdfAssets() {
 
 // What this browser must have natively for the viewer to draw a PDF and mark its words. A browser without any of it is
 // not offered the viewer (the library is not even downloaded): the browser's own viewer is framed and the note says
-// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium only - Firefox and Safari were not
-// run; their versions are MDN's browser-compat-data for what is asked for here: each candidate deleted in the page and in
-// the library's worker before the library loaded (typeof read before and after, so a deletion that did not apply could
-// not pass), then the preview's PDFs and the walk's gi-02 opened and every quote chosen. Asked for here: what our own code
-// calls, what broke the drawing or the marking when deleted, and what the library calls with no stand-in on a path the
-// viewer can take that those documents did not (read in the library). Not asked for: what the legacy build puts back
-// itself when it is missing (each was seen present again once the library had run, and with each deleted the documents
-// drew and marked exactly as before) - Map and WeakMap getOrInsert and getOrInsertComputed, Math.sumPrecise, Promise.try,
-// Uint8Array fromBase64, toBase64, toHex, setFromBase64 and setFromHex, Iterator with its map, filter, toArray, flatMap,
-// forEach, some, every and find (take and drop in the page only), the seven new Set methods, URL.parse, and Response and
-// Blob bytes(); nor what it does not put back and the documents never needed: Uint8Array.fromHex, Iterator.from,
-// Iterator.prototype.reduce and Array.prototype.findLast and findLastIndex (the library calls none of them on a path the
-// viewer takes) and Float16Array (used only where it exists). The same goes for OffscreenCanvas, ImageDecoder,
-// CompressionStream and DecompressionStream, used only where they exist. Dynamic import() is this script's own syntax, so a
-// browser running the script has it; the library's own syntax (class static blocks: Chrome 94, Firefox 93, Safari 16.4)
-// is older than the newest built-in asked for here. A worker has its page's built-ins, so the page answers for the worker.
+// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium only, each candidate deleted in the
+// page and in the library's worker (typeof read before and after), then the preview's PDFs and the walk's gi-02 opened and
+// every quote chosen: asked for here is what our own code calls, what broke the drawing or the marking when deleted, and
+// what the library calls with no stand-in on a path the viewer can take. What the legacy build puts back
+// itself, and what it does not that the documents never needed, are listed in CORE-UX-DESIGN.md ("Browsers that mark");
+// Iterator take and drop are put back in the page only. OffscreenCanvas, ImageDecoder, CompressionStream and
+// DecompressionStream are used only where they exist. Dynamic import() is this script's own syntax, so a browser running
+// the script has it; the library's own syntax (class static blocks: Chrome 94, Firefox 93, Safari 16.4) is older than the
+// newest built-in asked for here. A worker has its page's built-ins, so the page answers for the worker.
 function pdfCapable() {
   return typeof IntersectionObserver === 'function'  // our code: pages are drawn only near the visible area
     && typeof ResizeObserver === 'function'  // our code: pages are refitted when the panel's width changes
