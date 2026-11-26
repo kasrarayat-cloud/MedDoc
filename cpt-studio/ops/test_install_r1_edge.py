@@ -36,6 +36,11 @@ CONNECTIONS = {'cpt_conn': ('$cpt_conn_key', '5m', '40'), 'cpt_bytes_conn': ('$c
 BODY_SIZES = {('=', '/api/encounters'): '20m', ('~', '^/api/encounters/[0-9a-f-]+/answers$'): '1m', ('/',): '64k'}
 REQUEST_KEYS = ('$cpt_all_key', '$cpt_signin_key', '$cpt_write_key', '$cpt_upload_key', '$cpt_export_key',
                 '$cpt_bytes_key')
+# Release 2 (R2-27): the one exact key that counts nothing - the documents' search, a read sent as a POST (its words
+# stay out of every address), kept out of the write zone and counted in cpt_all alone; in an nginx map an exact key wins
+# over every regular expression
+UNCOUNTED_EXACT_KEYS = {'$cpt_write_key': {'0:POST /api/encounters/search': ''}}
+SEARCH = '/api/encounters/search'
 CIPHERS = ('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:'
            'ECDHE-RSA-AES128-GCM-SHA256')
 QUERY_VARIABLES = ('$request_uri', '$args', '$query_string', '$arg_', '$http_referer', '$is_args')
@@ -238,7 +243,10 @@ class FrontDoorLimitTests(unittest.TestCase):
             entry = found[variable]
             self.assertEqual(entry['source'], '$cpt_exempt:$request_method $uri', variable)
             self.assertEqual(entry['default'], '', variable)
-            values = set(entry['exact'].values()) | {result for _, result in entry['regex']}
+            uncounted = {key: result for key, result in entry['exact'].items() if result == ''}
+            self.assertEqual(uncounted, UNCOUNTED_EXACT_KEYS.get(variable, {}), variable)
+            values = ({result for result in entry['exact'].values() if result != ''}
+                      | {result for _, result in entry['regex']})
             self.assertEqual(values, {'$cpt_client'}, variable)  # the client: its address, or its IPv6 /64
         # the connection keys: the client too, never counted for this host itself, and never empty when they count
         self.assertEqual((found['$cpt_conn_key']['source'], found['$cpt_conn_key']['exact'],
@@ -249,10 +257,14 @@ class FrontDoorLimitTests(unittest.TestCase):
     def test_each_key_counts_exactly_its_requests(self):
         found = maps(rendered()['https'])
         counted = {
-            '$cpt_all_key': ['0:GET /', '0:POST /login/', '0:GET /static/studio/app.js', '0:HEAD /health/'],
+            '$cpt_all_key': ['0:GET /', '0:POST /login/', '0:GET /static/studio/app.js', '0:HEAD /health/',
+                             f'0:POST {SEARCH}'],  # R2-27: a search still counts, as the read it is
             '$cpt_signin_key': ['0:POST /login/'],
             '$cpt_write_key': ['0:POST /api/encounters', f'0:POST /api/encounters/{UUID}/decisions', '0:POST /ops/people/add',
-                               f'0:POST /ops/encounters/{UUID}/content'],
+                               f'0:POST /ops/encounters/{UUID}/content',
+                               # R2-27's key is exact: a path that only begins or ends like the search is a write
+                               f'0:POST {SEARCH}/', f'0:POST {SEARCH}es', f'0:POST /api/encounters/{UUID}/search',
+                               f'0:POST /ops{SEARCH}'],
             '$cpt_upload_key': ['0:POST /api/encounters'],
             '$cpt_export_key': [f'0:POST /api/encounters/{UUID}/reports'],
             '$cpt_bytes_key': [f'0:GET /api/encounters/{UUID}/original', f'0:HEAD /api/encounters/{UUID}/original',
@@ -260,11 +272,12 @@ class FrontDoorLimitTests(unittest.TestCase):
                                f'0:GET /ops/encounters/{UUID}/original'],
         }
         not_counted = {
-            '$cpt_all_key': ['1:GET /', '1:POST /login/'],
+            '$cpt_all_key': ['1:GET /', '1:POST /login/', f'1:POST {SEARCH}'],
             '$cpt_signin_key': ['1:POST /login/', '0:GET /login/', '0:POST /login/second-factor', '0:POST /api/session'],
-            '$cpt_write_key': ['1:POST /api/encounters', '0:GET /api/encounters', '0:POST /login/', '0:POST /apix/'],
+            '$cpt_write_key': ['1:POST /api/encounters', '0:GET /api/encounters', '0:POST /login/', '0:POST /apix/',
+                               f'0:POST {SEARCH}', f'1:POST {SEARCH}'],  # R2-27: a search is no write
             '$cpt_upload_key': ['1:POST /api/encounters', '0:GET /api/encounters', f'0:POST /api/encounters/{UUID}/answers',
-                                '0:POST /api/encounters/'],
+                                '0:POST /api/encounters/', f'0:POST {SEARCH}'],
             '$cpt_export_key': [f'1:POST /api/encounters/{UUID}/reports', f'0:GET /api/encounters/{UUID}/reports',
                                 f'0:POST /api/encounters/{UUID}/reports/x', '0:POST /api/encounters/x y/reports'],
             '$cpt_bytes_key': [f'1:GET /api/encounters/{UUID}/original', f'0:GET /api/encounters/{UUID}',

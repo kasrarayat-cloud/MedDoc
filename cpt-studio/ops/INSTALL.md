@@ -2249,6 +2249,13 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   PostgreSQL's builtin `pg_c_utf8` collation, which PostgreSQL 17 introduced:
   the database must stay PostgreSQL 17 or newer - on this host (17.11) and on
   the new server - and CI runs its tests on `postgres:17`.
+- Release 2's front door (R2-27): the documents' search
+  (`POST /api/encounters/search`) is a read sent as a POST, so its words stay
+  out of every address and log; it counts in the every-request zone alone,
+  never in the writes', so an office searching at once cannot get a
+  colleague's decision or answer refused. No zone's name, size or rate
+  changed. The vhost is republished by `cert` and `https-vhost` before `app`,
+  as any change under `deploy/nginx/` is (blue/green residual 10).
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:
