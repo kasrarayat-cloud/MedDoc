@@ -24,6 +24,7 @@ Release 1 (RELEASE-1-SPEC 4, B1 to B7):
   release, and the operator sign-in page shows no release (B7).
 """
 import hashlib
+import json
 from datetime import timedelta
 
 from django.conf import settings
@@ -39,7 +40,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
-from . import audit, rate, request_meta, second_factor, security_events, sessions, throttle
+from . import audit, customer, rate, request_meta, second_factor, security_events, sessions, throttle
 from .access import SecurityHeadersMiddleware, active_membership
 from .api import UNSTORABLE
 from .models import LoginAttempt, User
@@ -179,8 +180,12 @@ def index(request):
     membership = active_membership(request.user)
     # the workspace's specialty, a label the page shows (owner direction 2026-11-22, D390); nothing codes from it
     # the page's own timer, armed at load from the session's limits and its tag (studio.sessions.page_config)
+    # release 2 (R2-17, D-R2-8): GET /api/session's payload, from the same function, carried in <body data-session-json>
+    # (autoescaped), so the page routes at once with no session request; it names no document, so nothing is recorded
     response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA,
                                                      'specialty': membership.workspace.category.name,
+                                                     'session_json': json.dumps(customer.session_json(request.user,
+                                                                                                      membership)),
                                                      **getattr(request, 'cpt_page', {})})
     response.headers['Content-Security-Policy'] = INDEX_CSP
     return response

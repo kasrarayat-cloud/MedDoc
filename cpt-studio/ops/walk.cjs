@@ -562,9 +562,11 @@ function shapeProblems(value, node, where = '$', out = [], spec = contract()) {
   return out;
 }
 
-// The contract a customer JSON read is held to, by its route: GET /api/session, GET /api/encounters and
+// The contract a customer JSON read is held to, by its route: GET /api/session, GET /api/encounters (a page of a list,
+// release 2), POST /api/encounters/search (a page of a search: the list's shape, R2-20 and R2-24) and
 // GET /api/encounters/<id> (an answer of the page or of the walk), or null for any other.
 function contractFor(where) {
+  if (/^POST \/api\/encounters\/search(?=[ ?#]|$)/.test(String(where))) return 'list';
   const match = /^GET (\/api\/[^ ?#]*)/.exec(String(where));
   if (!match) return null;
   if (match[1] === '/api/session') return 'session';
@@ -655,6 +657,21 @@ function scanFile(text, ctx, name, hits = []) {
     if (!ownWording(bare, ctx)) return;
     scanText(line, ctx, 'file', `${name} line ${index + 1}`, hits);
   });
+  return hits;
+}
+
+// An /api/ answer's ETag, when it has one (release 2, R2-15 and R2-24): a quoted UUID, W/ allowed - never a hash
+// (API.md); anything else is a hard header hit, as ops/scan_customer.py etag_hits reads it. A static answer's own
+// validators are WhiteNoise's and are not read (UNSCANNED_HEADERS keeps skipping them for wording).
+const API_ETAG = /^(?:W\/)?"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/;
+
+function etagHits(headers, where, hits = []) {
+  if (!/^[A-Z]+ \/api\//.test(String(where))) return hits;
+  for (const [name, value] of Object.entries(headers || {})) {
+    if (name.toLowerCase() === 'etag' && !API_ETAG.test(String(value).trim())) {
+      hits.push({ id: 'etag_shape', severity: 'hard', surface: 'header', where: `${where} header ${name}`, match: String(value).slice(0, 120) });
+    }
+  }
   return hits;
 }
 
@@ -2624,6 +2641,7 @@ async function getJson(page, ctx, where) {
     json = null;
   }
   remember(ctx, `GET ${where}`, response.headers(), json, body, response.status());
+  if (ctx.scan) etagHits(response.headers(), `GET ${where}`, ctx.hits.header);
   return { status: response.status(), json };
 }
 
@@ -2647,6 +2665,7 @@ function remember(ctx, where, headers, json, body, status = 200) {
 async function captureResponse(response, ctx) {
   const where = pathnameOf(response.url());
   if (!ctx.scan || !where.startsWith('/api/') || !response.url().startsWith(ctx.base)) return;
+  etagHits(response.headers(), `${response.request().method()} ${where} (page)`, ctx.hits.header);  // the view's included
   if (/\/download$|\/original$/.test(where)) return;  // a download is scanned as the saved file; an original is the document
   const type = String(response.headers()['content-type'] || '');
   if (!type.includes('json')) return;
@@ -3485,7 +3504,7 @@ async function main(argv) {
 module.exports = {
   EVIDENCE_SCHEMA, CLIENT_HEADERS, PLAYWRIGHT, REVIEW_DIALOG, UsageError, parseArgs, serviceDateOf, documentsOf,
   readPrivate, loadCredentials, debugMayLog, secretForms, scrubSecret, compileDenylist, denylist, contract, shapeProblems,
-  contractFor, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
+  contractFor, etagHits, API_ETAG, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
   expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
   servedQuotes, foldMarked, FALLBACK_WHY, FRAME_REASONS, PDF_LIBRARY, OVERPRINT_HEIGHT_SHARE, OVERPRINT_REACH_MIN,

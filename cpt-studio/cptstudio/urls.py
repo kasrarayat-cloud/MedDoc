@@ -15,6 +15,7 @@ urlpatterns = [
     # The customer API (BUILD-SPEC 6; studio.api, its payloads studio.customer's).
     path('api/session', api.session),
     path('api/encounters', api.encounters),
+    path('api/encounters/search', api.search_encounters),  # R2: R2-20 (the words in the body only)
     path('api/encounters/<uuid:encounter_id>', api.encounter_detail),
     path('api/encounters/<uuid:encounter_id>/answers', api.answers),
     path('api/encounters/<uuid:encounter_id>/decisions', api.decide),

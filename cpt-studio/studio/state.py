@@ -37,10 +37,17 @@ def latest_round(encounter) -> Optional[models.CodingRound]:
     return Round.objects.filter(encounter_id=encounter.pk).order_by('-number').first()
 
 
-def current_decisions(round_) -> dict[str, models.CodeDecision]:
-    """{line: its current decision} for ``round_``: the latest row per line by sequence; a revoke leaves none."""
+def decisions_of(round_) -> list[models.CodeDecision]:
+    """Every decision on ``round_``, with its reviewer, in sequence order: the one query current_decisions runs (release
+    2, R2-25: a document's read runs it once and derives both its state and its codes' decisions from it)."""
+    return list(Decision.objects.filter(round_id=round_.pk).select_related('reviewer').order_by('sequence'))
+
+
+def current_of(decisions) -> dict[str, models.CodeDecision]:
+    """{line: its current decision} of ``decisions`` (decisions_of's, in sequence order): the latest row per line; a
+    revoke leaves none."""
     current: dict[str, models.CodeDecision] = {}
-    for decision in Decision.objects.filter(round_id=round_.pk).select_related('reviewer').order_by('sequence'):
+    for decision in decisions:
         if decision.action == Decision.REVOKE:
             current.pop(decision.line, None)
         else:
@@ -48,9 +55,20 @@ def current_decisions(round_) -> dict[str, models.CodeDecision]:
     return current
 
 
+def current_decisions(round_) -> dict[str, models.CodeDecision]:
+    """{line: its current decision} for ``round_``: the latest row per line by sequence; a revoke leaves none."""
+    return current_of(decisions_of(round_))
+
+
 def compute(encounter) -> Optional[str]:
     """The state ``encounter`` reads now, or None when it has no coding round."""
-    round_ = latest_round(encounter)
+    return derive(latest_round(encounter))
+
+
+def derive(round_, current=None) -> Optional[str]:
+    """The state of an encounter whose latest coding round is ``round_`` (None when it has none): compute's rules, in
+    this one place. ``current`` is that round's current decisions (current_of) when the caller has read them already;
+    otherwise they are read here (release 2, R2-25)."""
     if round_ is None:
         return None
     if round_.state in (Round.QUEUED, Round.RUNNING):
@@ -62,7 +80,8 @@ def compute(encounter) -> Optional[str]:
     codes = [code for code in round_.codes or () if isinstance(code, dict)]
     if any(code.get('status') == 'needs_answer' for code in codes):
         return AWAITING_ANSWER
-    decided = {line for line, decision in current_decisions(round_).items() if decision.action in DECIDED}
+    decided = {line for line, decision in (current if current is not None else current_decisions(round_)).items()
+               if decision.action in DECIDED}
     for status, state in (('needs_review', NEEDS_REVIEW), ('ready', READY)):
         if any(code.get('status') == status and code.get('line') not in decided for code in codes):
             return state

@@ -43,14 +43,18 @@ trap 'rm -f "$log"' EXIT
 require_ran "$log" 'CPT Studio Django tests'
 # Release 2 (R2-3, D358): tests/test_request_identity.py pins what the coder is sent and the coding files' blob ids.
 # The suite above ran it among the rest; here each of its tests must run and pass with none skipped (this is a git
-# checkout, so its blob test reads HEAD too), so the pin cannot leave the gate by vanishing or by a skip.
+# checkout, so its blob test reads HEAD too), so the pin cannot leave the gate by vanishing or by a skip. The run is
+# judged by its summary - a bare 'OK' rules out a failure, an error, a skip, an expected failure and an unexpected
+# success - and each pinned test by its id being in the log: a docstring or a test's own output moves its status off
+# the id's line (refutation round 1, gates[4]).
 require_request_identity() {  # <log>
   local pinned
   for pinned in TheCoderIsSentWhatRelease1SentTests.test_the_settings_are_release_1_s \
       TheCoderIsSentWhatRelease1SentTests.test_each_request_is_release_1_s \
+      TheCoderIsSentWhatRelease1SentTests.test_each_request_goes_on_the_wire_as_release_1_s \
       TheCodingFilesKeepTheirBlobsTests.test_each_file_on_disk_is_release_1_s_blob \
       TheCodingFilesKeepTheirBlobsTests.test_git_s_head_names_the_same_blobs; do
-    if ! grep -qF "(tests.test_request_identity.$pinned) ... ok" "$1" || ! grep -qx 'OK' "$1"; then
+    if ! grep -qF "(tests.test_request_identity.$pinned)" "$1" || ! grep -qx 'OK' "$1"; then
       echo "The request identity pin (R2-3): $pinned did not run and pass, or a test of it failed or was skipped." >&2
       exit 1
     fi
@@ -86,18 +90,22 @@ require_module_passed "$log" test_generate 'The verification generator suite tes
 # gate's own control are two tests; the old name, with 'and the operator reads the encounter', is gone with that
 # guarantee). Release 2 (R2-1): the floor is the 59 tests that need no browser; the browser tests are skipped where
 # Playwright is not installed, as on this runner, and a skip for any other reason fails here, so no test leaves the
-# gate by being skipped. Where Playwright is installed the same file is the local browser gate (at least 104 tests,
-# none failed, none skipped: a release gate, run on the host).
+# gate by being skipped. Nor by failing as TODO: '# todo 0' is required and no line may carry a TODO directive
+# (refutation round 1, gates[0]). Where Playwright is installed the same file is the local browser gate (at least 104
+# tests, none failed, none skipped: a release gate, run on the host).
 require_walk_passed() {  # <log>
-  local passed failed skipped_otherwise
+  local passed failed todo todo_lines skipped_otherwise
   passed=$(sed -nE 's/^# pass ([0-9]+)$/\1/p' "$1" | tail -n 1)
   failed=$(sed -nE 's/^# fail ([0-9]+)$/\1/p' "$1" | tail -n 1)
+  todo=$(sed -nE 's/^# todo ([0-9]+)$/\1/p' "$1" | tail -n 1)
+  todo_lines=$(grep -cE ' # TODO( |$)' "$1" || true)
   skipped_otherwise=$(grep -E ' # SKIP' "$1" | grep -cvE ' # SKIP no Playwright at ' || true)
-  if [[ -z "$passed" || "$passed" -lt 59 || "$failed" != 0 || "$skipped_otherwise" != 0 ]] \
+  if [[ -z "$passed" || "$passed" -lt 59 || "$failed" != 0 || "$todo" != 0 || "$todo_lines" != 0 \
+        || "$skipped_otherwise" != 0 ]] \
       || ! grep -qE '^ok [0-9]+ - the denylist scan finds exactly what every vector of customer-denylist\.json says, as its other readers do$' "$1" \
       || ! grep -qE "^ok [0-9]+ - every /ops/ path is 404 to the customer and never 200 to nobody, its POSTs with the session's CSRF token$" "$1" \
       || ! grep -qE "^ok [0-9]+ - the operator gate's control needs no operator: the admin gate, the doctors' 404, the member refused \(A11\)$" "$1"; then
-    echo "Browser-walk tests: passed ${passed:-none}, failed ${failed:-unknown}, ${skipped_otherwise} skipped for a reason other than no Playwright, or a named test did not run." >&2
+    echo "Browser-walk tests: passed ${passed:-none}, failed ${failed:-unknown}, todo ${todo:-unknown} (${todo_lines} TODO lines), ${skipped_otherwise} skipped for a reason other than no Playwright, or a named test did not run." >&2
     exit 1
   fi
 }

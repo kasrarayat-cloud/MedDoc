@@ -2420,5 +2420,147 @@ class ReleaseOneMigrationTests(TemporaryDirectoryTest):
         self.assertEqual(hashlib.sha256((self.MIGRATIONS / f'{self.NAME}.py').read_bytes()).hexdigest(), original)
 
 
+
+# --- release 2's migrations (RELEASE-2-SPEC R2-23 and section 6; D-R2-15): three plain AddIndex, one table each ----------
+
+R2_LAST_RELEASE_1_MIGRATION = 18  # 0018_r1_availability: release 2's rule binds every migration after it
+
+
+def r2_field_makes_index(node):
+    """Whether Django gives an added or altered field an index: a ForeignKey unless db_index=False, a OneToOneField, or
+    db_index, unique or primary_key given as anything but False - and a field this reader cannot read counts as one."""
+    kind, field = install._call(node)
+    if field is None or kind == 'OneToOneField':
+        return True
+    if kind == 'ForeignKey' and install._literal(field.get('db_index')) is not False:
+        return True
+    return any(install._literal(field[name]) is not False for name in ('db_index', 'unique', 'primary_key')
+               if name in field)
+
+
+def r2_migration_operations(source):
+    """[(operation name, the model it names, whether it adds an index to that model)] of one migration file, read with
+    ast as the installer's gate reads it: the operation by install._call (so AddIndex imported by name is AddIndex), the
+    model by its model_name= keyword, a CreateModel by name= (None when an operation names none this reader finds); an
+    index by AddIndex, or by AddField or AlterField of a field Django indexes (r2_field_makes_index)."""
+    import ast
+    tree = ast.parse(source)
+    found = []
+    for node in tree.body:
+        if not (isinstance(node, ast.ClassDef) and node.name == 'Migration'):
+            continue
+        for item in node.body:
+            if not (isinstance(item, ast.Assign) and any(getattr(t, 'id', None) == 'operations' for t in item.targets)):
+                continue
+            for element in item.value.elts:
+                call = install._call(element)[0]
+                keywords = {k.arg: k.value for k in element.keywords} if isinstance(element, ast.Call) else {}
+                named = keywords.get('name' if call == 'CreateModel' else 'model_name')
+                model = named.value.lower() if isinstance(named, ast.Constant) and isinstance(named.value, str) else None
+                indexes = call in ('AddIndex', 'AddIndexConcurrently') or (
+                    call in ('AddField', 'AlterField') and r2_field_makes_index(keywords.get('field')))
+                found.append((call, model, indexes))
+    return found
+
+
+def r2_one_table_problems(sources):
+    """{migration: why} for every migration (name -> source) after 0018 that adds an index to a table it does not
+    create, yet names another model too (RELEASE-2-SPEC 2.3: an index on an existing table lives in a migration that
+    touches that table only, since a two-table migration deadlocked against a worker transaction writing both, and
+    migrate_bounded retries only a lock timeout)."""
+    problems = {}
+    for name, source in sorted(sources.items()):
+        if not re.fullmatch(r'\d{4}_\w+', name) or int(name[:4]) <= R2_LAST_RELEASE_1_MIGRATION:
+            continue
+        operations = r2_migration_operations(source)
+        created = {model for call, model, _indexes in operations if call == 'CreateModel'}
+        indexed = {model for _call, model, indexes in operations if indexes and model not in created}
+        named = {model for _call, model, _indexes in operations}
+        if indexed and named != indexed or len(indexed) > 1 or None in named and indexed:
+            problems[name] = f'adds an index to {sorted(map(str, indexed))} and names {sorted(map(str, named))}'
+    return problems
+
+
+class ReleaseTwoMigrationTests(TemporaryDirectoryTest):
+    MIGRATIONS = ReleaseOneMigrationTests.MIGRATIONS
+    WHY = {'0019_r2_document_lists': ['encounter: an index (writes are not refused)'] * 2,
+           '0020_r2_run_lookups': ['providerrun: an index (writes are not refused)'] * 2,
+           '0021_r2_round_sweep': ['codinground: an index (writes are not refused)']}
+
+    def sources(self, folder=None):
+        folder = folder or self.MIGRATIONS
+        return {path.stem: path.read_text(encoding='utf-8') for path in sorted(folder.glob('[0-9][0-9][0-9][0-9]_*.py'))}
+
+    def test_the_gate_accepts_0019_0020_and_0021_as_indexes_that_refuse_no_write(self):
+        verdicts = install.migration_safety(self.MIGRATIONS)
+        for name, why in self.WHY.items():
+            with self.subTest(migration=name):
+                self.assertEqual(verdicts[name], {'safe': True, 'why': why})
+                self.assertEqual(install.migration_verdict(self.sources()[name]), verdicts[name])
+        # the chain: each after the one before, 0019 after release 1's last
+        for name, before in (('0019_r2_document_lists', '0018_r1_availability'),
+                             ('0020_r2_run_lookups', '0019_r2_document_lists'),
+                             ('0021_r2_round_sweep', '0020_r2_run_lookups')):
+            self.assertIn(f"('studio', '{before}')", self.sources()[name], name)
+        # plain AddIndex of Django's own Index only: no CONCURRENTLY (the gate refuses it), no SQL, no Python
+        for name in self.WHY:
+            source = self.sources()[name]
+            self.assertEqual([call for call, _model, _indexes in r2_migration_operations(source)],
+                             ['AddIndex'] * len(self.WHY[name]), name)
+            code = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('#'))
+            self.assertEqual(code.count('index=models.Index('), len(self.WHY[name]), name)
+            for word in ('Concurrently', 'RunSQL', 'RunPython', 'UniqueIndex', 'unique'):
+                self.assertNotIn(word, code, (name, word))
+
+    def test_every_index_on_an_existing_table_is_in_a_migration_of_that_table_alone(self):
+        self.assertEqual(r2_one_table_problems(self.sources()), {})
+        self.assertEqual({name: sorted({model for _call, model, _indexes in r2_migration_operations(source)})
+                          for name, source in self.sources().items() if name in self.WHY},
+                         {'0019_r2_document_lists': ['encounter'], '0020_r2_run_lookups': ['providerrun'],
+                          '0021_r2_round_sweep': ['codinground']})
+        # the pin finds what it exists for: 0019 and 0020 merged into one migration (a scratch copy)
+        merged = self.sources()
+        operations = merged['0020_r2_run_lookups'].split('    operations = [\n', 1)[1]
+        self.assertEqual(merged['0019_r2_document_lists'].count('    ]\n'), 2)  # dependencies, then operations
+        head, tail = merged['0019_r2_document_lists'].rsplit('    ]\n', 1)
+        merged['0019_r2_document_lists'] = head + operations.rsplit('    ]\n', 1)[0] + '    ]\n' + tail
+        self.assertIn("model_name='providerrun'", merged['0019_r2_document_lists'])
+        del merged['0020_r2_run_lookups']
+        self.assertEqual(list(r2_one_table_problems(merged)), ['0019_r2_document_lists'])
+        # and a release-1 migration is outside the rule (0018 creates tables and indexes several at once)
+        self.assertNotIn('0018_r1_availability', r2_one_table_problems(merged))
+        # the same merge with AddIndex imported by name, which the gate reads as AddIndex and accepts
+        bare = merged['0019_r2_document_lists'].replace('migrations.AddIndex(', 'AddIndex(').replace(
+            'from django.db import migrations, models\n',
+            'from django.db import migrations, models\nfrom django.db.migrations import AddIndex\n')
+        self.assertEqual((bare.count('migrations.AddIndex('), bare.count('        AddIndex('),
+                          bare.count('from django.db.migrations import AddIndex\n')), (0, 4, 1))
+        self.assertEqual(install.migration_verdict(bare)['safe'], True)
+        self.assertEqual(list(r2_one_table_problems({**merged, '0019_r2_document_lists': bare})),
+                         ['0019_r2_document_lists'])
+        # indexes made by fields: a nullable foreign key added to two existing tables - Django indexes each column, and
+        # the gate accepts both - and an AlterField that sets db_index on one of them
+        keys = ("from django.db import migrations, models\nimport django.db.models.deletion\n\n\n"
+                "class Migration(migrations.Migration):\n    dependencies = [('studio', '0021_r2_round_sweep')]\n"
+                "    operations = [\n" + ''.join(
+                    f"        migrations.AddField(model_name='{model}', name='probe', field=models.ForeignKey("
+                    "null=True, on_delete=django.db.models.deletion.SET_NULL, to='studio.workspace')),\n"
+                    for model in ('encounter', 'providerrun')) + '    ]\n')
+        self.assertEqual(install.migration_verdict(keys)['safe'], True)
+        self.assertEqual(list(r2_one_table_problems({**self.sources(), '0022_probe': keys})), ['0022_probe'])
+        altered = keys.replace(
+            "        migrations.AddField(model_name='providerrun', name='probe', field=models.ForeignKey("
+            "null=True, on_delete=django.db.models.deletion.SET_NULL, to='studio.workspace')),\n",
+            "        migrations.AlterField(model_name='providerrun', name='purpose', field=models.CharField("
+            "db_index=True, max_length=40)),\n")
+        self.assertIn("migrations.AlterField(model_name='providerrun'", altered)
+        self.assertEqual(list(r2_one_table_problems({**self.sources(), '0022_probe': altered})), ['0022_probe'])
+        # and fields that make no index stay apart from the rule: a plain nullable column on each of two tables
+        plain = keys.replace("field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, "
+                             "to='studio.workspace')", 'field=models.CharField(max_length=10, null=True)')
+        self.assertEqual(plain.count('models.CharField(max_length=10, null=True)'), 2)
+        self.assertEqual(r2_one_table_problems({**self.sources(), '0022_probe': plain}), {})
+
+
 if __name__ == '__main__':
     unittest.main()

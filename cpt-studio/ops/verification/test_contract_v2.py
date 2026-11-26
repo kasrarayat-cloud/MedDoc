@@ -102,6 +102,26 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(sc.shape_problems({'error': 'rate_limited', 'retry_after': 42}, CONTRACT['rate_limited']), [])
         self.assertTrue(sc.shape_problems({'error': 'rate_limited'}, CONTRACT['rate_limited']))
 
+    def test_release_two_pages_the_list_and_says_which_rows_open_a_pdf(self):
+        # RELEASE-2-SPEC R2-19, R2-16 and R2-24: a list answer is one page - its rows, the next page's cursor and, on a
+        # first page, the list's total, each nullable - and each row says whether its first stored file is a small PDF
+        self.assertEqual(CONTRACT['list'], {'keys': {'encounters': {'items': {'ref': 'list_row'}}, 'next': 'string?',
+                                                     'total': 'integer?'}})
+        row = CONTRACT['types']['list_row']['keys']
+        self.assertEqual(sorted(row), sorted(['id', 'title', 'state', 'state_label', 'service_date', 'insurance',
+                                              'created_at', 'kind', 'opens_pdf']))
+        self.assertEqual(row['opens_pdf'], 'boolean')
+        page = {'encounters': [], 'next': '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', 'total': None}
+        self.assertEqual(sc.shape_problems(page, CONTRACT['list']), [])
+        self.assertEqual(sc.shape_problems({'encounters': [], 'next': None, 'total': 0}, CONTRACT['list']), [])
+        # release 1's whole-list answer is now a difference: a reader of it would take a page for the whole practice
+        self.assertEqual(sc.shape_problems({'encounters': []}, CONTRACT['list']),
+                         ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)'])
+        self.assertTrue(sc.shape_problems({'encounters': [], 'next': 5, 'total': '1'}, CONTRACT['list']))
+        denylist = json.loads((HERE / 'customer-denylist.json').read_text(encoding='utf-8'))
+        self.assertFalse({'next', 'total', 'opens_pdf'} & set(denylist['forbidden_keys']))
+        self.assertIn('POST /api/encounters/search', CONTRACT['about'])
+
     def test_a_vendor_or_a_machinery_key_in_a_customer_payload_is_a_hit(self):
         # the denylist reads every key and every value of what the contract serves
         ctx = sc.scan_context()
