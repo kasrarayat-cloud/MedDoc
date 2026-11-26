@@ -1216,7 +1216,7 @@ class Bench(TransactionTestCase):
             done = subprocess.run(['node', str(self.tree / 'ops' / 'walk.cjs'), '--base-url', web.base, '--admin-url',
                                    admin.base, '--credentials', str(creds), '--docs', str(docs), '--out', str(out),
                                    '--allow-live-provider', '--service-date', '2026-11-02', '--insurance', 'medicare',
-                                   '--deadline-seconds', '300', '--workspace', 'walk'],
+                                   '--deadline-seconds', '300', '--workspace', ws.name],
                                   capture_output=True, text=True, timeout=1800,
                                   env={**os.environ, 'CPT_VERIFY_PLAYWRIGHT': PLAYWRIGHT})
             (self.raw / 'walk.log').write_text(done.stdout[-30000:] + '\n--- stderr\n' + done.stderr[-30000:])

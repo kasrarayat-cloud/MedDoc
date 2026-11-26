@@ -536,12 +536,16 @@ async function flowLists() {
 async function laterPage(s) {
   const { page } = s;
   const before = await page.evaluate(() => document.querySelectorAll('#documentsTable .document-row').length);
-  const started = await page.evaluate(() => { window.scrollTo(0, document.body.scrollHeight); return performance.now(); });
+  // the list's end brought into view, whatever element scrolls it (release 2 observes #listMore with a 600 px margin)
+  const started = await page.evaluate(() => { const rows = document.querySelectorAll('#documentsTable .document-row');
+    const end = document.getElementById('listMore') || rows[rows.length - 1]; if (end) end.scrollIntoView({ block: 'end' });
+    window.scrollTo(0, document.body.scrollHeight); return performance.now(); });
+  const top = () => page.evaluate(() => { const first = document.querySelector('#documentsTable .document-row'); if (first) first.scrollIntoView({ block: 'start' }); window.scrollTo(0, 0); });
   try {
     await page.waitForFunction(n => document.querySelectorAll('#documentsTable .document-row').length > n, before, { timeout: 4000, polling: 'raf' });
-  } catch (e) { await page.evaluate(() => window.scrollTo(0, 0)); return null; }
+  } catch (e) { await top(); return null; }
   const ms = await page.evaluate(t => Math.round(performance.now() - t), started);
-  await settle(page); await page.evaluate(() => window.scrollTo(0, 0));
+  await settle(page); await top();
   return ms;
 }
 

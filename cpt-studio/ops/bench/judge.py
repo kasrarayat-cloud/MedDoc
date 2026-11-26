@@ -35,18 +35,38 @@ A_TOLERANCE = 0.20
 
 # --- reading rounds ---------------------------------------------------------------------------------------------------
 
-def load_rounds(out: Path) -> dict:
-    """{tag: {round: merged}}: every round file of the folder, the files of one tag and round merged."""
-    rounds = {}
+def newest_attempts(out: Path) -> tuple[list, list]:
+    """(kept, superseded): the round files of the folder, one per tag, base round and parts - the newest attempt. The
+    protocol driver runs a round again as round + 100 only when the attempt before it was INVALID (its load passed 8 or
+    it failed), so a later attempt supersedes an earlier one; the earlier files stay on disk, never overwritten."""
+    best, superseded = {}, []
     for path in sorted(Path(out).glob('*.json')):
         m = ROUND_RE.match(path.name)
         if not m:
             continue
+        number = int(m.group('round'))
+        key = (m.group('tag'), number % 100, m.group('parts'))
+        if key in best and best[key][0] > number:
+            superseded.append(path.name)
+            continue
+        if key in best:
+            superseded.append(best[key][1].name)
+        best[key] = (number, path)
+    return [path for _, path in sorted(best.values(), key=lambda v: v[1].name)], sorted(superseded)
+
+
+def load_rounds(out: Path) -> dict:
+    """{tag: {base round: merged}}: the newest attempt of each round file of the folder (newest_attempts), the files of
+    one tag and base round merged."""
+    rounds = {}
+    kept, superseded = newest_attempts(Path(out))
+    for path in kept:
+        m = ROUND_RE.match(path.name)
         data = json.loads(path.read_text())
-        merged = rounds.setdefault(m.group('tag'), {}).setdefault(int(m.group('round')), {
+        merged = rounds.setdefault(m.group('tag'), {}).setdefault(int(m.group('round')) % 100, {
             'metrics': {}, 'checks': {}, 'controls': {}, 'errors': [], 'unexpected_statuses': {}, 'console_errors': [],
             'blocked_requests': [], 'loads': [], 'files': {}, 'revision': None, 'parts': [], 'requests': None,
-            'static': {}, 'office': {}, 'front_door': None})
+            'static': {}, 'office': {}, 'front_door': None, 'superseded': superseded})
         merged['parts'] += data.get('parts', [])
         for name, values in data.get('metrics', {}).items():
             merged['metrics'].setdefault(name, []).extend(values)
@@ -311,7 +331,9 @@ def verdict(rounds: dict, table: dict, a: str, b: str, *, control: bool = False)
         answer = 'FAIL'
     else:
         answer = 'PASS'
-    return {'verdict': answer, 'invalid': why, 'rows': rows}
+    superseded = sorted({name for tag in (a, b) for r in rounds.get(tag, {}).values()
+                         for name in r.get('superseded', [])})
+    return {'verdict': answer, 'invalid': why, 'superseded': superseded, 'rows': rows}
 
 
 # --- the office model: arithmetic against the vhost's zones (section 8) -----------------------------------------------

@@ -350,6 +350,25 @@ class JudgeTests(unittest.TestCase):
         nofloor['rows'][1]['gate'][0].pop('floor_factor')
         self.assertEqual(self.answer(self.pair([300, 298, 296], [120, 121, 119]), table=nofloor)['verdict'], 'INVALID')
 
+    def test_a_retried_round_supersedes_its_invalid_attempt(self):
+        rounds = []
+        for n in (1, 2, 3):
+            rounds.append(_round('A', n, {'open.later.first_page.P0': [300, 298, 296], 'open.text.frame.P0': [100]},
+                                 checks={'correct.barcode_every_open': {'ok': True}}))
+            rounds.append(_round('B', n, {'open.later.first_page.P0': [120, 121, 119], 'open.text.frame.P0': [100]},
+                                 app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}}))
+        rounds[1]['load_after'] = [12.0, 9.0, 7.0]  # B round 1 spoiled by another process
+        out = self.folder(rounds)
+        self.assertEqual(self.answer(out)['verdict'], 'INVALID')
+        retry = _round('B', 101, {'open.later.first_page.P0': [122, 120, 118], 'open.text.frame.P0': [101]},
+                       app_js='bbb', checks={'correct.barcode_every_open': {'ok': True}})
+        Path(out, 'B-r101-open.json').write_text(json.dumps(retry))
+        kept, superseded = JUDGE.newest_attempts(out)
+        self.assertEqual(superseded, ['B-r1-open.json'])
+        self.assertIn('B-r101-open.json', [p.name for p in kept])
+        self.assertEqual(sorted(JUDGE.load_rounds(out)['B']), [1, 2, 3])
+        self.assertEqual(self.answer(out)['verdict'], 'PASS')
+
     def test_b_ten_percent_slower_fails(self):
         got = self.answer(self.pair([300, 298, 296], [328, 330, 326], a_text=100, b_text=110))
         self.assertEqual(got['verdict'], 'FAIL')
