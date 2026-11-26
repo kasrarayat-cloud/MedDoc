@@ -193,6 +193,10 @@ LINES = ('SYNTHETIC NOTE', 'Procedure: colonoscopy to the cecum.',
          'Findings: one 6 mm polyp in the sigmoid colon, removed by cold snare.')
 ACCENTED = ('SYNTHETIC NOTE: a caf\u00e9-au-lait macule on the flank, 2 cm\u00b2; WBC 6.4 x 10\u00b3/\u00b5L; '
             'one polyp removed by cold snare.')
+# The other line boundaries str.splitlines knows - VT, FF, FS, GS, RS, NEL, U+2028, U+2029 - which canonical_text
+# keeps as they are ('nothing else'): pdftotext ends each page with a form feed, Word's manual line break is VT
+# (refutation round 2, pins[4]).
+KEPT_BREAKS = '\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029'
 
 
 def text_file(text: str, filename: str) -> dict:
@@ -201,7 +205,8 @@ def text_file(text: str, filename: str) -> dict:
 
 # label -> the upload as the member made it, or {'paste': its text}. Item A's equal pins are what the normalisation
 # does: the CRLF and CR files equal the LF one, the file with a BOM equals 'txt', the NFD file equals the NFC one (and
-# neither equals what NFKC would give), and the CRLF paste equals 'paste'.
+# neither equals what NFKC would give), and the CRLF paste equals 'paste'. 'txt-kept' keeps every other line boundary,
+# so it equals no other case.
 CASES = {
     'txt': {'data': TEXT_FILE, 'filename': 'n.txt', 'media_type': 'text/plain'},
     'paste': {'paste': PASTED},
@@ -209,6 +214,7 @@ CASES = {
     'txt-lf': text_file('\n'.join(LINES) + '\n', 'lines.txt'),
     'txt-crlf': text_file('\r\n'.join(LINES) + '\r\n', 'lines.txt'),
     'txt-cr': text_file('\r'.join(LINES) + '\r', 'lines.txt'),
+    'txt-kept': text_file(LINES[0] + '\x0c' + LINES[1] + KEPT_BREAKS + LINES[2] + '\x0c', 'lines.txt'),
     'txt-bom': {'data': b'\xef\xbb\xbf' + TEXT_FILE, 'filename': 'n.txt', 'media_type': 'text/plain'},
     'txt-nfc': text_file(unicodedata.normalize('NFC', ACCENTED), 'accent.txt'),
     'txt-nfd': text_file(unicodedata.normalize('NFD', ACCENTED), 'accent.txt'),
@@ -253,6 +259,12 @@ RELEASE_1_REQUESTS = {
          '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
         ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
          '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+    ),
+    'txt-kept': (
+        ('reader', '0e656ea23a09284f82227b7ebe7dc9647e355b72d8a4b271efaf4957c7615753',
+         '0e656ea23a09284f82227b7ebe7dc9647e355b72d8a4b271efaf4957c7615753', 2),
+        ('checker', '3adf0f92fa909849feb3379ef0f827a95ed54ef0f451d9cda139b58685a3adbb',
+         '3adf0f92fa909849feb3379ef0f827a95ed54ef0f451d9cda139b58685a3adbb', 2),
     ),
     'txt-bom': (
         ('reader', '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9',
@@ -324,6 +336,12 @@ RELEASE_1_WIRE = {
          '96a17e5cc58825860726ce1d95ad8368b083e7147ded8026730588bc78a2ebaf'),
         ('checker', 'c79c9ff2d1c9b074d0bdf2592dd2269b7a9febfb38968d1c31af406931a2728e',
          '97a38c84f28667390b862db868ebcac8dab1672c73998ff0f5f310719e8f1ceb'),
+    ),
+    'txt-kept': (
+        ('reader', '64310f004905caa1169580315aa3658a41e30fdf733f398bb73848ccd860231a',
+         '4026ec35ab22a2bdd60f14317df638724bbae6aa137df64d5175867aa5e3e73a'),
+        ('checker', 'c4c0a8ac6396b86dcd08d8fc35470f42f393c1548c7ba775912395ccc3849c8c',
+         '42acafe000437fd130149ebae8483eaf7968363926c0847567fd9bfc47700aad'),
     ),
     'txt-bom': (
         ('reader', 'e8753cd2e2c9580f11f91260b2d83d61ac7931ac350138168fa326e1bb3bcfa1',
