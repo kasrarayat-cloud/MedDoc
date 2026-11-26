@@ -66,7 +66,8 @@ const PORTS = Array.from({ length: 10 }, (_, i) => 9170 + i);
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_ANSWER_CHARS = 2000;
 const CSRF = crypto.randomBytes(16).toString('hex');
-const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'favicon.svg': 'image/svg+xml' };
+const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'session_news.js': 'text/javascript; charset=utf-8',
+  'favicon.svg': 'image/svg+xml' };
 // The PDF library the review page loads for a PDF view (studio/static/studio/lib/): exactly the files its manifest lists,
 // served with exactly the headers the site sends for them (Django and WhiteNoise, through studio.access.
 // SecurityHeadersMiddleware, which wraps WhiteNoise: tests/test_frontend.py holds the two equal), so a local check sees

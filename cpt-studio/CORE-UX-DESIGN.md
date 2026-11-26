@@ -487,6 +487,14 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   ready ahead. A document that opens across an end keeps no copy of it, unless the end spared its view. A forced
   password change met at a download the page saves leaves the page where it is, and no worker is made ready ahead after
   it. A first read refused because the page is out of date drops the click's view too.
+- **The pages outside the app tell its tabs** (integrated refutation round 1, session-0). The sign-in page and the
+  account page load `session_news.js`, which posts on the tabs' own channel (the BroadcastChannel, else the
+  localStorage key the tabs already share) the page's session at load (none on the sign-in page), and the account
+  page's "Sign out everywhere" as its session signed out when that form is sent. A tab of that session leaves at once;
+  a tab of another session asks the server which session it is in (marked a poll), and a 401 there, or another
+  member's session (their sign-in, a forced password change included, lands on the account page), is an end, wiped as
+  above. An end made with no page of this browser's (another browser's sign-out everywhere) is heard at the tab's next
+  request, or when this browser next reaches the sign-in page.
 
 ## 9. Install and verify
 

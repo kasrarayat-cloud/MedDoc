@@ -239,7 +239,8 @@ class ShellTemplateTests(SimpleTestCase):
         self.assertIn('name="password" type="password"', html)
         audit = _audit(html)
         self.assertFalse(audit.inline_script)
-        self.assertEqual(audit.script_sources, [])
+        # one same-origin script: session_news.js (integrated refutation round 1, session-0; tests/test_session_news.py)
+        self.assertEqual(audit.script_sources, ['/static/studio/session_news.js'])
         self.assertEqual(audit.handlers, [])
         self.assertEqual(audit.external, [])
 
@@ -699,7 +700,7 @@ class BrowserLogicTests(SimpleTestCase):
                                         r'wherever it is drawn$')
 
     def test_scripts_parse(self):
-        for path in (STATIC / 'app.js', STATIC / 'ops_session.js', STATIC / 'ops_second_factor.js',
+        for path in (STATIC / 'app.js', STATIC / 'ops_session.js', STATIC / 'ops_second_factor.js', STATIC / 'session_news.js',
                      ROOT / 'ops' / 'dev_preview_server.cjs'):
             result = subprocess.run([self.node, '--check', str(path)], capture_output=True, text=True, timeout=60, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)

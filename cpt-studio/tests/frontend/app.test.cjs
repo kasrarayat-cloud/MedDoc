@@ -5254,7 +5254,7 @@ test('B2: the console\'s key script converts the options to bytes and the answer
   const registered = opsSecondFactor.answer({ id: 'AAEC', rawId: Uint8Array.from([0, 1, 2]).buffer, type: 'public-key',
     response: { clientDataJSON: Uint8Array.from([123, 125]).buffer, attestationObject: Uint8Array.from([3]).buffer, getTransports: () => ['usb'] } });
   assert.deepEqual(registered.response, { clientDataJSON: 'e30', attestationObject: 'Aw', transports: ['usb'] });
-  for (const file of ['ops_session.js', 'ops_second_factor.js']) {
+  for (const file of ['ops_session.js', 'ops_second_factor.js', 'session_news.js']) {
     const source = fs.readFileSync(path.join(ROOT, 'studio', 'static', 'studio', file), 'utf8');
     assert.ok(!/eval\(|new Function|innerHTML|document\.write/.test(source), file);
   }
@@ -8132,4 +8132,113 @@ test('R2: the page script and the stylesheet stay 1% under section 8\'s static w
   const gzipped = file => zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
   assert.ok(gzipped(BUNDLE) <= 79200, `app.js: ${gzipped(BUNDLE)} B gzipped by node, the early gate 79,200 (section 8: 80,000)`);
   assert.ok(gzipped(STYLES) <= 15840, `styles.css: ${gzipped(STYLES)} B gzipped by node, the early gate 15,840 (section 8: 16,000)`);
+});
+
+// --- I1-13 (session-0): the sign-in page and the account page tell this browser's app tabs they were reached
+// (studio/static/studio/session_news.js), on the app's own channel and in the shapes the app already acts on ---------
+
+const SESSION_NEWS = path.join(ROOT, 'studio', 'static', 'studio', 'session_news.js');
+
+// session_news.js run on a page of its own (a vm context): the body's data-session (none on the sign-in page), the
+// "Sign out everywhere" form where the page has one, and a BroadcastChannel that works, cannot be made, refuses to post
+// or is not there (then the localStorage key, which may refuse too). It answers what was posted, what was stored and the
+// form's submit.
+function newsPage({ session, form = false, channel = 'works', storage = 'works', now = 1764000000000 } = {}) {
+  const posted = [];
+  const stored = [];
+  const listeners = {};
+  const everywhere = form ? { addEventListener(type, listener) { listeners[type] = listener; } } : null;
+  class Channel {
+    constructor(name) {
+      if (channel === 'throws') throw new Error('no channel here');
+      this.name = name;
+    }
+    postMessage(data) {
+      if (channel === 'refuses') throw new Error('the channel refused it');
+      posted.push({ name: this.name, data: JSON.parse(JSON.stringify(data)) });
+    }
+  }
+  const sandbox = {
+    document: { body: { dataset: session === undefined ? {} : { session } }, getElementById: id => (id === 'everywhereForm' ? everywhere : null) },
+    Date: { now: () => now },
+  };
+  if (channel !== 'none') sandbox.BroadcastChannel = Channel;
+  if (storage !== 'none') {
+    sandbox.localStorage = { setItem(key, value) { if (storage === 'throws') throw new Error('no storage here'); stored.push({ key, data: JSON.parse(value) }); } };
+  }
+  vm.runInNewContext(fs.readFileSync(SESSION_NEWS, 'utf8'), sandbox);
+  return { posted, stored, submit: () => listeners.submit?.({ type: 'submit' }) };
+}
+
+test('I1-13 (session-0): the sign-in page and the account page tell the app\'s tabs they were reached - on its own channel, in its own shapes: at load the page and its session (none on the sign-in page), and the account page\'s "Sign out everywhere" as its session signed out; with no channel, the storage key shareSession writes; a channel or storage that refuses throws nothing', () => {
+  const now = 1764000000000;
+  const page = { type: 'page', session: 'tag-a', at: now };
+  const out = { type: 'signed-out', reason: 'expired', session: 'tag-a', at: now };
+  // the sign-in page: one message, at load, naming no session; it has no everywhere form
+  const login = newsPage({ now });
+  assert.deepEqual([login.posted, login.stored], [[{ name: app.SESSION_CHANNEL, data: { type: 'page', session: '', at: now } }], []]);
+  // the account page: its session at load; its everywhere form, sent, says that session signed out
+  const account = newsPage({ session: 'tag-a', form: true, now });
+  assert.deepEqual(account.posted, [{ name: app.SESSION_CHANNEL, data: page }]);
+  account.submit();
+  assert.deepEqual(account.posted.map(item => [item.name, item.data]), [[app.SESSION_CHANNEL, page], [app.SESSION_CHANNEL, out]]);
+  assert.deepEqual(account.stored, [], 'the channel worked: nothing in storage');
+  // no channel, one that cannot be made, or one that refuses: the storage key the app's storage events read
+  for (const channel of ['none', 'throws', 'refuses']) {
+    const fallback = newsPage({ session: 'tag-a', form: true, channel, now });
+    fallback.submit();
+    assert.deepEqual([fallback.posted, fallback.stored], [[], [{ key: app.SESSION_CHANNEL, data: page }, { key: app.SESSION_CHANNEL, data: out }]], channel);
+  }
+  // nowhere to say it: no error escapes the page
+  for (const storage of ['none', 'throws']) assert.doesNotThrow(() => newsPage({ session: 'tag-a', form: true, channel: 'none', storage }).submit(), storage);
+  // the shape is the app's own (shareSession): the message, the session and the time, nothing else
+  const shared = [];
+  const saved = { channel: app.idle.channel, session: app.idle.session };
+  try {
+    Object.assign(app.idle, { channel: { postMessage: data => shared.push(JSON.parse(JSON.stringify(data))) }, session: 'tag-a' });
+    app.shareSession({ type: 'signed-out', reason: 'expired' });
+  } finally {
+    Object.assign(app.idle, saved);
+  }
+  assert.deepEqual(Object.keys(shared[0]).sort(), Object.keys(out).sort());
+  assert.deepEqual({ ...shared[0], at: now }, out);
+});
+
+test('I1-13 (session-0): an app tab acts on what those pages say as on another tab\'s news - its own session\'s account page changes nothing; that page\'s "Sign out everywhere" takes it to the sign-in page at once; the sign-in page, or another member\'s account page, makes it ask the server (a poll), whose 401 or other session ends it - and every end wipes the kept copies, the hints and the waiting worker', async () => {
+  const keep = () => {
+    const data = Uint8Array.from([37, 80, 68, 70]);
+    app.state.keptViews.clear();
+    app.keepView('/api/encounters/x/original?view=1', 'abcdef00-0000-4000-8000-000000000000', data);
+    app.state.viewHints = new Map([['x', true]]);
+    const thread = { terminated: false, terminate() { this.terminated = true; } };
+    app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+    return { data, thread };
+  };
+  const ping = (status, body) => ({ match: (method, url) => method === 'POST' && url === app.ACTIVITY_URL, status, body });
+  const alive = session => ping(200, { idle_seconds: 900, cap_seconds: 28800, warning_seconds: 120, session });
+  const cases = [
+    // [what, the page's messages, the server's answer to a check, ends?, asks?]
+    ['the account page of its own session', newsPage({ session: 'tag-a', form: true }).posted, null, false, false],
+    ['that page\'s "Sign out everywhere"', (() => { const one = newsPage({ session: 'tag-a', form: true }); one.submit(); return one.posted; })(), null, true, false],
+    ['the sign-in page after the sessions ended (401)', newsPage({}).posted, ping(401, { error: 'signed_out', reason: 'expired' }), true, true],
+    ['the sign-in page while still signed in', newsPage({}).posted, alive('tag-a'), false, true],
+    ['another member\'s account page (a forced change: their session)', newsPage({ session: 'tag-b', form: true }).posted, alive('tag-b'), true, true],
+  ];
+  for (const [what, messages, answer, ends, asks] of cases) {
+    await withSignedInPage({ elements: { signoutForm: fakeElement({ submitted: 0, submit() { this.submitted += 1; } }) }, answers: answer ? [answer] : [] }, async ({ calls }) => {
+      Object.assign(app.idle, { gone: false, session: 'tag-a', checking: null, deadline: Date.now() + 600000, idleEnd: Date.now() + 600000 });
+      app.state.leaving = false;
+      const { data, thread } = keep();
+      for (const message of messages) app.receiveSession(message.data);
+      await settle(() => !app.idle.checking);
+      const checks = calls.filter(call => call.url === app.ACTIVITY_URL);
+      assert.deepEqual(checks.map(call => [call.method, call.headers[app.POLL_HEADER]]), asks ? [['POST', '1']] : [], `${what}: asked the server (a poll, no one's activity)`);
+      const left = calls.filter(call => call.assign).map(call => call.assign.split('?')[0]);
+      assert.deepEqual(left, ends ? ['/login/'] : [], `${what}: where the tab went`);
+      assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated],
+        ends ? [0, [0, 0, 0, 0], 0, null, true] : [1, [37, 80, 68, 70], 1, app.state.pdfStandby, false], `${what}: page memory`);
+      if (!ends) assert.ok(app.state.pdfStandby, `${what}: the waiting worker stays`);
+      app.forgetMemory();
+    });
+  }
 });

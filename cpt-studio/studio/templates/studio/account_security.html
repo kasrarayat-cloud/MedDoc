@@ -8,8 +8,9 @@
   <title>Account and password — CPT Studio</title>
   <link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">
   <link rel="stylesheet" href="{% static 'studio/styles.css' %}">
+  <script defer src="{% static 'studio/session_news.js' %}"></script>
 </head>
-<body class="login-body">
+<body class="login-body" data-session="{{ session }}">
   <main class="login-card" id="main">
     <div class="brand"><span class="brand-symbol" aria-hidden="true"><span></span></span><span>cpt<span class="brand-light">studio</span></span></div>
     <span class="eyebrow">ACCOUNT AND PASSWORD</span>
