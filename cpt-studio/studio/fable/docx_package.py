@@ -44,9 +44,11 @@ before it waits on it, so the parent's finally kills that group as well as the c
   pointer that would leave no picture - a v:imagedata or a:blip whose relationship, as LibreOffice reads it, names by
   the zip name LibreOffice opens a part that is sent and is a picture it decodes - in its place (R2-29); a field kept,
   not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader sees outside the fields in it
-  while a removed field stood in its instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that
-  holds nothing (no r:id, or one naming no relationship, a missing part or an empty part) is removed as release 1
-  removes it, counted in 'chunks'. A removed field in another field's result, and in no field's instruction, stays a
+  while a removed field stood in its instruction, which LibreOffice 7.4 drops (R2-30's fallback); and, told as an
+  inserted document, a zip entry a Unicode Path field names otherwise than its stored name, so the part checked here
+  could be another than the part LibreOffice opens (refutation round 2, loss[6] (b)). An altChunk that holds nothing
+  (no r:id, or one naming no relationship, a missing part or an empty part) is removed as release 1 removes it,
+  counted in 'chunks'. A removed field in another field's result, and in no field's instruction, stays a
   field whose instruction is QUOTE - a type LibreOffice shows by its stored result - unless it is an INCLUDEPICTURE
   whose stored result shows no text, symbol or mark: a picture alone (R2-30, refutation rounds 1 and 2). Everything
   else is edited as release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's
@@ -316,7 +318,9 @@ def safe_package(data: bytes) -> bytes:
     - It must be a Word package: a zip, every part named once (part names compare without case), none encrypted, at
       most MAX_PACKAGE_PARTS parts, each part's size within E1's limits; '[Content_Types].xml' and the package
       relationships ('_rels/.rels') present; the package's officeDocument relationship internal, naming a part present
-      whose content type is a Word document's or template's main part; no part that marks an OpenDocument package.
+      whose content type is a Word document's or template's main part; no part that marks an OpenDocument package;
+      no entry a Unicode Path extra field names otherwise than its stored name read as UTF-8, whatever the field's CRC
+      (refused as an inserted document, ContentNotShown: refutation round 2, loss[6] (b)).
     - Every relationship with a TargetMode other than Internal is dropped from every relationships part, and any part
       only such relationships named is dropped with its own relationships. A relationships part that declares a DTD, or
       is not a Relationships element, is refused.
@@ -366,6 +370,9 @@ def _package(data: bytes, report: dict):
                 if read != info.filename:  # release 1 renamed this part: its package is not this one (rounds[1])
                     report['renamed'] = report.get('renamed', 0) + 1
                     info.filename = read
+        renamed_by_field = _renamed_by_unicode_path(data, infos)
+        if renamed_by_field:  # loss[6] (b), the lead's decision: one part checked here, another opened by LibreOffice
+            raise ContentNotShown({'documents': renamed_by_field})
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):
@@ -1680,6 +1687,57 @@ def _utf8_reading(info) -> str:
         return info.orig_filename.encode('cp437').decode('utf-8')
     except UnicodeDecodeError:
         return info.orig_filename
+
+
+def _renamed_by_unicode_path(data: bytes, infos) -> int:
+    """How many zip entries carry a Unicode Path extra field (0x7075) - in their central directory record or their
+    local header - that names them otherwise than their stored name read as UTF-8, whatever the field's CRC and
+    version (refutation round 2, loss[6] (b), the lead's decision: zipfile applies such a field only when its CRC
+    matches, LibreOffice 24.2.7 reads it without, so the part checked here and the part LibreOffice opens could differ -
+    two entries whose fields swap their names code one document while the doctor's reader opens another). A field that
+    is not UTF-8, too short to hold its version and CRC, or cut off, and a stored name that is not UTF-8, name it
+    otherwise. Such a file is refused, whatever it holds: Word writes no such field."""
+    count = 0
+    for info in infos:
+        raw = info.orig_filename.encode('utf-8' if info.flag_bits & 0x800 else 'cp437', 'replace')  # its bytes
+        try:
+            stored = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            stored = None
+        local = _local_header_extra(data, info)
+        fields = [field for extra in (info.extra, local) if extra for field in _unicode_path_fields(extra)]
+        if any(name is None or name != stored for _crc, name in fields):  # the CRC ignored, as LibreOffice ignores it
+            count += 1
+    return count
+
+
+def _unicode_path_fields(extra: bytes):
+    """(the name CRC, the name - None when unreadable) of each Unicode Path field (0x7075) in an extra field block."""
+    at = 0
+    while at + 4 <= len(extra):
+        kind, size = struct.unpack_from('<HH', extra, at)
+        body = extra[at + 4:at + 4 + size]
+        if kind == 0x7075:
+            if len(body) < 5 or len(body) < size:
+                yield None, None  # too short to hold its version and CRC, or cut off
+            else:
+                crc = struct.unpack_from('<L', body, 1)[0]
+                try:
+                    yield crc, body[5:].decode('utf-8')
+                except UnicodeDecodeError:
+                    yield crc, None
+        at += 4 + size
+
+
+def _local_header_extra(data: bytes, info):
+    """The extra field block of a zip entry's local header (zipfile reads only the central directory's), or None when
+    no local header stands at its offset (zipfile then refuses to read the entry)."""
+    at = info.header_offset
+    head = data[at:at + 30]
+    if len(head) < 30 or head[:4] != b'PK\x03\x04':
+        return None
+    name_length, extra_length = struct.unpack_from('<HH', head, 26)
+    return data[at + 30 + name_length:at + 30 + name_length + extra_length]
 
 
 def _released(candidates, kept_rows, by_folded, special, dropped):

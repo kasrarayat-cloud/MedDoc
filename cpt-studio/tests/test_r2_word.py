@@ -736,6 +736,67 @@ def with_unicode_path(data, stored, unicode_name):
     return out.getvalue()
 
 
+def unicode_path_field(name, crc, *, version=1, raw=None):
+    """A Unicode Path extra field (0x7075) naming an entry ``name`` (or the bytes ``raw``), with ``crc`` and
+    ``version``."""
+    raw = name.encode('utf-8') if raw is None else raw
+    return struct.pack('<HHBL', 0x7075, 5 + len(raw), version, crc) + raw
+
+
+def central_extras(data, extras):
+    """``data`` (a zip with no comment) with the central directory record of each entry ``extras`` names carrying that
+    extra field block in place of its own; nothing else moves, the central directory being the zip's last part."""
+    end = data.rindex(b'PK\x05\x06')
+    count, _size, offset = struct.unpack_from('<HII', data, end + 10)
+    records, at = [], offset
+    for _ in range(count):
+        name_length, extra_length, comment_length = struct.unpack_from('<HHH', data, at + 28)
+        head, name = bytearray(data[at:at + 46]), data[at + 46:at + 46 + name_length]
+        extra = data[at + 46 + name_length:at + 46 + name_length + extra_length]
+        comment = data[at + 46 + name_length + extra_length:at + 46 + name_length + extra_length + comment_length]
+        if name.decode('utf-8', 'replace') in extras:
+            extra = extras[name.decode('utf-8', 'replace')]
+            struct.pack_into('<H', head, 30, len(extra))
+        records.append(bytes(head) + name + extra + comment)
+        at += 46 + name_length + extra_length + comment_length
+    tail = bytearray(data[end:])
+    struct.pack_into('<I', tail, 12, sum(len(record) for record in records))
+    return data[:offset] + b''.join(records) + bytes(tail)
+
+
+def with_unicode_paths(data, names, *, crc=None, version=1, raw=None, where=('local', 'central')):
+    """``data`` rewritten with a Unicode Path field on each entry ``names`` maps (its stored name: the name its field
+    gives) - its CRC the stored name's unless ``crc`` - in its local header, its central directory record or both."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(out, 'w') as rebuilt:
+        for info in source.infolist():
+            fresh = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            fresh.compress_type = zipfile.ZIP_DEFLATED
+            if info.filename in names and 'local' in where:
+                fresh.extra = unicode_path_field(names[info.filename], zlib.crc32(info.filename.encode('utf-8'))
+                                                 if crc is None else crc, version=version, raw=raw)
+            rebuilt.writestr(fresh, source.read(info))
+    built = out.getvalue()
+    if where == ('local', 'central'):
+        return built
+    return central_extras(built, {name: b'' if 'local' in where else unicode_path_field(
+        target, zlib.crc32(name.encode('utf-8')) if crc is None else crc, version=version, raw=raw)
+        for name, target in names.items()})
+
+
+def with_local_extra(data, name, extra):
+    """``data`` rewritten with the extra field block ``extra`` in the local header of its entry ``name`` alone."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(out, 'w') as rebuilt:
+        for info in source.infolist():
+            fresh = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            fresh.compress_type = zipfile.ZIP_DEFLATED
+            if info.filename == name:
+                fresh.extra = extra
+            rebuilt.writestr(fresh, source.read(info))
+    return central_extras(out.getvalue(), {name: b''})
+
+
 def entry_names(data) -> dict:
     """{each entry's name as its bytes are stored: whether its UTF-8 flag is set}."""
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -747,7 +808,8 @@ class ZipNameTests(ReleaseOneCase):
     """Refutation round 1, loss[2]: a zip entry name stored as UTF-8 without the UTF-8 flag is read as LibreOffice reads
     it - UTF-8, where that is valid - so an import that holds content is refused rather than removed as holding nothing,
     and a picture keeps its name (release 1 read such a name as cp437 and the rebuild renamed the part: the picture was
-    lost). A name zipfile takes from a Unicode Path extra field is left as zipfile reads it."""
+    lost). A name zipfile takes from a Unicode Path extra field is left as zipfile reads it - and since refutation round
+    2 (loss[6] (b)) a file whose field names an entry otherwise than its stored name is refused (UnicodePathTests)."""
 
     def importing(self, entry_name):
         return package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
@@ -782,7 +844,7 @@ class ZipNameTests(ReleaseOneCase):
 
     def test_a_unicode_path_name_is_left_as_zipfile_reads_it(self):
         # zipfile names the entry from the extra field: a name cp437 cannot write ('O' with a double acute) is not read
-        # again, so the check refuses the import rather than failing
+        # again, so the check refuses the file rather than failing (for the rename itself since round 2's loss[6] (b))
         data = with_unicode_path(package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
                                          (rel('rIdChunk', 'aFChunk', 'afchunk_\u0150.docx'),),
                                          (('word/afchunk_O.docx', inner_docx('IMPORTED')),)),
@@ -797,8 +859,9 @@ class ZipNameTests(ReleaseOneCase):
     def test_an_import_named_by_a_stored_name_a_reader_may_read_is_refused(self):
         # refutation round 2, loss[6]: the entry stored as 'word/afchunk1.docx' carries a Unicode Path field naming it
         # 'word/afchunk2.docx', which zipfile reads; a reader that ignores the field opens the stored name the import
-        # names. And a name stored as UTF-8 without the flag, read as cp437 - as zipfile, release 1 and a reader of
-        # the code page do (D-R2-40's principle: a spelling the doctor's Word may resolve)
+        # names (since loss[6] (b) such a file is refused for the rename itself). And a name stored as UTF-8 without
+        # the flag, read as cp437 - as zipfile, release 1 and a reader of the code page do (D-R2-40's principle: a
+        # spelling the doctor's Word may resolve)
         unicode_path = with_unicode_path(package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
                                                  (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
                                                  (('word/afchunk1.docx', inner_docx('IMPORTED')),)),
@@ -821,6 +884,75 @@ class ZipNameTests(ReleaseOneCase):
                 with self.assertRaises(docx_package.ConversionRefused) as checked:  # C8: a stored conversion of it
                     docx_package.check_in_child(data)
                 self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
+
+
+class UnicodePathTests(ReleaseOneCase):
+    """Refutation round 2, loss[6] (b), the lead's decision: a package any of whose entries carries a Unicode Path extra
+    field (0x7075) naming it otherwise than its stored name read as UTF-8 - whatever the field's CRC and version, in
+    its central directory record or its local header - is refused as an inserted document, fresh and before a stored
+    conversion is read again. zipfile applies such a field only where its CRC matches, LibreOffice 24.2.7 reads it
+    without, so lane D could check one part while LibreOffice opens another. A field that names the entry as its stored
+    name does renames nothing."""
+
+    def assert_refused(self, data, documents):
+        counts = {'documents': documents, 'objects': 0, 'controls': 0, 'fields': 0}
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package._safe_package(data)
+        self.assertEqual((caught.exception.code, caught.exception.counts), (docx_package.INSERTED_DOCUMENT, counts))
+        with self.assertRaises(docx_package.ConversionRefused) as checked:  # C8: a stored conversion of it
+            docx_package.check_in_child(data)
+        self.assertEqual((checked.exception.code, checked.exception.counts), (docx_package.INSERTED_DOCUMENT, counts))
+
+    @staticmethod
+    def picture():
+        return package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                       (rel('rIdPic', 'image', 'media/image1.png'),), (('word/media/image1.png', PNG_BYTES),))
+
+    def test_two_entries_whose_fields_swap_their_names_are_refused(self):
+        decoy = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                 f'<w:document {NS}><w:body>{p(t("DECOYTOKEN other words"))}</w:body></w:document>')
+        data = with_unicode_paths(package(p(t('SWAPTOKEN the real note')), parts=(('word/decoyxx.xml', decoy),)),
+                                  {'word/document.xml': 'word/decoyxx.xml', 'word/decoyxx.xml': 'word/document.xml'})
+        with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(data)[0])) as archive:  # the bad shape:
+            self.assertIn(b'DECOYTOKEN', archive.read('word/document.xml'))  # release 1 coded the decoy
+        self.assert_refused(data, 2)
+
+    def test_an_entry_a_field_renames_is_refused_whatever_the_fields_crc_version_or_header(self):
+        renamed = {'word/media/image1.png': 'word/media/image2.png'}
+        cut = struct.pack('<HH', 0x7075, 3) + b'\x01\x00\x00'  # too short to hold its version and CRC
+        for label, data in (
+                ('its CRC the stored name\'s (zipfile renames the part)', with_unicode_paths(self.picture(), renamed)),
+                ('its CRC another (zipfile keeps the stored name)', with_unicode_paths(self.picture(), renamed, crc=0)),
+                ('version 2', with_unicode_paths(self.picture(), renamed, version=2)),
+                ('in the local header only', with_unicode_paths(self.picture(), renamed, where=('local',))),
+                ('in the central directory only', with_unicode_paths(self.picture(), renamed, where=('central',))),
+                ('a name that is not UTF-8', with_unicode_paths(self.picture(), renamed, crc=0,
+                                                                raw=b'word/media/\xff.png')),
+                ('too short, in the local header', with_local_extra(self.picture(), 'word/media/image1.png', cut))):
+            with self.subTest(label):
+                self.release_1()._safe_package(data)  # the bad shape: release 1 coded it
+                self.assert_refused(data, 1)
+
+    def test_a_field_that_names_an_entry_as_its_stored_name_does_renames_nothing(self):
+        # the controls: a field naming the stored name; a name stored as UTF-8 without the flag, its field naming it as
+        # that UTF-8 reads (zipfile applies it, in release 1 too); no field - each coded with release 1's package, and
+        # its stored conversion reused
+        same = with_unicode_paths(self.picture(), {'word/media/image1.png': 'word/media/image1.png'})
+        final = 'word/media/photo_\u00df.png'
+        flagless_same = flagless(with_unicode_paths(
+            package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                    (rel('rIdPic', 'image', 'media/photo_\u00df.png'),), (('word/media/photo_XX.png', PNG_BYTES),)),
+            {'word/media/photo_XX.png': final}, crc=zlib.crc32(final.encode('utf-8'))),
+            b'word/media/photo_XX.png', final)
+        with zipfile.ZipFile(io.BytesIO(flagless_same)) as archive:
+            self.assertIn(final, archive.namelist())  # zipfile took the field's name
+        for label, data in (('a field naming the stored name', same), ('a flagless UTF-8 name, a field naming it so',
+                                                                        flagless_same), ('no field', self.picture())):
+            with self.subTest(label):
+                self.assertEqual(docx_package._safe_package(data)[1], {'fields': 0, 'objects': 0, 'controls': 0,
+                                                                       'chunks': 0})
+                self.assert_release_1_package(data)
+                self.assertIs(docx_package.check_in_child(data), False)
 
 
 def character_reference_word(kept_id, *, in_object=False, named=True):
@@ -1370,7 +1502,7 @@ COLLIDING_NAMES_WORD = flagless(flagless(
     package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
             (('word/afchunk1.docx', inner_docx('IMPORTED SYNTHETIC TEXT')), ('word/media/aXX.png', PNG_BYTES),
              ('word/media/aYY.png', PNG_BYTES))),
-    b'word/media/aXX.png', 'word/media/aÉ.png'), b'word/media/aYY.png', 'word/media/aé.png')
+    b'word/media/aXX.png', 'word/media/a\u00c9.png'), b'word/media/aYY.png', 'word/media/a\u00e9.png')
 IMPORTED_COUNTS = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
 OBJECT_COUNTS = {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}
 

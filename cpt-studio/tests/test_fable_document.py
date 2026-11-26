@@ -1429,7 +1429,7 @@ class InsertedDocumentTests(SimpleTestCase):
                              # part, and LibreOffice opens one (C9 fails closed); an opaque path under a scheme
                              ('//[x]/word/afchunk1.docx', 'word/afchunk1.docx'),
                              ('file://[x/word/afchunk1.docx', 'word/afchunk1.docx'),
-                             ('//x／y/word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('//x\uff0fy/word/afchunk1.docx', 'word/afchunk1.docx'),
                              ('urn:Zword/afchunk1.docx', 'word/afchunk1.docx'),
                              # loss[3]: a rootless path under a scheme opens that path, its dot segments removed, minus
                              # its first character
@@ -1438,8 +1438,8 @@ class InsertedDocumentTests(SimpleTestCase):
                              ('x:a/../fchunk1.docx', 'fchunk1.docx'), ('x:afchunk1.docx?v=1#f', 'fchunk1.docx'),
                              # D-R2-40: the doctor's Word resolves a zip name percent-decoded and drops a '..' past the
                              # package root (round 1's loss[4], the three Word-only spellings)
-                             ('chunk a.docx', 'word/chunk%20a.docx'), ('chünk.docx', 'word/ch%C3%BCnk.docx'),
-                             ('chünk.docx', 'word/ch%c3%bcnk.docx'),
+                             ('chunk a.docx', 'word/chunk%20a.docx'), ('ch\u00fcnk.docx', 'word/ch%C3%BCnk.docx'),
+                             ('ch\u00fcnk.docx', 'word/ch%c3%bcnk.docx'),
                              ('../../word/afchunk1.docx', 'word/afchunk1.docx'),
                              ('/../word/afchunk1.docx', 'word/afchunk1.docx'),
                              ('../../../word/afchunk1.docx', 'word/afchunk1.docx')):
