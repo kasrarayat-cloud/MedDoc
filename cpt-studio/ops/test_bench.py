@@ -510,6 +510,40 @@ class JudgeTests(unittest.TestCase):
         self.assertFalse(JUDGE.a_column_close(120, [194, 199]))
         self.assertTrue(JUDGE.a_column_close(5, None))
 
+    def test_a_is_checked_against_lane_m_s_recorded_a_where_there_is_one(self):
+        """Section 8's figure for the list at 100 documents is 39.2 ms; release 1 measured on this bench in the A/A
+        protocol gives about 25. With the recorded A in the row, A at 25 is A, and A at 39 is not."""
+        table = copy.deepcopy(TABLE)
+        table['rows'][0].update({'a_section8': 39.2, 'a_recorded': 25.0, 'gate': [{'abs_max': 30}], 'gain': False})
+        quiet = self.answer(self.pair([25.0, 24.6, 25.4], [20.0, 20.5, 19.5]), table=table)
+        self.assertEqual(quiet['verdict'], 'PASS', quiet)
+        loud = self.answer(self.pair([39.0, 39.4, 38.8], [20.0, 20.5, 19.5]), table=table)
+        self.assertEqual(loud['verdict'], 'INVALID')
+        self.assertTrue(any("lane M's recorded A 25.0" in ' '.join(r['why']) for r in loud['rows']), loud)
+        table['rows'][0].pop('a_recorded')  # without a recorded A, section 8's figure is the A column, as before
+        self.assertEqual(self.answer(self.pair([25.0, 24.6, 25.4], [20.0, 20.5, 19.5]), table=table)['verdict'],
+                         'INVALID')
+
+    def test_a_noisy_metric_s_a_column_tolerance_is_twice_its_own_spread(self):
+        """The longest GC pause is one sample a round (A/A 135 and 205 ms, a 41% spread): A at 140 against a recorded
+        205 is within twice that spread, and outside a plain 20%."""
+        table = copy.deepcopy(TABLE)
+        table['rows'][0].update({'a_section8': [194, 199], 'a_recorded': 205.3, 'a_spread': 0.41, 'stat': 'max',
+                                 'min_samples': 1, 'gate': [{'abs_max': 5}], 'gain': False})
+        self.assertAlmostEqual(JUDGE.a_tolerance(table['rows'][0]), 0.82)
+        noisy = self.answer(self.pair([140.0], [3.0]), table=table)
+        self.assertEqual(noisy['verdict'], 'PASS', noisy)
+        table['rows'][0]['a_spread'] = 0.05
+        self.assertEqual(JUDGE.a_tolerance(table['rows'][0]), 0.20)
+        self.assertEqual(self.answer(self.pair([140.0], [3.0]), table=table)['verdict'], 'INVALID')
+
+    def test_apply_floors_records_the_a_column_s_spread(self):
+        table = {'rows': [{'id': 'r', 'metric': 'm', 'a_section8': 10, 'gate': [{'abs_max': 5}]},
+                          {'id': 'q', 'metric': 'n', 'gate': [{'abs_max': 5}]}]}
+        floored = JUDGE.apply_floors(table, {'m': 0.3, 'n': 0.2})
+        self.assertEqual(floored['rows'][0]['a_spread'], 0.3)
+        self.assertNotIn('a_spread', floored['rows'][1])
+
 
 class OfficeModelTests(unittest.TestCase):
     def test_limit_req_is_nginx_s(self):

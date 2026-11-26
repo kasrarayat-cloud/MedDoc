@@ -146,6 +146,8 @@ def apply_floors(table: dict, spreads: dict) -> dict:
                 gate['floor_factor'] = floor_factor(s) if s is not None else None
         if row.get('gain'):
             row['spread'] = spreads.get(row['metric'])
+        if row.get('metric') and (row.get('a_section8') is not None or row.get('a_recorded') is not None):
+            row['a_spread'] = spreads.get(row['metric'])  # widens the A-column check for a noisy metric (a_tolerance)
     return table
 
 
@@ -156,15 +158,30 @@ def needs_floor(gate: dict) -> bool:
 
 # --- one row ----------------------------------------------------------------------------------------------------------
 
-def a_column_close(a_now, a_section8) -> bool:
-    """Release 1's own value is within 20% of section 8's A column (a number, or a [low, high] range)."""
-    if a_section8 is None or a_now is None:
+def a_tolerance(row: dict) -> float:
+    """How far release 1's own value may be from the A column: 20%, or twice the metric's own recorded A/A spread where
+    that is larger - C5's rule (no limit tighter than release 1's own spread) applied to the check that A is A, so a
+    one-sample metric such as the longest GC pause does not make every round INVALID."""
+    return max(A_TOLERANCE, 2 * (row.get('a_spread') or 0))
+
+
+def a_reference(row: dict):
+    """(value, whose) the A-column check compares with: lane M's recorded A (this bench, this host, the A/A protocol)
+    where acceptance.json holds one, else section 8's figure."""
+    if row.get('a_recorded') is not None:
+        return row['a_recorded'], "lane M's recorded A"
+    return row.get('a_section8'), "section 8's A"
+
+
+def a_column_close(a_now, a_ref, tolerance=A_TOLERANCE) -> bool:
+    """Release 1's own value is within the tolerance of the A column (a number, or a [low, high] range)."""
+    if a_ref is None or a_now is None:
         return True
-    low, high = (a_section8, a_section8) if not isinstance(a_section8, list) else a_section8
+    low, high = (a_ref, a_ref) if not isinstance(a_ref, list) else a_ref
     if low <= a_now <= high:
         return True
     near = low if a_now < low else high
-    return near == 0 and a_now == 0 or (near != 0 and abs(a_now - near) / abs(near) <= A_TOLERANCE)
+    return near == 0 and a_now == 0 or (near != 0 and abs(a_now - near) / abs(near) <= tolerance)
 
 
 def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = False) -> dict:
@@ -235,9 +252,11 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
     if len(b_values) < need or (row.get('needs_a') and len(a_values) < need):
         return {**out, 'verdict': 'INVALID',
                 'why': [f'too few samples (A {len(a_values)}, B {len(b_values)}, need {need})']}
-    if not control and row.get('a_section8') is not None and row.get('needs_a', True) and a is not None and \
-            not a_column_close(a, row['a_section8']):
-        return {**out, 'verdict': 'INVALID', 'why': [f'A {a} is more than 20% from section 8\'s A {row["a_section8"]}']}
+    reference, whose = a_reference(row)
+    if not control and reference is not None and row.get('needs_a', True) and a is not None and \
+            not a_column_close(a, reference, a_tolerance(row)):
+        return {**out, 'verdict': 'INVALID',
+                'why': [f'A {a} is more than {a_tolerance(row):.0%} from {whose} {reference}']}
     if b is None:
         return {**out, 'verdict': 'INVALID', 'why': ['no B value']}
     limits = []
