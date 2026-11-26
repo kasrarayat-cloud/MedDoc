@@ -664,6 +664,8 @@ class RealGunicornTests(SimpleTestCase):
                 break
             except OSError:
                 continue
+        else:  # never listen() unbound: the kernel would bind every interface (refutation round 2)
+            self.fail('no loopback port of GUNICORN_TEST_PORTS is free')
         silent.listen(16)
         port = silent.getsockname()[1]
         hung = {'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': str(port)}
