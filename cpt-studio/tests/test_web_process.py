@@ -608,8 +608,9 @@ class RealGunicornTests(SimpleTestCase):
         # the master loaded the application before its first fork: the hasher's library, which only the warm-up loads,
         # is mapped in the master's own memory (a master that does not preload never imports Django)
         self.assertIn('_argon2_cffi_bindings', Path(f'/proc/{server.process.pid}/maps').read_text())
-        # one thread each, by the kernel's count: the master forks every worker from a single thread, and no worker
-        # starts one (a thread in the master at a fork leaves its locks held, with no owner, in the worker)
+        # one thread each, by the kernel's count: the master forks its first four workers from a single thread, and no
+        # worker starts one (a thread in the master at a fork leaves its locks held, with no owner, in the worker); the
+        # recycling test below counts the master again after its replacements' forks
         self.assertEqual([len(os.listdir(f'/proc/{pid}/task')) for pid in (server.process.pid, *server.workers())],
                          [1] * 5)
         self.assertEqual(server.stop(), 0)
@@ -635,6 +636,10 @@ class RealGunicornTests(SimpleTestCase):
         self.assertAllAnswered(server.many(8, 40), 320)
         self.assertGreaterEqual(server.text().count('Autorestarting worker after current request.'), 10)
         self.assertEqual(len(server.until_sessions(4)), 4)  # each replacement opened its own; none was left behind
+        # every replacement is a fork of this master (R2-8): after the recycles it still holds one thread by the
+        # kernel's count, as at boot (a thread it started after its first forks would be held at each later fork;
+        # refutation round 2). An end-of-run sample: a master thread that ended before it is not seen
+        self.assertEqual(len(os.listdir(f'/proc/{server.process.pid}/task')), 1)
         self.assertEqual(server.stop(), 0)
 
     def test_the_workers_start_and_answer_when_the_database_does_not(self):
