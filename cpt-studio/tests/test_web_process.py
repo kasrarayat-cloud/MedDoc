@@ -14,8 +14,9 @@ Each probe runs in a fresh interpreter - this Python, this tree, this environmen
 the sender long ago (tests.support.coding does), so its own sys.modules says nothing about what the web loads. What the
 web loads is cptstudio.wsgi and both hosts' URLconfs with every view module they name: what a worker holds by the end of
 its first request, and from R2-5 what the master holds before the fork. The probe's tripwires refuse any database
-connection (Django's and the driver's own) and record a thread start without starting it; a control in the same probe
-proves that both trip.
+connection (Django's and the driver's own) and record a thread start without starting it; and the probe counts the
+process's own OS threads (/proc/self/task, what CPython 3.12's fork warning reads), which also sees a thread started
+below threading.Thread.start (refutation round 1, import[1]). A control in the same probe proves that each trips.
 
 Lane W (R2-5 to R2-9, D-R2-17), below lane F's tests. R2-5: importing cptstudio.wsgi - what gunicorn's master does once,
 before it forks - also warms the web (cptstudio.warm): both URLconfs loaded and compiled, every page template compiled,
@@ -58,7 +59,7 @@ from django.test import SimpleTestCase
 # The probe: tripwires first, then the step (argv[1]), then one line of JSON. Nothing in it reaches a database or the
 # network: a connection attempt is refused before any socket opens.
 IMPORT_PROBE = r'''
-import json, sys, threading
+import json, os, sys, threading
 
 opened, started = [], []
 
@@ -97,6 +98,7 @@ MARKERS = ('cptstudio.wsgi', 'cptstudio.urls', 'cptstudio.urls_admin', 'studio.a
            'studio.management.commands.run_worker', 'studio.fable.client', 'anthropic')
 print('PROBE ' + json.dumps({
     'error': error, 'opened': opened, 'started': started, 'threads': threading.active_count(),
+    'os_threads': len(os.listdir('/proc/self/task')),
     'loaded': [name for name in MARKERS if name in sys.modules],
     'ai': sorted(name for name in sys.modules if name.split('.')[0] in SDK or name == 'studio.fable.client'),
 }))
@@ -120,7 +122,8 @@ for urlconf in (settings.ROOT_URLCONF, hosts.ADMIN_URLCONF):
 '''
 JOBS_IMPORT_STEP = DJANGO_SETUP_STEP + 'import studio.jobs\n'
 WORKER_IMPORT_STEP = DJANGO_SETUP_STEP + 'import studio.management.commands.run_worker\n'
-# The control: after the web, a connection asked of Django, one asked of the driver, and a thread - each must trip.
+# The control: after the web, a connection asked of Django, one asked of the driver, a thread through threading and a
+# native one - each must trip.
 TRIPWIRE_CONTROL_STEP = WEB_IMPORT_STEP + '''
 import threading
 import psycopg
@@ -131,6 +134,8 @@ for attempt in (connection.ensure_connection, lambda: psycopg.connect('')):
     except RuntimeError:
         pass
 threading.Thread(target=print, name='lane-f-control').start()
+import _thread, time
+_thread.start_new_thread(time.sleep, (60,))
 '''
 WEB_MODULES = ('cptstudio.wsgi', 'cptstudio.urls', 'cptstudio.urls_admin', 'studio.api', 'studio.jobs')
 
@@ -181,6 +186,7 @@ class NothingHappensAtImportTests(SimpleTestCase):
         self.assertIsNone(web['error'])
         self.assertEqual(web['started'], [])
         self.assertEqual(web['threads'], 1)
+        self.assertEqual(web['os_threads'], 1)  # a thread started below threading.Thread.start too
 
     def test_the_probe_sees_a_connection_and_a_thread(self):
         # the positive control: the same tripwires, after the same import, catch each kind of act
@@ -188,6 +194,7 @@ class NothingHappensAtImportTests(SimpleTestCase):
         self.assertIsNone(control['error'])
         self.assertEqual(control['opened'], ['django:default', 'psycopg'])
         self.assertEqual(control['started'], ['lane-f-control'])
+        self.assertEqual(control['os_threads'], 2)  # the recorded thread never starts; the native one does
 
 
 # --- Lane W: the web's process (R2-5 to R2-9, D-R2-17) --------------------------------------------------------------
