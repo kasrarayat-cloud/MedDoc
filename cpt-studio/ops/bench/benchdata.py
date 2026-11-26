@@ -81,10 +81,12 @@ def sentence(rng: random.Random, n: int) -> str:
     return (' '.join(rng.choice(WORDS) for _ in range(n)) + '.').capitalize()
 
 
-def text_pdf(pages: int, number: int, seed: int, *, marker: bool = True, lines: int = 34) -> bytes:
+def text_pdf(pages: int, number: int, seed: int, *, marker: bool = True, lines: int = 34, head: tuple = (),
+             span: bool = False) -> bytes:
     """A text PDF of ``pages`` pages. Page 1 carries the marker block and the barcode of ``number`` unless ``marker`` is
     False (the control document: a PDF without the marker must never count as drawn). Each page ends with the quoted
-    passage the documents' citations name."""
+    passage the documents' citations name. The walk's documents only: ``head`` adds lines under page 1's title, and
+    ``span`` splits page 1's quoted passage across the page break. Without them the bytes are the same as ever."""
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     rng = random.Random(seed)
@@ -100,10 +102,20 @@ def text_pdf(pages: int, number: int, seed: int, *, marker: bool = True, lines: 
         c.drawString(56, 750, f'SYNTHETIC PROCEDURE NOTE - NOT A REAL PATIENT - page {page} of {pages}')
         c.setFont('Helvetica', 10)
         y = 728
-        for n in range(lines):
+        if page == 1:
+            for extra in head:
+                c.drawString(56, y, extra)
+                y -= 18
+        for n in range(lines - (len(head) if page == 1 else 0)):
             c.drawString(56, y, f'{n + 1:02d} ' + sentence(rng, 11)[:105])
             y -= 18
-        c.drawString(56, y, f'Quoted passage {page}: {QUOTE}')
+        if span and page == 1 and pages > 1:
+            c.drawString(56, y, f'Quoted passage {page}: the synthetic polyp was removed by')
+        elif span and page == 2:
+            c.drawString(56, 60, 'cold snare and retrieved, and the passage ends on this page.')
+            c.drawString(56, y, f'Quoted passage {page}: {QUOTE}')
+        else:
+            c.drawString(56, y, f'Quoted passage {page}: {QUOTE}')
         c.showPage()
     c.save()
     return out.getvalue()

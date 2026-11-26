@@ -4,7 +4,8 @@
 //   node proxy.cjs --listen <port> --upstream <port> --control <port> [--log <file>] [--host-header <name>]
 //
 // - Every request gets an X-Request-ID of 32 hex characters (as nginx gives one), unless it already has one, so each
-//   served request can be joined to the access record the application writes with that id.
+//   served request can be joined to the access record the application writes with that id; the answer carries it back
+//   as X-Bench-Request-Id, so the browser side can join what the page received to that record too.
 // - Every request is logged when its answer ends: sequence, start and end (ms since the epoch, fractional), method, the
 //   path with its query, status, the answer's body bytes, the request body's bytes, the request headers (the Cookie
 //   value replaced by a short digest of the session cookie, which names the member and nothing else) and the answer's
@@ -66,7 +67,7 @@ const server = http.createServer((req, res) => {
         entry.resHeaders = answer.headers;
         // hop-by-hop headers stay on their hop, as nginx keeps them: gunicorn's `Connection: close` must not close the
         // browser's kept-alive connection to this proxy
-        const back = { ...answer.headers };
+        const back = { ...answer.headers, 'x-bench-request-id': headers['x-request-id'] };
         for (const name of ['connection', 'keep-alive', 'transfer-encoding', 'proxy-connection']) delete back[name];
         res.writeHead(answer.statusCode, back);
         answer.on('data', chunk => { entry.bytes += chunk.length; });

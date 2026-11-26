@@ -60,7 +60,7 @@ TEST_PREFIX = 'test_cptstudio_'
 MARKER_WORD = 'zqxbenchmarkerword'  # typed into the search; must appear in no URL, header, log line or record
 ACCESS_FORMAT = '%(p)s %(D)s %(m)s %(U)s %(q)s %(s)s %(B)s %({x-request-id}i)s'
 PLAYWRIGHT = os.environ.get('BENCH_PLAYWRIGHT', '/opt/meddoc-pro/node_modules/playwright')
-SLOW_STATUS_OK = {200, 204, 302, 303, 304}
+SLOW_STATUS_OK = {200, 201, 204, 302, 303, 304}
 
 
 # --- pure helpers: no Django, no database (ops/test_bench.py tests these) ------------------------------------------------
@@ -234,7 +234,8 @@ class Env:
 class Web:
     """The tree's gunicorn, with its own deploy/gunicorn.conf.py and command-line overrides only."""
 
-    def __init__(self, env: Env, label: str, *extra, gc_log: Path | None = None, tree: Path | None = None):
+    def __init__(self, env: Env, label: str, *extra, gc_log: Path | None = None, tree: Path | None = None,
+                 static: Path | None = None):
         self.env, self.label = env, label
         self.tree = tree or env.tree
         self.port = env.ports.take()
@@ -245,6 +246,8 @@ class Web:
         self.err_path = env.raw / f'gunicorn-{label}.err'
         self.err = open(self.err_path, 'ab')
         extra_env = {'BENCH_GC_LOG': gc_log} if gc_log else {}
+        if static is not None:
+            extra_env['BENCH_STATIC'] = static
         environ = env.environ(**extra_env)
         environ['PYTHONPATH'] = f'{self.tree}:{HERE}'
         self.proc = subprocess.Popen(
@@ -575,6 +578,13 @@ class Bench(TransactionTestCase):
                   'versions': versions(), 'load_before': os.getloadavg(), 'metrics': {}, 'checks': {}, 'controls': {},
                   'errors': [], 'unexpected_statuses': {}, 'console_errors': [], 'blocked_requests': []}
         self.result = result
+        sampling = threading.Event()
+
+        def sample_load():  # the load through the round, every 5 s: a spike between before and after is still seen
+            while not sampling.wait(5):
+                result.setdefault('load_samples', []).append(round(os.getloadavg()[0], 2))
+        sampler = threading.Thread(target=sample_load, daemon=True)
+        sampler.start()
         originals = self.raw / 'originals'
         originals.mkdir(mode=0o700)
         try:
@@ -613,7 +623,9 @@ class Bench(TransactionTestCase):
                 finally:
                     self.acts.stop()
         finally:
+            sampling.set()
             result['load_after'] = os.getloadavg()
+            result['load_max'] = max([result['load_before'][0], result['load_after'][0], *result.get('load_samples', [])])
             target.write_text(json.dumps(result, indent=1, default=str))
             self.password_file.unlink(missing_ok=True)
             print(f'\nbench: wrote {target}', flush=True)
@@ -1124,23 +1136,194 @@ class Bench(TransactionTestCase):
         office['vhost_zones'] = vhost_zones(self.tree)
         self.result['office'] = office
 
+    # -- records (M4): every read served is recorded, once, before its pixels; fail closed; no marker anywhere ----------
+
     def part_records(self):
-        raise NotImplementedError('the records part is not built yet')
+        from studio import models
+        judged = {}
+        for size in ('n100', 'n1500'):
+            since = models.AccessRecord.objects.count()
+            repeats_before = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
+            data, entries, lines = self.browser('records', 'P0', size=size, label=f'records-{size}')
+            rows = list(models.AccessRecord.objects.order_by('created_at', 'id').values(
+                'view', 'encounter_ids', 'count', 'filters', 'request_id', 'created_at', 'outcome', 'sign_in_ref')[since:])
+            for row in rows:
+                row['created_at'] = row['created_at'].timestamp() * 1000
+                row['sign_in_ref'] = str(row['sign_in_ref'])
+            repeats_after = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
+            added = sum(n - repeats_before.get(k, 0) for k, n in repeats_after.items())
+            judged[size] = judge_records(entries, rows, added, data.get('actions', []), data.get('lists', []))
+            if size == 'n100':  # the flow opens four documents here: none recorded is a failure, never a vacuous pass
+                opens = judged[size]['openings']['opens']
+                judged[size]['openings']['ok'] = judged[size]['openings']['ok'] and len(opens) == 4
+                kinds = judged[size]['equation']['kinds']
+                judged[size]['equation']['ok'] = judged[size]['equation']['ok'] and all(
+                    kinds[k]['answers'] > 0 for k in ('member.list', 'member.detail', 'member.inline'))
+        for name in ('equation', 'polls', 'openings', 'list_ids', 'inline_before_pixels'):
+            parts = {size: judged[size][name] for size in judged}
+            self.check(f'records.{name}', all(p['ok'] for p in parts.values()), sizes=parts)
+        self.browser('fail-closed', 'P0', label='fail-closed', allowed=frozenset(SLOW_STATUS_OK | {503}))
+        self.check('records.marker', *marker_audit(self.raw, MARKER_WORD))
+        self.result['records'] = judged
 
     def part_left_behind(self):
-        raise NotImplementedError('the left-behind part is not built yet')
+        data, entries, lines = self.browser('left-behind', 'P0', label='left-behind', allowed=frozenset(range(100, 600)))
+        self.headers_audit(entries, 'left-behind')
 
     def part_correct(self):
-        raise NotImplementedError('the correct part is not built yet')
+        self.browser('correct', 'P0', label='correct', allowed=frozenset(range(100, 600)))
+
+    # -- walk (M9): the tree's own walk over its web, its worker (a fake coder) and the admin host ------------------------
 
     def part_walk(self):
-        raise NotImplementedError('the walk part is not built yet')
+        from studio import models
+        ws, user = bd.practice('walk', 3, self.password, seed=3)
+        models.User.objects.filter(pk=user.pk).update(actor_kind='agent')
+        docs = self.raw / 'walk-docs'
+        docs.mkdir(mode=0o700)
+        head = ('Date of service: 2026-11-02.', 'The colonoscopy to the cecum was complete.')
+        (docs / 'a-note-2p.pdf').write_bytes(bd.text_pdf(2, 201, 11, head=head))
+        (docs / 'b-note.txt').write_text('SYNTHETIC NOTE - NOT A REAL PATIENT\nDate of service: 2026-11-02\n'
+                                         'The colonoscopy to the cecum was complete.\n'
+                                         'The polyp was removed by cold snare and retrieved.\n')
+        (docs / 'c-scan-1p.pdf').write_bytes(bd.scan_pdf(1, 203, 13, dpi=100))
+        (docs / 'd-quotes-3p.pdf').write_bytes(bd.text_pdf(3, 204, 14, head=head, span=True))
+        creds = self.raw / 'walk-credentials.json'
+        creds.write_text(json.dumps({'username': user.username, 'password': self.password}))
+        creds.chmod(0o600)
+        web = Web(self.env, 'walk')
+        admin = Proxy(self.env, web.port, 'walk-admin', host_header='admin.quillmd.com')
+        log = open(self.raw / 'walk-worker.log', 'wb')
+        worker = subprocess.Popen([sys.executable, '-B', str(HERE / 'bench_worker.py')], cwd=self.tree,
+                                  env=self.env.environ(), stdout=log, stderr=log, start_new_session=True)
+        out = self.raw / 'walk-out'
+        try:
+            time.sleep(3)
+            started = time.time()
+            done = subprocess.run(['node', str(self.tree / 'ops' / 'walk.cjs'), '--base-url', web.base, '--admin-url',
+                                   admin.base, '--credentials', str(creds), '--docs', str(docs), '--out', str(out),
+                                   '--allow-live-provider', '--service-date', '2026-11-02', '--insurance', 'medicare',
+                                   '--deadline-seconds', '300', '--workspace', 'walk'],
+                                  capture_output=True, text=True, timeout=1800,
+                                  env={**os.environ, 'CPT_VERIFY_PLAYWRIGHT': PLAYWRIGHT})
+            (self.raw / 'walk.log').write_text(done.stdout[-30000:] + '\n--- stderr\n' + done.stderr[-30000:])
+            evidence = json.loads((out / 'evidence.json').read_text()) if (out / 'evidence.json').exists() else {}
+            run_checks = evidence.get('run_checks', [])
+            documents = [{'name': d.get('name'), 'result': d.get('result'), 'checks': len(d.get('checks', [])),
+                          'failed': [c.get('id') for c in d.get('checks', []) if c.get('status') != 'pass']}
+                         for d in evidence.get('documents', [])]
+            failed = [c.get('id') for c in run_checks if c.get('status') != 'pass']
+            self.check('walk.passes', done.returncode == 0 and not failed and len(documents) == 4
+                       and all(not d['failed'] for d in documents), exit=done.returncode, run_failed=failed,
+                       documents=documents, seconds=round(time.time() - started, 1))
+        finally:
+            worker.send_signal(signal.SIGTERM)
+            try:
+                worker.wait(30)
+            except subprocess.TimeoutExpired:
+                os.killpg(worker.pid, signal.SIGKILL)
+            log.close()
+            admin.stop()
+            web.stop()
+            creds.unlink(missing_ok=True)
+
+    # -- blue/green (M12): one open page's upstream flipped between the two releases; release 1's web on this schema ----
 
     def part_bluegreen(self):
-        raise NotImplementedError('the bluegreen part is not built yet')
+        other = Path(os.environ.get('BENCH_OTHER_TREE', '')).resolve() / 'cpt-studio'
+        if not (other / 'manage.py').exists():
+            raise RuntimeError('BENCH_OTHER_TREE must name the other release\'s tree (the folder holding cpt-studio/)')
+        other_static = self.raw / 'static-other'
+        subprocess.run([sys.executable, '-B', 'manage.py', 'collectstatic', '--noinput'], cwd=other,
+                       env={**self.env.environ(BENCH_STATIC=other_static), 'PYTHONPATH': f'{other}:{HERE}'},
+                       check=True, stdout=subprocess.DEVNULL, timeout=300)
+        mine = Web(self.env, 'bluegreen-mine')
+        theirs = Web(self.env, 'bluegreen-other', tree=other, static=other_static)
+        proxy = Proxy(self.env, theirs.port, 'bluegreen')
+        out = self.raw / 'browser-bluegreen.json'
+        try:
+            self.warm(mine)
+            self.warm(theirs)
+            cmd = ['node', str(HERE / 'bench.cjs'), '--flow', 'bluegreen', '--profile', 'P0', '--base', proxy.base,
+                   '--control', str(proxy.control), '--act', str(self.acts_port), '--docs', str(self.docs_file),
+                   '--password-file', str(self.password_file), '--out', str(out), '--playwright', PLAYWRIGHT,
+                   '--size', 'n100', '--web-mine', str(mine.port), '--web-other', str(theirs.port)]
+            done = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+            (self.raw / 'browser-bluegreen.log').write_text(done.stdout[-20000:] + '\n--- stderr\n' + done.stderr[-20000:])
+            data = json.loads(out.read_text()) if out.exists() else {'errors': ['no output']}
+            self.result['checks'].update(data.get('checks', {}))
+            for message in data.get('errors', []):
+                self.result['errors'].append({'part': 'bluegreen', 'error': message})
+            self.check('bluegreen.x3', *self.x3(theirs, other))
+        finally:
+            proxy.stop()
+            theirs.stop()
+            mine.stop()
+
+    def x3(self, theirs: Web, other: Path):
+        """The other tree's web on THIS tree's schema: sign-in, list, detail, view, upload, decision, report, sign-out
+        and the operator pages answer as that tree's own (the statuses its own pages expect), and its list query's plan
+        is recorded. Meaningful when this tree carries migrations the other does not (release 2's 0019-0021)."""
+        mine_migrations = {p.name for p in (self.tree / 'studio' / 'migrations').glob('0*.py')}
+        theirs_migrations = {p.name for p in (other / 'studio' / 'migrations').glob('0*.py')}
+        extra = sorted(mine_migrations - theirs_migrations)
+        m = Member(theirs.base, self.data['n100']['username'], self.password, read_client(other))
+        doc = self.docs_by_label['text-4p']['id']
+        got = {'shell': m.req('GET', '/')['status'], 'session': m.req('GET', '/api/session', api=True)['status'],
+               'list': m.req('GET', '/api/encounters', api=True)['status'],
+               'detail': m.req('GET', f'/api/encounters/{doc}', api=True)['status'],
+               'view': m.req('GET', f'/api/encounters/{doc}/original?view=1')['status']}
+        boundary = 'benchboundary'
+        upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nX3 upload\r\n'
+                  f'--{boundary}\r\nContent-Disposition: form-data; name="service_date"\r\n\r\n2026-11-02\r\n'
+                  f'--{boundary}\r\nContent-Disposition: form-data; name="insurance"\r\n\r\nmedicare\r\n'
+                  f'--{boundary}\r\nContent-Disposition: form-data; name="synthetic_attested"\r\n\r\ntrue\r\n'
+                  f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="x3.txt"\r\n'
+                  f'Content-Type: text/plain\r\n\r\nSYNTHETIC NOTE - NOT A REAL PATIENT\r\n--{boundary}--\r\n').encode()
+        got['upload'] = m.req('POST', '/api/encounters', body=upload, api=True,
+                              headers={'Content-Type': f'multipart/form-data; boundary={boundary}'})['status']
+        detail = json.loads(m.req('GET', f'/api/encounters/{doc}', api=True)['body'] or b'{}')
+        codes = [c for c in (detail.get('codes') or []) if c.get('status') == 'ready']
+        round_number = (detail.get('round') or {}).get('number') if isinstance(detail.get('round'), dict) else None
+        if codes:
+            got['decision'] = m.req('POST', f'/api/encounters/{doc}/decisions', api=True, headers={
+                'Content-Type': 'application/json'}, body=json.dumps({'line': codes[0].get('line'), 'action': 'approve',
+                                                                     'round': round_number,
+                                                                     'acknowledgement': True}))['status']
+        got['report'] = m.req('POST', f'/api/encounters/{doc}/reports', api=True, headers={
+            'Content-Type': 'application/json'}, body=json.dumps({'kind': 'draft', 'fmt': 'pdf', 'round': 1}))['status']
+        got['operator_page'] = get_with_host(theirs.base, '/ops/', 'admin.quillmd.com')['status']
+        got['signout'] = m.req('POST', '/logout/')['status']
+        expected = {'shell': {200}, 'session': {200}, 'list': {200}, 'detail': {200}, 'view': {200},
+                    'upload': {200, 201, 400}, 'decision': {200, 201, 400, 409}, 'report': {200, 201},
+                    'operator_page': {200, 302, 404}, 'signout': {302, 303}}
+        wrong = {k: v for k, v in got.items() if v not in expected.get(k, {v})}
+        return not wrong and not any(v >= 500 for v in got.values()), {'statuses': got, 'wrong': wrong,
+                                                                      'migrations_beyond_the_other': extra}
+
+    # -- plans (M14): the changed reads at 18,000 documents, 36,000 runs and 200,000 access records -------------------------
 
     def part_plans(self):
-        raise NotImplementedError('the plans part is not built yet')
+        out = {'release_2_indexes': release2_index_names(self.tree)}
+        live = plans_seed(self.password, documents=101, runs_per=3, records=2000, name='plans-live')
+        out['index_build_live_ms'] = rebuild_indexes(out['release_2_indexes'])
+        big = plans_seed(self.password, documents=18000, runs_per=2, records=200000, name='plans-big')
+        out['index_build_big_ms'] = rebuild_indexes(out['release_2_indexes'])
+        out['insert_wait'] = insert_during_build(out['release_2_indexes'], big)
+        out['reads'] = explain_changed_reads(self, big)
+        seq = [r for r in out['reads'] if r['seq_scans']]
+        slow = [r for r in out['reads'] if r['ms'] > 20]
+        self.check('plans.no_seq_scan', bool(out['reads']) and not seq, scans=[(r['read'], r['seq_scans']) for r in seq])
+        self.check('plans.reads_20ms', bool(out['reads']) and not slow, slow=[(r['read'], r['ms']) for r in slow])
+        builds = out['index_build_big_ms'] | {f'live:{k}': v for k, v in out['index_build_live_ms'].items()}
+        self.check('plans.index_build', bool(out['release_2_indexes'])
+                   and all(v <= 2000 for v in out['index_build_big_ms'].values())
+                   and all(v <= 100 for v in out['index_build_live_ms'].values()), builds=builds)
+        self.check('plans.insert_wait', bool(out['insert_wait'])
+                   and all(w['insert_ms'] <= w['build_ms'] + 100 for w in out['insert_wait']), waits=out['insert_wait'])
+        out['live'] = live['counts']
+        out['big'] = big['counts']
+        self.result['plans'] = out
 
     def headers_audit(self, entries, where):
         """Every non-static 200 or 304 is no-store; no answer header holds a stored file's sha256 or its first 16 hex;
@@ -1300,6 +1483,283 @@ def vhost_zones(tree: Path) -> dict:
     return {'zones': zones, 'maps': maps}
 
 
+# --- the gate parts' judgements and probes (records, markers, the other tree, plans) -------------------------------------------
+
+UUID_RE = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+
+def read_kind(method: str, url: str):
+    """The access row a served request writes, by its method and path (studio.read_audit.VIEW_KINDS), or None."""
+    path, _, query = url.partition('?')
+    if (method == 'GET' and path == '/api/encounters') or (method == 'POST' and path == '/api/encounters/search'):
+        return 'member.list'
+    if method == 'GET' and re.fullmatch(rf'/api/encounters/{UUID_RE}', path):
+        return 'member.detail'
+    if method == 'GET' and re.fullmatch(rf'/api/encounters/{UUID_RE}/original', path):
+        return 'member.inline' if 'view=1' in query.split('&') else 'member.download'
+    return None
+
+
+def judge_records(entries: list, rows: list, repeats_added: int, actions: list, lists: list) -> dict:
+    """The records part's exact gates over one flow: ``entries`` the proxy's log (each with its X-Request-ID),
+    ``rows`` the access rows written meanwhile, ``repeats_added`` the counted repeats added meanwhile, ``actions`` and
+    ``lists`` what the page did and the list answers it received (each with the request id the proxy gave it)."""
+    rid = lambda e: (e.get('reqHeaders') or {}).get('x-request-id', '')
+    served = [e for e in entries if e['status'] in (200, 304) and read_kind(e['method'], e['url'])]
+    by_rid = {}
+    for row in rows:
+        by_rid.setdefault(row['request_id'], []).append(row)
+    out = {}
+    kinds, polls = {}, []
+    for kind in ('member.list', 'member.detail', 'member.inline', 'member.download'):
+        mine = [e for e in served if read_kind(e['method'], e['url']) == kind]
+        polled = [e for e in mine if kind == 'member.detail' and (e.get('reqHeaders') or {}).get('x-cpt-poll') == '1']
+        polls += polled
+        plain = [e for e in mine if e not in polled]
+        rows_k = [r for r in rows if r['view'] == kind and r['outcome'] != 'refused']
+        if kind == 'member.list':
+            ok = len(mine) == len(rows_k) + repeats_added
+        else:
+            ok = all(len([r for r in by_rid.get(rid(e), []) if r['view'] == kind]) == 1 for e in plain) and \
+                len([r for r in rows_k if r['request_id'] not in {rid(e) for e in polled}]) == len(plain)
+        kinds[kind] = {'answers': len(mine), 'polls': len(polled), 'rows': len(rows_k), 'ok': ok}
+    answered = {rid(e) for e in served}
+    orphans = [r['view'] for r in rows if r['request_id'] not in answered and r['outcome'] != 'refused']
+    out['equation'] = {'ok': all(k['ok'] for k in kinds.values()) and not orphans, 'kinds': kinds, 'orphans': orphans,
+                       'repeats_added': repeats_added}
+    groups = {}
+    for e in polls:
+        for r in by_rid.get(rid(e), []):
+            groups.setdefault((r['sign_in_ref'], tuple(r['encounter_ids'])), []).append(r['created_at'])
+    crowded = [k for k, times in groups.items() if any(b - a < 60000 for a, b in zip(sorted(times), sorted(times)[1:]))]
+    out['polls'] = {'ok': not crowded, 'poll_answers': len(polls), 'poll_rows': sum(len(v) for v in groups.values())}
+    opens, late = [], []
+    for a in actions:
+        if a.get('kind') != 'records-open':
+            continue
+        written = [r for item in a.get('rids', []) for r in by_rid.get(item[3], [])]
+        detail = sum(1 for r in written if r['view'] == 'member.detail')
+        inline = sum(1 for r in written if r['view'] == 'member.inline')
+        library_failed = a.get('mode') == 'frame' and a.get('label') != 'text-note'
+        opens.append({'label': a.get('label'), 'detail': detail, 'inline': inline,
+                      'ok': detail == 1 and (inline == 1 or (library_failed and inline == 2))})
+        pixels = a.get('canvasEpoch')
+        for r in written:
+            if r['view'] == 'member.inline' and pixels and r['created_at'] > pixels:
+                late.append({'label': a.get('label'), 'row_after_pixels_ms': round(r['created_at'] - pixels, 1)})
+    out['openings'] = {'ok': all(o['ok'] for o in opens), 'opens': opens}
+    out['inline_before_pixels'] = {'ok': not late, 'late': late}
+    mismatches = []
+    seen_ids = [r['encounter_ids'] for r in rows if r['view'] == 'member.list']
+    for answer in lists:
+        written = [r for r in by_rid.get(answer.get('rid') or '', []) if r['view'] == 'member.list']
+        if written:
+            if written[0]['encounter_ids'] != answer.get('ids') or written[0]['count'] != len(answer.get('ids') or []):
+                mismatches.append({'path': answer.get('path'), 'served': len(answer.get('ids') or []),
+                                   'named': len(written[0]['encounter_ids'] or [])})
+        elif not (repeats_added and answer.get('ids') in seen_ids):
+            mismatches.append({'path': answer.get('path'), 'served': len(answer.get('ids') or []), 'named': None})
+    out['list_ids'] = {'ok': bool(lists) and not mismatches, 'answers': len(lists), 'mismatches': mismatches[:10]}
+    return out
+
+
+def marker_audit(raw: Path, word: str):
+    """(ok, where): the marker typed into the search appears in no URL or header the proxy saw, no gunicorn line, and
+    no access row or security event (the round's server-side artifacts; the bench's own inputs are not scanned)."""
+    from studio import models
+    found = {}
+    for pattern in ('proxy-*.jsonl', 'access-*.log', 'gunicorn-*.err'):
+        for path in raw.glob(pattern):
+            if word in path.read_text(errors='replace'):
+                found[path.name] = True
+    rows = models.AccessRecord.objects.filter(filters__icontains=word).count() + \
+        models.AccessRecord.objects.filter(reason__icontains=word).count()
+    events = sum(1 for data in models.SecurityEvent.objects.values_list('data', flat=True)
+                 if word in json.dumps(data))
+    if rows:
+        found['access_records'] = rows
+    if events:
+        found['security_events'] = events
+    return not found, {'found': found}
+
+
+def read_client(tree: Path) -> tuple[str, str]:
+    """Another tree's client header and version, read from its own studio/client_contract.py (never written here)."""
+    text = (tree / 'studio' / 'client_contract.py').read_text()
+    return (re.search(r"^HEADER = '([^']+)'", text, re.M).group(1), re.search(r"^VERSION = '([^']+)'", text, re.M).group(1))
+
+
+def get_with_host(base: str, path: str, host: str) -> dict:
+    port = int(base.rsplit(':', 1)[1])
+    c = http.client.HTTPConnection('127.0.0.1', port, timeout=60)
+    c.request('GET', path, headers={'Host': host, 'X-Request-ID': secrets.token_hex(16)})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    return {'status': r.status}
+
+
+def release2_index_names(tree: Path) -> list[str]:
+    """The indexes this tree's migrations after 0018 add (release 2's 0019-0021), by the names they give them."""
+    names = set()
+    for path in sorted((tree / 'studio' / 'migrations').glob('00*.py')):
+        if int(path.name[:4]) >= 19:
+            names |= set(re.findall(r"name=['\"](studio_[a-z0-9_]+)['\"]", path.read_text()))
+    return sorted(names)
+
+
+def plans_seed(password: str, *, documents: int, runs_per: int, records: int, name: str) -> dict:
+    """A practice of ``documents`` (a round each), ``runs_per`` coding runs per round and ``records`` access rows, as
+    bulk data in the bench's throwaway database."""
+    from django.db import connection
+    from studio import jobs, models
+    ws, user = bd.practice(name, documents, password, seed=documents)
+    rounds = list(models.CodingRound.objects.filter(encounter__workspace=ws).values_list('id', 'encounter_id',
+                                                                                         'revision_id'))
+    purposes = list(jobs.PURPOSES)
+    models.ProviderRun.objects.bulk_create(
+        [models.ProviderRun(encounter_id=e, revision_id=rv, provider='anthropic', adapter_version='bench@1',
+                            request_body={}, contexts=[], state=models.ProviderRun.SUCCEEDED,
+                            purpose=purposes[k % len(purposes)], scope={'round': str(r)})
+         for r, e, rv in rounds for k in range(runs_per)], batch_size=5000)
+    with connection.cursor() as cur:
+        cur.execute("INSERT INTO studio_accessrecord (id, created_at, host, view, actor_id, actor_kind, actor_role, "
+                    "workspace_id, encounter_ids, filters, reason, outcome, client, request_id) "
+                    "SELECT gen_random_uuid(), now() - (g * interval '1 second'), 'cpt', 'member.detail', %s, 'human', "
+                    "'reviewer', %s, '[]'::jsonb, '{}'::jsonb, '', 'served', '', '' FROM generate_series(1, %s) g",
+                    [user.pk, ws.pk, records])
+        cur.execute('ANALYZE')
+        counts = {}
+        for table in ('studio_encounter', 'studio_providerrun', 'studio_codinground', 'studio_accessrecord'):
+            cur.execute(f'SELECT count(*) FROM {table}')
+            counts[table] = cur.fetchone()[0]
+    return {'ws': ws, 'user': user, 'round': rounds[len(rounds) // 2], 'counts': counts}
+
+
+def rebuild_indexes(names: list) -> dict:
+    """{index: ms}: each index dropped and built again by its own definition (pg_indexes), at the database's size now."""
+    from django.db import connection
+    out = {}
+    with connection.cursor() as cur:
+        for name in names:
+            cur.execute('SELECT indexdef FROM pg_indexes WHERE indexname = %s', [name])
+            row = cur.fetchone()
+            if not row:
+                out[name] = None
+                continue
+            cur.execute(f'DROP INDEX "{name}"')
+            started = time.perf_counter()
+            cur.execute(row[0])
+            out[name] = round((time.perf_counter() - started) * 1000, 1)
+    return out
+
+
+def insert_during_build(names: list, big: dict) -> list:
+    """For each index: build it in a transaction (as a migration does: its SHARE lock held until the commit) while an
+    insert into its table starts 20 ms in; the insert's wait and the build's time, in ms."""
+    from django.db import connection, connections, transaction
+    from studio import models
+    out = []
+    with connection.cursor() as cur:
+        cur.execute('SELECT indexname, tablename, indexdef FROM pg_indexes WHERE indexname = ANY(%s)', [list(names)])
+        found = cur.fetchall()
+    enc_id, rev_id = big['round'][1], big['round'][2]
+    inserts = {
+        'studio_encounter': lambda: models.Encounter.objects.create(workspace=big['ws'], title='Bench insert',
+                                                                    created_by=big['user']),
+        'studio_providerrun': lambda: models.ProviderRun.objects.create(
+            encounter_id=enc_id, revision_id=rev_id, provider='anthropic', adapter_version='bench@1', request_body={},
+            contexts=[], purpose='coding_reader', scope={'round': str(big['round'][0])}),
+        'studio_codinground': lambda: models.CodingRound.objects.create(
+            encounter_id=enc_id, revision_id=rev_id, number=900 + len(out), trigger='retry', context={}, state='done')}
+    for name, table, definition in found:
+        with connection.cursor() as cur:
+            cur.execute(f'DROP INDEX "{name}"')
+        timing = {}
+
+        def build():
+            started = time.perf_counter()
+            with transaction.atomic():
+                with connection.cursor() as cur:
+                    cur.execute(definition)
+                timing['build_ms'] = round((time.perf_counter() - started) * 1000, 1)
+            connections.close_all()
+
+        def insert():
+            time.sleep(0.02)
+            started = time.perf_counter()
+            inserts[table]()
+            timing['insert_ms'] = round((time.perf_counter() - started) * 1000, 1)
+            connections.close_all()
+        threads = [threading.Thread(target=build), threading.Thread(target=insert)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        out.append({'index': name, 'table': table, **timing})
+    return out
+
+
+def explain_changed_reads(bench, big: dict) -> list:
+    """EXPLAIN (ANALYZE, BUFFERS) of every statement the changed reads send to the three tables, at the bulk size: the
+    list, queue and search pages and the counts (through the tree's own views), the round lookups and the sweeps."""
+    from django.db import connection
+    from django.test import Client
+    from django.test.utils import CaptureQueriesContext, override_settings
+    from studio import jobs, models, operator, request_meta
+    from tests.support import operator as ops
+    captured = []
+
+    def capture(label, call):
+        try:
+            with CaptureQueriesContext(connection) as q:
+                call()
+        except Exception as exc:
+            captured.append((label, None, f'{type(exc).__name__}: {exc}'[:200]))
+            return
+        for item in q.captured_queries:
+            sql = item['sql']
+            if sql.lstrip().upper().startswith('SELECT') and re.search(r'studio_(encounter|providerrun|codinground)\b',
+                                                                       sql):
+                captured.append((label, sql, None))
+    with override_settings(STATIC_ROOT=bench.raw / 'static'):
+        c = Client(HTTP_HOST='cpt.quillmd.com', HTTP_X_REQUEST_ID='0' * 32)
+        c.force_login(big['user'])
+        ops.mark_signed_in(c, door=request_meta.CPT)
+        api = {f'HTTP_{bench.client[0].upper().replace("-", "_")}': bench.client[1]}
+        capture('list page', lambda: c.get('/api/encounters?list=documents', **api))
+        capture('queue page', lambda: c.get('/api/encounters?list=queue', **api))
+        capture('search', lambda: c.post('/api/encounters/search', data=json.dumps({'text': '0042', 'before': None}),
+                                         content_type='application/json', **api))
+        capture('counts', lambda: c.get('/api/session', **api))
+    round_ = models.CodingRound.objects.get(pk=big['round'][0])
+    capture('awaiting_reconcile', lambda: jobs.awaiting_reconcile(round_))
+    capture('reused', lambda: jobs._reused(round_, jobs.PURPOSES[0]))
+    capture('abandoned_outcome', lambda: jobs.abandoned_outcome(round_))
+    capture('sweeps', lambda: jobs.mark_stale())
+    capture('round_runs', lambda: operator.round_runs(round_))
+    out = []
+    for label, sql, error in captured:
+        if error:
+            out.append({'read': label, 'error': error, 'ms': 0, 'seq_scans': []})
+            continue
+        with connection.cursor() as cur:
+            cur.execute('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + sql)
+            plan = cur.fetchone()[0][0]
+
+        def walk(node):
+            yield node
+            for child in node.get('Plans', []):
+                yield from walk(child)
+        nodes = list(walk(plan['Plan']))
+        out.append({'read': label, 'sql': sql[:160], 'ms': round(plan['Execution Time'] + plan['Planning Time'], 2),
+                    'seq_scans': sorted({n.get('Relation Name') for n in nodes if n['Node Type'] == 'Seq Scan'
+                                         and n.get('Relation Name') in ('studio_encounter', 'studio_providerrun',
+                                                                        'studio_codinground')}),
+                    'indexes': sorted({n['Index Name'] for n in nodes if 'Index Name' in n})})
+    return out
+
+
 # --- the protocol: trees in a declared, interleaved order ------------------------------------------------------------------
 
 def driver(argv=None) -> int:
@@ -1315,7 +1775,12 @@ def driver(argv=None) -> int:
     parser.add_argument('--ports', required=True)
     parser.add_argument('--python', default=sys.executable)
     parser.add_argument('--profiles', default=','.join(PROFILES))
-    parser.add_argument('--max-load', type=float, default=6.0, help='wait (up to 15 minutes) while the 1-minute load is higher')
+    parser.add_argument('--max-load', type=float, default=4.0,
+                        help='before each run, wait (up to --wait-minutes) until the 1-minute load is at most this and '
+                             'the 5-minute load at most 8')
+    parser.add_argument('--wait-minutes', type=int, default=90)
+    parser.add_argument('--retries', type=int, default=2,
+                        help='a round whose load passed 8 (the judge\'s INVALID) is run again as round + 100, this often')
     args = parser.parse_args(argv)
     trees = dict(item.split('=', 1) for item in args.tree)
     order = [(tag, int(n)) for tag, n in (item.split(':') for item in args.order.split(','))]
@@ -1331,25 +1796,34 @@ def driver(argv=None) -> int:
     log = open(out / 'protocol.log', 'a')
     status = 0
     for group in args.group:
-        for tag, round_no in order:
+        for tag, first_round in order:
             tree = Path(trees[tag]).resolve() / 'cpt-studio'
-            waited = 0
-            while os.getloadavg()[0] > args.max_load and waited < 900:
-                time.sleep(30)
-                waited += 30
-            env = {**os.environ, 'BENCH_TAG': tag, 'BENCH_ROUND': str(round_no), 'BENCH_PARTS': group,
-                   'BENCH_OUT': str(out), 'BENCH_PORTS': args.ports, 'BENCH_PROFILES': args.profiles}
-            line = f'{utc()} {tag}:{round_no} {group} load={os.getloadavg()[0]:.2f} waited={waited}s'
-            print(line, flush=True)
-            log.write(line + '\n')
-            log.flush()
-            run_log = out / f'run-{tag}-r{round_no}-{group.replace(",", "+")}.log'
-            with open(run_log, 'w') as handle:
-                done = subprocess.run([args.python, '-B', 'manage.py', 'test', str(HERE), '--pattern', 'bench_run.py',
-                                       '--noinput'], cwd=tree, env=env, stdout=handle, stderr=subprocess.STDOUT,
-                                      timeout=4 * 3600)
-            log.write(f'{utc()} {tag}:{round_no} {group} exit {done.returncode}\n')
-            log.flush()
+            for attempt in range(args.retries + 1):
+                round_no = first_round + 100 * attempt
+                waited = 0
+                while (os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and waited < args.wait_minutes * 60:
+                    time.sleep(30)
+                    waited += 30
+                env = {**os.environ, 'BENCH_TAG': tag, 'BENCH_ROUND': str(round_no), 'BENCH_PARTS': group,
+                       'BENCH_OUT': str(out), 'BENCH_PORTS': args.ports, 'BENCH_PROFILES': args.profiles}
+                line = f'{utc()} {tag}:{round_no} {group} load={os.getloadavg()[0]:.2f} waited={waited}s'
+                print(line, flush=True)
+                log.write(line + '\n')
+                log.flush()
+                run_log = out / f'run-{tag}-r{round_no}-{group.replace(",", "+")}.log'
+                with open(run_log, 'w') as handle:
+                    done = subprocess.run([args.python, '-B', 'manage.py', 'test', str(HERE), '--pattern',
+                                           'bench_run.py', '--noinput'], cwd=tree, env=env, stdout=handle,
+                                          stderr=subprocess.STDOUT, timeout=4 * 3600)
+                written = out / out_name(tag, round_no, group.split(','))
+                peak = json.loads(written.read_text()).get('load_max', 99) if written.exists() else 99
+                log.write(f'{utc()} {tag}:{round_no} {group} exit {done.returncode} load_max={peak}\n')
+                log.flush()
+                if done.returncode == 0 and peak <= 8:
+                    break
+                log.write(f'{utc()} {tag}:{round_no} {group} INVALID (exit {done.returncode}, load {peak}); '
+                          f'{"run again" if attempt < args.retries else "no retries left"}\n')
+                log.flush()
             status = status or done.returncode
     log.close()
     return status

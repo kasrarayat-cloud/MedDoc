@@ -95,6 +95,7 @@ const INIT_FOR = geometry => `(() => {
       return { bits: bits.join(''), number: decodeSquares(bits, G.bits) }; } catch (e) { return { bits: '', number: null }; } };
   const visible = () => { const rows = [...document.querySelectorAll('#documentsTable .document-row')].filter(r => !r.hidden && r.offsetParent !== null); return rows.length + '|' + (rows[0] ? rows[0].getAttribute('href') : '') + '|' + (rows.length ? rows[rows.length - 1].getAttribute('href') : ''); };
   P.visible = visible;
+  P.readBarcode = () => { const cv = document.querySelector('.pdf-page[data-page="1"] canvas'); return cv && cv.width > 0 && dark(cv) ? barcode(cv) : null; };
   const routed = () => { if (P.firstRoute === undefined && document.querySelector('#main > section')) P.firstRoute = performance.now(); };
   const look = () => {
     const c = P.cur; if (!c || c.stop || c.t0 === null) return; const now = performance.now();
@@ -633,7 +634,251 @@ async function main() {
   }
 }
 
-// The gate flows (records, left-behind, correct) live below, in EXTRA.
-const EXTRA = {};
+// --- the gate flows (R2-32): what the page did, for bench_run.py to judge against the server log and the database ------
+
+// The list answers the page received, with the request id the proxy gave each (joined to its access row by bench_run).
+function watchLists(page, into) {
+  page.on('response', async r => {
+    const url = r.url(); if (!url.startsWith(BASE)) return;
+    const path = url.slice(BASE.length);
+    if (!(/^\/api\/encounters(\?|$)/.test(path) || path === '/api/encounters/search') || r.status() !== 200) return;
+    try { const body = await r.json(); into.push({ rid: r.headers()['x-bench-request-id'], method: r.request().method(), path: shape(path),
+      ids: (body.encounters || []).map(e => e.id), next: body.next === undefined ? 'absent' : body.next, total: body.total === undefined ? 'absent' : body.total }); }
+    catch (e) { into.push({ rid: r.headers()['x-bench-request-id'], path: shape(path), error: String(e).slice(0, 80) }); }
+  });
+}
+
+async function nothingDrawn(page, ms = 4000) {
+  await sleep(ms);
+  return page.evaluate(() => { const c = window.__bench.cur || {}; const cv = document.querySelector('.pdf-page[data-page="1"] canvas');
+    return { canvasDark: Boolean(c.canvas), canvas: Boolean(cv), column: Boolean(document.getElementById('reviewColumn')), hash: location.hash,
+      login: Boolean(document.querySelector('input[name=password]')) }; });
+}
+
+async function openNoWait(s, label) {  // a re-open whose drawing must NOT happen: click, then look for 4 s
+  const doc = DOC[label];
+  await arm(s.page, 'doc');
+  const row = s.page.locator(`a.document-row[href="#doc/${doc.id}"]`);
+  if (await row.count()) await row.first().click(); else await s.page.evaluate(id => { location.hash = `#doc/${id}`; }, doc.id);
+  return nothingDrawn(s.page);
+}
+
+async function flowRecords() {
+  const size = DATA.rows[SIZE];
+  const s = await newContext();
+  const lists = []; watchLists(s.page, lists);
+  try {
+    await signIn(s, DATA.users[SIZE]); await sleep(1500);
+    const d = await tab(s, 'documents', 'records-documents');
+    for (let i = 0; i < 3 && d; i += 1) { if ((await laterPage(s)) === null) break; }
+    if (SIZE === 'n100') {
+      for (const label of ['text-2p', 'text-4p', 'text-2p', 'text-note']) { await openDoc(s, label, 'records-open'); await back(s); }
+    }
+    for (const nav of ['queue', 'workspace', 'documents']) await tab(s, nav, 'records-tab');
+    // hover writes nothing and asks for nothing
+    const seq = await proxySeq(); const before = (await act('count')).total;
+    const rows = s.page.locator('#documentsTable .document-row');
+    for (let i = 0; i < Math.min(5, await rows.count()); i += 1) { await rows.nth(i).hover(); await sleep(300); }
+    await sleep(800);
+    result.checks['records.hover'] = { ok: (await proxyLog(seq)).length === 0 && (await act('count')).total === before,
+      requests: (await proxyLog(seq)).length, rows: (await act('count')).total - before };
+    if (SIZE === 'n100') {  // three polls of one document within a minute
+      for (let i = 0; i < 3; i += 1) {
+        await s.page.evaluate(([id, h, v]) => fetch(`/api/encounters/${id}`, { headers: { [h]: v, 'X-CPT-Poll': '1' } }).then(r => r.status), [DOC['text-4p'].id, DATA.client[0], DATA.client[1]]);
+        await sleep(150);
+      }
+    }
+    // the marker word typed into the search, one key at a time (above 200 documents release 2 searches on the server)
+    await s.page.locator('#documentSearch').click();
+    for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(350); }
+    await sleep(2500);
+    await s.page.locator('#documentSearch').fill(''); await sleep(800);
+  } catch (e) { result.errors.push(`records ${size}: ${String(e && e.stack || e).slice(0, 600)}`); }
+  finally { result.lists = lists; await s.context.close(); }
+}
+
+// Fail closed: with the bench database refusing the insert of member.inline, member.detail, then member.list, nothing of a
+// document (one held in page memory included) is drawn and no list row appears; once the trigger is dropped it works.
+async function flowFailClosed() {
+  const s = await newContext();
+  const seen = {};
+  try {
+    await signIn(s, DATA.users[SIZE]); await sleep(1500);
+    await openDoc(s, 'text-2p', 'fail-warm'); await back(s);
+    await act('refuse', { view: 'member.inline' });
+    seen.inline_kept = await openNoWait(s, 'text-2p');
+    await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
+    seen.inline_fresh = await openNoWait(s, 'text-4p');
+    await act('refuse', { view: 'member.detail' });
+    await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
+    seen.detail = await openNoWait(s, 'text-10p');
+    await act('refuse', { view: 'member.list' });
+    await s.page.evaluate(() => { location.hash = 'workspace'; }); await sleep(1500);
+    await s.page.evaluate(() => { location.hash = 'documents'; }); await sleep(4000);
+    seen.list_rows = await s.page.evaluate(() => document.querySelectorAll('#documentsTable .document-row').length);
+    await act('refuse', { view: '' });
+    await s.page.evaluate(() => { location.hash = 'workspace'; }); await sleep(800);
+    await tab(s, 'documents', 'fail-restored');
+    const again = await openDoc(s, 'text-10p', 'fail-restored');
+    seen.restored = again.firstPage !== null;
+    const drawn = ['inline_kept', 'inline_fresh', 'detail'].filter(k => seen[k].canvasDark);
+    result.checks['records.fail_closed'] = { ok: drawn.length === 0 && seen.list_rows === 0 && seen.restored, seen };
+  } catch (e) { result.errors.push(`fail closed: ${String(e && e.stack || e).slice(0, 600)}`); result.checks['records.fail_closed'] = { ok: false, seen }; }
+  finally { try { await act('refuse', { view: '' }); } catch (e) { /* already dropped */ } await s.context.close(); }
+}
+
+// Nothing left behind after an end: heap (buffers of an opened document's size, marker strings), storage, workers, and
+// Back after sign-out. Wipe ends (sign-out, idle, a 401) leave none at all; access off and a route to another document
+// leave at most the declared kept set (6 documents, 24 MiB).
+async function flowLeftBehind() {
+  const opened = ['text-2p', 'scan-3p', 'text-4p'];
+  const markers = [...opened.map(l => `Rich ${l}`), 'the synthetic polyp was removed by cold snare'];
+  const ends = {}; const cached = [];
+  for (const end of ['signout', 'idle', 'unauthorized', 'access-off', 'route']) {
+    const s = await newContext();
+    try {
+      await s.cdp.send('Network.enable');
+      s.cdp.on('Network.requestServedFromCache', e => cached.push(e.requestId));
+      const urls = new Map(); s.cdp.on('Network.requestWillBeSent', e => urls.set(e.requestId, e.request.url));
+      if (end === 'idle') await s.page.clock.install();
+      await signIn(s, DATA.users[SIZE]); await sleep(1200);
+      for (const label of opened) { await openDoc(s, label, `left-${end}`); await back(s); }
+      if (end === 'signout') await Promise.all([s.page.waitForURL(/\/login\//, { timeout: 60000 }), s.page.locator('button[form="signoutForm"]').first().click()]);
+      if (end === 'idle') { await s.page.clock.fastForward('16:00'); await s.page.waitForURL(/\/login\//, { timeout: 60000 }).catch(() => {}); }
+      if (end === 'unauthorized') { await act('end_sessions'); await s.page.evaluate(() => { location.hash = 'queue'; }); await s.page.waitForURL(/\/login\//, { timeout: 60000 }).catch(() => {}); }
+      if (end === 'access-off') { await act('membership', { user: DATA.users[SIZE], active: false }); await s.page.evaluate(() => { location.hash = 'queue'; }); await sleep(2000); }
+      if (end === 'route') { await openDoc(s, 'text-10p', 'left-route'); }
+      await sleep(2500);
+      const h = await heap(s.cdp, markers);
+      const sizes = Object.fromEntries(opened.map(l => [l, h.sizes.filter(x => x === DOC[l].bytes).length]));
+      const store = await s.page.evaluate(async () => { const out = { local: [], session: [], caches: [], idb: [] };
+        try { out.local = Object.keys(localStorage); out.session = Object.keys(sessionStorage); } catch (e) { out.error = String(e); }
+        try { out.caches = await caches.keys(); } catch (e) { /* no Cache API on this page */ }
+        try { out.idb = (await indexedDB.databases()).map(d => d.name); } catch (e) { /* none */ } return out; });
+      const workers = await workerTargets(s.context);
+      const wipe = ['signout', 'idle', 'unauthorized'].includes(end);
+      const keptBytes = opened.reduce((a, l) => a + sizes[l] * DOC[l].bytes, 0);
+      const heapOk = wipe ? Object.values(sizes).every(n => n === 0) && Object.values(h.markers).every(v => !v)
+        : Object.values(sizes).reduce((a, n) => a + n, 0) <= 6 && keptBytes <= 24 * 1048576;
+      const storeOk = store.local.every(k => k === 'cpt-studio-session') && !store.session.length && !store.caches.length && !store.idb.length;
+      ends[end] = { heapOk, storeOk, workers, sizes, markers: h.markers, store, url: s.page.url().replace(BASE, '') };
+      if (end === 'signout') {
+        await s.page.goBack().catch(() => {}); await sleep(2000);
+        const back = await s.page.evaluate(() => ({ login: Boolean(document.querySelector('input[name=password]')), column: Boolean(document.getElementById('reviewColumn')),
+          canvas: Boolean(document.querySelector('.pdf-page canvas')), rows: document.querySelectorAll('#documentsTable .document-row').length }));
+        result.checks['left.back_after_signout'] = { ok: back.login || (!back.column && !back.canvas && back.rows === 0), back };
+      }
+      if (end === 'access-off') await act('membership', { user: DATA.users[SIZE], active: true });
+      const fromCache = cached.map(id => urls.get(id)).filter(u => u && u.startsWith(BASE) && !u.slice(BASE.length).startsWith('/static/'));
+      if (fromCache.length) ends[end].fromCache = fromCache.slice(0, 5);
+    } catch (e) { result.errors.push(`left-behind ${end}: ${String(e && e.stack || e).slice(0, 600)}`); ends[end] = { heapOk: false, storeOk: false, error: String(e).slice(0, 200) }; }
+    finally { await s.context.close(); }
+  }
+  const wipes = ['signout', 'idle', 'unauthorized'];
+  result.checks['left.heap_after_end'] = { ok: Object.entries(ends).every(([end, e]) => e.heapOk && (!wipes.includes(end) || e.workers === 0)), ends };
+  result.checks['left.storage'] = { ok: Object.values(ends).every(e => e.storeOk), stores: Object.fromEntries(Object.entries(ends).map(([k, e]) => [k, e.store])) };
+  result.checks['left.not_from_http_cache'] = { ok: Object.values(ends).every(e => !e.fromCache) };
+}
+
+// Correctness (M5): rapid switching, a newer Word conversion, access ended, another practice in a second tab, a hung PDF.
+async function flowCorrect() {
+  let s = await newContext();
+  try {
+    await signIn(s, DATA.users[SIZE]); await sleep(1500);
+    await tab(s, 'documents', 'correct-documents');
+    // eight openings 60 ms apart end on the last document, with no page error and at most two workers after 5 s
+    const order = ['text-2p', 'text-4p', 'text-10p', 'word-3p', 'scan-3p', 'text-note', 'text-2p', 'text-4p'];
+    const before = (await act('count')).total; const errorsBefore = result.pageErrors.length;
+    await arm(s.page, 'doc');
+    await s.page.evaluate(() => { window.__bench.cur.t0 = performance.now(); });
+    for (const label of order) { await s.page.evaluate(id => { location.hash = `#doc/${id}`; }, DOC[label].id); await sleep(60); }
+    await sleep(5000);
+    const final = { barcode: await s.page.evaluate(() => window.__bench.readBarcode()) };  // the page drawn NOW
+    const workers = await workerTargets(s.context);
+    const rows = (await act('records', { since: before })).rows;
+    const asked = new Set(order.map(l => DOC[l].id));
+    const strays = rows.filter(r => (r.encounter_ids || []).some(id => !asked.has(id)));
+    result.checks['correct.rapid_switching'] = { ok: final.barcode && final.barcode.number === DOC['text-4p'].number && workers <= 2
+      && result.pageErrors.length === errorsBefore && strays.length === 0, barcode: final.barcode, workers, strays: strays.length, rows: rows.length };
+    await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row');
+    // a newer round of the Word document with another conversion: the re-open shows the new barcode, never the old bytes
+    const w1 = await openDoc(s, 'word-3p', 'correct-word-before'); await back(s);
+    await act('reconvert', { doc: 'word-3p' });
+    const w2 = await openDoc(s, 'word-3p', 'correct-word-after'); await back(s);
+    result.checks['correct.word_reconvert'] = { ok: (w1.barcode || {}).number === DOC['word-3p'].number && (w2.barcode || {}).number === DOC['word-3p'].renumber,
+      before: w1.barcode, after: w2.barcode };
+    // access ended: nothing of the document is drawn
+    const ended = {};
+    for (const [mode, doc, on, off] of [
+        ['membership', 'text-2p', ['membership', { user: DATA.users[SIZE], active: false }], ['membership', { user: DATA.users[SIZE], active: true }]],
+        ['destroyed', 'text-4p', ['destroy', { doc: 'text-4p', on: true }], ['destroy', { doc: 'text-4p', on: false }]],
+        ['closed', 'text-10p', ['close', { user: DATA.users[SIZE], on: true }], ['close', { user: DATA.users[SIZE], on: false }]],
+        ['session', 'text-2p', ['end_sessions', {}], null]]) {
+      await openDoc(s, doc, `correct-${mode}-warm`); await back(s);
+      await act(on[0], on[1]);
+      ended[mode] = await openNoWait(s, doc);
+      if (off) await act(off[0], off[1]);
+      if (mode === 'session') { await s.context.close(); s = await newContext(); await signIn(s, DATA.users[SIZE]); await sleep(1200); }
+      else { await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 }); }
+    }
+    result.checks['correct.access_ended'] = { ok: Object.values(ended).every(e => !e.canvasDark), ended };
+    // two tabs: another practice signs in in the second; the first never shows the first practice's kept documents
+    await openDoc(s, 'text-2p', 'correct-tabs-warm'); await back(s);
+    const other = await s.context.newPage();
+    await other.goto(`${BASE}/login/`); await other.fill('input[name=username]', DATA.users.n1500); await other.fill('input[name=password]', PASSWORD);
+    await Promise.all([other.waitForURL(`${BASE}/`, { timeout: 60000 }), other.click('button[type=submit]')]);
+    await sleep(2000);
+    const first = await openNoWait(s, 'text-2p');
+    result.checks['correct.two_tabs'] = { ok: !first.canvasDark, first };
+  } catch (e) { result.errors.push(`correct: ${String(e && e.stack || e).slice(0, 800)}`); }
+  finally { await s.context.close(); }
+  // a document the library hangs on (its view held 25 s at the proxy): the 20 s note appears and the next one opens
+  const h = await newContext();
+  try {
+    await signIn(h, DATA.users[SIZE]); await sleep(1500);
+    await openDoc(h, 'text-2p', 'correct-hung-warm'); await back(h);
+    await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['control-held'].id}/original\\?view=1`, ms: 25000, times: 1 });
+    const held = await openDoc(h, 'control-held', 'correct-hung', { limit: 30000 });
+    await back(h);
+    const next = await openDoc(h, 'text-4p', 'correct-after-hung');
+    result.checks['correct.hung_pdf'] = { ok: Boolean(held.fallback) && held.fallbackAt >= 19000 && next.firstPage !== null && (next.barcode || {}).number === DOC['text-4p'].number,
+      fallback: held.fallback, fallbackAt: held.fallbackAt, next: next.firstPage };
+  } catch (e) { result.errors.push(`hung: ${String(e && e.stack || e).slice(0, 600)}`); }
+  finally { await h.context.close(); }
+}
+
+// Blue/green (M12): an open page's upstream flipped between the two releases' webs, as the switch does. X1: the other
+// tree's page, then this tree's web; X2: this tree's page, then the other's. The next act shows the update notice; never
+// a blank list, a console error other than the 409, or a wrong document; a reload gives the new web's page, signed in.
+async function flowBlueGreen() {
+  const mine = Number(arg('web-mine')); const other = Number(arg('web-other'));
+  for (const [name, start, flip] of [['x1', other, mine], ['x2', mine, other]]) {
+    await call(CONTROL, 'POST', '/upstream', { port: start });
+    const s = await newContext();
+    const errorsBefore = result.consoleErrors.length + result.pageErrors.length;
+    try {
+      await signIn(s, DATA.users[SIZE]); await sleep(1500);
+      await tab(s, 'documents', `${name}-documents`);
+      const appBefore = await s.page.evaluate(() => [...document.scripts].map(x => x.src).find(src => /\/app\./.test(src)) || '');
+      await call(CONTROL, 'POST', '/upstream', { port: flip });
+      await s.page.locator('[data-nav="queue"]').first().click(); await sleep(2500);
+      const seen = await s.page.evaluate(() => ({ notice: document.body.innerText.includes('CPT Studio was updated'),
+        rows: document.querySelectorAll('#documentsTable .document-row').length, review: Boolean(document.getElementById('reviewColumn')),
+        canvas: Boolean(document.querySelector('.pdf-page canvas')) }));
+      const errors = [...result.consoleErrors, ...result.pageErrors].slice(errorsBefore).filter(e => !/\b409\b/.test(e));
+      await s.page.reload(); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 }).catch(() => {});
+      const after = await s.page.evaluate(() => ({ login: Boolean(document.querySelector('input[name=password]')),
+        rows: document.querySelectorAll('#documentsTable .document-row').length,
+        app: [...document.scripts].map(x => x.src).find(src => /\/app\./.test(src)) || '' }));
+      const blank = !seen.notice && seen.rows === 0;
+      result.checks[`bluegreen.${name}`] = { ok: seen.notice && !blank && !seen.review && !seen.canvas && errors.length === 0 && !after.login && after.rows > 0
+        && after.app !== appBefore, seen, errors, after: { ...after, appChanged: after.app !== appBefore } };
+    } catch (e) { result.errors.push(`bluegreen ${name}: ${String(e && e.stack || e).slice(0, 600)}`); result.checks[`bluegreen.${name}`] = { ok: false }; }
+    finally { await s.context.close(); }
+  }
+}
+
+const EXTRA = { records: flowRecords, 'fail-closed': flowFailClosed, 'left-behind': flowLeftBehind, correct: flowCorrect,
+  bluegreen: flowBlueGreen };
 module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY };
 if (require.main === module) main().catch(e => { console.error(String(e && e.stack || e).slice(0, 3000)); process.exit(1); });

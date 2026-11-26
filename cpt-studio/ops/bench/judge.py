@@ -58,6 +58,7 @@ def load_rounds(out: Path) -> dict:
         merged['console_errors'] += data.get('console_errors', [])
         merged['blocked_requests'] += data.get('blocked_requests', [])
         merged['loads'] += [data.get('load_before'), data.get('load_after')]
+        merged.setdefault('load_max', []).append(data.get('load_max', 0) or 0)
         merged['files'].update(data.get('files', {}))
         merged['revision'] = data.get('revision') or merged['revision']
         if data.get('requests') is not None:
@@ -278,10 +279,9 @@ def invalid_reasons(rounds: dict, tags, *, control: bool, controls: list) -> lis
                 why.append(f'{where}: {len(r["console_errors"])} console error(s), first: {r["console_errors"][0][:120]}')
             if r['blocked_requests']:
                 why.append(f'{where}: requests left loopback: {r["blocked_requests"][:3]}')
-            for load in r['loads']:
-                if load and load[0] > MAX_LOAD:
-                    why.append(f'{where}: load average {load[0]:.1f} > {MAX_LOAD}')
-                    break
+            peaks = [load[0] for load in r['loads'] if load] + r.get('load_max', [])
+            if peaks and max(peaks) > MAX_LOAD:
+                why.append(f'{where}: load average {max(peaks):.1f} > {MAX_LOAD}')
             if r['errors']:
                 why.append(f'{where}: a part failed: {str(r["errors"][0])[:200]}')
             if 'open' in r['parts']:
