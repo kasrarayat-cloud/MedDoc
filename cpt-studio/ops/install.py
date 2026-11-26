@@ -1113,7 +1113,7 @@ ROUTE_WORDS = ('access', 'account', 'activity', 'add', 'answers', 'api', 'bundle
                'encounters', 'enrol', 'everywhere', 'health', 'holds', 'login', 'logout', 'members', 'new', 'ops',
                'options', 'original', 'password', 'people', 'reads', 'reconcile', 'recovery', 'release', 'reports',
                'resume', 'retry', 'role', 'second-factor', 'security', 'session', 'sign-ins', 'spending', 'static',
-               'stop', 'studio', 'unlock', 'workspaces', 'fonts', 'lib')
+               'stop', 'studio', 'unlock', 'workspaces', 'fonts', 'lib', 'search')
 _SEGMENT = (r'(?:' + '|'.join(re.escape(word) for word in ROUTE_WORDS) + rf'|{_UUID}'
             r'|[a-z0-9_-]{1,64}\.[0-9a-f]{12}\.(?:css|js|mjs|svg|png|ico|woff2?|ttf|txt|map|json)(?:\.gz|\.br)?)')
 _PATH = rf'/(?:{_SEGMENT}(?:/{_SEGMENT})*/?)?'

@@ -209,9 +209,15 @@ RECOVERY_CODE_COUNT = 10
 
 # C1: a member's poll of a document writes at most one read record per session and document in this many seconds.
 READ_AUDIT_DETAIL_DEDUPE_SECONDS = 60
-# Refutation round 1 (avail-3): a member's list read that repeats one of the same session (and address, practice, count
-# and filters) made within this many seconds is counted on that record (AccessRecordRepeat) instead of writing its own.
+# Refutation round 1 (avail-3), and release 2 (R2-21, D-R2-13): a list record names the documents of the page it served,
+# so a member's list read that repeats one of the same session (and address, practice, count and filters) made within
+# this many seconds, showing the same documents in the same order, is counted on that record (AccessRecordRepeat)
+# instead of writing its own; a page that shows other documents, or the same ones in another order, is its own record.
 READ_AUDIT_LIST_REPEAT_SECONDS = 60
+# Release 2 (R2-21, D-R2-13): (requests, per seconds) - a member's later list pages and searches, counted in the scope
+# list.member; over it the answer is 429 rate_limited and one SecurityEvent list.rate_limited, and nothing is served. A
+# first page and the Overview pay no count: the repeat rule above bounds them.
+LIST_PAGES_LIMIT_PER_MEMBER = (120, 60)
 # C2 (OWNER DECISION D24): how long an operator's opening of one document's content lasts, in that session only.
 CONTENT_GRANT_SECONDS = 15 * 60
 # C5 and D2 (OWNER DECISION D8): (requests, per seconds) - report creations per member and per practice, uploads per
