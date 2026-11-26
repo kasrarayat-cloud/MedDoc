@@ -75,7 +75,8 @@ class MemberReadTests(ReadCase):
     def test_each_kind_of_read_writes_exactly_one_row_with_its_ids(self):
         export = self.report()
         cases = (
-            ('/api/encounters', read_audit.MEMBER_LIST, [], None),
+            # release 2 (R2-21): a list's row names the documents of the page it served, newest first
+            ('/api/encounters', read_audit.MEMBER_LIST, [str(self.text.pk), str(self.enc.pk)], None),
             (f'/api/encounters/{self.enc.pk}', read_audit.MEMBER_DETAIL, [str(self.enc.pk)], None),
             (f'/api/encounters/{self.enc.pk}/original?view=1', read_audit.MEMBER_INLINE, [str(self.enc.pk)], None),
             (f'/api/encounters/{self.enc.pk}/original', read_audit.MEMBER_DOWNLOAD, [str(self.enc.pk)], None),
@@ -96,10 +97,16 @@ class MemberReadTests(ReadCase):
                 self.assertNotIn(TITLE_MARKER, json.dumps([row.filters, row.reason]))
 
     def test_the_list_records_the_practice_the_time_and_how_many_rows_it_showed(self):
+        # release 2 (R2-21, rewritten in the open): a list is served a page at a time, so its row names the documents of
+        # the page it served, in the order shown, with the list and the cursor it was asked with - here the whole
+        # practice, which fits on one page
         before = timezone.now()
         shown = self.member.get('/api/encounters').json()['encounters']
         row = Record.objects.get(view=read_audit.MEMBER_LIST)
-        self.assertEqual((row.count, row.workspace_id, row.encounter_ids), (len(shown), self.ws.pk, []))
+        self.assertEqual((row.count, row.workspace_id, row.encounter_ids),
+                         (len(shown), self.ws.pk, [item['id'] for item in shown]))
+        self.assertEqual(row.encounter_ids, [str(self.text.pk), str(self.enc.pk)])
+        self.assertEqual(row.filters, {'list': 'documents', 'before': None})
         self.assertEqual(row.count, self.ws.encounters.count())
         self.assertTrue(before <= row.as_of <= timezone.now())
 
@@ -357,3 +364,207 @@ class ConsoleFailClosedTests(ConsoleReadCase):
         self.assertEqual(answer.status_code, 503)
         self.assertEqual(self.ops.get(f'/ops/encounters/{self.text.pk}/original').status_code, 403)
         self.assertNotIn(TITLE_MARKER, self.ops.get(f'/ops/encounters/{self.text.pk}').content.decode())
+
+
+# --- release 2, R2-21: the list record names the documents of its page -------------------------------------------------
+
+from django.conf import settings  # noqa: E402 - this section's own imports
+
+from studio import paging  # noqa: E402
+
+LIST = '/api/encounters'
+
+
+class R2ListRecordTests(ReadCase):
+    """Each page of a list served writes one member.list row naming exactly the documents it showed, in order, with its
+    list and cursor (filters), its count and when it was read - before it leaves (503 when it cannot be written). A
+    repeat is counted only when it showed the same documents in the same order; a later page first counts toward the
+    member's limit (R2-21; D-R2-13)."""
+
+    def setUp(self):
+        super().setUp()
+        for index in range(58):  # 60 documents: a first page of 50 and a later page of 10
+            f.encounter(self.ws, self.reviewer, title=f'{TITLE_MARKER} synthetic page note {index:02d}')
+
+    def start(self):
+        """Now, or half a minute after the next UTC midnight when that is under two minutes away (a repeat is counted
+        only on a record of its own UTC day): never earlier than now, as a session's times never are."""
+        now = timezone.now()
+        if (now + timedelta(minutes=2)).date() != now.date():
+            return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1, seconds=30)
+        return now
+
+    def at(self, start, seconds=0):
+        return mock.patch.object(timezone, 'now', return_value=start + timedelta(seconds=seconds))
+
+    def lists(self):
+        return self.rows(view=read_audit.MEMBER_LIST)
+
+    def test_each_list_and_a_later_page_write_one_row_naming_exactly_their_documents(self):
+        self.enterContext(self.at(self.start()))  # every read at one moment: one UTC day (a repeat is of its own day)
+        first = self.member.get(LIST).json()
+        self.assertEqual(len(first['encounters']), 50)
+        (row,) = self.lists()
+        self.assertEqual((row.encounter_ids, row.count, row.filters),
+                         ([item['id'] for item in first['encounters']], 50, {'list': 'documents', 'before': None}))
+        for path, filters in ((f'{LIST}?list=documents', None),  # no list is documents: the same read, counted
+                              (f'{LIST}?list=queue', {'list': 'queue', 'before': None}),
+                              (f'{LIST}?list=recent', {'list': 'recent', 'before': None}),
+                              (f'{LIST}?before={first["next"]}', {'list': 'documents', 'before': first['next']}),
+                              (f'{LIST}?list=documents&before={first["next"]}', None)):
+            with self.subTest(path=path):
+                started, before = timezone.now(), set(Record.objects.values_list('pk', flat=True))
+                answer = self.member.get(path)
+                self.assertEqual(answer.status_code, 200)
+                new = Record.objects.exclude(pk__in=before)
+                if filters is None:  # the same page again, within the minute: counted on its row
+                    self.assertFalse(new.exists())
+                    continue
+                (row,) = new
+                page = answer.json()['encounters']
+                self.assertEqual((row.view, row.outcome, row.workspace_id), (read_audit.MEMBER_LIST, read_audit.SERVED,
+                                                                             self.ws.pk))
+                self.assertEqual(row.encounter_ids, [item['id'] for item in page])
+                self.assertEqual((row.count, row.filters), (len(page), filters))
+                self.assertTrue(started <= row.as_of <= row.created_at)
+        later = Record.objects.get(filters__before=first['next'])
+        self.assertEqual(len(later.encounter_ids), 10)
+        self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=later.pk).repeats, 1)
+        self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats, 1)
+
+    def search(self, before=None, words='synthetic page note'):
+        return self.member.post('/api/encounters/search', data=json.dumps({'text': words, 'before': before}),
+                                content_type='application/json')
+
+    def test_a_search_and_its_later_page_write_one_row_each_naming_exactly_their_documents(self):
+        started = timezone.now()
+        first = self.search().json()
+        later = self.search(first['next']).json()
+        rows = [row for row in self.lists() if row.filters['list'] == 'search']
+        self.assertEqual([(row.encounter_ids, row.count, row.filters) for row in rows], [
+            ([item['id'] for item in first['encounters']], 50, {'list': 'search', 'before': None}),
+            ([item['id'] for item in later['encounters']], 8, {'list': 'search', 'before': first['next']})])
+        for row in rows:
+            self.assertTrue(started <= row.as_of <= row.created_at)
+            self.assertEqual((row.view, row.outcome, row.workspace_id), (read_audit.MEMBER_LIST, read_audit.SERVED,
+                                                                         self.ws.pk))
+        self.assertNotIn('page note', json.dumps([row.filters for row in Record.objects.all()]))  # never the words
+
+    def test_two_pages_of_one_size_are_two_records_and_a_new_document_is_named(self):
+        # the finding's reproduction (R2-21), by GETs: page A; a new document arrives first, the fiftieth leaves: page B,
+        # page B again; the new document is destroyed: page A again. Release 1's rule (count and filters alike) made it
+        # one record and three repeats, naming the new document nowhere.
+        start = self.start()
+        with self.at(start):
+            page_a = [row['id'] for row in self.member.get(LIST).json()['encounters']]
+        with self.at(start, 1):
+            arrived = f.encounter(self.ws, self.reviewer, title=f'{TITLE_MARKER} synthetic newest note')
+        with self.at(start, 2):
+            page_b = [row['id'] for row in self.member.get(LIST).json()['encounters']]
+        with self.at(start, 3):
+            self.member.get(LIST)
+        models.Encounter.objects.filter(pk=arrived.pk).update(destroyed_at=start, title='')
+        with self.at(start, 5):
+            self.assertEqual([row['id'] for row in self.member.get(LIST).json()['encounters']], page_a)
+        self.assertEqual(page_b, [str(arrived.pk)] + page_a[:49])
+        records = self.lists()
+        self.assertEqual([row.encounter_ids for row in records], [page_a, page_b])
+        self.assertEqual([models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats for row in records], [1, 1])
+        self.assertTrue(any(str(arrived.pk) in row.encounter_ids for row in records))
+
+    def test_a_page_that_differs_only_in_order_or_in_its_cursor_is_its_own_record(self):
+        start = self.start()
+        with self.at(start):
+            first = self.member.get(LIST).json()
+        one, two = first['encounters'][0]['id'], first['encounters'][1]['id']
+        times = dict(models.Encounter.objects.filter(pk__in=[one, two]).values_list('pk', 'created_at'))
+        models.Encounter.objects.filter(pk=one).update(created_at=times[uuid.UUID(two)])
+        models.Encounter.objects.filter(pk=two).update(created_at=times[uuid.UUID(one)])
+        with self.at(start, 1):
+            again = self.member.get(LIST).json()
+        shown = [row['id'] for row in again['encounters']]
+        self.assertEqual((set(shown), shown[:2]), ({row['id'] for row in first['encounters']}, [two, one]))
+        # the same later rows by two cursors: the last row's own, and one naming its time with the lowest id
+        moment, _key = paging.parse(again['next'])
+        other = paging.cursor_of(moment, uuid.UUID(int=0))
+        with self.at(start, 2):
+            by_row = self.member.get(f'{LIST}?before={again["next"]}').json()['encounters']
+        with self.at(start, 3):
+            by_time = self.member.get(f'{LIST}?before={other}').json()['encounters']
+        self.assertEqual(by_row, by_time)
+        records = self.lists()
+        self.assertEqual(len(records), 4)
+        self.assertFalse(models.AccessRecordRepeat.objects.exists())
+        self.assertEqual([row.filters['before'] for row in records], [None, None, again['next'], other])
+
+    def test_a_page_whose_row_cannot_be_written_answers_503_and_shows_nothing(self):
+        first = self.member.get(LIST).json()
+        Record.objects.all()._raw_delete(Record.objects.db)
+        with write_fails():
+            for path in (LIST, f'{LIST}?list=queue', f'{LIST}?list=recent', f'{LIST}?before={first["next"]}'):
+                with self.subTest(path=path):
+                    answer = self.member.get(path)
+                    self.assertEqual((answer.status_code, answer.json()), (503, {'error': read_audit.NOT_RECORDED,
+                                                                                 'details': {}}))
+                    self.assertNotIn(TITLE_MARKER.encode(), answer.content)
+            answer = self.search(words='synthetic')  # a search, whose titles would hold the marker
+            self.assertEqual((answer.status_code, answer.json()), (503, {'error': read_audit.NOT_RECORDED,
+                                                                         'details': {}}))
+            self.assertNotIn(TITLE_MARKER.encode(), answer.content)
+        self.assertFalse(Record.objects.exists())
+        self.assertEqual(self.member.get(f'{LIST}?before={first["next"]}').status_code, 200)  # the control
+        self.assertEqual(self.search(words='synthetic').status_code, 200)
+
+    def test_later_pages_over_the_members_limit_are_refused_unread_and_unrecorded(self):
+        start = self.start()  # every read at one moment: one UTC day, and one window of the limit
+        with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(3, 60)), self.at(start):
+            first = self.member.get(LIST).json()
+            later = f'{LIST}?before={first["next"]}'
+            served = [self.member.get(later).status_code for _ in range(3)]
+            before = Record.objects.count()
+            with mock.patch.object(customer, 'list_page', wraps=customer.list_page) as built:
+                refused = [self.member.get(later) for _ in range(2)]
+            first_pages = [self.member.get(path).status_code for path in (LIST, f'{LIST}?list=recent')]
+        built.assert_not_called()  # refused unread: neither refused page was built
+        self.assertEqual(served, [200, 200, 200])
+        for answer in refused:
+            self.assertEqual((answer.status_code, answer.json()['error']), (429, 'rate_limited'))
+            self.assertEqual(answer['Retry-After'], str(answer.json()['retry_after']))
+            self.assertNotIn(TITLE_MARKER.encode(), answer.content)
+        # no row for a refused page; after them, the first page repeats the first read (counted on its row) and the
+        # Overview's recent five are a row of their own
+        self.assertEqual(Record.objects.count(), before + 1)
+        self.assertEqual(Record.objects.filter(filters={'list': 'recent', 'before': None}).count(), 1)
+        events = models.SecurityEvent.objects.filter(event='list.rate_limited')
+        self.assertEqual(events.count(), 1)  # the window's first refusal only
+        self.assertEqual((events.get().data['scope'], events.get().data['limit'], events.get().workspace_id),
+                         ('list.member', 3, self.ws.pk))
+        self.assertEqual(first_pages, [200, 200])  # a first page and the Overview pay no count
+        self.assertEqual(settings.LIST_PAGES_LIMIT_PER_MEMBER, (120, 60))
+
+    def test_later_pages_and_searches_spend_one_count_of_the_members_own_limit(self):
+        # one budget a member spends on later pages and searches alike (alternating them buys nothing), and each
+        # member's own - another member of the practice is not refused by this one's reads
+        other = member_client(self.viewer)
+        start = self.start()  # every read at one moment: one window of the limit
+        with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(3, 60)), self.at(start):
+            later = f'{LIST}?before={self.member.get(LIST).json()["next"]}'
+            answers = [self.member.get(later).status_code, self.search().status_code,
+                       self.member.get(later).status_code, self.search().status_code,
+                       self.member.get(later).status_code]
+            theirs = other.get(later).status_code
+        self.assertEqual(answers, [200, 200, 200, 429, 429])
+        self.assertEqual(theirs, 200)
+        self.assertEqual(models.RateWindow.objects.get(scope='list.member', key=str(self.reviewer.pk)).count, 5)
+        self.assertEqual(models.RateWindow.objects.get(scope='list.member', key=str(self.viewer.pk)).count, 1)
+
+    def test_the_reads_page_names_the_pages_documents_by_reference_and_counts_the_rest(self):
+        page = self.member.get(LIST).json()['encounters']
+        auditor = ops.admin_client(f.user('r2-reads-auditor'), HTTP_X_REQUEST_ID=REQUEST_ID)
+        body = auditor.get(f'/ops/activity/reads?kind={read_audit.MEMBER_LIST}').content.decode()
+        for row in page[:8]:
+            self.assertIn(row['id'][:8], body)
+        self.assertIn('and 42 more', body)
+        self.assertIn('50 shown', body)
+        self.assertIn('list documents', body)
+        self.assertNotIn(TITLE_MARKER, body)

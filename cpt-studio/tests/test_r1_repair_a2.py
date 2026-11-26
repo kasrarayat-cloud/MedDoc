@@ -129,6 +129,10 @@ class ListRepeatDayTests(TestCase):
         (first,) = self.lists()
         repeat = models.AccessRecordRepeat.objects.get(record_id=first.pk)
         self.assertEqual((repeat.repeats, repeat.last_at), (2, noon + timedelta(seconds=40)))
+        # release 2 (R2-21): the record names the documents the page showed, newest first, and the list it was
+        self.assertEqual(first.encounter_ids, [str(pk) for pk in models.Encounter.objects.filter(workspace=self.ws)
+                                               .order_by('-created_at', '-pk').values_list('pk', flat=True)])
+        self.assertEqual(first.filters, {'list': 'documents', 'before': None})
         self.assertIn('read again 2 times by this sign-in, the last at 2026-11-21 12:00:40',
                       self.page('?day=2026-11-21'))
 

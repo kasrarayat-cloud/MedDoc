@@ -409,7 +409,7 @@ class WorkspaceTests(AdminCase):
         self.assertEqual(changed.status_code, 302)
         listing = doctor.get('/api/encounters')
         self.assertEqual(listing.status_code, 200)
-        self.assertEqual(listing.json()['encounters'], [])
+        self.assertEqual(listing.json(), {'encounters': [], 'next': None, 'total': 0})  # release 2: one page (R2-19)
         self.assertEqual(doctor.get('/api/session').json()['workspace']['name'], 'Spine Partners')
 
     def test_creating_a_workspace_refuses_and_records_nothing(self):

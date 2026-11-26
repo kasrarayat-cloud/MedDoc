@@ -453,6 +453,10 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # reasons: ops/test_install.py ReleaseOneMigrationTests)
         # refutation rounds 1 and 2 of release 1: 0018 adds two tables, a nullable column, ten non-unique indexes and a
         # constraint on a table it creates, read safe (its reasons: tests/test_r1_repair_s.py StoreContractTests)
+        # release 2 (RELEASE-2-SPEC R2-23, D-R2-15): 0019, 0020 and 0021 each add Django's own non-unique indexes to one
+        # existing table (the paged lists' two to studio_encounter, a round's runs and the runs in flight to
+        # studio_providerrun, the open rounds to studio_codinground), read safe (ops/test_install.py
+        # ReleaseTwoMigrationTests also pins the one-table rule)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
@@ -460,7 +464,13 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                                 '0013_completion_answer_binding',
                                                                 '0014_event_inventory',
                                                                 '0015_inventory_appraisal', '0016_fable_coding',
-                                                                '0017_r1_security', '0018_r1_availability'])
+                                                                '0017_r1_security', '0018_r1_availability',
+                                                                '0019_r2_document_lists', '0020_r2_run_lookups',
+                                                                '0021_r2_round_sweep'])
+        for name, model, indexes in (('0019_r2_document_lists', 'encounter', 2), ('0020_r2_run_lookups', 'providerrun', 2),
+                                     ('0021_r2_round_sweep', 'codinground', 1)):
+            self.assertEqual(migrations['after_baseline'][name],
+                             {'safe': True, 'why': [f'{model}: an index (writes are not refused)'] * indexes})
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',

@@ -8,7 +8,11 @@ the member reads is one of this module's own sentences (api_view: never an excep
 record - runs, models, usage, hashes, the coding review's whole answers - is a platform operator's, under /ops/.
 
     GET  /api/session                               customer.session_json
-    GET  /api/encounters                            customer.list_rows
+    GET  /api/encounters[?list=documents|queue|recent][&before=<cursor>]
+                                                    customer.list_page: one page of a list (release 2, R2-19), with the
+                                                    next page's cursor and, on a first page, the list's total
+    POST /api/encounters/search                     {text, before}: customer.search_page, one page of the practice's
+                                                    documents whose row holds the words (R2-20)
     POST /api/encounters                            an upload or a paste (multipart); starts coding round 1
     GET  /api/encounters/<id>                       customer.encounter_json
     POST /api/encounters/<id>/answers               {answers: [{question_id, text}]} -> a new round
@@ -36,12 +40,14 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseNotModified, JsonResponse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
+from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, rate, read_audit, request_meta
-from . import security_events, session_store, sessions
+from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, paging, rate, read_audit
+from . import request_meta, security_events, session_store, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -86,6 +92,9 @@ class ApiError(Exception):
 
 RATE_LIMITED = 'rate_limited'
 EXPORT_MEMBER_SCOPE, EXPORT_WORKSPACE_SCOPE, UPLOAD_MEMBER_SCOPE = 'export.member', 'export.workspace', 'upload.member'
+# Release 2 (R2-21, D-R2-13): a member's later list pages and searches, settings.LIST_PAGES_LIMIT_PER_MEMBER; a first
+# page and the Overview pay no count, the read record's repeat rule bounds them
+LIST_MEMBER_SCOPE = 'list.member'
 
 
 class RateLimited(Exception):
@@ -266,19 +275,63 @@ def session(request):
     return JsonResponse(customer.session_json(request.user, membership))
 
 
+# --- the lists (release 2, R2-19 and R2-21) ---------------------------------------------------------------------------
+# GET /api/encounters?list=documents|queue|recent[&before=<cursor>] (no list: documents) answers one page of the list
+# (customer.list_page). An unknown list, or a cursor this API cannot read, is answered 400 with one of these sentences,
+# before anything is read or recorded; a cursor is exactly one the API gave (studio.paging, written as cursor_of writes
+# it), and the recent five have no later page. Each page served is recorded before it leaves - member.list naming the
+# documents it showed, in order, with its list and cursor - and a later page first counts toward the member's limit.
+
+LIST_UNKNOWN = 'That list is not available.'
+LIST_CURSOR_UNREADABLE = 'That part of the list could not be read. Open the list again.'
+
+
+def _cursor_read(raw):
+    """``raw`` when it is a cursor exactly as this API writes them (paging.cursor_of of what it names), else None."""
+    position = paging.parse(raw)
+    return raw if position is not None and paging.cursor_of(*position) == raw else None
+
+
+def _list_asked(request):
+    """(the list a GET /api/encounters asks for, its cursor or None); ApiError 400 for anything else - a list not served,
+    a parameter given twice, a cursor that is no cursor of this API, or a cursor on the recent five."""
+    names, cursors = request.GET.getlist('list'), request.GET.getlist('before')
+    if len(names) > 1 or (names and names[0] not in customer.LIST_NAMES):
+        raise ApiError(400, LIST_UNKNOWN)
+    which = names[0] if names else customer.LIST_DOCUMENTS
+    if not cursors:
+        return which, None
+    if len(cursors) > 1 or which == customer.LIST_RECENT or _cursor_read(cursors[0]) is None:
+        raise ApiError(400, LIST_CURSOR_UNREADABLE)
+    return which, cursors[0]
+
+
+def _later_page_counted(request, membership):
+    """A later page or a search counts one hit of list.member (settings.LIST_PAGES_LIMIT_PER_MEMBER); over it, 429
+    rate_limited and, at the window's first refusal, one SecurityEvent list.rate_limited - nothing read or recorded."""
+    _limited(request, LIST_MEMBER_SCOPE, request.user.pk, settings.LIST_PAGES_LIMIT_PER_MEMBER,
+             workspace_id=membership.workspace_id)
+
+
 @api_view
 @read_audit.phi_read(read_audit.MEMBER_LIST)
 def encounters(request):
-    """GET the list; POST an upload (multipart: file or text, title, service_date, insurance, synthetic_attestation,
-    client_key) -> 201 {id}, its coding round 1 queued in the same transaction (intake.create_encounter). The list is
-    recorded as member.list: the practice, the time it was read and how many rows it holds - the whole practice, with no
-    paging, so that says exactly which rows were shown."""
+    """GET one page of a list; POST an upload (multipart: file or text, title, service_date, insurance,
+    synthetic_attestation, client_key) -> 201 {id}, its coding round 1 queued in the same transaction
+    (intake.create_encounter). A page is recorded as member.list before it is served (release 2, R2-21): the practice,
+    the documents of that page in the order shown, their number, when it was read, and the list and cursor it was asked
+    with - so the record says exactly which rows were shown, whatever the page."""
     membership = active_membership(request.user)
     if request.method == 'GET':
+        which, before = _list_asked(request)
+        if before is not None:
+            _later_page_counted(request, membership)
         as_of = timezone.now()
-        rows = customer.list_rows(membership)
-        _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, count=len(rows), as_of=as_of)
-        return JsonResponse({'encounters': rows})
+        page = customer.list_page(membership, which, before)
+        shown = [row['id'] for row in page['encounters']]
+        _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
+                  count=len(shown), as_of=as_of, filters={'list': which, 'before': before})
+        return JsonResponse(page)
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -318,6 +371,44 @@ def encounters(request):
     except ValidationError as exc:  # intake's and storage's own sentences about the file
         raise ApiError(400, ' '.join(exc.messages))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
+
+
+# --- the search (release 2, R2-20 and R2-21) --------------------------------------------------------------------------
+# POST /api/encounters/search {"text": the words, "before": a cursor or null} answers one page of the practice's
+# documents whose row holds the words (customer.search_page), in the list's shape with total null. It is a POST, so the
+# words - possibly a name - never sit in an address, a query string or an access log; the middleware enforces CSRF and
+# the request's body limit. Text that is not text, or blank once trimmed as the page trims, is answered 400; text longer
+# than customer.SEARCH_MAX_CHARS characters, not counting the combining dot above (U+0307; customer.search_length), or
+# holding a character PostgreSQL text cannot hold (UNSTORABLE), is an empty page, recorded with count 0. Every search
+# first counts toward the member's limit (list.member), then is recorded as a member.list row naming the documents
+# found, with the filters {"list": "search", "before": cursor} - never the words.
+
+SEARCH_TEXT_REQUIRED = 'Type the words to search for.'
+
+
+@require_POST
+@api_view
+@read_audit.phi_read(read_audit.MEMBER_LIST)
+def search_encounters(request):
+    """One page of a search (see above), recorded before it is served."""
+    membership = active_membership(request.user)
+    data = _payload(request)
+    text, before = data.get('text'), data.get('before')
+    words = customer.search_words(text) if isinstance(text, str) else ''
+    if not words:
+        raise ApiError(400, SEARCH_TEXT_REQUIRED)
+    if before is not None and (not isinstance(before, str) or _cursor_read(before) is None):
+        raise ApiError(400, LIST_CURSOR_UNREADABLE)
+    _later_page_counted(request, membership)
+    as_of = timezone.now()
+    if customer.search_length(words) > customer.SEARCH_MAX_CHARS or UNSTORABLE.search(words):
+        page = {'encounters': [], 'next': None, 'total': None}  # no row's text holds such words, lower-cased or not
+    else:
+        page = customer.search_page(membership, words, before)
+    shown = [row['id'] for row in page['encounters']]
+    _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
+              count=len(shown), as_of=as_of, filters={'list': 'search', 'before': before})
+    return JsonResponse(page)
 
 
 @require_GET
@@ -452,6 +543,35 @@ def download_report(request, report_id):
     return response
 
 
+# --- the in-page view's validator (release 2, R2-15; D-R2-6, D-R2-7) ---------------------------------------------------
+# A PDF view of a stored file carries ETag "<tag>": a UUID-shaped value derived with the site's key from the sign-in
+# reference, the document and the stored file's recorded sha256 - so it names no hash, is bound to the sign-in, and is
+# made without reading the file. A re-open that names it in If-None-Match (the page sends it only for a view it holds in
+# its memory) writes its member.inline row first, with the filters {"shown_from": "page_memory"}, and is answered 304
+# with no body and no stored file read; a row that cannot be written answers 503 and nothing else. Anything else - another
+# tag, '*', another sign-in, a text or a paste (never tagged), a stored file whose recorded hash changed - is a 200 with
+# the bytes, recorded as today. Both stay no-store (access.SecurityHeadersMiddleware): nothing is kept by a proxy.
+
+SHOWN_FROM_PAGE_MEMORY = {'shown_from': 'page_memory'}  # a 304's record: the page drew its own copy
+
+
+def view_tag(request, encounter, shown):
+    """The ETag value of ``shown`` (customer.view_source) for this request's sign-in, or None: only a PDF view of a stored
+    file, in a session that carries a sign-in reference, is tagged."""
+    sign_in = request_meta.sign_in_ref(request)
+    stored = shown.stored
+    if stored is None or shown.content_type != customer.PDF or sign_in is None or not getattr(stored, 'sha256', None):
+        return None
+    return str(uuid.UUID(salted_hmac('studio.api.view_tag', f'{sign_in}:{encounter.pk}:{stored.sha256}',
+                                     algorithm='sha256').hexdigest()[:32]))
+
+
+def _held(request, tag) -> bool:
+    """Whether the request's If-None-Match names ``tag``, in its strong or its weak form ('*' never does)."""
+    header = request.META.get('HTTP_IF_NONE_MATCH', '')
+    return bool(header) and any(item != '*' and item.removeprefix('W/') == f'"{tag}"' for item in parse_etags(header))
+
+
 @require_GET
 @api_view(contract=False)
 @read_audit.phi_read(read_audit.MEMBER_DOWNLOAD)  # and member.inline, for view=1
@@ -459,24 +579,33 @@ def original(request, encounter_id):
     """The upload as a download (customer.download_content, release 1 C6: a Word document's is the PDF its coding review
     read; the Word file itself only with format=original, which the page asks for after its warning, and the only one
     a Word document with no PDF yet has), recorded as member.download with the format it served; with view=1, what the
-    in-page viewer shows (customer.view_content: the PDF or text, the pasted text, a Word document's converted PDF),
-    inline and framable by CPT Studio's own page only, recorded as member.inline. Each row is written before the bytes
-    are sent."""
+    in-page viewer shows (customer.view_source: the PDF or text, the pasted text, a Word document's converted PDF),
+    inline and framable by CPT Studio's own page only, recorded as member.inline - or, for a PDF view the page holds
+    (its ETag in If-None-Match; release 2, R2-15), a 304 recorded as shown from the page's memory. Each row is written
+    before anything is sent."""
     inline = request.GET.get('view') == '1'
     view = read_audit.MEMBER_INLINE if inline else read_audit.MEMBER_DOWNLOAD
     encounter, _ = _scoped(request, encounter_id, view)
     record = {'workspace_id': encounter.workspace_id, 'encounter_ids': [encounter.pk]}
     try:
         if inline:
-            found = customer.view_content(encounter)
-            if found is None:
+            shown = customer.view_source(encounter)
+            if shown is None:
                 raise Http404()
-            data, content_type, filename = found
+            tag = view_tag(request, encounter, shown)
+            if tag is not None and _held(request, tag):
+                _recorded(request, view, filters=SHOWN_FROM_PAGE_MEMORY, **record)
+                held = HttpResponseNotModified()
+                held['ETag'] = f'"{tag}"'
+                return held
+            data = customer.view_bytes(encounter, shown)
             _recorded(request, view, **record)
-            response = HttpResponse(data, content_type=content_type)
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            response = HttpResponse(data, content_type=shown.content_type)
+            response['Content-Disposition'] = f'inline; filename="{shown.filename}"'
             response['X-Frame-Options'] = 'SAMEORIGIN'
             response['Content-Security-Policy'] = VIEW_CSP
+            if tag is not None:
+                response['ETag'] = f'"{tag}"'
             return response
         try:
             found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)

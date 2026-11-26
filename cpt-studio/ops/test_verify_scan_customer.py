@@ -30,6 +30,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
+import urllib.parse  # noqa: E402 - release 2: the cursor as the scan writes it
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location('cpt_scan_customer', HERE / 'scan_customer.py')
@@ -39,6 +40,9 @@ _spec.loader.exec_module(sc)
 
 USERNAME, PASSWORD = 'review-agent', 'Synthetic-scan pass&+%<>"é-2026'
 ENCOUNTER_ID = 'f6000000-0000-4000-8000-0000000000a1'
+SECOND_ID = 'f6000000-0000-4000-8000-0000000000a2'  # release 2: the second page's document (R2-24's --all)
+NEXT_PAGE = f'20261120T071000.000000Z~{ENCOUNTER_ID}'  # the first page's next cursor
+VIEW_TAG = '"0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17"'  # an ETag as release 2's view carries it (R2-15)
 DRAFT_ID, APPROVED_ID = 'f6000000-0000-4000-8000-0000000000d1', 'f6000000-0000-4000-8000-0000000000d2'
 PDF_ID = 'f6000000-0000-4000-8000-0000000000d3'
 QUOTE = 'Cold forceps biopsies were taken from the gastric antrum.'
@@ -579,19 +583,41 @@ class StubSite:
             return self.send(request, 200, code + (" const LABEL = 'Claude';" if self.leak.get('bundle_name') else ''), 'text/javascript')
         if route in (('GET', '/static/studio/styles.css'), ('GET', '/static/studio/extra.js')):
             return self.send(request, 200, 'main { margin: 0; }', 'text/css')
+        paged = self.leak.get('two_pages') or self.leak.get('short_list')
         if route == ('GET', '/api/session'):
             session = session_json()
             if self.leak.get('session_mode'):
                 session['provider_mode'] = 'live'
+            if paged:  # the practice holds two documents
+                session['counts'] = {'documents': 2, 'queue': 0}
             return self.send(request, 200, session)
-        if route == ('GET', '/api/encounters'):
+        if request.command == 'GET' and request.path.split('?')[0] == '/api/encounters':
             row = {'id': self.id, 'title': self.encounter['title'], 'state': 'reviewed', 'state_label': 'Reviewed',
                    'service_date': '2026-11-02', 'insurance': 'medicare', 'created_at': self.encounter['created_at'],
-                   'kind': 'upload'}
-            return self.send(request, 200, {'encounters': [row]})
-        if route in (('GET', f'/api/encounters/{self.id}/original'), ('GET', f'/api/encounters/{self.id}/original?view=1')):
-            headers = [('X-Content-SHA256', 'cd' * 32)] if self.leak.get('original_hash') else []
-            return self.send(request, 200, b'%PDF-1.4 synthetic ' + b'0' * (3 * 1024 * 1024), 'application/pdf', headers)
+                   'kind': 'upload', 'opens_pdf': True}
+            if request.path == '/api/encounters':  # the first page: release 2's next and total
+                more = bool(self.leak.get('two_pages'))
+                return self.send(request, 200, {'encounters': [row], 'next': NEXT_PAGE if more else None,
+                                                'total': 2 if more else 1})
+            if self.leak.get('refused') and request.path != '/api/encounters':  # the list limit (R2-21): 429
+                self.leak['refused'] -= 1
+                wait = self.leak.get('retry_after', '1')
+                return self.send(request, 429, {'error': 'rate_limited', 'retry_after': 1},
+                                 headers=[('Retry-After', wait)] if wait is not None else [])
+            if self.leak.get('two_pages') and parse_qs(request.path.split('?', 1)[1]) == {'before': [NEXT_PAGE]}:
+                return self.send(request, 200, {'encounters': [{**row, 'id': SECOND_ID}], 'next': None, 'total': None})
+            return self.send(request, 400, {'error': 'That part of the list could not be read. Open the list again.',
+                                            'details': {}})
+        ids = (self.id, SECOND_ID) if self.leak.get('two_pages') else (self.id,)
+        for listed in ids:
+            if route in (('GET', f'/api/encounters/{listed}/original'), ('GET', f'/api/encounters/{listed}/original?view=1')):
+                headers = [('X-Content-SHA256', 'cd' * 32)] if self.leak.get('original_hash') else []
+                if route[1].endswith('?view=1') and self.leak.get('etag'):
+                    headers.append(('ETag', self.leak['etag']))
+                return self.send(request, 200, b'%PDF-1.4 synthetic ' + b'0' * (3 * 1024 * 1024), 'application/pdf', headers)
+        if self.leak.get('two_pages') and route == ('GET', f'/api/encounters/{SECOND_ID}'):
+            enc = json.loads(json.dumps(self.encounter).replace(self.id, SECOND_ID))
+            return self.send(request, 200, enc)
         if route == ('GET', f'/api/encounters/{self.id}'):
             enc = json.loads(json.dumps(self.encounter))
             if self.leak.get('vendor_key'):
@@ -690,6 +716,80 @@ class ScanRunTests(unittest.TestCase):
                 failed = {item['id'] for item in evidence['checks'] if item['status'] == 'fail'}
                 for check in wanted:
                     self.assertIn(check.format(short=site.id[:8]), failed, (leak, sorted(failed)))
+
+    def test_all_follows_the_lists_pages_and_scans_every_document_listed(self):
+        # release 2 (R2-24): the list is paged; --all follows each page's next with ?before=, GET only, and holds every
+        # page to the contract - so a practice of two pages is scanned whole, and the read is checked against the session
+        code, evidence, printed, site = self.run_scan('--all', site=StubSite(two_pages=True))
+        self.assertEqual(code, 0, printed)
+        statuses = self.statuses(evidence)
+        for check in ('customer.list_contract', 'customer.list_contract.page2', 'customer.list_complete',
+                      f'customer.contract.{ENCOUNTER_ID[:8]}', f'customer.contract.{SECOND_ID[:8]}'):
+            self.assertEqual(statuses.get(check), 'pass', check)
+        self.assertEqual([item['id'] for item in evidence['encounters']], [ENCOUNTER_ID, SECOND_ID])
+        asked = [path for method, path in site.log if method == 'GET' and path.startswith('/api/encounters?')]
+        self.assertEqual(asked, [f'/api/encounters?before={urllib.parse.quote(NEXT_PAGE, safe="")}'])
+        self.assertTrue(evidence['only_get_beyond_sign_in_and_out'])
+        # --limit stops the pages: one document wanted, one page read, and that is complete
+        code, evidence, printed, site = self.run_scan('--all', '--limit', '1', site=StubSite(two_pages=True))
+        self.assertEqual((code, self.statuses(evidence).get('customer.list_complete')), (0, 'pass'), printed)
+        self.assertFalse([path for method, path in site.log if path.startswith('/api/encounters?')])
+        self.assertEqual([item['id'] for item in evidence['encounters']], [ENCOUNTER_ID])
+
+    def test_all_waits_out_the_list_limit_on_a_later_page_and_asks_for_it_again(self):
+        # release 2 (R2-21): each later page counts toward the member's list limit (120 a minute), so a practice of more
+        # than about 6,000 documents meets a 429 inside a minute; the scan waits as Retry-After says and asks for the
+        # same page again - GET only, at most twice a page - and a correct server passes
+        later = f'/api/encounters?before={urllib.parse.quote(NEXT_PAGE, safe="")}'
+        waited = []
+        with unittest.mock.patch.object(sc.time, 'sleep', side_effect=waited.append):
+            code, evidence, printed, site = self.run_scan('--all', site=StubSite(two_pages=True, refused=1))
+        self.assertEqual(code, 0, printed)
+        statuses = self.statuses(evidence)
+        self.assertEqual((statuses.get('customer.list_contract.page2'), statuses.get('customer.list_complete')),
+                         ('pass', 'pass'))
+        self.assertEqual([path for method, path in site.log if path.startswith('/api/encounters?')], [later, later])
+        self.assertEqual(waited, [1])
+        self.assertTrue(evidence['only_get_beyond_sign_in_and_out'])
+        # refused three times, or with a Retry-After the scan does not wait out (none, 0, over 61 s): the page fails
+        for leak, gets, sleeps in (({'refused': 3}, 3, [1, 1]), ({'refused': 1, 'retry_after': None}, 1, []),
+                                   ({'refused': 1, 'retry_after': '0'}, 1, []),
+                                   ({'refused': 1, 'retry_after': '62'}, 1, [])):
+            with self.subTest(leak=leak):
+                waited.clear()
+                with unittest.mock.patch.object(sc.time, 'sleep', side_effect=waited.append):
+                    code, evidence, printed, site = self.run_scan('--all', site=StubSite(two_pages=True, **leak))
+                self.assertEqual(code, 1, printed)
+                statuses = self.statuses(evidence)
+                self.assertEqual((statuses.get('customer.list_contract.page2'), statuses.get('customer.list_complete')),
+                                 ('fail', 'fail'))
+                self.assertEqual([path for method, path in site.log if path.startswith('/api/encounters?')],
+                                 [later] * gets)
+                self.assertEqual(waited, sleeps)
+
+    def test_all_fails_when_the_list_holds_fewer_documents_than_the_session_counts(self):
+        code, evidence, printed, _site = self.run_scan('--all', site=StubSite(short_list=True))
+        self.assertEqual(code, 1, printed)
+        statuses = self.statuses(evidence)
+        self.assertEqual(statuses.get('customer.list_complete'), 'fail')
+        self.assertIn('read 1 document(s)', next(item['reason'] for item in evidence['checks']
+                                                  if item['id'] == 'customer.list_complete'))
+        # without --all nothing is followed or counted: the named document alone
+        code, evidence, printed, _site = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(short_list=True))
+        self.assertEqual(code, 0, printed)
+        self.assertNotIn('customer.list_complete', self.statuses(evidence))
+
+    def test_an_api_answers_etag_is_absent_or_a_quoted_uuid_and_never_a_hash(self):
+        for tag in (VIEW_TAG, f'W/{VIEW_TAG}'):
+            with self.subTest(tag=tag):
+                code, evidence, printed, _site = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(etag=tag))
+                self.assertEqual((code, self.statuses(evidence).get('scan.header')), (0, 'pass'), printed)
+        for tag in (f'"{"ab" * 32}"', f'"{"ab" * 8}"', VIEW_TAG.strip('"'), '"x"'):
+            with self.subTest(tag=tag):
+                code, evidence, printed, _site = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(etag=tag))
+                self.assertEqual((code, self.statuses(evidence).get('scan.header')), (1, 'fail'), printed)
+                self.assertIn('etag_shape', json.dumps(evidence['hits']['header']))
+        self.assertEqual(sc.etag_hits([('ETag', f'"{"ab" * 32}"')], '/static/studio/app.0123456789ab.js'), [])
 
     def test_a_pdf_export_is_scanned_as_its_text_and_one_that_cannot_be_read_fails_the_run(self):
         check = f'report.{ENCOUNTER_ID[:8]}.approved.pdf.text'
