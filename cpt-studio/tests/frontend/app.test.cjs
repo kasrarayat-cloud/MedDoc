@@ -7219,8 +7219,10 @@ test('R2-19, R2-20, R2-24: the dev preview pages its list and answers the search
   assert.equal(preview.searchAnswer(many, { text: 'é'.repeat(240), before: null })[0], 200, '240 characters are words');
 });
 
-test('R2: the page script and the stylesheet stay within section 8\'s static weight, as WhiteNoise compresses them (gzip, level 9)', () => {
+test('R2: the page script and the stylesheet stay 1% under section 8\'s static weight, an early warning (node\'s gzip is not WhiteNoise\'s byte for byte; the bench reads the .gz itself)', () => {
+  // node bundles Chromium's zlib, whose level-9 deflate stream differs from Python's (WhiteNoise's compress_gzip):
+  // measured -13..+3 B on styles.css and +148..+197 B on app.js, so a pass here is a pass there with 1% to spare
   const gzipped = file => zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
-  assert.ok(gzipped(BUNDLE) <= 80000, `app.js: ${gzipped(BUNDLE)} B gzipped, the gate 80,000`);
-  assert.ok(gzipped(STYLES) <= 16000, `styles.css: ${gzipped(STYLES)} B gzipped, the gate 16,000`);
+  assert.ok(gzipped(BUNDLE) <= 79200, `app.js: ${gzipped(BUNDLE)} B gzipped by node, the early gate 79,200 (section 8: 80,000)`);
+  assert.ok(gzipped(STYLES) <= 15840, `styles.css: ${gzipped(STYLES)} B gzipped by node, the early gate 15,840 (section 8: 16,000)`);
 });
