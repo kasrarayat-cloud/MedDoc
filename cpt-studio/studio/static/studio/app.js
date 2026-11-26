@@ -2395,7 +2395,7 @@ async function loadDocument(id, serial, silent, poll = false) {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
     if (serial !== state.routeSerial || older()) return;
-    // a document refused (another practice's, or access ended) is an end (R2-18): on its first read, a poll or a refresh
+    // a 404 - another practice's document, or access ended - is an end (R2-18): on a first read, a poll or a refresh
     if (error.status === 404) forgetMemory();
     if (state.outdated) {
       dropEarly();  // R2-16: a first read refused as outdated drops the click's early view too
@@ -2866,7 +2866,7 @@ function settleWithin(promise, ms) {
 // and then handed to the library as its port (openPdf), so the library never starts a worker of its own, nor its stand-in
 // on the page's own thread. An 'error' or 'messageerror' event before ready rejects; the caller's time limit covers a
 // worker that never says it is ready.
-function startWorker(viewer, address) {
+function startWorker(viewer, address, loading) {
   return new Promise((resolve, reject) => {
     const thread = new Worker(address, { type: 'module' });
     viewer.thread = thread;
@@ -2879,7 +2879,7 @@ function startWorker(viewer, address) {
     const ready = event => {
       const data = event?.data;
       if (data && typeof data === 'object' && data.sourceName === 'worker' && data.targetName === 'main' && data.action === 'ready') {
-        state.pdfStarted = true;  // R2-12
+        if (state.pdfLibrary === loading) state.pdfStarted = true;  // R2-12; a forgotten library's worker says nothing
         done(resolve, thread);
       }
     };
@@ -2897,8 +2897,8 @@ function startWorker(viewer, address) {
 // poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
 // member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
 // counted by the server either (studio.sessions.automatic).
-// R2-15: a kept view is asked for with its tag; a 304 hands back a copy of the kept bytes, and any other answer, or
-// none, drops them first. It answers {data, tag, held}.
+// R2-15: a kept view is asked for with its tag; a 304 hands back a copy of the kept bytes; any other answer, or a
+// failed request, drops them first, and the page's own abort leaves them kept. It answers {data, tag, held}.
 async function downloadDocument(view, signal, moved) {
   const held = state.keptViews.get(view) || null;
   const headers = { [POLL_HEADER]: '1' };
@@ -2907,7 +2907,7 @@ async function downloadDocument(view, signal, moved) {
   try {
     response = await fetch(view, { credentials: 'same-origin', cache: 'no-store', signal, headers });
   } catch (error) {
-    dropView(view, held);
+    if (!signal?.aborted) dropView(view, held);
     throw error;
   }
   if (held && response.status === 304) {
@@ -3101,7 +3101,7 @@ function startStandby() {
     const library = await loading;
     if (state.pdfStandby !== standby) throw new Error('The worker made ready ahead is no longer wanted.');
     standby.address = library.GlobalWorkerOptions.workerSrc;
-    const thread = await startWorker(standby, standby.address);
+    const thread = await startWorker(standby, standby.address, loading);
     thread.addEventListener('error', standby.failed);
     return thread;
   })()]), PDF_VIEW.limitMs);
@@ -3119,11 +3119,11 @@ function endStandby() {
 
 // The viewer's own worker: the one made ready ahead for this address, the viewer's at once, else a new one; one made
 // ready for another address (?attempt=n) is ended.
-function takeWorker(viewer, address) {
+function takeWorker(viewer, address, loading) {
   const standby = state.pdfStandby;
   if (!standby || standby.address !== address || !standby.thread) {
     if (standby?.address && standby.address !== address) endStandby();
-    return startWorker(viewer, address);
+    return startWorker(viewer, address, loading);
   }
   state.pdfStandby = null;
   standby.taken = true;
@@ -3196,7 +3196,7 @@ async function openPdf(viewer) {
       const library = await loading;
       if (!opening()) return;
       viewer.library = library;
-      const thread = await takeWorker(viewer, library.GlobalWorkerOptions.workerSrc);
+      const thread = await takeWorker(viewer, library.GlobalWorkerOptions.workerSrc, loading);
       if (!opening()) return;
       viewer.worker = new library.PDFWorker({ port: thread, verbosity: library.VerbosityLevel.ERRORS });
     })(), PDF_VIEW.limitMs);

@@ -6013,6 +6013,40 @@ test('R2 V2: the document is asked for beside the library and its worker once bo
   }, () => Promise.resolve(viewResponse({ status: 503, chunks: [] })));
 });
 
+test('R2 V2: a worker made ready ahead that says ready after the library was forgotten does not bring back the parallel order', async () => {
+  const word = fixture('encounter-word.json');
+  const working = fakeLibrary();
+  let fresh = null;
+  const load = specifier => (/\?attempt=2$/.test(specifier) ? new Promise(resolve => { fresh = resolve; }) : Promise.resolve(working.library));
+  try {
+    await withPdfPage(load, async ({ element: find, fetches, loads }) => {
+      await withStandby(async () => {
+        const viewer = await mount(word, find, () => fetches.length === 1);
+        assert.equal(app.state.pdfStarted, true);
+        // the worker made ready ahead (after a drawn page) is still starting
+        FakeWorker.start = 'never';
+        app.startStandby();
+        await settle(() => FakeWorker.made.length === 2);
+        // the document's own worker fails once started: the library is forgotten
+        viewer.thread.emit('error', {});
+        assert.equal(app.state.pdfStarted, false);
+        // the waiting worker, of the forgotten library, says ready now
+        FakeWorker.made[1].emit('message', { data: { sourceName: 'worker', targetName: 'main', action: 'ready' } });
+        await settle(() => false);
+        assert.equal(app.state.pdfStarted, false, 'a worker of a forgotten library says nothing about the next one\'s files');
+        await mount(word, find, () => loads.length === 2);
+        assert.match(loads[1], /\?attempt=2$/);
+        assert.equal(fetches.length, 1, 'the next document waits for its fresh library and worker: release 1\'s order');
+        app.closeViewer();
+        fresh?.(fakeLibrary().library);
+        await settle(() => false);
+      });
+    });
+  } finally {
+    FakeWorker.start = 'ready';
+  }
+});
+
 test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text read beside its drawing; the two are shown together', async () => {
   const word = fixture('encounter-word.json');
   const saved = { viewer: app.state.viewer };
@@ -6108,7 +6142,7 @@ test('R2 V3: a re-open asks with the tag it holds and draws the kept bytes on a 
       assert.equal(fetches[1].init.headers['X-CPT-Poll'], '1', 'the page\'s own read: never the member\'s activity');
       assert.deepEqual(opened[1], opened[0], 'the same bytes, drawn from page memory');
       const kept = app.state.keptViews.get(view).data;
-      assert.ok(library.made.tasks.every(task => task.options.data !== kept), 'the library takes the array it is given: never the kept one');
+      assert.ok(library.made.tasks.every(task => task.options.data.buffer !== kept.buffer), 'the library takes the array it is given: never the kept one\'s buffer');
       assert.equal(app.state.keptViews.size, 1);
       app.closeViewer();
       // changed on the server: the new bytes are drawn, and kept in place of the old, which are overwritten
@@ -6237,6 +6271,40 @@ test('R2 V3: the kept copies are bounded - six documents, 24 MiB - the least rec
   app.forgetMemory();
   assert.equal(app.state.keptViews.size, 0);
   assert.ok(held.every(data => data.every(byte => byte === 0)), 'overwritten, not only let go of');
+});
+
+test('R2 V3: a re-open answered 304 moves its copy to the end - the next copy kept lets the least recently viewed go, never the one just viewed again', async () => {
+  const fetchBefore = global.fetch;
+  const tag = 'abcdef00-0000-4000-8000-000000000000';
+  app.state.keptViews.clear();
+  try {
+    for (let n = 1; n <= 6; n += 1) app.keepView(`/v${n}`, tag, new Uint8Array(4).fill(n));
+    global.fetch = async () => ({ status: 304, ok: false, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) });
+    const got = await app.downloadDocument('/v1', new AbortController().signal, () => {});
+    assert.deepEqual([got.held, [...got.data]], [true, [1, 1, 1, 1]], 'the oldest copy re-opened from page memory');
+    app.keepView('/v7', tag, new Uint8Array(4).fill(7));
+    assert.deepEqual([...app.state.keptViews.keys()], ['/v3', '/v4', '/v5', '/v6', '/v1', '/v7'], 'viewed again through a 304: kept longer');
+  } finally {
+    global.fetch = fetchBefore;
+    app.forgetMemory();
+  }
+});
+
+test('R2 V3, R2-15: the page\'s own abort of a re-open - a route away, a second click - leaves the copy kept and whole; a request that fails drops it', async () => {
+  const word = fixture('encounter-word.json');
+  const view = `/api/encounters/${word.id}/original?view=1`;
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+    app.state.pdfStarted = true;
+    const data = Uint8Array.from([37, 80, 68]);
+    app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);
+    app.startEarly(word.id);
+    assert.deepEqual(fetches.map(item => item.init.headers['If-None-Match']), ['"abcdef00-0000-4000-8000-000000000000"'], 'asked with its tag at the click');
+    app.dropEarly();  // the member routes away before the answer
+    await settle(() => false);
+    assert.equal(fetches[0].init.signal.aborted, true);
+    assert.deepEqual([app.state.keptViews.get(view)?.data === data, [...data]], [true, [37, 80, 68]], 'kept, the same bytes, not overwritten');
+    app.forgetMemory();
+  }, (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))));
 });
 
 test('R2 V3, R2-18: the idle end, the cap, another tab\'s sign-out, a 401, a forced password change and the sign-out form each wipe page memory before the page leaves', async () => {

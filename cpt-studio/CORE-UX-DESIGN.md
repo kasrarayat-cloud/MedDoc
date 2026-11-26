@@ -464,8 +464,8 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
 - **A re-open from page memory** (R2-15). A PDF the page opened is kept in its memory under the tag the server gave it
   (a quoted UUID; anything else is no tag): at most six documents and 24 MiB, the least recently viewed going first, and
   never a Blob, the Cache API, IndexedDB or Web Storage. A re-open sends the tag (`If-None-Match`) and draws the kept
-  bytes only when the server answers 304, which it records as it records any view; any other answer, or none, drops the
-  copy and overwrites it.
+  bytes only when the server answers 304, which it records as it records any view; any other answer, or a failed
+  request, drops the copy and overwrites it, and the page's own abort (a route away, a second click) leaves it kept.
 - **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
   the page meets it (the view's own download and the framed viewer's load included), another tab's sign-out, a
   document refused with 404 (on its first read, a poll or a refresh, the page out of date or not), and the page left
