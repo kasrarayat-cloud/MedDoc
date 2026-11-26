@@ -46,6 +46,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import uuid
 from pathlib import Path
 from unittest import mock
@@ -444,9 +445,13 @@ class ReleaseGunicorn:
     stopped by the process id it was started as, never by a name, and the kernel stops it if the test process dies
     first."""
 
-    def __init__(self, test, *options, config=GUNICORN_CONF, app='cptstudio.wsgi', environment=None, exclude=()):
+    def __init__(self, test, *options, config=GUNICORN_CONF, app='cptstudio.wsgi', environment=None, exclude=(),
+                 separate=False):
         self.test, self.options, self.config, self.app = test, options, config, app
         self.environment, self.exclude = dict(environment or {}), set(exclude)
+        # stdout (gunicorn's access log) and stderr (its error log, and what the application writes there) each in a
+        # file of its own, as Docker keeps them apart, instead of one file holding both
+        self.separate, self.errlog = separate, None
         self.name = f'lane-w-gunicorn-{uuid.uuid4().hex[:12]}'
         folder = tempfile.TemporaryDirectory(prefix='lane-w-gunicorn-')
         test.addCleanup(folder.cleanup)
@@ -462,11 +467,14 @@ class ReleaseGunicorn:
         environment.update({'PYTHONDONTWRITEBYTECODE': '1', 'PGAPPNAME': self.name,
                             'DJANGO_SETTINGS_MODULE': 'cptstudio.settings',
                             'CPT_STUDIO_DB_NAME': connection.settings_dict['NAME'], **self.environment})
-        with self.log.open('wb') as output:
+        self.errlog = self.folder / f'gunicorn-{attempt}.err' if self.separate else None
+        errors_to = self.errlog if self.errlog else Path(os.devnull)
+        with self.log.open('wb') as output, errors_to.open('wb') as errors:
             self.process = subprocess.Popen(
                 [sys.executable, '-B', '-m', 'gunicorn', '-c', str(self.config), '--bind', f'127.0.0.1:{self.port}',
                  *self.options, self.app], cwd=settings.BASE_DIR, env=environment, stdout=output,
-                stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=_stop_with_the_test_process)
+                stderr=errors if self.errlog else subprocess.STDOUT, start_new_session=True,
+                preexec_fn=_stop_with_the_test_process)
 
     def start(self, booted=4, timeout=180):
         """Started, with ``booted`` workers booted; a port taken between its check and the bind is left for another."""
@@ -507,7 +515,14 @@ class ReleaseGunicorn:
         return self.process.returncode
 
     def text(self) -> str:
-        return self.log.read_text(encoding='utf-8', errors='replace') if self.log else ''
+        """All its output, both streams."""
+        return ''.join(self.streams())
+
+    def streams(self) -> tuple:
+        """(stdout, stderr) as written; with the streams not kept apart, everything is in the first."""
+        def read(path):
+            return path.read_text(encoding='utf-8', errors='replace') if path else ''
+        return read(self.log), read(self.errlog)
 
     def until_text(self, needle, timeout=60) -> str:
         deadline = time.monotonic() + timeout
@@ -654,6 +669,15 @@ class RealGunicornTests(SimpleTestCase):
         self.assertEqual(server.stop(), 0)
 
 
+def docker_stamped(text: str, first: int = 0) -> bytes:
+    """``text`` as `docker logs --timestamps` gives one stream of it: each line Docker read - it splits at a line feed
+    only - after a time of its own, in order from ``first`` nanoseconds."""
+    lines = text.split('\n')
+    if lines and lines[-1] == '':
+        lines.pop()
+    return '\n'.join(f'2026-11-26T10:00:00.{first + index:09d}Z {line}' for index, line in enumerate(lines)).encode()
+
+
 @functools.cache
 def lane_w_installer():
     """ops/install.py, loaded from this tree as a module of its own, or None in a tree without ops/ (the image ships
@@ -776,12 +800,12 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                          if ACCESS_LINE.match(body) and '"GET /health/ HTTP/1.1" 200 ' in body])
         self.assertTrue([body for body in bodies if body not in expected])  # and the runs wrote lines that are dropped
 
-    def release_web_that_cannot_load(self, environment) -> str:
-        """The release's settings file unchanged; its application fails in gunicorn's master (preload_app), before
-        gunicorn writes a line: gunicorn exits 1."""
-        server = ReleaseGunicorn(self, environment=environment)
+    def release_web_that_cannot_load(self, environment) -> tuple:
+        """(stdout, stderr) of the release's settings file unchanged, whose application fails in gunicorn's master
+        (preload_app) before gunicorn writes a line: gunicorn exits 1."""
+        server = ReleaseGunicorn(self, environment=environment, separate=True)
         self.assertEqual(server.run_to_exit(timeout=60), 1)  # it exits within seconds; one that serves never does
-        return server.text()
+        return server.streams()
 
     def test_release_2s_web_that_cannot_load_its_application_keeps_one_fixed_line(self):
         install = lane_w_installer()
@@ -799,10 +823,35 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         }
         for what, environment in runs.items():
             with self.subTest(what=what):
-                lines = self.release_web_that_cannot_load(environment).splitlines()
-                stamped = [f'2026-11-26T10:00:00.{index:09d}Z {line}' for index, line in enumerate(lines)]
-                kept, dropped = install.ids_only_lines('web', '\n'.join(stamped).encode())
-                # exactly the one fixed line - never the error's text, which gunicorn or the traceback writes after it
+                out, err = self.release_web_that_cannot_load(environment)
+                streams = (docker_stamped(out), docker_stamped(err, 10 ** 6))  # Docker keeps stdout and stderr apart
+                kept, dropped = install.ids_only_lines('web', *streams)
+                # exactly the one fixed line, from stderr - never the error's text, which gunicorn or the traceback
+                # writes after it
                 self.assertEqual([line.split(' ', 1)[1] for line in kept], [WEB_LOAD_FAILED])
-                self.assertEqual(dropped, len(lines) - 1)
+                self.assertIn(WEB_LOAD_FAILED, err.split('\n'))
+                self.assertEqual(dropped, sum(len(stream.decode().splitlines()) for stream in streams) - 1)
                 self.assertGreater(dropped, 0)
+
+    def test_a_request_cannot_write_the_fixed_line_into_a_serving_webs_kept_log(self):
+        # gunicorn's access log, on stdout, writes a request's path decoded and unescaped: a line feed (%0A) starts a
+        # line of the request's own after Docker's own time, and a file separator (%1C) - a line break to the reader -
+        # one after a time the request chose. The fixed line is kept from stderr alone (refutation round 2)
+        install = lane_w_installer()
+        if install is None:
+            self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
+        server = ReleaseGunicorn(self, separate=True).start()
+        line = urllib.parse.quote(WEB_LOAD_FAILED, safe='')
+        stamp = urllib.parse.quote('2026-11-26T10:00:00.000000000Z ', safe='')
+        for path in (f'/x%0A{line}%0Ay', f'/x%1C{stamp}{line}%1Cy'):
+            with self.subTest(path=path):
+                self.assertTrue(400 <= server.get(path) < 500)
+        self.assertEqual(server.stop(), 0)
+        out, err = server.streams()
+        stdout, stderr = docker_stamped(out), docker_stamped(err, 10 ** 6)
+
+        def kept(*streams):
+            return [line.split(' ', 1)[1] for line in install.ids_only_lines('web', *streams)[0]]
+        # the control: the requests did write the line, alone on a line, into stdout - read as stderr it is kept, twice
+        self.assertEqual(kept(b'', stdout).count(WEB_LOAD_FAILED), 2)
+        self.assertNotIn(WEB_LOAD_FAILED, kept(stdout, stderr))

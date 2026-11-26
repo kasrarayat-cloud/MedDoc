@@ -1136,17 +1136,15 @@ KEPT_LOG_FORMATS = {
         # to load.' comes only from a web that loads the application in each worker (an earlier revision's, after a
         # switch-back), and with two or more workers failing at once gunicorn 23 may write no 'Reason:' line at all.
         # Release 2's web loads the application in gunicorn's master before gunicorn writes a line
-        # (deploy/gunicorn.conf.py, preload_app): one that cannot load writes the fixed line below instead, then the
-        # error's text, which is never kept. The worker class is a fixed word: deploy/gunicorn.conf.py's own
-        # (ops/test_install_r2web.py ties the two).
+        # (deploy/gunicorn.conf.py, preload_app): one that cannot load writes the fixed line KEPT_STDERR_FORMATS keeps
+        # instead, then the error's text, which is never kept. The worker class is a fixed word:
+        # deploy/gunicorn.conf.py's own (ops/test_install_r2web.py ties the two).
         r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
         r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
         r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
         r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?(?: Perhaps out of memory\?)?|WORKER TIMEOUT \(pid:\d+\)|'
         r'Autorestarting worker after current request\.|Reason: (?:Worker failed to boot|App failed to load)\.|'
         r'Worker \(pid:\d+\) exited with code \d+\.?)',
-        # release 2's web whose application cannot load in gunicorn's master (cptstudio/wsgi.py, refutation round 1)
-        r'CPT Studio web: the application could not be loaded\.',
         # django.request's warning and error lines name the path alone (its traceback lines are dropped)
         rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
         rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
@@ -1176,6 +1174,12 @@ KEPT_LOG_FORMATS = {
     )),
     # the converter's own messages are Lane 5's and not yet listed: every line is counted and dropped (fail closed)
     'converter': (),
+}
+# Lines kept from a container's stderr alone (refutation round 2 of lane W): its stdout carries gunicorn's access log,
+# which writes a client's decoded path unescaped, so a line kept from either stream could be forged by a request.
+# Release 2's web writes this one to stderr when its application cannot load in gunicorn's master (cptstudio/wsgi.py).
+KEPT_STDERR_FORMATS = {
+    'web': (re.compile(r'CPT Studio web: the application could not be loaded\.'),),
 }
 
 
@@ -1291,12 +1295,13 @@ STATIC_TOKEN = 'static-file'
 
 
 def ids_only_lines(role, *streams) -> tuple:
-    """(kept, dropped) of a container's output (``streams``: `docker logs --timestamps` stdout and stderr): the lines in
-    one of the role's KEPT_LOG_FORMATS, each with its timestamp, in time order; every other line - a traceback, a DETAIL
-    line, a line with no timestamp - counted in ``dropped`` and never copied (A13)."""
-    patterns = KEPT_LOG_FORMATS.get(role, ())
+    """(kept, dropped) of a container's output (``streams``: `docker logs --timestamps` stdout, then stderr): the lines
+    in one of the role's KEPT_LOG_FORMATS - or, in the second stream (stderr) alone, its KEPT_STDERR_FORMATS - each with
+    its timestamp, in time order; every other line - a traceback, a DETAIL line, a line with no timestamp - counted in
+    ``dropped`` and never copied (A13)."""
     kept, dropped = [], 0
-    for stream in streams:
+    for index, stream in enumerate(streams):
+        patterns = KEPT_LOG_FORMATS.get(role, ()) + (KEPT_STDERR_FORMATS.get(role, ()) if index == 1 else ())
         for line in (stream or b'').decode('utf-8', 'replace').splitlines():
             stamp_match = DOCKER_TIMESTAMP_RE.match(line)
             body = line[stamp_match.end():] if stamp_match else None
