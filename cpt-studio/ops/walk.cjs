@@ -92,8 +92,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const zlib = require('node:zlib');
 
-const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
-  || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
+// The Playwright the walk drives: CPT_VERIFY_PLAYWRIGHT, else this host's (release 2, R2-1: the earlier default, a
+// worktree's runtime folder, no longer existed, so every browser test was skipped where it should have run).
+const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT || '/opt/meddoc-pro/node_modules/playwright';
 const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@2';
 // studio/client_contract.py VERSION, with app.js and ops/verify_login.py (tests/test_cux_client_contract.py pins them).
 const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-26' };
