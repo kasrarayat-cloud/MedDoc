@@ -611,7 +611,7 @@ def browser_lowered() -> tuple:
 # measured over every code point in lane S's refutation round 2 (search[0]) and again for this table. Committed, so
 # SearchLetterTests holds the server to them where no such browser is installed, CI among them (D-R2-42).
 CHROMIUM_153_NEWER = {
-    '꟎': '꟏', '꟒': 'ꟓ', '꟔': 'ꟕ',
+    '\ua7ce': '\ua7cf', '\ua7d2': '\ua7d3', '\ua7d4': '\ua7d5',
     '\U00016ea0': '\U00016ebb', '\U00016ea1': '\U00016ebc', '\U00016ea2': '\U00016ebd', '\U00016ea3': '\U00016ebe',
     '\U00016ea4': '\U00016ebf', '\U00016ea5': '\U00016ec0', '\U00016ea6': '\U00016ec1', '\U00016ea7': '\U00016ec2',
     '\U00016ea8': '\U00016ec3', '\U00016ea9': '\U00016ec4', '\U00016eaa': '\U00016ec5', '\U00016eab': '\U00016ec6',
