@@ -1190,7 +1190,9 @@ class Bench(TransactionTestCase):
         (docs / 'b-note.txt').write_text('SYNTHETIC NOTE - NOT A REAL PATIENT\nDate of service: 2026-11-02\n'
                                          'The colonoscopy to the cecum was complete.\n'
                                          'The polyp was removed by cold snare and retrieved.\n')
-        (docs / 'c-scan-1p.pdf').write_bytes(bd.scan_pdf(1, 203, 13, dpi=100))
+        ocr = ('Date of service: 2026-11-02.', 'The colonoscopy to the cecum was complete.',
+               f'Quoted passage {{page}}: {bd.QUOTE}')
+        (docs / 'c-scan-2p.pdf').write_bytes(bd.scan_pdf(2, 203, 13, dpi=100, ocr=ocr))
         (docs / 'd-quotes-3p.pdf').write_bytes(bd.text_pdf(3, 204, 14, head=head, span=True))
         creds = self.raw / 'walk-credentials.json'
         creds.write_text(json.dumps({'username': user.username, 'password': self.password}))
@@ -1213,10 +1215,14 @@ class Bench(TransactionTestCase):
             (self.raw / 'walk.log').write_text(done.stdout[-30000:] + '\n--- stderr\n' + done.stderr[-30000:])
             evidence = json.loads((out / 'evidence.json').read_text()) if (out / 'evidence.json').exists() else {}
             run_checks = evidence.get('run_checks', [])
-            documents = [{'name': d.get('name'), 'result': d.get('result'), 'checks': len(d.get('checks', [])),
-                          'failed': [c.get('id') for c in d.get('checks', []) if c.get('status') != 'pass']}
+            # a check is passed or skipped by design (scan.files: the walk leaves report wording to scan_customer.py)
+            documents = [{'file': d.get('file') or d.get('name'), 'result': d.get('result'),
+                          'checks': len(d.get('checks', [])),
+                          'skipped': [c.get('id') for c in d.get('checks', []) if c.get('status') == 'skip'],
+                          'failed': [c.get('id') for c in d.get('checks', [])
+                                     if c.get('status') not in ('pass', 'skip')]}
                          for d in evidence.get('documents', [])]
-            failed = [c.get('id') for c in run_checks if c.get('status') != 'pass']
+            failed = [c.get('id') for c in run_checks if c.get('status') not in ('pass', 'skip')]
             self.check('walk.passes', done.returncode == 0 and not failed and len(documents) == 4
                        and all(not d['failed'] for d in documents), exit=done.returncode, run_failed=failed,
                        documents=documents, seconds=round(time.time() - started, 1))

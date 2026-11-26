@@ -128,9 +128,10 @@ def _paper_table() -> list[int]:
     return [max(150, min(255, round(normal.inv_cdf((v + 0.5) / 256)))) for v in range(256)]
 
 
-def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int = 62) -> bytes:
+def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int = 62, ocr: tuple = ()) -> bytes:
     """An image-only PDF (a scan): JPEG pages of noisy paper with bars of ink, the marker block and the barcode drawn
-    into page 1's pixels."""
+    into page 1's pixels. The walk's scan only: ``ocr`` lines are laid on every page as invisible text (render mode 3),
+    the text layer scanning software adds, so its quotes can be found; without it the bytes are the same as ever."""
     from PIL import Image, ImageDraw
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.utils import ImageReader
@@ -163,6 +164,13 @@ def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int
         img.save(buf, 'JPEG', quality=quality)
         buf.seek(0)
         c.drawImage(ImageReader(buf), 0, 0, PAGE_W, PAGE_H)
+        if ocr:
+            text = c.beginText(56, 700)
+            text.setTextRenderMode(3)
+            text.setFont('Helvetica', 10)
+            for line in ocr:
+                text.textLine(line.replace('{page}', str(page)))
+            c.drawText(text)
         c.showPage()
     c.save()
     return out.getvalue()
