@@ -328,6 +328,15 @@ def _package(data: bytes, report: dict):
         raise PackageRefused('it is not a zip archive') from None
     with archive:
         infos = archive.infolist()
+        for info in infos:  # a name without the UTF-8 flag is read as LibreOffice reads it: UTF-8, where it is valid
+            # (refutation round 1, loss[2]: zipfile reads it as cp437, so an import that holds content was removed as
+            # holding nothing, and the rebuild renamed the part); a name zipfile took from a Unicode Path extra field
+            # (0x7075) is left as it is
+            if not info.flag_bits & 0x800 and info.filename == info.orig_filename:
+                try:
+                    info.filename = info.filename.encode('cp437').decode('utf-8')
+                except UnicodeDecodeError:
+                    pass
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):

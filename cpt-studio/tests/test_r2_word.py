@@ -23,9 +23,11 @@ import hashlib
 import io
 import random
 import re
+import struct
 import tempfile
 import types
 import zipfile
+import zlib
 from pathlib import Path
 from unittest import mock
 from xml.etree import ElementTree
@@ -579,6 +581,92 @@ class ImportHoldingNothingTests(ReleaseOneCase):
                                                                   'External'),)))):
             with self.subTest(f'refused on purpose: {label}'), self.assertRaises(docx_package.ContentNotShown):
                 docx_package._safe_package(data)
+
+
+# --- refutation round 1, loss[2]: a zip entry name stored as UTF-8 without the UTF-8 flag ---------------------------
+
+def flagless(data, placeholder, name):
+    """``data`` (a zip zipfile wrote) with its entry name ``placeholder`` (ASCII) stored as ``name``'s UTF-8 bytes of
+    the same length, the UTF-8 flag left clear - as a writer that stores UTF-8 names without it does."""
+    raw = name.encode('utf-8')
+    assert len(raw) == len(placeholder) and data.count(placeholder) == 2  # its local header and central directory
+    return data.replace(placeholder, raw)
+
+
+def with_unicode_path(data, stored, unicode_name):
+    """``data`` rewritten with its entry ``stored`` (an ASCII name) carrying a Unicode Path extra field (0x7075) that
+    names it ``unicode_name``, the UTF-8 flag clear: zipfile reads the entry by that name."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(out, 'w') as rebuilt:
+        for info in source.infolist():
+            fresh = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            fresh.compress_type = zipfile.ZIP_DEFLATED
+            if info.filename == stored:
+                name = unicode_name.encode('utf-8')
+                fresh.extra = struct.pack('<HHBL', 0x7075, 5 + len(name), 1, zlib.crc32(stored.encode())) + name
+            rebuilt.writestr(fresh, source.read(info))
+    return out.getvalue()
+
+
+def entry_names(data) -> dict:
+    """{each entry's name as its bytes are stored: whether its UTF-8 flag is set}."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return {info.orig_filename.encode('utf-8' if info.flag_bits & 0x800 else 'cp437'): bool(info.flag_bits & 0x800)
+                for info in archive.infolist()}
+
+
+class ZipNameTests(ReleaseOneCase):
+    """Refutation round 1, loss[2]: a zip entry name stored as UTF-8 without the UTF-8 flag is read as LibreOffice reads
+    it - UTF-8, where that is valid - so an import that holds content is refused rather than removed as holding nothing,
+    and a picture keeps its name (release 1 read such a name as cp437 and the rebuild renamed the part: the picture was
+    lost). A name zipfile takes from a Unicode Path extra field is left as zipfile reads it."""
+
+    def importing(self, entry_name):
+        return package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
+                       (rel('rIdChunk', 'aFChunk', 'afchunk_\u00e4.docx'),), ((entry_name, inner_docx('IMPORTED')),))
+
+    def test_an_import_named_without_the_flag_is_refused(self):
+        data = flagless(self.importing('word/afchunk_XX.docx'), b'word/afchunk_XX.docx', 'word/afchunk_\u00e4.docx')
+        self.assertEqual(entry_names(data)[b'word/afchunk_\xc3\xa4.docx'], False)
+        self.assertEqual(self.release_1()._safe_package(data)[1]['chunks'], 1)  # the bad shape: release 1 removed it
+        for label, shape in (('without the flag', data), ('with it (the control)',
+                                                          self.importing('word/afchunk_\u00e4.docx'))):
+            with self.subTest(label):
+                with self.assertRaises(docx_package.ContentNotShown) as caught:
+                    docx_package._safe_package(shape)
+                self.assertEqual((caught.exception.code, caught.exception.counts), (docx_package.INSERTED_DOCUMENT,
+                                                                                    IMPORTED_COUNTS))
+                with self.assertRaises(docx_package.ConversionRefused) as checked:  # C8: a stored conversion of it
+                    docx_package.check_in_child(shape)
+                self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
+
+    def test_a_picture_named_without_the_flag_keeps_its_name(self):
+        built = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                        (rel('rIdPic', 'image', 'media/photo_\u00df.png'),), (('word/media/photo_XX.png', PNG_BYTES),))
+        data = flagless(built, b'word/media/photo_XX.png', 'word/media/photo_\u00df.png')
+        out, removed = docx_package._safe_package(data)
+        self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 0})
+        names = entry_names(out)
+        self.assertEqual(names.get(b'word/media/photo_\xc3\x9f.png'), True)  # its bytes kept, the flag now set
+        with zipfile.ZipFile(io.BytesIO(out)) as archive:
+            self.assertEqual(archive.read('word/media/photo_\u00df.png'), PNG_BYTES)
+        # release 1 renamed it (read as cp437, written as UTF-8): the deviation from its bytes is this name alone
+        self.assertNotIn(b'word/media/photo_\xc3\x9f.png', entry_names(self.release_1()._safe_package(data)[0]))
+        self.assertEqual(docx_package._safe_package(out)[0], out)  # read again, nothing changes
+
+    def test_a_unicode_path_name_is_left_as_zipfile_reads_it(self):
+        # zipfile names the entry from the extra field: a name cp437 cannot write ('O' with a double acute) is not read
+        # again, so the check refuses the import rather than failing
+        data = with_unicode_path(package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
+                                         (rel('rIdChunk', 'aFChunk', 'afchunk_\u0150.docx'),),
+                                         (('word/afchunk_O.docx', inner_docx('IMPORTED')),)),
+                                 'word/afchunk_O.docx', 'word/afchunk_\u0150.docx')
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            self.assertIn('word/afchunk_\u0150.docx', archive.namelist())
+        with self.assertRaises(docx_package.ContentNotShown):
+            docx_package._safe_package(data)
+        with self.assertRaises(docx_package.ConversionRefused):
+            docx_package.check_in_child(data)
 
 
 # --- R2-30: a removed field inside another field's result stays a field ----------------------------------------------
