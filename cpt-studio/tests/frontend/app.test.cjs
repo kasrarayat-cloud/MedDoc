@@ -6997,6 +6997,188 @@ test('R2-22, R2-16: the list\'s rows that say they open as a PDF, first page, la
   });
 });
 
+test('R2-22, C2: above 200 documents, a key that leaves the words unchanged asks nothing and keeps the results loaded; narrower words still ask', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  await withListPage(pagedServer(rows), async ({ calls, table, near, type }) => {
+    app.state.routeSerial = 77;
+    await app.showList('documents', 77);
+    const searches = () => calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body);
+    type('synthetic');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found?.query === 'synthetic');
+    for (let n = 1; n <= 3; n += 1) {
+      near(true);
+      await settle(() => table.rows.length === 50 + 50 * n && !app.state.list.loading);
+    }
+    assert.deepEqual([table.rows.length, app.state.list.found.auto, searches().length], [200, 3, 4], 'the answer and its three automatic pages');
+    for (const words of ['synthetic ', 'Synthetic', ' synthetic  ']) {
+      type(words);
+      t.mock.timers.tick(1000);
+      await settle(() => false);
+    }
+    type('synthetica');  // a letter typed and deleted inside the pause
+    type('synthetic');
+    t.mock.timers.tick(1000);
+    await settle(() => false);
+    assert.deepEqual(searches().slice(4), [], 'the words unchanged: nothing asked');
+    assert.deepEqual([table.rows.length, app.state.list.found.rows.length, app.state.list.found.auto], [200, 200, 3], 'the results loaded stay');
+    type('synthetic polyp');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found?.query === 'synthetic polyp');
+    assert.deepEqual(searches().slice(4), [{ text: 'synthetic polyp', before: null }], 'narrower words, matches beyond the page: asked');
+  });
+});
+
+test('R2-22, C2: the same words typed while their own search is answered ask nothing more', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, table, type }) => {
+    app.state.routeSerial = 78;
+    await app.showList('documents', 78);
+    const searches = () => calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body);
+    server.holdWhen(method => method === 'POST');
+    type('synthetic');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    assert.equal(searches().length, 1);
+    type('synthetic ');  // while it is asked
+    server.waiting.shift().release();
+    await settle(() => app.state.list.found?.query === 'synthetic');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => false);
+    assert.deepEqual([searches().length, table.rows.length], [1, 50], 'answered for these very words: not asked again');
+  });
+});
+
+test('R2-22, C2: an answer that finds newer words typed waits for their pause still running; nothing is asked before it, nor twice', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, type }) => {
+    app.state.routeSerial = 79;
+    await app.showList('documents', 79);
+    const searches = () => calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body.text);
+    server.holdWhen(method => method === 'POST');
+    type('polyp');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    assert.deepEqual(searches(), ['polyp'], 'the first search, held');
+    type('polyp re');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);  // its pause passes while the first is out: it is due once that answers
+    type('polyp rep');
+    server.waiting.shift().release();  // the first answers before the last key's pause has passed
+    await settle(() => !app.state.list.searching);
+    assert.deepEqual(searches(), ['polyp'], 'nothing asked before the pause');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS - 1);
+    assert.deepEqual(searches(), ['polyp']);
+    t.mock.timers.tick(1);
+    assert.deepEqual(searches(), ['polyp', 'polyp rep'], 'the newest words, once their pause has passed');
+    server.waiting.shift().release();
+    await settle(() => app.state.list.found?.query === 'polyp rep');
+    t.mock.timers.tick(1000);
+    await settle(() => false);
+    assert.deepEqual(searches(), ['polyp', 'polyp rep'], 'never the same words twice');
+  });
+});
+
+test('R2-22, C2: the words are sent as typed, trimmed, their case kept, by the search and by its later pages; the page\'s own rule reads them lower-cased', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  await withListPage(pagedServer(rows), async ({ calls, table, near, type, shown }) => {
+    app.state.routeSerial = 80;
+    await app.showList('documents', 80);
+    const searches = () => calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body);
+    type('  Polyp ');
+    assert.deepEqual(shown().map(row => row.href), rows.slice(0, 50).filter(row => listText(row).includes('polyp')).map(hrefOf), 'the rows on the page, by release 1\'s rule');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found?.query === 'polyp');
+    near(true);
+    await settle(() => table.rows.length === 100 && !app.state.list.loading);
+    assert.deepEqual(searches(), [{ text: 'Polyp', before: null }, { text: 'Polyp', before: 'c50' }], 'as typed, trimmed: its first page and its next');
+  });
+});
+
+test('R2-22, C7: a failure is said under the list it failed for: the list\'s failed page says nothing under a complete search answer, and is said again once the box is cleared', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260);
+  const server = pagedServer(rows, { refuse: (method, url) => (method === 'GET' && url.includes('&before=') ? { status: 503, body: { error: 'The service is not available right now.' } } : null) });
+  await withListPage(server, async ({ calls, table, more, near, type }) => {
+    app.state.routeSerial = 41;
+    await app.showList('documents', 41);
+    near(true);
+    await settle(() => /could not be loaded/.test(more.innerHTML));
+    assert.match(more.innerHTML, /Documents could not be loaded\. The service is not available right now\./, 'the list\'s own failure, under the list');
+    type('polyp report 2');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found?.query === 'polyp report 2' && !app.state.list.searching);
+    const found = app.state.list.found;
+    const matches = rows.filter(row => listText(row).includes('polyp report 2')).length;
+    assert.deepEqual([found.rows.length, found.next, table.rows.length], [matches, null, matches], 'a complete answer: every match, nothing beyond');
+    near(true);
+    await settle(() => false);
+    assert.equal(calls.filter(call => call.url === app.SEARCH_URL).length, 1, 'nothing more is asked');
+    assert.doesNotMatch(more.innerHTML, /could not be loaded/, `under the complete answer #listMore reads: ${JSON.stringify(more.innerHTML)}`);
+    type('');
+    assert.match(more.innerHTML, /Documents could not be loaded\. The service is not available right now\./, 'cleared: the list\'s own failure is said again');
+    assert.match(more.innerHTML, /Show more documents/);
+  });
+});
+
+test('R2-22, C7: the search\'s failed page is not said under the list once the box is cleared, its automatic loads used up or not', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const exhaust of [false, true]) {
+    const rows = listRowsOf(400);
+    const server = pagedServer(rows, { refuse: (method, url, body) => (method === 'POST' && body?.before ? { status: 503, body: { error: 'The service is not available right now.' } } : null) });
+    await withListPage(server, async ({ calls, table, more, near, type }) => {
+      app.state.routeSerial = 42;
+      await app.showList('documents', 42);
+      if (exhaust) {
+        for (const expected of [100, 150, 200]) {
+          near(true);
+          await settle(() => table.rows.length === expected && !app.state.list.loading);
+        }
+        assert.match(more.innerHTML, /Show more documents/, 'the list\'s three automatic loads used up');
+      }
+      const listPages = calls.filter(call => call.url.includes('&before=')).length;
+      type('synthetic');
+      t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      await settle(() => app.state.list.found?.query === 'synthetic' && !app.state.list.searching);
+      near(true);
+      await settle(() => /could not be loaded/.test(more.innerHTML));
+      assert.equal(app.state.list.found.failed, true, 'the search\'s own page failed');
+      type('');
+      assert.equal(app.state.list.found, null);
+      assert.equal(app.state.list.browse.failed, false, 'the list never failed');
+      assert.equal(table.rows.length, exhaust ? 200 : 50);
+      assert.equal(calls.filter(call => call.url.includes('&before=')).length, listPages, 'and nothing of it was asked since');
+      assert.doesNotMatch(more.innerHTML, /could not be loaded/, `exhaust=${exhaust}: under the list #listMore reads: ${JSON.stringify(more.innerHTML)}`);
+    });
+  }
+});
+
+test('R2-22, C7: a page of the list that fails while a search answer is shown is said under the list once the box is cleared', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  const server = holding(pagedServer(rows, { refuse: (method, url) => (method === 'GET' && url.includes('&before=') ? { status: 503, body: { error: 'The service is not available right now.' } } : null) }));
+  await withListPage(server.answer, async ({ more, near, type }) => {
+    app.state.routeSerial = 43;
+    await app.showList('documents', 43);
+    server.holdWhen((method, url) => method === 'GET' && url.includes('&before='));
+    near(true);
+    await settle(() => server.waiting.length === 1);
+    type('synthetic');  // while the list's next page is out
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found?.query === 'synthetic' && !app.state.list.searching);
+    near(false);
+    server.waiting.shift().release();  // the list's page fails, the search's answer shown
+    await settle(() => !app.state.list.loading);
+    assert.doesNotMatch(more.innerHTML, /could not be loaded/, 'not said under the search');
+    type('');
+    assert.match(more.innerHTML, /Documents could not be loaded\. The service is not available right now\./, 'said under its own list');
+    assert.match(more.innerHTML, /Show more documents/);
+  });
+});
+
 test('R2-19, R2-20, R2-24: the dev preview pages its list and answers the search as the server does', () => {
   const rows = listRowsOf(120).reverse();  // in any order: the preview orders them
   const [status, first] = preview.listAnswer(rows, 'documents', null);

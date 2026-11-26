@@ -2113,8 +2113,8 @@ function askWordOriginal(address) {
 // sidebar number follow its total (else its rows: release 1's whole list). The list is page memory only.
 async function showList(name, serial) {
   $('#main').innerHTML = name === 'workspace' ? overviewView() : documentsView(name);
-  const list = { name, loaded: false, total: null, local: true, browse: null, found: null, query: '', all: false, loading: false,
-    searching: false, again: false, timer: 0, observer: null, near: false, problem: '', refused: '' };
+  const list = { name, loaded: false, total: null, local: true, browse: null, found: null, query: '', words: '',
+    all: false, loading: false, searching: false, again: false, timer: 0, observer: null, near: false, refused: '' };
   state.list = list;
   let page;
   try {
@@ -2129,7 +2129,8 @@ async function showList(name, serial) {
   if (serial !== state.routeSerial || list !== state.list) return;
   const next = name === 'workspace' ? null : page.next;
   Object.assign(list, { loaded: true, total: page.total,
-    browse: { rows: page.rows, next, auto: 0, failed: false, button: next !== null && typeof IntersectionObserver !== 'function' } });
+    browse: { rows: page.rows, next, auto: 0, failed: false, problem: '',
+      button: next !== null && typeof IntersectionObserver !== 'function' } });
   // C2: the search runs in the page up to LOCAL_SEARCH_MAX documents, else on the server
   list.local = next === null || (page.total !== null && page.total <= LOCAL_SEARCH_MAX);
   state.viewHints = new Map();
@@ -2199,13 +2200,13 @@ async function loadMore(list, why) {
   const source = list.found || list.browse;
   if (list.loading || !source?.next) return;
   list.loading = true;
-  list.problem = '';
+  source.problem = '';
   drawListMore();
   let page = null;
   let failure = '';
   try {
     page = listPage(source === list.browse ? await api(`${LIST_ADDRESS[list.name]}&before=${encodeURIComponent(source.next)}`)
-      : await api(SEARCH_URL, { method: 'POST', json: { text: source.query, before: source.next } }));
+      : await api(SEARCH_URL, { method: 'POST', json: { text: source.words, before: source.next } }));
   } catch (error) {
     failure = error.message;
   }
@@ -2220,7 +2221,7 @@ async function loadMore(list, why) {
     if (shown) appendRows(list, page.rows);
     if (source.next && source.auto >= AUTO_PAGES) source.button = true;
   } else {
-    if (shown) list.problem = `Documents could not be loaded. ${failure}`;
+    source.problem = `Documents could not be loaded. ${failure}`;  // said while its own list is shown
     if (why !== 'button') Object.assign(source, { failed: true, button: true });
   }
   filterRows();
@@ -2250,7 +2251,7 @@ function drawListMore() {
   const more = $('#listMore');
   if (!more || !list?.loaded) return;
   const source = list.found || list.browse;
-  const said = [list.problem, list.refused].filter(Boolean);
+  const said = [source.problem, list.refused].filter(Boolean);
   more.hidden = !source.next && !said.length;
   more.innerHTML = said.map(words => `<p class="empty-state" role="status">${escapeHtml(words)}</p>`).join('')
     + (source.next && source.button ? `<button type="button" class="button secondary" data-action="more-documents"${list.loading ? ' disabled aria-busy="true"' : ''}>${MORE_TEXT}</button>` : '');
@@ -2294,7 +2295,8 @@ function applySearch() {
   const input = $('#documentSearch');
   const list = state.list;
   if (!input || !list?.loaded) return;
-  list.query = input.value.toLowerCase().trim();
+  list.words = input.value.trim();  // sent as typed (R2-20); lower-cased for the page's own rule
+  list.query = list.words.toLowerCase();
   clearTimeout(list.timer);
   list.timer = 0;
   if (list.local) {
@@ -2317,17 +2319,20 @@ function applySearch() {
 async function searchDocuments(list) {
   list.timer = 0;
   if (list !== state.list || !list.query || nothingBeyond(list)) return;
+  // words whose answer is on the page already are never asked again: its own pages reach the rest
+  if (list.query === list.found?.query) return filterRows();
   if (list.searching) {
     list.again = true;
     return;
   }
   const query = list.query;
+  const words = list.words;
   list.searching = true;
   list.again = false;
   let page = null;
   let failure = '';
   try {
-    page = listPage(await api(SEARCH_URL, { method: 'POST', json: { text: query, before: null } }));
+    page = listPage(await api(SEARCH_URL, { method: 'POST', json: { text: words, before: null } }));
   } catch (error) {
     failure = error.message;
   }
@@ -2336,13 +2341,14 @@ async function searchDocuments(list) {
   const due = list.again;
   list.again = false;
   if (list.query !== query) {
-    if (due) searchDocuments(list);
+    if (due && !list.timer) searchDocuments(list);  // a pause still running asks in its own time
     else filterRows();
     return;
   }
   if (page) {
     list.refused = '';
-    list.found = { query, rows: page.rows, next: page.next, auto: 0, failed: false, button: page.next !== null && typeof IntersectionObserver !== 'function' };
+    list.found = { query, words, rows: page.rows, next: page.next, auto: 0, failed: false, problem: '',
+      button: page.next !== null && typeof IntersectionObserver !== 'function' };
     hintRows(page.rows);
     $('#documentsTable').innerHTML = LIST_HEADER + page.rows.map(row => documentRow(row)).join('');
     relook(list);
