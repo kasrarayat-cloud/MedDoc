@@ -28,6 +28,7 @@ Instruments that lied in the measure area's prototype, and the rule each gave:
 """
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import hashlib
 import http.client
@@ -159,6 +160,41 @@ def take_lock(path: Path):
     return handle
 
 
+@contextlib.contextmanager
+def recorded_round(result: dict, target: Path, close):
+    """The round's file is written whatever happens (``close`` first: the load and the password file); a round that
+    aborts outside its parts - the seed, collectstatic, a server that never starts - records the abort as an error, so
+    its own file is INVALID (records[1]) and the driver runs it again."""
+    try:
+        yield
+    except BaseException as exc:
+        result['errors'].append({'part': 'round', 'error': f'{type(exc).__name__}: {exc}'[:2000]})
+        raise
+    finally:
+        close()
+        target.write_text(json.dumps(result, indent=1, default=str))
+
+
+def host_state() -> dict:
+    """The host a round ran on (protocol[4]): its boot, uptime, kernel and swap in use, so a session's A can be shown to
+    share the recorded A's boot (a reboot separated release 1's rounds more than load did)."""
+    out = {'kernel': platform.release()}
+    try:
+        out['boot_id'] = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    except OSError:
+        out['boot_id'] = None
+    try:
+        out['uptime_s'] = round(float(Path('/proc/uptime').read_text().split()[0]), 1)
+    except (OSError, ValueError, IndexError):
+        out['uptime_s'] = None
+    try:
+        info = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines() if ':' in line)
+        out['swap_used_mb'] = round((int(info['SwapTotal'].split()[0]) - int(info['SwapFree'].split()[0])) / 1024)
+    except (OSError, KeyError, ValueError):
+        out['swap_used_mb'] = None
+    return out
+
+
 def median(values):
     values = [v for v in values if v is not None]
     return round(statistics.median(values), 1) if values else None
@@ -220,7 +256,7 @@ def _django_settings():
 
 
 _SETTINGS = _django_settings()
-if _SETTINGS is not None and os.environ.get('BENCH_PARTS'):
+if _SETTINGS is not None:  # bench[7]: BENCH_PARTS set or not, before the test runner can create any database
     _why = refusals(_SETTINGS.DATABASES['default'], getattr(_SETTINGS, 'CODING_MODE', ''))
     if _why:
         raise RuntimeError('bench refused: ' + '; '.join(_why))
@@ -575,7 +611,8 @@ class Bench(TransactionTestCase):
         self.tree = tree
         result = {'tag': tag, 'round': round_no, 'parts': parts, 'tree': str(tree), 'at': utc(),
                   'revision': read_revision(tree), 'files': tree_hashes(tree), 'bench_sha256': bench_digest(),
-                  'versions': versions(), 'load_before': os.getloadavg(), 'metrics': {}, 'checks': {}, 'controls': {},
+                  'versions': versions(), 'host': host_state(), 'load_before': os.getloadavg(), 'metrics': {},
+                  'checks': {}, 'controls': {},
                   'errors': [], 'unexpected_statuses': {}, 'console_errors': [], 'blocked_requests': []}
         self.result = result
         sampling = threading.Event()
@@ -587,7 +624,15 @@ class Bench(TransactionTestCase):
         sampler.start()
         originals = self.raw / 'originals'
         originals.mkdir(mode=0o700)
-        try:
+
+        def close():
+            sampling.set()
+            result['load_after'] = os.getloadavg()
+            result['load_max'] = max([result['load_before'][0], result['load_after'][0],
+                                      *result.get('load_samples', [])])
+            result['swap_used_mb_after'] = host_state()['swap_used_mb']
+            self.password_file.unlink(missing_ok=True)
+        with recorded_round(result, target, close):
             with override_settings(ORIGINALS_DIR=originals):
                 need = set().union(*(NEEDS[p] for p in parts))
                 started = time.time()
@@ -619,14 +664,7 @@ class Bench(TransactionTestCase):
                         result.setdefault('part_s', {})[part] = round(time.time() - began, 1)
                 finally:
                     self.acts.stop()
-        finally:
-            sampling.set()
-            result['load_after'] = os.getloadavg()
-            result['load_max'] = max([result['load_before'][0], result['load_after'][0],
-                                      *result.get('load_samples', [])])
-            target.write_text(json.dumps(result, indent=1, default=str))
-            self.password_file.unlink(missing_ok=True)
-            print(f'\nbench: wrote {target}', flush=True)
+        print(f'\nbench: wrote {target}', flush=True)
 
     # -- helpers -------------------------------------------------------------------------------------------------------
 
@@ -1829,6 +1867,8 @@ def driver(argv=None) -> int:
     if why or not os.environ.get('CPT_STUDIO_TEST_DB_SUFFIX'):
         print('refused: ' + '; '.join(why or ['CPT_STUDIO_TEST_DB_SUFFIX is not set']), file=sys.stderr)
         return 2
+    import judge  # the judge's own validity rule (no Django): the driver keeps and runs again by it
+    controls = json.loads((HERE / 'acceptance.json').read_text()).get('controls', [])
     log = open(out / 'protocol.log', 'a')
     status = 0
     for spec in args.group:
@@ -1836,9 +1876,20 @@ def driver(argv=None) -> int:
         profiles = own.split('+') if own else None
         for tag, first_round in order:
             tree = Path(trees[tag]).resolve() / 'cpt-studio'
-            attempt, busy = 0, 0
+            attempt, busy, rc, valid = 0, 0, 0, False
             while attempt <= args.retries:
                 round_no = first_round + 100 * attempt
+                written = out / out_name(tag, round_no, group.split(','), profiles)
+                if written.exists():  # a resumed protocol: a round measured before is kept as it is, never run again
+                    why = judge.attempt_reasons(written.name, json.loads(written.read_text()), controls)
+                    log.write(f'{utc()} {tag}:{round_no} {spec} measured before, '
+                              f'{"valid" if not why else "INVALID: " + why[0]}; kept, not run again\n')
+                    log.flush()
+                    if not why:
+                        valid = True
+                        break
+                    attempt += 1
+                    continue
                 waited = 0
                 while (not bench_host_quiet(*os.getloadavg()[:2], args.max_load, args.max_load_5) and
                        waited < args.wait_minutes * 60) or not lock_free(out / 'bench.lock'):
@@ -1857,22 +1908,27 @@ def driver(argv=None) -> int:
                     done = subprocess.run([args.python, '-B', 'manage.py', 'test', str(HERE), '--pattern',
                                            'bench_run.py', '--noinput'], cwd=tree, env=env, stdout=handle,
                                           stderr=subprocess.STDOUT, timeout=4 * 3600)
-                written = out / out_name(tag, round_no, group.split(','), profiles)
                 if not written.exists() and 'another bench holds the lock' in run_log.read_text() and busy < 50:
                     busy += 1  # another bench took the lock first: nothing was measured, the same round is run again
                     log.write(f'{utc()} {tag}:{round_no} {spec} the lock was held by another bench; waiting\n')
                     log.flush()
                     continue
-                peak = json.loads(written.read_text()).get('load_max', 99) if written.exists() else 99
-                log.write(f'{utc()} {tag}:{round_no} {spec} exit {done.returncode} load_max={peak}\n')
+                rc = done.returncode
+                data = json.loads(written.read_text()) if written.exists() else None
+                peak = (data or {}).get('load_max', 99)
+                why = ([f'exit {rc}'] if rc else []) + (judge.attempt_reasons(written.name, data, controls)
+                                                         if data is not None else ['no round file'])
+                log.write(f'{utc()} {tag}:{round_no} {spec} exit {rc} load_max={peak}\n')
                 log.flush()
-                if done.returncode == 0 and peak <= 8:
+                if not why:
+                    valid = True
                     break
-                log.write(f'{utc()} {tag}:{round_no} {spec} INVALID (exit {done.returncode}, load {peak}); '
+                log.write(f'{utc()} {tag}:{round_no} {spec} INVALID (exit {rc}, load {peak}; {why[0][:160]}); '
                           f'{"run again" if attempt < args.retries else "no retries left"}\n')
                 log.flush()
                 attempt += 1
-            status = status or done.returncode
+            # protocol[0]: a round still INVALID with every retry spent fails the driver, whatever its exit code
+            status = status or rc or (0 if valid else 3)
     log.close()
     return status
 

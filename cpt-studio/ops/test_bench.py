@@ -94,16 +94,16 @@ class BenchRefusesAnythingButTheThrowawayServerTests(unittest.TestCase):
 
     def test_the_round_refuses_at_import_before_any_test_database_is_made(self):
         code = 'import django; django.setup(); import bench_run'
-        ok = self._run(code, DJANGO_SETTINGS_MODULE='cptstudio.settings', BENCH_PARTS='server',
-                       CPT_STUDIO_TEST_DB_SUFFIX='x')
-        self.assertEqual(ok.returncode, 0, ok.stderr[-800:])
-        for extra in ({'CPT_STUDIO_DB_PORT': '55451'}, {'CPT_STUDIO_DB_HOST': 'db.example'},
-                      {'CPT_STUDIO_CODING_MODE': 'live'}):
-            with self.subTest(extra=extra):
-                done = self._run(code, DJANGO_SETTINGS_MODULE='cptstudio.settings', BENCH_PARTS='server',
-                                 CPT_STUDIO_TEST_DB_SUFFIX='x', **extra)
-                self.assertNotEqual(done.returncode, 0)
-                self.assertIn('bench refused', done.stderr)
+        for parts in ({'BENCH_PARTS': 'server'}, {'BENCH_PARTS': ''}, {}):  # bench[7]: a missing BENCH_PARTS too
+            ok = self._run(code, DJANGO_SETTINGS_MODULE='cptstudio.settings', CPT_STUDIO_TEST_DB_SUFFIX='x', **parts)
+            self.assertEqual(ok.returncode, 0, ok.stderr[-800:])
+            for extra in ({'CPT_STUDIO_DB_PORT': '55451'}, {'CPT_STUDIO_DB_HOST': 'db.example'},
+                          {'CPT_STUDIO_CODING_MODE': 'live'}):
+                with self.subTest(parts=parts, extra=extra):
+                    done = self._run(code, DJANGO_SETTINGS_MODULE='cptstudio.settings', CPT_STUDIO_TEST_DB_SUFFIX='x',
+                                     **parts, **extra)
+                    self.assertNotEqual(done.returncode, 0)
+                    self.assertIn('bench refused', done.stderr)
 
     def test_the_protocol_driver_refuses_the_same_settings(self):
         # The tree named does not exist: were the refusal missing, the driver would try to run a round there and fail
@@ -192,6 +192,103 @@ class BenchDriverStartTests(unittest.TestCase):
         self.assertFalse(quiet(6.1, 2.0, 6.0, 8.0))
         self.assertTrue(quiet(5.0, 12.0, 5.0, 99.0))  # --max-load-5 99: start as soon as the 1-minute load settles
         self.assertFalse(quiet(5.5, 12.0, 5.0, 99.0))
+
+
+STUB_MANAGE = """import json, os, sys
+from pathlib import Path
+env = os.environ
+loads = json.loads(env.get('STUB_LOADS', '{}'))
+number, parts = int(env['BENCH_ROUND']), env['BENCH_PARTS'].split(',')
+own = '@' + '+'.join(env['BENCH_PROFILES'].split(',')) if env.get('BENCH_GROUP_PROFILES') == '1' else ''
+name = env['BENCH_TAG'] + '-r' + str(number) + '-' + '+'.join(parts) + own + '.json'
+load = float(loads.get(str(number), loads.get('*', 1.0)))
+Path(env['BENCH_OUT'], name).write_text(json.dumps({'tag': env['BENCH_TAG'], 'round': number, 'parts': parts,
+    'load_before': [1.0, 1.0, 1.0], 'load_after': [1.0, 1.0, 1.0], 'load_max': load, 'metrics': {}, 'checks': {},
+    'controls': {}, 'errors': [], 'unexpected_statuses': {}, 'console_errors': [], 'blocked_requests': []}))
+with open(env['STUB_CALLS'], 'a') as calls:
+    calls.write(name + chr(10))
+"""
+
+
+class BenchDriverResumeTests(unittest.TestCase):
+    """judge[2], records[1], protocol[0]: the real driver over a stub round (a tree whose manage.py writes the round's
+    file with a chosen load): a valid round is never measured again, an INVALID one is run as round + 100, and a
+    round still INVALID with every retry spent fails the driver."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        (self.dir / 'tree' / 'cpt-studio').mkdir(parents=True)
+        (self.dir / 'tree' / 'cpt-studio' / 'manage.py').write_text(STUB_MANAGE)
+        self.out, self.calls = self.dir / 'out', self.dir / 'calls.log'
+        self.out.mkdir()
+
+    def drive(self, loads, retries=2):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(('BENCH_', 'DJANGO_SETTINGS'))}
+        env.update({'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_DB_PORT': '55461', 'CPT_STUDIO_TEST_DB_SUFFIX': 'x',
+                    'CPT_STUDIO_CODING_MODE': 'disabled', 'PYTHONDONTWRITEBYTECODE': '1',
+                    'STUB_LOADS': json.dumps(loads), 'STUB_CALLS': str(self.calls)})
+        return subprocess.run([sys.executable, '-B', str(BENCH / 'bench_run.py'), '--tree', f'A={self.dir / "tree"}',
+                               '--order', 'A:1', '--group', 'server', '--out', str(self.out), '--ports', '9300-9349',
+                               '--max-load', '999', '--max-load-5', '999', '--wait-minutes', '0',
+                               '--retries', str(retries)], env=env, capture_output=True, text=True, timeout=120)
+
+    def calls_made(self):
+        return self.calls.read_text().split() if self.calls.exists() else []
+
+    def test_a_valid_round_is_kept_and_never_measured_again(self):
+        self.assertEqual(self.drive({'*': 1.0}).returncode, 0)
+        self.assertEqual(self.calls_made(), ['A-r1-server.json'])
+        run_log = (self.out / 'run-A-r1-server.log').read_bytes()
+        again = self.drive({'*': 1.0})
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertEqual(self.calls_made(), ['A-r1-server.json'])  # nothing measured the second time
+        self.assertFalse((self.out / 'A-r101-server.json').exists())
+        self.assertEqual((self.out / 'run-A-r1-server.log').read_bytes(), run_log)  # its log never overwritten
+        self.assertIn('measured before, valid; kept, not run again', (self.out / 'protocol.log').read_text())
+
+    def test_a_resumed_invalid_round_is_run_again_as_its_next_attempt(self):
+        self.assertEqual(self.drive({'1': 12.0, '101': 1.0}, retries=0).returncode, 3)  # INVALID, no retry allowed
+        self.assertEqual(self.calls_made(), ['A-r1-server.json'])
+        done = self.drive({'1': 12.0, '101': 1.0})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.calls_made(), ['A-r1-server.json', 'A-r101-server.json'])  # round 1 itself never again
+        self.assertIn('measured before, INVALID: load average 12.0', (self.out / 'protocol.log').read_text())
+
+    def test_the_driver_fails_when_a_round_is_still_invalid_with_no_retries_left(self):
+        done = self.drive({'*': 12.0}, retries=1)
+        self.assertEqual(done.returncode, 3, done.stderr)  # protocol[0]: it exited 0 after 'no retries left'
+        log = (self.out / 'protocol.log').read_text()
+        self.assertIn('A:101 server INVALID (exit 0, load 12.0; load average 12.0 > 8.0); no retries left', log)
+
+
+class BenchRoundRecordTests(unittest.TestCase):
+    def test_a_round_that_aborts_outside_its_parts_is_invalid_in_its_own_file(self):
+        """records[1]: the round's file is written whatever happens, and an abort outside the parts is its error."""
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d, 'A-r1-server.json')
+            result = {'parts': ['server'], 'errors': [], 'load_before': [1.0, 1.0, 1.0], 'load_max': 1.0}
+            closed = []
+            with self.assertRaises(RuntimeError):
+                with RUN.recorded_round(result, target, lambda: closed.append(True)):
+                    raise RuntimeError('collectstatic failed')
+            data = json.loads(target.read_text())
+            self.assertEqual(closed, [True])
+            self.assertEqual(data['errors'][0]['part'], 'round')
+            self.assertTrue(JUDGE.attempt_reasons(target.name, data))
+            clean = Path(d, 'A-r2-server.json')
+            with RUN.recorded_round(dict(result, errors=[]), clean, lambda: None):
+                pass
+            self.assertEqual(JUDGE.attempt_reasons(clean.name, json.loads(clean.read_text())), [])
+        self.assertIn('with recorded_round(result, target, close):', (BENCH / 'bench_run.py').read_text())
+
+    def test_a_round_records_the_host_it_ran_on(self):
+        """protocol[4]: a reboot separated release 1's rounds more than load did; each round names its boot."""
+        host = RUN.host_state()
+        self.assertRegex(host['boot_id'] or '', r'^[0-9a-f-]{36}$')
+        self.assertGreater(host['uptime_s'], 0)
+        self.assertIsInstance(host['swap_used_mb'], int)
+        self.assertTrue(host['kernel'])
 
 
 class BenchDataTests(unittest.TestCase):
