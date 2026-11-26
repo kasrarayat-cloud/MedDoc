@@ -137,7 +137,7 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
 ### 5.3 The coding step (`studio/fable/`)
 
 - `client.py` - Anthropic's official SDK (`anthropic==2.11.0`, `max_retries=0`), one streamed send per request:
-  `claude-fable-5-2`, `max_tokens` 96,000, `output_config.effort` from `CPT_STUDIO_CODING_EFFORT` (default `max`), the
+  `claude-fable-5-2`, `max_tokens` 96,000, `output_config.effort` from `CPT_STUDIO_CODING_EFFORT` (default `high` since release 2, R2-33; release 1's was `max`), the
   server-side fallbacks in their default form. Outcomes: a final message is `succeeded`, or `failed` for stop reason
   `refusal` (declined) or `max_tokens` (too long); an HTTP or stream error is `failed` with its status and type; a
   timeout or lost connection after the request started is `unknown`. A message served by a fallback is recorded as such

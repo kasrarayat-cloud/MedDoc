@@ -49,10 +49,11 @@ the requests are unchanged, so this module holds them to release 1's - at the co
 A failure here is the alarm working (R2-3's risk: a new SDK version - seen on the wire - or a changed document rebuild
 breaks the equality), never a value to re-pin: what the coder is sent may change only through the coding-path gate
 (D358), and a bump of the SDK, its transport or pydantic is re-measured on release 1's tree before it is pinned. R2-33
-is such a change, made on purpose by the owner's decision: he moved the coder's effort from "max" to "high" (D433: a
-paid test of five synthetic documents at both; D434: at "high" every code, unit and modifier matched "max", at 84% less
-cost), and these pins were re-measured on release 1's tree at "high" rather than taken from release 2's. Synthetic data
-only; nothing reaches the network.
+is such a change, made on purpose under the owner's permission (D433: a paid test of five synthetic documents at both
+efforts, and leave to change the effort if the quality held); the lead set the coder's effort from "max" to "high"
+after the paid test's result (D434: at "high" every code, unit and modifier matched "max", at 84% less cost), and these
+pins were re-measured on release 1's tree at "high" rather than taken from release 2's. Synthetic data only; nothing
+reaches the network.
 """
 from __future__ import annotations
 

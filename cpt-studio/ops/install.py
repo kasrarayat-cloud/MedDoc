@@ -77,8 +77,9 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # A stopped worker finishes the stage it is in (run_worker: each of its threads finishes its current job), which may be
 # inside a send. The Fable coding build's one stage (studio.jobs.stage_code, DECISIONS D351-D353) prepares the document
 # - a Word file is converted in a bounded child of at most 70 s (studio.fable.document.CONVERT_SECONDS) - then makes two
-# streamed sends one after the other, the reader's and the checker's, each of up to 96,000 output tokens at effort max:
-# about 1,000 s each at the slowest rate measured (studio.jobs.CODE_STALE_SECONDS' own reckoning), so one round can run
+# streamed sends one after the other, the reader's and the checker's, each of up to 96,000 output tokens (max_tokens):
+# about 1,000 s each at the slowest rate measured, whatever the effort - the bound is max_tokens at that rate
+# (studio.jobs.CODE_STALE_SECONDS' own reckoning) - so one round can run
 # past 2,000 s and the 1,800 s of the pipeline before it would cut the checker's send into an UNKNOWN outcome. The stage
 # must be recorded before Docker kills the worker, or a request that reached the vendor is left 'sending' (HARNESS.md 8,
 # 11.2). So 3,600 s outlasts the stage, and it is studio.jobs.CODE_STALE_SECONDS, the age at which the stale-stage sweep
@@ -223,8 +224,11 @@ CODER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
 CODING_MODES = ('disabled', 'live')  # --coding-mode: the installer never starts a pair replaying
 # The coder's effort, the owner's setting (the build specification, section 4.1): 'high' since release 2 (R2-33), 'max'
 # in release 1. The owner approved a paid test of five synthetic documents at both efforts (D433); at 'high' every
-# code, unit and modifier matched 'max', at 84% less cost (D434). Every container the installer starts is given it as
-# CPT_STUDIO_CODING_EFFORT (runtime_env), the worker's included.
+# code, unit and modifier matched 'max', at 84% less cost (D434). runtime_env gives it as CPT_STUDIO_CODING_EFFORT to
+# the web and the worker (service_args: the incoming web and a switch-back's earlier pair included, so a switch-back runs
+# release 1's pair at 'high' too, the effort D434 measured release 1's image at) and to every one-shot of the app image
+# (the migrate, dispose and manage runs); never to the converter (converter_args), the database (db_args) or a root
+# helper, which run no coder.
 CODING_EFFORT = 'high'
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
