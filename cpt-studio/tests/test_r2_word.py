@@ -7,16 +7,18 @@
   sees outside the fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and
   nothing else; a seeded fuzz.
 - The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
-- Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package: the reference is release 1's
-  own docx_package.py, vendored as a test fixture checked against its git blob id (RELEASE_1_PACKAGE_BLOB, immutable),
-  so the comparisons run wherever the tests run - CI's shallow clone and the image included - and are never skipped.
+- Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package (apart from the deviations
+  ZipNameTests and CharacterReferenceTests pin): the reference is release 1's own docx_package.py, vendored as a test
+  fixture checked against its git blob id (RELEASE_1_PACKAGE_BLOB, immutable), so the comparisons run wherever the
+  tests run - CI's shallow clone and the image included - and are never skipped.
 - R2-31: a refused Word upload through the shipped job path - its sentence, its three audit rows with the code and
   counts, nothing counted or sent, retry offered and refused the same way; the two sentences against the customer
   denylist.
 - R2-28 step 7 (C8): a round that would read a conversion an earlier round stored runs the package check on the stored
   original first - a stored conversion of a file the check refuses is refused at its next round (an answers round and a
   retry) with no coder and no converter call; a clean one is reused byte-identically, with no converter call; one
-  R2-30's QUOTE applies to converts afresh, with one.
+  whose package is not release 1's (R2-30's QUOTE, a name or an id release 1 lost: refutation round 2, rounds[1])
+  converts afresh, with one; and a check that cannot decide lets the converter decide (rounds[0]).
 
 Synthetic bytes only, every package built here; no LibreOffice, no network, no provider."""
 import gzip
@@ -39,7 +41,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import jobs, models, storage
-from studio.fable import CONVERT, docx_package
+from studio.fable import CONVERT, DOCUMENT, docx_package
 from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from tests.support import coding as f
@@ -761,9 +763,7 @@ class ZipNameTests(ReleaseOneCase):
                 self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
 
     def test_a_picture_named_without_the_flag_keeps_its_name(self):
-        built = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
-                        (rel('rIdPic', 'image', 'media/photo_\u00df.png'),), (('word/media/photo_XX.png', PNG_BYTES),))
-        data = flagless(built, b'word/media/photo_XX.png', 'word/media/photo_\u00df.png')
+        data = flagless_picture_word()
         out, removed = docx_package._safe_package(data)
         self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 0})
         names = entry_names(out)
@@ -817,23 +817,36 @@ class ZipNameTests(ReleaseOneCase):
                 self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
 
 
+def character_reference_word(kept_id, *, in_object=False, named=True):
+    """A removed field naming rIdPic (unless not ``named``) beside a kept picture - or an object's preview - whose id
+    a kept attribute writes as ``kept_id`` (refutation round 1, loss[6]; the 7.4 corpus's R1-L6 shapes)."""
+    removed = p(fc('begin'), instr(INC), '<w:r>' + drawing('rIdPic') + '</w:r>' if named else '', fc('separate'),
+                t('Kept result words.'), fc('end'))
+    picture_rel, picture_part = rel('rIdPic', 'image', 'media/image1.png'), ('word/media/image1.png', PNG_BYTES)
+    if in_object:
+        shown = p('<w:r><w:object w:dxaOrig="6000" w:dyaOrig="900">' + SHAPETYPE + vshape(rid=kept_id)
+                  + ole('Package') + '</w:object></w:r>')
+        return package(BEFORE + removed + shown + AFTER,
+                       (picture_rel, rel('rIdOle', 'package', 'embeddings/o.bin')),
+                       (picture_part, ('word/embeddings/o.bin', b'\xd0\xcf synthetic object')))
+    return package(BEFORE + removed + p('<w:r>' + drawing(kept_id) + '</w:r>') + AFTER, (picture_rel,),
+                   (picture_part,))
+
+
+def flagless_picture_word():
+    """A picture whose zip name is stored as UTF-8 without the UTF-8 flag (refutation round 1, loss[2]; R1-L2b)."""
+    built = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                    (rel('rIdPic', 'image', 'media/photo_\u00df.png'),), (('word/media/photo_XX.png', PNG_BYTES),))
+    return flagless(built, b'word/media/photo_XX.png', 'word/media/photo_\u00df.png')
+
+
 class CharacterReferenceTests(ReleaseOneCase):
     """Refutation round 1, loss[6]: a relationship that removed content named is kept while a kept attribute still
     holds its id - also when that attribute writes the id with a character reference, as expat reads it - so the picture
     it shows stays. Release 1 searched the bytes alone, dropped the relationship and lost the picture."""
 
     def shape(self, kept_id, *, in_object=False, named=True):
-        removed = p(fc('begin'), instr(INC), '<w:r>' + drawing('rIdPic') + '</w:r>' if named else '', fc('separate'),
-                    t('Kept result words.'), fc('end'))
-        picture_rel, picture_part = rel('rIdPic', 'image', 'media/image1.png'), ('word/media/image1.png', PNG_BYTES)
-        if in_object:
-            shown = p('<w:r><w:object w:dxaOrig="6000" w:dyaOrig="900">' + SHAPETYPE + vshape(rid=kept_id)
-                      + ole('Package') + '</w:object></w:r>')
-            return package(BEFORE + removed + shown + AFTER,
-                           (picture_rel, rel('rIdOle', 'package', 'embeddings/o.bin')),
-                           (picture_part, ('word/embeddings/o.bin', b'\xd0\xcf synthetic object')))
-        return package(BEFORE + removed + p('<w:r>' + drawing(kept_id) + '</w:r>') + AFTER, (picture_rel,),
-                       (picture_part,))
+        return character_reference_word(kept_id, in_object=in_object, named=named)
 
     def test_a_picture_named_with_a_character_reference_keeps_its_relationship(self):
         for label, data in (('decimal', self.shape('&#114;IdPic')), ('hexadecimal', self.shape('&#x72;IdPic')),
@@ -1334,6 +1347,15 @@ SHELLED_WORD = package(BEFORE + p(fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('
                                   fc('end')) + AFTER)
 NOT_A_PACKAGE = b'PK\x03\x04 synthetic bytes that are no zip'
 UNREADABLE_PART_WORD = package(p(field(INC, 'X')) + '<w:p><w:r></w:p>')  # refused once its parts are read
+# refutation round 2, rounds[0]: an import beside two pictures whose UTF-8 names, stored without the flag, differ only
+# in case - release 1 reads them as cp437, two names, and codes the file without the import; release 2's check refuses
+# the zip for a part named twice, so it cannot decide (CHECK_UNDECIDED), and the converter refuses it with the general
+# sentence
+COLLIDING_NAMES_WORD = flagless(flagless(
+    package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
+            (('word/afchunk1.docx', inner_docx('IMPORTED SYNTHETIC TEXT')), ('word/media/aXX.png', PNG_BYTES),
+             ('word/media/aYY.png', PNG_BYTES))),
+    b'word/media/aXX.png', 'word/media/aÉ.png'), b'word/media/aYY.png', 'word/media/aé.png')
 IMPORTED_COUNTS = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
 OBJECT_COUNTS = {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}
 
@@ -1346,10 +1368,14 @@ class StoredCheckTests(SimpleTestCase):
         private_tempdir(self)
 
     def test_what_the_check_makes_of_each_kind_of_file(self):
-        self.assertFalse(docx_package.check_in_child(CLEAN_WORD))  # reused
-        self.assertTrue(docx_package.check_in_child(SHELLED_WORD))  # R2-30's QUOTE applies: converted afresh
-        self.assertFalse(docx_package.check_in_child(NOT_A_PACKAGE))  # no Word package: no conversion came of it
-        self.assertTrue(docx_package.check_in_child(UNREADABLE_PART_WORD))  # the converter decides, as for any file
+        self.assertIs(docx_package.check_in_child(CLEAN_WORD), False)  # reused
+        self.assertIs(docx_package.check_in_child(SHELLED_WORD), True)  # R2-30's QUOTE applies: converted afresh
+        self.assertIs(docx_package.check_in_child(NOT_A_PACKAGE), False)  # no Word package: no conversion came of it
+        # refused for another reason once it opened as a zip: the check cannot decide, and the converter decides, as for
+        # any file (refutation round 2, rounds[0]: told apart from R2-30's edit)
+        for data in (UNREADABLE_PART_WORD, COLLIDING_NAMES_WORD):
+            self.assertEqual(docx_package.check_in_child(data), docx_package.CHECK_UNDECIDED)
+        self.assertEqual(release_1_package()._safe_package(COLLIDING_NAMES_WORD)[1]['chunks'], 1)  # release 1 coded it
         for data, code, counts in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS),
                                    (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)):
             with self.subTest(code=code), self.assertRaises(docx_package.ConversionRefused) as caught:
@@ -1380,12 +1406,34 @@ class StoredCheckTests(SimpleTestCase):
             with self.assertRaises(fable_document.DocumentError) as fresh:  # a fresh conversion ends the same way
                 fable_document.convert_docx(data, runner=failing_runner)
             self.assertEqual((fresh.exception.text, fresh.exception.recorded()), (error.text, error.recorded()))
-        self.assertFalse(fable_document.needs_fresh_conversion(CLEAN_WORD))
-        self.assertTrue(fable_document.needs_fresh_conversion(SHELLED_WORD))
+        self.assertIs(fable_document.needs_fresh_conversion(CLEAN_WORD), False)
+        self.assertIs(fable_document.needs_fresh_conversion(SHELLED_WORD), True)
         for failure in (docx_package.ConversionBusy('synthetic'), docx_package.ConversionFailed('synthetic')):
             with self.subTest(failure=type(failure).__name__), \
                     mock.patch.object(docx_package, 'check_in_child', side_effect=failure):
-                self.assertTrue(fable_document.needs_fresh_conversion(CLEAN_WORD))  # undecided: converted afresh
+                # undecided: converted afresh - and, for a round's own view, the converter decides first (rounds[0])
+                self.assertEqual(fable_document.needs_fresh_conversion(CLEAN_WORD), docx_package.CHECK_UNDECIDED)
+
+    def test_a_package_release_1_builds_otherwise_converts_afresh(self):
+        # refutation round 2, rounds[1]: the check is False only where release 2's package is release 1's - a picture
+        # whose id a kept attribute writes with a character reference keeps its relationship and part, and a name
+        # stored without the UTF-8 flag keeps its UTF-8 reading, where release 1 lost the picture; their stored
+        # conversions (release 1's) are not read again
+        release_1 = release_1_package()
+        for label, data in (('a picture id by a decimal reference', character_reference_word('&#114;IdPic')),
+                            ('a picture id by a hexadecimal reference', character_reference_word('&#x72;IdPic')),
+                            ('an object preview\'s id by a decimal reference',
+                             character_reference_word('&#114;IdPic', in_object=True)),
+                            ('a picture named without the UTF-8 flag', flagless_picture_word())):
+            with self.subTest(f'converted afresh: {label}'):
+                self.assertIs(docx_package.check_in_child(data), True)
+                self.assertNotEqual(docx_package._safe_package(data)[0], release_1._safe_package(data)[0])
+        for label, data in (('literal', character_reference_word('rIdPic')),
+                            ('the removed field names nothing', character_reference_word('&#114;IdPic', named=False)),
+                            ('an object preview\'s id, literal', character_reference_word('rIdPic', in_object=True))):
+            with self.subTest(f'release 1\'s package, reused: {label}'):
+                self.assertIs(docx_package.check_in_child(data), False)
+                self.assertEqual(docx_package._safe_package(data)[0], release_1._safe_package(data)[0])
 
 
 # --- R2-31 and C8 through the shipped job path -----------------------------------------------------------------------
@@ -1612,8 +1660,46 @@ class StoredConversionTests(r.CustomerCase, TestCase):
         self.assertIsNone(round_.view_pdf_storage_name)
         self.assertEqual(self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()['codes'], [])
 
+    def test_a_fresh_conversion_past_the_stores_limit_beside_an_earlier_view_fails_as_one_too_large(self):
+        # refutation round 2, rounds[4]: store_original refuses a conversion over MAX_UPLOAD_BYTES at every round while
+        # prepare keeps one up to MAX_PDF_BYTES, so 'storage' (which a retry would meet again, for ever) is not the
+        # failure: beside an earlier view the round fails DOCUMENT with the Word file's sentence, nothing sent - an
+        # answers round and a retry alike (the real store_original)
+        enc, rev, _, _ = self.stored(SHELLED_WORD)
+        prefix = b'%PDF-1.7\n% a synthetic conversion past the store\'s limit\n'
+        large = prefix + b'0' * (settings.MAX_UPLOAD_BYTES + 1 - len(prefix))
+        self.assertLess(len(large), docx_package.MAX_PDF_BYTES)
+        for trigger, number in ((Round.ANSWERS, 2), (Round.RETRY, 3)):
+            with self.subTest(trigger=trigger):
+                coder = f.FakeCoder()  # it fails the test if anything is sent
+                with self.assertLogs('studio.jobs', 'ERROR'):
+                    round_, convert, _ = self.next_round(enc, rev, trigger, coder, converted=large)
+                convert.assert_called_once_with(SHELLED_WORD)
+                self.assertEqual((round_.number, round_.state, round_.failure_kind, round_.error),
+                                 (number, Round.FAILED, DOCUMENT, fable_document.REFUSED_TEXT['docx']))
+                self.assertEqual((coder.counts, coder.calls), ([], []))
+                self.assertIsNone(round_.view_pdf_storage_name)
 
-# --- refutation round 1, view[0] and loss[3]: a resumed Word round reads, records and shows one PDF ------------------
+    def test_a_stored_conversion_of_a_package_release_1_built_otherwise_converts_afresh(self):
+        # refutation round 2, rounds[1]: release 1's stored conversion of a file whose release-2 package keeps a picture
+        # release 1's lost (an id a character reference writes - R1-L6a; a name stored without the UTF-8 flag - R1-L2b)
+        # is not read again: the next round converts afresh, with one converter call, and both reads carry the fresh PDF
+        for label, data in (('a picture id by a decimal reference', character_reference_word('&#114;IdPic')),
+                            ('a picture named without the UTF-8 flag', flagless_picture_word())):
+            with self.subTest(label):
+                enc, rev, name, _ = self.stored(data)
+                coder = self.answering()
+                round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, coder, converted=FRESH_PDF)
+                self.assertEqual(round_.state, Round.DONE)
+                check.assert_called_once_with(data)
+                convert.assert_called_once_with(data)
+                fresh = hashlib.sha256(FRESH_PDF).hexdigest()
+                self.assertEqual((round_.view_pdf_sha256, self.sent(coder)), (fresh, {fresh}))
+                self.assertNotEqual(round_.view_pdf_storage_name, name)
+
+
+# --- refutation round 1, view[0] and loss[3]: a resumed Word round that recorded its own view reads, records and shows
+# one PDF (refutation round 2, rounds[2]: a round that stored no view has none to read back, and converts afresh) ----
 
 RESUME_PAGE = b'%PDF-1.6\n1 0 obj <</Type/Page>> endobj\n% the same page streams in both conversions\n'
 RESUME_PDF_A = RESUME_PAGE + b'/CreationDate(D:20261126002410Z)\n/ID [<55583B0FAFF25547>]\n%%EOF\n'
@@ -1624,13 +1710,20 @@ def pdf_sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def stored_files():
+    """{every file under the originals folder: its sha256}."""
+    return {path: pdf_sha(path.read_bytes()) for path in Path(settings.ORIGINALS_DIR).rglob('*') if path.is_file()}
+
+
 @override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
 class ResumedWordRoundTests(r.CustomerCase, TestCase):
     """Refutation round 1, view[0] and loss[3]: a round that recorded a conversion as its own view - stopped and
-    resumed, or requeued, begun on release 1's worker or on release 2's - reads that conversion back: its reader, its
-    checker, its view and the page served are one PDF, converted at most once, and the file the reader read is kept. A
+    resumed, or requeued, its reads paid or not, begun on release 1's worker or on release 2's - reads that conversion
+    back: its reader, its checker, its view and the page served are one PDF, and the file the reader read is kept. A
     file the check refuses still ends a resumed round, and a later round of an R2-30 revision still converts afresh
-    (C8). Two conversions of one file differ in their bytes (the PDF's creation time and id), as here."""
+    (C8). When the check cannot decide, the converter decides first, and the round reads its own view back only once the
+    converter has accepted the file (refutation round 2, rounds[0]). Two conversions of one file differ in their bytes
+    (the PDF's creation time and id), as here."""
 
     def setUp(self):
         super().setUp()
@@ -1646,6 +1739,11 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
     def carried(run):
         return run.request_body['messages'][0]['content'][0]['source']['data']['$original_sha256']
 
+    @staticmethod
+    def answering():
+        return f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
+                           checker=f.succeeded(r.checker_message(r.CHECKER)))
+
     def stopping(self, enc, *, after='reader'):
         """A coder whose reader (or checker) answers and then the encounter is stopped."""
         reader, checker = f.succeeded(r.reader_message(r.READER)), f.succeeded(r.checker_message(r.CHECKER))
@@ -1659,18 +1757,21 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
             return f.FakeCoder(reader=answer_then_stop(reader), checker=checker)
         return f.FakeCoder(reader=reader, checker=answer_then_stop(checker))
 
-    def assert_one_pdf(self, enc, round_, pdf, name, converted):
+    def assert_one_pdf(self, enc, round_, pdf, name, converted, *, conversions=None):
+        """The round DONE on ``pdf`` alone - its reads, its view, the page served - kept under ``name``, after
+        ``converted`` conversions (one for RESUME_PDF_A, none for a stored one, unless ``conversions`` says)."""
         round_.refresh_from_db()
         reader = Run.objects.get(purpose=jobs.READER, scope__round=str(round_.pk))
         checker = Run.objects.get(purpose=jobs.CHECKER, scope__round=str(round_.pk))
         served = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}/original?view=1').content
         self.assertEqual(round_.state, Round.DONE)
-        self.assertEqual(converted, 1 if pdf is RESUME_PDF_A else 0)
+        self.assertEqual(converted, conversions if conversions is not None else 1 if pdf is RESUME_PDF_A else 0)
         self.assertEqual({self.carried(reader), self.carried(checker), round_.view_pdf_sha256, pdf_sha(served)},
                          {pdf_sha(pdf)})
         self.assertEqual(round_.view_pdf_storage_name, name)  # the file the reader read is the one kept
 
     def stopped_then_resumed(self, data, check=None):
+        """(enc, the round, the converter's mock, the round's first view's name, the files its resumed pass stored)."""
         with mock.patch.object(fable_document, 'convert_docx', side_effect=[RESUME_PDF_A, RESUME_PDF_B]) as convert:
             enc, _, round_ = self.word(data)
             self.use(self.stopping(enc))
@@ -1679,55 +1780,155 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
             first = round_.view_pdf_storage_name
             self.assertEqual((round_.state, round_.view_pdf_sha256), (Round.CANCELLED, pdf_sha(RESUME_PDF_A)))
             jobs.resume(enc, self.reviewer)
+            before = stored_files()
             if check is None:
                 self.run_next()
             else:
                 with mock.patch.object(docx_package, 'check_in_child', side_effect=check):
                     self.run_next()
-        return enc, round_, convert, first
+        added = {path: digest for path, digest in stored_files().items() if path not in before}
+        return enc, round_, convert, first, added
+
+    def begun_on_release_1(self, data, paid):
+        """A Word revision release 1 coded - round 1, its conversion stored as STORED_PDF - and an answers round begun
+        on release 1's worker, which has no check: it reuses that conversion, records it as its own view, and then
+        stops - requeued at its reader's slot with nothing sent ('nothing'), stopped after its reader ('the reader',
+        resumed here), or requeued after both reads, before they were combined ('both reads'). (enc, rev, the round,
+        the stored view's name, its sha256, how many runs the round holds)."""
+        enc = f.encounter(self.ws, self.reviewer, service_date='2026-11-02', insurance='medicare',
+                          title='Synthetic Word note')
+        rev = f.upload(enc, self.reviewer, data=data, filename='synthetic-note.docx', media_type=DOCX)
+        first = r.write_round(enc)
+        name, digest, _ = storage.store_original(self.ws.pk, STORED_PDF, 'converted.pdf')
+        Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+        round_ = jobs.start_round(enc, rev, Round.ANSWERS, self.reviewer)
+        halt = mock.patch.object(jobs.fable_result, 'combine', wraps=jobs.fable_result.combine)
+        if paid == 'nothing':
+            self.use(f.FakeCoder())  # it fails the test if anything is sent
+            halt = mock.patch.object(jobs, '_take_slot', side_effect=jobs.Requeue('synthetic: every slot is in use'))
+        elif paid == 'the reader':
+            self.use(self.stopping(enc))
+        else:
+            self.use(self.answering())
+            halt = mock.patch.object(jobs.fable_result, 'combine',
+                                     side_effect=jobs.Requeue('synthetic: requeued before combining'))
+        with mock.patch.object(fable_document, 'needs_fresh_conversion', return_value=False), \
+                mock.patch.object(fable_document, 'convert_docx', side_effect=AssertionError('release 1 reused it')), \
+                halt, mock.patch.object(jobs, 'REQUEUE_SECONDS', 0):
+            self.run_next()  # release 1's worker: no check
+        round_.refresh_from_db()
+        self.assertEqual((round_.state, round_.view_pdf_sha256),
+                         (Round.CANCELLED if paid == 'the reader' else Round.QUEUED, digest))
+        runs = Run.objects.filter(scope__round=str(round_.pk)).count()
+        self.assertEqual(runs, {'nothing': 0, 'the reader': 1, 'both reads': 2}[paid])
+        if paid == 'the reader':
+            jobs.resume(enc, self.reviewer)
+        return enc, rev, round_, name, digest, runs
 
     def test_a_stopped_and_resumed_round_of_r2_30s_shape_reads_its_own_conversion(self):
-        enc, round_, convert, first = self.stopped_then_resumed(SHELLED_WORD)
+        enc, round_, convert, first, _ = self.stopped_then_resumed(SHELLED_WORD)
         self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count)
 
-    def test_a_round_requeued_between_its_reads_reads_its_own_conversion(self):
+    def requeued_at(self, slot, data=SHELLED_WORD):
+        """A round of ``data`` requeued at its ``slot``-th provider slot (1: the reader's, before anything was sent; 2:
+        the checker's), then run again: (enc, the round, the converter's mock, its first view's name)."""
         real_take, taken = jobs._take_slot, []
 
-        def no_slot_for_the_checker():
+        def no_slot():
             taken.append(1)
-            if len(taken) == 2:
+            if len(taken) == slot:
                 raise jobs.Requeue('every provider slot is in use')
             return real_take()
-        enc, _, round_ = self.word(SHELLED_WORD)
-        self.use(f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
-                             checker=f.succeeded(r.checker_message(r.CHECKER))))
+        enc, _, round_ = self.word(data)
+        self.use(self.answering())
         with mock.patch.object(fable_document, 'convert_docx', side_effect=[RESUME_PDF_A, RESUME_PDF_B]) as convert, \
-                mock.patch.object(jobs, '_take_slot', side_effect=no_slot_for_the_checker), \
+                mock.patch.object(jobs, '_take_slot', side_effect=no_slot), \
                 mock.patch.object(jobs, 'REQUEUE_SECONDS', 0):
             self.run_next()
             round_.refresh_from_db()
             first = round_.view_pdf_storage_name
+            self.assertEqual((round_.state, round_.view_pdf_sha256), (Round.QUEUED, pdf_sha(RESUME_PDF_A)))
+            self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), slot - 1)
             self.run_next()
+        return enc, round_, convert, first
+
+    def test_a_round_requeued_between_its_reads_reads_its_own_conversion(self):
+        enc, round_, convert, first = self.requeued_at(2)
+        self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count)
+
+    def test_a_round_requeued_at_its_readers_slot_reads_its_own_conversion(self):
+        # refutation round 2, rounds[3]: the rule's unpaid half - requeued before anything was sent, its own view
+        # recorded and no read paid - reads that view back too
+        enc, round_, convert, first = self.requeued_at(1)
         self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count)
 
     def test_a_resumed_clean_round_whose_check_cannot_decide_reads_its_own_conversion(self):
-        enc, round_, convert, first = self.stopped_then_resumed(
-            CLEAN_WORD, check=docx_package.ConversionBusy('synthetic: out of time'))
-        self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count)
+        # refutation round 2, rounds[0]: the converter decides first - a second conversion - and, once it has accepted
+        # the file, the round reads its own view back; the PDF made to decide is neither read nor stored
+        for failure in (docx_package.ConversionBusy('synthetic: out of time'),
+                        docx_package.ConversionFailed('synthetic: the child failed')):
+            with self.subTest(failure=type(failure).__name__):
+                enc, round_, convert, first, added = self.stopped_then_resumed(CLEAN_WORD, check=failure)
+                self.assertEqual([call.args for call in convert.call_args_list], [(CLEAN_WORD,), (CLEAN_WORD,)])
+                self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count, conversions=2)
+                self.assertEqual(added, {})  # the second conversion was not stored
+                self.assertFalse(Round.objects.filter(view_pdf_sha256=pdf_sha(RESUME_PDF_B)).exists())
 
     def test_a_file_the_check_refuses_still_ends_a_resumed_round(self):
         # its first pass converted as release 1's converter did, before the converter's phase: the resume is refused
-        enc, round_, convert, _ = self.stopped_then_resumed(IMPORTING_WORD)
+        enc, round_, convert, _, _ = self.stopped_then_resumed(IMPORTING_WORD)
         round_.refresh_from_db()
         self.assertEqual((round_.state, round_.failure_kind, round_.error),
                          (Round.FAILED, CONVERT, fable_document.REFUSED_PACKAGE_TEXT[docx_package.INSERTED_DOCUMENT]))
         self.assertEqual(convert.call_count, 1)
         self.assertFalse(Run.objects.filter(purpose=jobs.CHECKER, scope__round=str(round_.pk)).exists())
+        # refutation round 2, rounds[3]: begun on release 1's worker and requeued before anything was sent, then run on
+        # release 2's - the check refuses the file, with no converter call and nothing sent
+        for data, code in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT),
+                           (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT)):
+            with self.subTest(code=code):
+                enc, _, round_, _, _, _ = self.begun_on_release_1(data, 'nothing')
+                with mock.patch.object(fable_document, 'convert_docx',
+                                       side_effect=AssertionError('no conversion')) as convert:
+                    self.run_next()
+                round_.refresh_from_db()
+                self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                 (Round.FAILED, CONVERT, fable_document.REFUSED_PACKAGE_TEXT[code]))
+                convert.assert_not_called()
+                self.assertFalse(Run.objects.filter(scope__round=str(round_.pk)).exists())
+
+    def test_an_own_view_whose_check_cannot_decide_is_read_again_only_once_the_converter_accepts_the_file(self):
+        # refutation round 2, rounds[0]: a round begun on release 1's worker recorded release 1's conversion - which
+        # left the import or the object out - as its own view, and stopped: requeued with nothing sent, or after its
+        # reader. On release 2's worker its check cannot decide (out of time; a failed child; a refusal that is not
+        # ContentNotShown - two pictures whose names differ only in case): the converter decides, refuses the file, and
+        # the round ends with the converter's sentence, nothing more sent and its own view never read again
+        real = fable_document.convert_docx
+        cases = [(data, code, paid, failure)
+                 for data, code in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT),
+                                    (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT))
+                 for paid in ('nothing', 'the reader')
+                 for failure in (docx_package.ConversionBusy('synthetic: out of time'),
+                                 docx_package.ConversionFailed('synthetic: the child failed'))]
+        cases += [(COLLIDING_NAMES_WORD, None, paid, None) for paid in ('nothing', 'the reader')]
+        for data, code, paid, failure in cases:
+            with self.subTest(code=code, paid=paid, check=type(failure).__name__ if failure else 'the real check'):
+                enc, _, round_, _, _, runs = self.begun_on_release_1(data, paid)
+                check = {'side_effect': failure} if failure else {'wraps': docx_package.check_in_child}
+                with mock.patch.object(docx_package, 'check_in_child', **check) as checked, \
+                        mock.patch.object(fable_document, 'convert_docx',
+                                          side_effect=lambda d, **kw: real(d, runner=failing_runner, **kw)) as convert:
+                    self.run_next()
+                round_.refresh_from_db()
+                text = fable_document.REFUSED_PACKAGE_TEXT[code] if code else fable_document.CONVERT_TEXT
+                self.assertEqual((round_.state, round_.failure_kind, round_.error), (Round.FAILED, CONVERT, text))
+                checked.assert_called_once_with(data)
+                convert.assert_called_once_with(data)  # the converter decided
+                self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)  # nothing more sent
 
     def test_a_later_round_of_an_r2_30_revision_still_converts_afresh(self):
         enc, rev, _ = self.word(SHELLED_WORD)
-        self.use(f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
-                             checker=f.succeeded(r.checker_message(r.CHECKER))))
+        self.use(self.answering())
         with mock.patch.object(fable_document, 'convert_docx', side_effect=[RESUME_PDF_A, RESUME_PDF_B]) as convert:
             self.run_next()
             later = jobs.start_round(enc, rev, Round.ANSWERS, self.reviewer)
@@ -1737,41 +1938,20 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                          (Round.DONE, 2, pdf_sha(RESUME_PDF_B)))
 
     def test_a_round_begun_on_release_1s_worker_and_resumed_after_the_switch_stays_on_its_pdf(self):
-        # loss[3]: release 1's worker reused the stored conversion (it has no check) and read it - its reader alone,
-        # then a stop; or both reads, then a requeue before they were combined. Resumed on release 2's worker, the round
-        # reads that same PDF back, with no converter call; only the next round converts afresh, so R2-30's edit applies
-        for paid in ('the reader', 'both reads'):
+        # loss[3]: release 1's worker reused the stored conversion (it has no check) and recorded it as the round's own
+        # view - then nothing was sent (a requeue at the reader's slot: refutation round 2, rounds[3]), or it read its
+        # reader alone and stopped, or both reads and was requeued before they were combined. Resumed on release 2's
+        # worker, the round reads that same PDF back, with no converter call; only the next round converts afresh, so
+        # R2-30's edit applies
+        for paid in ('nothing', 'the reader', 'both reads'):
             with self.subTest(paid=paid):
-                enc = f.encounter(self.ws, self.reviewer, service_date='2026-11-02', insurance='medicare',
-                                  title='Synthetic Word note')
-                rev = f.upload(enc, self.reviewer, data=SHELLED_WORD, filename='synthetic-note.docx', media_type=DOCX)
-                first = r.write_round(enc)
-                name, digest, _ = storage.store_original(self.ws.pk, STORED_PDF, 'converted.pdf')
-                Round.objects.filter(pk=first.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
-                round_ = jobs.start_round(enc, rev, Round.ANSWERS, self.reviewer)
-                if paid == 'the reader':
-                    self.use(self.stopping(enc))
-                    halt = mock.patch.object(jobs.fable_result, 'combine', wraps=jobs.fable_result.combine)
-                else:
-                    self.use(f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
-                                         checker=f.succeeded(r.checker_message(r.CHECKER))))
-                    halt = mock.patch.object(jobs.fable_result, 'combine',
-                                             side_effect=jobs.Requeue('synthetic: requeued before combining'))
-                with mock.patch.object(fable_document, 'needs_fresh_conversion', return_value=False), \
-                        mock.patch.object(fable_document, 'convert_docx',
-                                          side_effect=AssertionError('release 1 reused it')), halt, \
-                        mock.patch.object(jobs, 'REQUEUE_SECONDS', 0):
-                    self.run_next()  # release 1's worker: no check
-                round_.refresh_from_db()
-                self.assertEqual((round_.state, round_.view_pdf_sha256),
-                                 (Round.CANCELLED if paid == 'the reader' else Round.QUEUED, digest))
-                if paid == 'the reader':
-                    jobs.resume(enc, self.reviewer)
+                enc, rev, round_, name, _, _ = self.begun_on_release_1(SHELLED_WORD, paid)
+                if paid == 'nothing':
+                    self.use(self.answering())
                 with mock.patch.object(fable_document, 'convert_docx', side_effect=AssertionError('no conversion')):
                     self.run_next()
                 self.assert_one_pdf(enc, round_, STORED_PDF, name, 0)
-                self.use(f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
-                                     checker=f.succeeded(r.checker_message(r.CHECKER))))
+                self.use(self.answering())
                 later = jobs.start_round(enc, rev, Round.ANSWERS, self.reviewer)
                 with mock.patch.object(fable_document, 'convert_docx', return_value=RESUME_PDF_B) as convert:
                     self.run_next()

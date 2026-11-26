@@ -38,20 +38,23 @@ before it waits on it, so the parent's finally kills that group as well as the c
 - Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
   would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
   rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
-  reader resolves -, in any format, story or namespace form, and - on purpose, although the file holds nothing of it -
-  one whose relationship is External, and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object,
-  control or pointer that would leave no picture - a v:imagedata or a:blip naming, by its exact name, a part that is
-  sent and is a picture - in its place (R2-29); a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored
-  result holds something a reader sees outside the fields in it while a removed field stood in its instruction, which
-  LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
-  missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A removed field in another
-  field's result, and in no field's instruction, stays a field whose instruction is QUOTE - a type LibreOffice shows
-  by its stored result - unless it is an INCLUDEPICTURE whose stored result shows no text: a picture alone (R2-30,
-  refutation round 1). Everything else is edited as release 1 edits it, so a Word file that needs no refusal and no
-  QUOTE gives exactly release 1's package (a zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed,
-  apart).
+  reader resolves, LibreOffice or the doctor's Word, or by a target no reading resolves (refutation round 2, D-R2-40) -,
+  in any format, story or namespace form, and - on purpose, although the file holds nothing of it - one whose
+  relationship is External, and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or
+  pointer that would leave no picture - a v:imagedata or a:blip whose relationship, as LibreOffice reads it, names by
+  the zip name LibreOffice opens a part that is sent and is a picture it decodes - in its place (R2-29); a field kept,
+  not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader sees outside the fields in it
+  while a removed field stood in its instruction, which LibreOffice 7.4 drops (R2-30's fallback). An altChunk that
+  holds nothing (no r:id, or one naming no relationship, a missing part or an empty part) is removed as release 1
+  removes it, counted in 'chunks'. A removed field in another field's result, and in no field's instruction, stays a
+  field whose instruction is QUOTE - a type LibreOffice shows by its stored result - unless it is an INCLUDEPICTURE
+  whose stored result shows no text, symbol or mark: a picture alone (R2-30, refutation rounds 1 and 2). Everything
+  else is edited as release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's
+  package - apart from a zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed, and, in a part E2
+  edits, a relationship id a kept attribute writes with a character reference or with white space expat normalizes,
+  whose relationship and part release 1 dropped (_still_named, refutation round 1's loss[6]).
   check_in_child runs the same check on a Word file whose conversion a round stored, before that conversion is read
-  again (R2-28 step 7, C8).
+  again (R2-28 step 7, C8); a package that differs from release 1's - a QUOTE or either deviation - converts afresh.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -254,17 +257,25 @@ def _convert_package(runner, data: bytes, work: str):
     return ('pdf', runner(package, Path(work)), removed)
 
 
-def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bool:
+# check_in_child's answer when the check could not decide a file it opened as a zip (refutation round 2, rounds[0]):
+# truthy, so a later round converts afresh, as for R2-30's edit - and a round's own view is read again only once the
+# converter has accepted the file (studio.jobs._stored_conversion)
+CHECK_UNDECIDED = 'undecided'
+
+
+def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES):
     """Release 2, R2-28 step 7 (C8): release 2's package check of ``data`` - a Word file a round of whose revision
     stored its conversion - before that conversion is read again, run as a conversion's check runs (in a bounded child
     of ``seconds`` and ``memory_bytes``, safe_package's own PACKAGE_SECONDS inside it) and converting nothing.
 
-    False: the stored conversion may be read again - the check refused nothing and made none of R2-30's edits, so the
-    package is the one release 1 gave; or the file is no zip at all, which every deployed version refused at that same
-    line, so no stored conversion came of it (the stand-ins of the job tests). True: the round converts afresh -
-    R2-30's edit applies to the file, or the check refused it for a reason that is not ContentNotShown, before its
-    parts were read or after (refutation round 1, protocol[2]: a zip that passes a limit is no exception), which a
-    fresh conversion then gives. ConversionRefused (with ContentNotShown's code and counts),
+    False: the stored conversion may be read again - the check refused nothing and the package is release 1's: no
+    QUOTE shell (R2-30), no name stored without the UTF-8 flag read as UTF-8 (R2-28 step 2) and no id kept only as
+    expat reads it (R2-29 step 5) - refutation round 2, rounds[1]: either of the last two keeps a picture release 1's
+    package lost -; or the file is no zip at all, which every deployed version refused at that same line, so no stored
+    conversion came of it (the stand-ins of the job tests). True: the round converts afresh - its package is not release
+    1's. CHECK_UNDECIDED: the check refused the zip for a reason that is not ContentNotShown, before its parts were read
+    or after (refutation round 1, protocol[2]: a zip that passes a limit is no exception), and the converter decides,
+    as for a fresh conversion (round 2, rounds[0]). ConversionRefused (with ContentNotShown's code and counts),
     ConversionBusy or ConversionFailed otherwise, as convert_in_child raises them."""
     try:
         answer = bounded.run_bounded(_check_package, data, seconds=seconds, memory_bytes=memory_bytes)
@@ -276,14 +287,15 @@ def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT
         raise ConversionBusy(answer[1])
     if isinstance(answer, tuple) and len(answer) == 4 and answer[0] == 'refused':
         raise ConversionRefused(*answer[1:])
-    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'checked' and answer[1] in (True, False):
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'checked' \
+            and answer[1] in (True, False, CHECK_UNDECIDED):
         return answer[1]
     raise ConversionFailed('the check gave no answer')
 
 
 def _check_package(data: bytes):
-    """In check_in_child's bounded child: ('checked', whether the round converts afresh), ('refused', reason, code,
-    counts) for ContentNotShown, or ('busy', reason)."""
+    """In check_in_child's bounded child: ('checked', False, True or CHECK_UNDECIDED), ('refused', reason, code, counts)
+    for ContentNotShown, or ('busy', reason)."""
     report = {}
     try:
         _package(data, report)
@@ -292,8 +304,8 @@ def _check_package(data: bytes):
     except ContentNotShown as exc:
         return ('refused', str(exc), exc.code, dict(exc.counts))
     except PackageRefused:
-        return ('checked', bool(report.get('zip')))
-    return ('checked', report.get('shells', 0) > 0)
+        return ('checked', CHECK_UNDECIDED if report.get('zip') else False)
+    return ('checked', report.get('shells', 0) > 0 or report.get('renamed', 0) > 0 or report.get('parsed', 0) > 0)
 
 
 def safe_package(data: bytes) -> bytes:
@@ -315,7 +327,8 @@ def safe_package(data: bytes) -> bytes:
       stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
       another field's result stays a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a picture
       alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no QUOTE
-      gives exactly release 1's package.
+      gives exactly release 1's package, apart from the two deviations the module's docstring names (refutation round
+      1's loss[2] and loss[6]).
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -328,9 +341,11 @@ def _safe_package(data: bytes):
 
 def _package(data: bytes, report: dict):
     """_safe_package's work. ``report`` is told how far it got, whether it returns or raises: 'zip', once the file
-    opened as a zip archive; 'read', once every part was read and the package found a Word one (E2 then begins);
-    'shells', how many of R2-30's QUOTE shells it made in the parts still sent (check_in_child reads 'zip' and
-    'shells')."""
+    opened as a zip archive; 'read', once every part was read and the package found a Word one (E2 then begins); and
+    how its package differs from release 1's - 'renamed', how many names stored without the UTF-8 flag it read as UTF-8
+    where release 1 read them as cp437; 'shells', how many of R2-30's QUOTE shells it made in the parts still sent;
+    'parsed', how many relationship ids it kept, in the parts still sent, only as expat reads a kept attribute
+    (check_in_child reads 'zip', 'renamed', 'shells' and 'parsed': refutation round 2, rounds[1])."""
     deadline = time.monotonic() + PACKAGE_SECONDS
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
@@ -345,9 +360,12 @@ def _package(data: bytes, report: dict):
             # (0x7075) is left as it is
             if not info.flag_bits & 0x800 and info.filename == info.orig_filename:
                 try:
-                    info.filename = info.filename.encode('cp437').decode('utf-8')
+                    read = info.filename.encode('cp437').decode('utf-8')
                 except UnicodeDecodeError:
-                    pass
+                    continue
+                if read != info.filename:  # release 1 renamed this part: its package is not this one (rounds[1])
+                    report['renamed'] = report.get('renamed', 0) + 1
+                    info.filename = read
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):
@@ -392,9 +410,10 @@ def _package(data: bytes, report: dict):
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
     report['read'] = True
-    removed, held, unshown, shells = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten,
-                                                            special, orphans, deadline, reader_names)
+    removed, held, unshown, shells, parsed = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows,
+                                                                    rewritten, special, orphans, deadline, reader_names)
     report['shells'] = sum(made for name, made in shells.items() if name not in orphans)
+    report['parsed'] = sum(count for name, count in parsed.items() if name not in orphans)
     released = orphans - external_orphans  # what E2 dropped, with the content it removed
     if released:  # a part E2 dropped takes its Override with it
         types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in released})
@@ -1311,23 +1330,25 @@ def _named_by(references, edits) -> set:
     return found
 
 
-def _still_named(data, values) -> set:
-    """Which of ``values`` (relationship ids) some attribute of ``data`` still holds, found by their bytes (as written,
-    or with XML's escapes), or as expat reads the attribute: a relationship whose id any kept attribute holds is kept.
-    The parse runs only for an id the bytes miss - one a kept attribute writes with a character reference, or with
-    white space expat normalizes (refutation round 1, loss[6]: such an id's relationship was dropped, and the picture a
-    kept element named with it lost) - over bytes _well_formed has already parsed."""
+def _still_named(data, values):
+    """(which of ``values`` (relationship ids) some attribute of ``data`` still holds, those only expat finds): an
+    id is found by its bytes (as written, or with XML's escapes), or as expat reads the attribute; a
+    relationship whose id any kept attribute holds is kept. The parse runs only for an id the bytes miss - one a kept
+    attribute writes with a character reference, or with white space expat normalizes (refutation round 1, loss[6]:
+    such an id's relationship was dropped, and the picture a kept element named with it lost) - over bytes _well_formed
+    has already parsed. Release 1 kept only the ids its bytes find, so an id found by the parse alone makes a package
+    that is not release 1's (refutation round 2, rounds[1])."""
     found = set()
     for value in values:
         for form in {value, escape(value, {'"': '&quot;', "'": '&apos;'})}:
             if re.search(rb'=\s*(["\'])' + re.escape(form.encode('utf-8')) + rb'\1', data):
                 found.add(value)
-    missing = set(values) - found
+    missing, parsed = set(values) - found, set()
     if missing:
         parser = expat.ParserCreate(namespace_separator=' ')
-        parser.StartElementHandler = lambda name, attrs: found.update(missing.intersection(attrs.values()))
+        parser.StartElementHandler = lambda name, attrs: parsed.update(missing.intersection(attrs.values()))
         parser.Parse(data, True)
-    return found
+    return found | parsed, parsed
 
 
 def _well_formed(data):
@@ -1340,9 +1361,10 @@ def _well_formed(data):
 
 def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
     """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named, the counts of
-    what E2 would leave nothing of - LOST_KINDS -, the QUOTE shells made), or None when nothing is to be removed - the
-    part then passes through byte for byte. When anything is lost, the file is refused (ContentNotShown), so the part is
-    returned unedited. ``pictures`` and ``inserted``: _relationship_ids of the part.
+    what E2 would leave nothing of - LOST_KINDS -, the QUOTE shells made, how many ids a kept attribute holds only as
+    expat reads it), or None when nothing is to be removed - the part then passes through byte for byte. When anything
+    is lost, the file is refused (ContentNotShown), so the part is returned unedited. ``pictures`` and ``inserted``:
+    _relationship_ids of the part.
 
     The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
     take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
@@ -1355,7 +1377,7 @@ def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
     - when every field's type is final - counts those whose result 7.4 would lose (R2-30's fallback)."""
     reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, inserted=inserted).read()
     if any(reader.lost.values()):
-        return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0
+        return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0, 0
     if not reader.edits:
         return None
     data, removed, gone, shells, lost = raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), 0, dict.fromkeys(LOST_KINDS, 0)
@@ -1379,7 +1401,8 @@ def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
     else:
         raise PackageRefused('a document part could not be edited safely')
     _well_formed(data)
-    return data, removed, gone - _still_named(data, gone), lost, shells
+    kept, parsed = _still_named(data, gone)
+    return data, removed, gone - kept, lost, shells, len(parsed)
 
 
 def _moved(offsets, edits) -> frozenset:
@@ -1465,8 +1488,9 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
     SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
     relationships only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only
     they named added to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is
-    still sent}, {part: what E2 would leave nothing of in it}, {part: the QUOTE shells made in it})."""
-    removed, held, dropped_ids, unshown, shells = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}, {}, {}
+    still sent}, {part: what E2 would leave nothing of in it}, {part: the QUOTE shells made in it}, {part: the ids it
+    keeps only as expat reads them})."""
+    removed, held, dropped_ids, unshown, shells, parsed = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}, {}, {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:
         name = info.filename
@@ -1480,7 +1504,7 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
                 pictures, inserted = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names)
                 outcome = _edited_part(raw, deadline, pictures, inserted)
                 if outcome is not None:
-                    edited, counts, ids, lost, made = outcome
+                    edited, counts, ids, lost, made, expat_only = outcome
                     if any(lost.values()):  # the file is refused: nothing of the part is edited
                         unshown[name] = lost
                     else:
@@ -1491,6 +1515,8 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
                             dropped_ids[name] = ids
                         if made:
                             shells[name] = made
+                        if expat_only:
+                            parsed[name] = expat_only
             elif _DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE:
                 _refuse_any_dtd(raw)
         except _OutOfTime:
@@ -1515,7 +1541,7 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
             if target is not None:
                 candidates.add(target.casefold())
     orphans |= _released(candidates, kept_rows, by_folded, special, orphans)
-    return removed, held, unshown, shells
+    return removed, held, unshown, shells, parsed
 
 
 def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names):

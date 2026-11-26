@@ -194,14 +194,16 @@ def convert_docx(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memory_by
         raise DocumentError(CONVERT, CONVERT_TEXT, str(exc)) from None
 
 
-def needs_fresh_conversion(data: bytes) -> bool:
+def needs_fresh_conversion(data: bytes):
     """Release 2, R2-28 step 7 (C8), the worker's side: release 2's package check of ``data`` - a Word file a round of
     whose revision stored its conversion - before that conversion is read again (docx_package.check_in_child: in the
     worker, in the bounded child and under the limits a conversion's check runs under, converting nothing, with no
     converter call). DocumentError CONVERT when the check refuses the file (ContentNotShown): the sentence and the
-    record of its code, as a fresh conversion of it would end. True when the round must convert afresh: R2-30's QUOTE
-    applies to the file, or the check could not decide (it ran out of time, failed, or refused the file for another
-    reason once it opened as a zip) - the converter then decides, as for any fresh conversion. False when the stored
+    record of its code, as a fresh conversion of it would end. True when the round must convert afresh: its package is
+    not release 1's (R2-30's QUOTE applies to the file, or a name or an id release 1 lost is kept: refutation round 2,
+    rounds[1]). docx_package.CHECK_UNDECIDED (truthy) when the check could not decide - it ran out of time, failed, or
+    refused the file for another reason once it opened as a zip -: the converter then decides, as for any fresh
+    conversion, a round's own view included (round 2, rounds[0]: studio.jobs._stored_conversion). False when the stored
     conversion may be read again: a clean revision's view stays byte-identical, with no converter call; or the file is
     no zip at all, of which no conversion was ever made."""
     try:
@@ -209,7 +211,7 @@ def needs_fresh_conversion(data: bytes) -> bool:
     except docx_package.ConversionRefused as exc:
         raise _refused(exc, f'the Word package was refused: {exc}') from None
     except (docx_package.ConversionBusy, docx_package.ConversionFailed):
-        return True
+        return docx_package.CHECK_UNDECIDED
 
 
 def _refused(exc, detail) -> DocumentError:
