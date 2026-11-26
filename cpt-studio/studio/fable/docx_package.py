@@ -39,8 +39,10 @@ before it waits on it, so the parent's finally kills that group as well as the c
   run first, with their reasons -, the package's structure - its zip archive and entry names, every relationships part
   and its targets, the content types, and the id a preview names - must be in the one form a Word package takes, where
   lane D, LibreOffice and the doctor's Word read every structural reference alike; any other form is refused
-  (PackageNotCanonical, told as an inserted document) before E2 reads a part, whatever the file holds. Word and the real
-  tools measured write only that form.
+  (PackageNotCanonical, told as an inserted document) before E2 reads a part, whatever the file holds. The files
+  measured from Word and the real tools are in that form; a tool that copies a template's relationships part without its
+  part is not (pandoc 3.1.3 with --reference-doc copies every word/_rels/*.xml.rels but document's and footnotes', such
+  as a docx-npm template's endnotes.xml.rels), and form 3 refuses it (class b).
 - Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
   would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
   rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
@@ -603,10 +605,12 @@ def _require_word_main_part(parts, by_folded):
 # spelling read otherwise. So the structure is held to the one form a Word package takes, in which every structural
 # reference has exactly one reading and the three readers' coincide by construction; any other form is refused
 # (PackageNotCanonical) before E2 reads a part, whatever the file holds. The forms are those Word and the real tools
-# measured write (Word, LibreOffice, pandoc, python-docx and the committed templates): a file any of them wrote passes.
-# A path segment is of RFC 3986's unreserved characters but '~' - which no reader escapes, decodes or folds - and is
-# never empty, '.' or '..' ('..' only leads a relative target): no scheme, authority, query, fragment, escape, backslash
-# or white space. A package's own name for its content types is the one name outside that alphabet.
+# measured write (Word, LibreOffice, pandoc, python-docx and the committed templates): every file measured from them
+# passes, though not every file they can write (pandoc --reference-doc with a template holding a relationships part for
+# a part pandoc does not write is refused by form 3: class b). A path segment is of RFC 3986's unreserved characters but
+# '~' - which no reader escapes, decodes or folds - and is never empty, '.' or '..' ('..' only leads a relative target):
+# no scheme, authority, query, fragment, escape, backslash or white space. A package's own name for its content types is
+# the one name outside that alphabet.
 _SEGMENT = re.compile(r'[A-Za-z0-9._-]+')
 _RELATIONSHIP_ID = re.compile(r'[A-Za-z_][A-Za-z0-9._-]*')  # an XML name of ASCII letters, as Word's 'rId7' and 'R0f1e'
 _RELATIONSHIPS_NAME = re.compile(r'(?:(.+)/)?_rels/([^/]+)\.rels')  # 'word/_rels/document.xml.rels'

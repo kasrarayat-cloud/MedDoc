@@ -9,7 +9,7 @@
 - The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
 - The canonical package gate (refutation round 3, D-R2-46): a package not in the one form a Word package takes - its
   zip, its relationships parts and targets, its content types, a preview's id - is refused before E2 reads a part, told
-  as an inserted document (CanonicalPackageTests); the forms Word and the real tools write pass it unchanged.
+  as an inserted document (CanonicalPackageTests); the files measured from Word and the real tools pass it unchanged.
 - Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package (apart from the deviation
   CharacterReferenceTests pins): the reference is release 1's own docx_package.py, vendored as a test
   fixture checked against its git blob id (RELEASE_1_PACKAGE_BLOB, immutable), so the comparisons run wherever the
