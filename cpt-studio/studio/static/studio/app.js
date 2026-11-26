@@ -1260,8 +1260,9 @@ const state = {
   confirming: null, objectUrls: new Set(),
   // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
   sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
-  // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16)
-  keptViews: new Map(), early: null, viewHints: new Map(),
+  // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16); the
+  // ends met (forgetMemory, R2-18): a document opening across one keeps no copy
+  keptViews: new Map(), early: null, viewHints: new Map(), wipes: 0,
   // the list on the page (R2-22)
   list: null,
 };
@@ -2400,8 +2401,12 @@ async function loadDocument(id, serial, silent, poll = false) {
   try {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
-    if (serial !== state.routeSerial || older()) return;
-    // a 404 - another practice's document, or access ended - is an end (R2-18): on a first read, a poll or a refresh
+    // a 404 - another practice's document, or access ended - is an end (R2-18): on a first read, a poll or a refresh;
+    // to a read no longer awaited (a route left, an older read), it spares the view the route shown is opening
+    if (serial !== state.routeSerial || older()) {
+      if (error.status === 404) forgetMemory(state.viewer?.view || state.early?.view || '');
+      return;
+    }
     if (error.status === 404) forgetMemory();
     if (state.outdated) {
       dropEarly();  // R2-16: a first read refused as outdated drops the click's early view too
@@ -3141,11 +3146,16 @@ function takeWorker(viewer, address, loading) {
 }
 
 // R2-18: at every end - sign-out, idle, cap, a 401, another tab, a forced password change, a refused document,
-// pagehide - the early view, the kept copies (overwritten), the hints and the worker made ready ahead go.
-function forgetMemory() {
-  dropEarly();
-  for (const { data } of state.keptViews.values()) data.fill(0);
-  state.keptViews.clear();
+// pagehide - the early view, the kept copies (overwritten), the hints and the worker made ready ahead go; the view
+// `opening` keeps its early view and its copy (pagehide's Event is no view).
+function forgetMemory(opening = '') {
+  state.wipes += 1;
+  if (!opening || state.early?.view !== opening) dropEarly();
+  for (const [view, { data }] of state.keptViews) {
+    if (view === opening) continue;
+    data.fill(0);
+    state.keptViews.delete(view);
+  }
   state.viewHints.clear();
   endStandby();
 }
@@ -3184,6 +3194,7 @@ function closeViewer() {
 
 async function openPdf(viewer) {
   const opening = () => state.viewer === viewer && viewer.mode === 'loading';
+  const wipes = state.wipes;
   // a browser without what marking needs is not given the library at all
   if (!pdfCapable()) {
     fallbackViewer(viewer, 'browser');
@@ -3253,7 +3264,8 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'document');
     return;
   }
-  if (copy) keepView(viewer.view, tag, copy);
+  if (copy && state.wipes === wipes) keepView(viewer.view, tag, copy);
+  else copy?.fill(0);  // an end came while it opened (R2-18)
   let proxies;
   try {
     proxies = await watched(viewer, Promise.all(Array.from({ length: pdf.numPages }, (_, index) => pdf.getPage(index + 1))));
@@ -3868,7 +3880,10 @@ function noteRefusedFrame(frame) {
   try {
     status = frame.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus;
   } catch {
-    status = undefined;
+    // the site's refusals forbid framing, so theirs cannot be read: the session is asked, as a poll, and a 401 or a
+    // forced password change's 403 is the end it is (api; R2-18)
+    api('/api/session', { poll: true }).catch(() => {});
+    return;
   }
   if (!Number.isInteger(status) || status === 0 || status === 200) return;
   if (status === 401 || status === 403) forgetMemory();  // an end (R2-18), as at the viewer's own download
@@ -4428,6 +4443,7 @@ async function saveDownload(url, filename) {
     sessionEnded('expired');
     throw new ApiError('Your session has ended. Sign in again.', 401);
   }
+  if (response.status === 403) forgetMemory();  // a forced password change: an end (R2-18), as at the view's download
   if (!response.ok) throw new ApiError(await downloadRefusal(response), response.status);
   const address = URL.createObjectURL(await response.blob());
   if (!(state.objectUrls instanceof Set)) state.objectUrls = new Set();

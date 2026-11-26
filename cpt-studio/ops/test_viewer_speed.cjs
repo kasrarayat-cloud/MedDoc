@@ -3,9 +3,10 @@
  * The viewer's speed (release 2: RELEASE-2-SPEC R2-10 to R2-18), through the shipped page in Chromium, against
  * ops/dev_preview_server.cjs's mock: what a page load and an opening ask the server for, what fades, the worker made ready
  * ahead, the re-open answered 304 and drawn from page memory (three times over, and after a re-open left while it was
- * answered), the view asked for with the click, what is left after another tab's sign-out and after pagehide, and the
- * lists above 200 documents (an unchanged search never asked again; a failure said under its own list). Eight tests;
- * release 1's page fails all eight. Skipped where Playwright is not installed
+ * answered), the view asked for with the click, what is left after another tab's sign-out, after a session ended or a
+ * password to change met first at the framed viewer's load (refused with the site's own headers) and after pagehide (on
+ * a page that saves data too), and the lists above 200 documents (an unchanged search never asked again; a failure said
+ * under its own list). Ten tests; release 1's page fails all ten. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -123,6 +124,18 @@ async function back(page) {
   await page.click('a.back-link');
   await listed(page);
 }
+// The site's own refusal headers, read from the server's code - studio/access.py's policy and cptstudio/settings.py's
+// X_FRAME_OPTIONS (tests/test_frontend.py holds both on /api/session's 401) - each forbidding framing.
+function siteRefusal() {
+  const policy = /\n {4}CSP = \(((?:\s*"[^"]*")+)\)/.exec(fs.readFileSync(path.join(__dirname, '..', 'studio', 'access.py'), 'utf8'));
+  const frames = /\nX_FRAME_OPTIONS = '([A-Z]+)'/.exec(fs.readFileSync(path.join(__dirname, '..', 'cptstudio', 'settings.py'), 'utf8'));
+  assert.ok(policy && frames, 'the site\'s refusal headers, read from its code');
+  const csp = [...policy[1].matchAll(/"([^"]*)"/g)].map(part => part[1]).join('');
+  assert.deepEqual([/frame-ancestors 'none'/.test(csp), frames[1]], [true, 'DENY'], 'every refusal forbids framing');
+  return (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body),
+    headers: { 'Content-Security-Policy': csp, 'X-Frame-Options': frames[1], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+}
+
 // a digest of the first page's canvas: its pixels and its size
 const pixels = page => page.evaluate(async () => {
   const canvas = document.querySelector('.pdf-page[data-page="1"] canvas');
@@ -283,6 +296,83 @@ test('V9: another tab\'s sign-out wipes this tab\'s kept copies and ends its wor
   }
 });
 
+test('V9b, R2-18: a session ended elsewhere, or a password that must change, met first at the framed viewer\'s load - its refusal forbids framing, so the page asks the server - wipes the kept copies and the hints and ends the waiting worker; a refusal that is no end changes nothing', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const site = siteRefusal();
+  const ended = { error: 'signed_out', reason: 'idle' };
+  const change = { error: 'password_change_required' };
+  for (const [what, frame, session, status, leaves] of [
+    ['a session ended elsewhere', site(401, ended), site(401, ended), 401, '/login/'],
+    ['a password that must change', site(403, change), site(403, change), 403, '/account/'],
+    ['a 503, the session still open', site(503, { error: 'The service is not available right now.' }), null, 200, '']]) {
+    const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+      const { page, calls, errors } = await open(context);
+      await listed(page);
+      await openRow(page, READY);
+      assert.equal(await page.evaluate(() => state.keptViews?.size ?? 0), 1, `${what}: a copy kept for a re-open`);
+      await page.waitForFunction(() => Boolean(state.pdfStandby?.thread));  // a worker waiting for the next document
+      // from here the document's view is refused, with the site's own headers; the session answered as `session` says
+      // (else by the preview, 200)
+      await context.route(url => url.pathname === `/api/encounters/${READY}/original` && url.search === '?view=1', route => route.fulfill(frame));
+      if (session) await context.route(url => url.pathname === '/api/session', route => route.fulfill(session));
+      await context.route(url => url.pathname === '/account/', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Account</title>' }));
+      let wiped = null;
+      await page.exposeFunction('reportWipe', value => { wiped = value; });
+      const hints = await page.evaluate(() => {
+        window.__copies = [...state.keptViews.values()].map(item => item.data);
+        window.__ended = false;
+        const thread = state.pdfStandby.thread;
+        const terminate = thread.terminate.bind(thread);
+        thread.terminate = () => { window.__ended = true; terminate(); };
+        // what this page can read of the frame's answer: a frame the browser blocked throws
+        window.__read = [];
+        document.addEventListener('load', event => {
+          if (event.target !== state.viewer?.frame) return;
+          try {
+            window.__read.push(String(event.target.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus));
+          } catch (error) {
+            window.__read.push(error.name);
+          }
+        }, true);
+        window.__left = () => ({ copies: window.__copies.length, zeroed: window.__copies.every(copy => copy.every(byte => byte === 0)),
+          kept: state.keptViews.size, hints: state.viewHints.size, waiting: Boolean(state.pdfStandby), ended: window.__ended, read: window.__read.slice() });
+        // at an end the page leaves at once: what is left is read as it wipes
+        const forget = window.forgetMemory;
+        window.forgetMemory = function wipeAndReport(...args) {
+          forget(...args);
+          window.reportWipe(window.__left());
+        };
+        return state.viewHints.size;
+      });
+      assert.ok(hints > 0, `${what}: the list's hints held`);
+      calls.length = 0;
+      // the library could not run (fallbackViewer): the browser's own viewer is framed, and its load is refused
+      await page.evaluate(() => fallbackViewer(state.viewer, 'library'));
+      if (leaves) {
+        await page.waitForURL(url => url.pathname === leaves);
+        for (let turn = 0; turn < 200 && wiped === null; turn += 1) await page.waitForTimeout(25);
+      } else {
+        await page.waitForFunction(() => window.__read.length > 0);
+        for (let turn = 0; turn < 200 && !calls.some(call => call.url === '/api/session'); turn += 1) await page.waitForTimeout(25);
+        await settled(calls.filter(call => call.url === '/api/session'));
+        await page.waitForTimeout(500);
+        wiped = await page.evaluate(() => window.__left());
+      }
+      await settled(calls.filter(call => call.url === '/api/session'));
+      assert.deepEqual(calls.filter(call => call.url === '/api/session').map(call => [call.method, call.poll, call.status]), [['GET', '1', status]],
+        `${what}: the session asked once, as a poll`);
+      assert.deepEqual(wiped, leaves ? { copies: 1, zeroed: true, kept: 0, hints: 0, waiting: false, ended: true, read: ['SecurityError'] }
+        : { copies: 1, zeroed: false, kept: 1, hints, waiting: true, ended: false, read: ['SecurityError'] },
+      `${what}: the frame's answer unreadable; ${leaves ? 'an end: overwritten, dropped, the hints gone, the waiting worker ended' : 'no end: all kept'}`);
+      // the blocked frame's own line, and the refused session's, are the only errors in the page
+      assert.deepEqual(errors.filter(error => !/^Framing '[^']*' violates the following Content Security Policy directive: "frame-ancestors 'none'"|^Failed to load resource/.test(error)), [],
+        `${what}: no other error in the page`);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('V10, R2-18: pagehide - the back-forward cache included - overwrites and drops the kept copies and the hints, and ends the waiting worker', { skip: SKIP, timeout: LIMIT_MS }, async () => {
   const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
@@ -306,6 +396,30 @@ test('V10, R2-18: pagehide - the back-forward cache included - overwrites and dr
     });
     assert.deepEqual(left, { copies: 1, zeroed: true, kept: 0, hints: 0, waiting: false, ended: true },
       'overwritten, dropped, the hints gone, the waiting worker ended');
+    assert.deepEqual(errors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('V10b, R2-18: on a page that saves data, where no worker is made ready ahead, pagehide still overwrites and drops the kept copies and the hints', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    await context.addInitScript(() => Object.defineProperty(Object.getPrototypeOf(navigator.connection), 'saveData', { get: () => true }));
+    const { page, errors } = await open(context);
+    await listed(page);
+    await openRow(page, READY);
+    assert.equal(await page.evaluate(() => state.keptViews?.size ?? 0), 1, 'a copy kept for a re-open');
+    await page.waitForTimeout(3000);  // past a drawn page's 600 ms and the idle wait: no worker is made ready ahead
+    const left = await page.evaluate(() => {
+      const copies = [...state.keptViews.values()].map(item => item.data);
+      const waiting = Boolean(state.pdfStandby);
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      return { saveData: navigator.connection.saveData, waiting, copies: copies.length,
+        zeroed: copies.every(copy => copy.every(byte => byte === 0)), kept: state.keptViews.size, hints: state.viewHints.size };
+    });
+    assert.deepEqual(left, { saveData: true, waiting: false, copies: 1, zeroed: true, kept: 0, hints: 0 },
+      'overwritten, dropped, the hints gone, with no worker made ready ahead');
     assert.deepEqual(errors, []);
   } finally {
     await context.close();
