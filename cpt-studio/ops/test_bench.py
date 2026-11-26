@@ -105,14 +105,17 @@ class BenchRefusesAnythingButTheThrowawayServerTests(unittest.TestCase):
                 self.assertIn('bench refused', done.stderr)
 
     def test_the_protocol_driver_refuses_the_same_settings(self):
+        # The tree named does not exist: were the refusal missing, the driver would try to run a round there and fail
+        # differently (and write its log first) - and nothing could reach any database.
         with tempfile.TemporaryDirectory() as out:
             for extra in ({'CPT_STUDIO_DB_PORT': '55451'}, {'CPT_STUDIO_TEST_DB_SUFFIX': ''},
                           {'CPT_STUDIO_CODING_MODE': 'live'}):
                 with self.subTest(extra=extra):
                     env = self._environ(**{'CPT_STUDIO_TEST_DB_SUFFIX': 'x', **extra})
                     done = subprocess.run([sys.executable, '-B', str(BENCH / 'bench_run.py'), '--tree',
-                                           f'A={APP.parent}', '--order', 'A:1', '--group', 'server', '--out', out,
-                                           '--ports', '9300-9349'],
+                                           'A=/nonexistent/bench-tree', '--order', 'A:1', '--group', 'server',
+                                           '--out', out, '--ports', '9300-9349', '--max-load', '999',
+                                           '--wait-minutes', '0'],
                                           env=env, capture_output=True, text=True, timeout=120)
                     self.assertEqual(done.returncode, 2, done.stderr[-600:])
                     self.assertIn('refused', done.stderr)
@@ -518,6 +521,13 @@ class RecordsJudgementTests(unittest.TestCase):
         self.assertFalse(RUN.judge_records(entries, late, 1, actions, lists)['inline_before_pixels']['ok'])
         unnamed = [dict(r, encounter_ids=[], count=2) if r['view'] == 'member.list' else r for r in rows]
         self.assertFalse(RUN.judge_records(entries, unnamed, 1, actions, lists)['list_ids']['ok'])
+        # one answer, its own row naming other ids, nothing counted as a repeat: only the row-to-answer comparison sees it
+        wrong = [dict(r, encounter_ids=[DOC_B, DOC_A]) if r['view'] == 'member.list' else r for r in rows]
+        alone = [e for e in entries if e['reqHeaders']['x-request-id'] != 'l2']
+        got = RUN.judge_records(alone, wrong, 0, actions, lists[:1])
+        self.assertTrue(got['equation']['ok'], got['equation'])
+        self.assertFalse(got['list_ids']['ok'])
+        self.assertEqual(got['list_ids']['mismatches'], [{'path': '/api/encounters', 'served': 2, 'named': 2}])
         self.assertFalse(RUN.judge_records(entries, rows, 1, actions, [])['list_ids']['ok'])  # nothing seen: no pass
         crowded = entries + [_entry('p2', 'GET', f'/api/encounters/{DOC_A}', poll=True)]
         polled = rows + [_row('p1', 'member.detail', [DOC_A], at=5000), _row('p2', 'member.detail', [DOC_A], at=9000)]
