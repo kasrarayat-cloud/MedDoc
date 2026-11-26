@@ -1295,29 +1295,28 @@ class Bench(TransactionTestCase):
                'detail': m.req('GET', f'/api/encounters/{doc}', api=True)['status'],
                'view': m.req('GET', f'/api/encounters/{doc}/original?view=1')['status']}
         boundary = 'benchboundary'
-        upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nX3 upload\r\n'
-                  f'--{boundary}\r\nContent-Disposition: form-data; name="service_date"\r\n\r\n2026-11-02\r\n'
-                  f'--{boundary}\r\nContent-Disposition: form-data; name="insurance"\r\n\r\nmedicare\r\n'
-                  f'--{boundary}\r\nContent-Disposition: form-data; name="synthetic_attested"\r\n\r\ntrue\r\n'
-                  f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="x3.txt"\r\n'
-                  f'Content-Type: text/plain\r\n\r\nSYNTHETIC NOTE - NOT A REAL PATIENT\r\n--{boundary}--\r\n').encode()
-        got['upload'] = m.req('POST', '/api/encounters', body=upload, api=True,
+        fields = {'title': 'X3 upload', 'service_date': '2026-11-02', 'insurance': 'medicare',
+                  'synthetic_attestation': 'yes', 'client_key': str(uuid.uuid4())}
+        upload = ''.join(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'
+                         for k, v in fields.items())
+        upload += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="x3.txt"\r\n'
+                   f'Content-Type: text/plain\r\n\r\nSYNTHETIC NOTE - NOT A REAL PATIENT\r\n--{boundary}--\r\n')
+        got['upload'] = m.req('POST', '/api/encounters', body=upload.encode(), api=True,
                               headers={'Content-Type': f'multipart/form-data; boundary={boundary}'})['status']
+        session = json.loads(m.req('GET', '/api/session', api=True)['body'] or b'{}')
         detail = json.loads(m.req('GET', f'/api/encounters/{doc}', api=True)['body'] or b'{}')
-        codes = [c for c in (detail.get('codes') or []) if c.get('status') == 'ready']
-        round_number = (detail.get('round') or {}).get('number') if isinstance(detail.get('round'), dict) else None
-        if codes:
-            got['decision'] = m.req('POST', f'/api/encounters/{doc}/decisions', api=True, headers={
-                'Content-Type': 'application/json'}, body=json.dumps({'line': codes[0].get('line'), 'action': 'approve',
-                                                                     'round': round_number,
-                                                                     'acknowledgement': True}))['status']
+        ready = [c for c in (detail.get('codes') or []) if c.get('status') == 'ready' and not c.get('decision')]
+        got['decision'] = m.req('POST', f'/api/encounters/{doc}/decisions', api=True, headers={
+            'Content-Type': 'application/json'}, body=json.dumps({
+                'round': (detail.get('round') or {}).get('number'), 'line': ready[0]['line'] if ready else None,
+                'code': ready[0]['code'] if ready else None, 'action': 'approve',
+                'acknowledgement': session.get('acknowledgement')}))['status']
         got['report'] = m.req('POST', f'/api/encounters/{doc}/reports', api=True, headers={
             'Content-Type': 'application/json'}, body=json.dumps({'kind': 'draft', 'fmt': 'pdf', 'round': 1}))['status']
         got['operator_page'] = get_with_host(theirs.base, '/ops/', 'admin.quillmd.com')['status']
         got['signout'] = m.req('POST', '/logout/')['status']
-        expected = {'shell': {200}, 'session': {200}, 'list': {200}, 'detail': {200}, 'view': {200},
-                    'upload': {200, 201, 400}, 'decision': {200, 201, 400, 409}, 'report': {200, 201},
-                    'operator_page': {200, 302, 404}, 'signout': {302, 303}}
+        expected = {'shell': {200}, 'session': {200}, 'list': {200}, 'detail': {200}, 'view': {200}, 'upload': {201},
+                    'decision': {201}, 'report': {200, 201}, 'operator_page': {302}, 'signout': {302, 303}}
         wrong = {k: v for k, v in got.items() if v not in expected.get(k, {v})}
         return not wrong and not any(v >= 500 for v in got.values()), {'statuses': got, 'wrong': wrong,
                                                                       'migrations_beyond_the_other': extra}

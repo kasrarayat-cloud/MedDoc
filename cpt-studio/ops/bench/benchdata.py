@@ -160,6 +160,16 @@ def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int
             d.rectangle(box(*MARKER), fill=0)
             for square in _squares(number):
                 d.rectangle(box(*square), fill=0)
+        if ocr:  # the printed words under the text layer, each at the place the layer gives it (Helvetica 10 pt)
+            from PIL import ImageFont
+            from reportlab.pdfbase.pdfmetrics import stringWidth
+            font = ImageFont.load_default(size=max(8, round(10 / 72 * dpi)))
+            for i, line in enumerate(ocr):
+                y_pt, x_pt = 700 - 12 * i, 56.0
+                for word in line.replace('{page}', str(page)).split(' '):
+                    d.text((round(w * x_pt / PAGE_W), round(h * (PAGE_H - y_pt) / PAGE_H)), word, font=font, fill=30,
+                           anchor='ls')
+                    x_pt += stringWidth(word + ' ', 'Helvetica', 10)
         buf = io.BytesIO()
         img.save(buf, 'JPEG', quality=quality)
         buf.seek(0)
@@ -380,7 +390,7 @@ def reconvert(enc, spec: dict):
         finished_at=now, view_pdf_storage_name=vname, view_pdf_sha256=vdigest)
 
 
-# --- the practices a round (or a rehearsal on a test instance) needs --------------------------------------------------------
+# --- the practices a round (or a rehearsal on a test instance) needs -----------------------------------------------
 
 SIZES = {'n50': 50, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
 RICH_IN = 'n100'  # the practice whose 100 documents include the RICH ones
@@ -388,7 +398,8 @@ RICH_IN = 'n100'  # the practice whose 100 documents include the RICH ones
 
 def seed(names, password) -> dict:
     """The practices ``names`` (SIZES' keys), each with one reviewer; the practice of 100 holds the RICH documents among
-    its 100. Ids are uuid5 of fixed names, so a test instance seeded with this function holds the same ids as a round."""
+    its 100. Ids are uuid5 of fixed names, so a test instance seeded with this function holds the same ids as a
+    round."""
     out = {}
     for name in sorted(names, key=lambda n: SIZES[n]):
         rich = len(RICH) if name == RICH_IN else 0
