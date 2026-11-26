@@ -1668,6 +1668,60 @@ class FieldShellTests(ReleaseOneCase):
                         begin[:-len('</w:r>')] + '<w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>'
                         + fc('separate') + t('TYPED') + fc('end'))
 
+    def test_a_removed_field_that_only_removed_fields_enclose_is_unwrapped_exactly_as_release_1(self):
+        """Integrated refutation round 1, coding-0 (I1-14): R2-30 keeps the words of a removed field in the result of a
+        field that STAYS. In a removed field's result with no kept field around it (7.4 shape 124's G10: INCLUDETEXT in
+        INCLUDETEXT's result) both are unwrapped exactly as release 1 unwraps them - no field is left to drop the words,
+        and release 1's package loses nothing there on 7.4 (lead/word74-d4, shape 124) - so the package is release 1's
+        byte for byte and C8 reuses a stored conversion of it (check_in_child False). Where a kept field stands in the
+        chain, every removed field inside it is shelled, and only those."""
+        inc = field(INC, 'INNER RESULT')
+        link = field(' LINK Excel.Sheet.12 "c:\\\\synthetic\\\\SECRET.xlsx" ', 'LINKED RESULT')
+        simple_inc = '<w:fldSimple w:instr=\' INCLUDETEXT "c:\\\\SECRET.docx" \'>' + t('INNER') + '</w:fldSimple>'
+        simple_link = '<w:fldSimple w:instr=" LINK Excel.Sheet.12 SECRET ">' + t('INNER') + '</w:fldSimple>'
+
+        def around(outer, inner):  # a complex field whose result holds ``inner``
+            return fc('begin') + instr(outer) + fc('separate') + t('OUT1 ') + inner + t(' OUT2') + fc('end')
+
+        def simple_around(outer, inner):  # a w:fldSimple whose result holds ``inner`` (``outer`` has no double quote)
+            return f'<w:fldSimple w:instr="{outer}">' + t('OUT1 ') + inner + t(' OUT2') + '</w:fldSimple>'
+
+        removed_only = {
+            'complex in complex (shape 124: INCLUDETEXT in INCLUDETEXT)': p(around(INC, inc)),
+            'a LINK in an INCLUDETEXT': p(around(INC, link)),
+            'simple in simple': p(simple_around(' INCLUDETEXT c:\\SECRET.docx ', simple_inc)),
+            'complex in simple (DDEAUTO)': p(simple_around(' DDEAUTO Excel SECRET ', inc)),
+            'simple in complex (LINK)': p(around(INC, simple_link)),
+            'three deep, all removed': p(around(INC, around(' LINK Excel.Sheet.12 SECRET ', inc))),
+            'an outer field over two paragraphs': p(fc('begin'), instr(INC), fc('separate'), t('OUT1 '))
+                                                  + p(inc, t(' OUT2'), fc('end')),
+        }
+        for name, body in removed_only.items():
+            with self.subTest(name):
+                data = package(BEFORE + body + AFTER)
+                self.assert_release_1_package(data)
+                out = docx_package._safe_package(data)[0]
+                self.assertEqual(shells_in(out), 0)
+                self.assertNotIn('SECRET', document_part(out))
+                ElementTree.fromstring(document_part(out).encode('utf-8'))
+                self.assertIs(docx_package.check_in_child(data), False, 'C8 reuses a stored conversion of it')
+        kept = {
+            # the same pair in a kept IF's result: both shelled
+            'in a kept IF': (p(around(' IF 1 = 1 "a" "b" ', around(INC, inc))), 2),
+            # in a kept REF w:fldSimple's result: both shelled
+            'in a kept REF w:fldSimple': (p(simple_around(' REF Bm \\h ', around(INC, simple_link))), 2),
+            # a kept IF between two removed fields: the one inside it shelled, the outer one unwrapped as release 1
+            'a kept IF between two removed fields': (p(around(INC, around(' IF 1 = 1 "a" "b" ', link))), 1),
+        }
+        for name, (body, shells) in kept.items():
+            with self.subTest(name):
+                data = package(BEFORE + body + AFTER)
+                out = docx_package._safe_package(data)[0]
+                self.assertEqual(shells_in(out), shells)
+                self.assertNotIn('SECRET', document_part(out))
+                self.assertNotEqual(out, self.release_1()._safe_package(data)[0])
+                self.assertIs(docx_package.check_in_child(data), True, 'C8 converts it afresh, so the QUOTE applies')
+
     def test_an_instruction_over_two_paragraphs_keeps_both_paragraphs_and_their_properties(self):
         def paragraphs(inner):
             return BEFORE + inner + AFTER

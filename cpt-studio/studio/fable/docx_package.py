@@ -56,7 +56,7 @@ before it waits on it, so the parent's finally kills that group as well as the c
   inserted document, a zip entry a Unicode Path field names otherwise than its stored name, so the part checked here
   could be another than the part LibreOffice opens (refutation round 2, loss[6] (b)). An altChunk that holds nothing
   (no r:id, or one naming no relationship, a missing part or an empty part) is removed as release 1 removes it,
-  counted in 'chunks'. A removed field in another field's result, and in no field's instruction, stays a
+  counted in 'chunks'. A removed field in the result of a field that stays, and in no field's instruction, stays a
   field whose instruction is QUOTE - a type LibreOffice shows by its stored result - unless it is an INCLUDEPICTURE
   whose stored result shows no text, symbol or mark: a picture alone (R2-30, refutation rounds 1 and 2). Everything
   else is edited as release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's
@@ -351,10 +351,10 @@ def safe_package(data: bytes) -> bytes:
       ContentNotShown, and nothing of it is rebuilt or converted - an imported document that holds content or reaches
       outside and every subdocument (R2-28), an object or a control that would leave no picture (R2-29), a field whose
       stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
-      another field's result stays a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a picture
-      alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no QUOTE
-      gives exactly release 1's package, apart from the deviation the module's docstring names (refutation round 1's
-      loss[6]; its loss[2] deviation is refused by the canonical package gate).
+      the result of a field that stays remains a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a
+      picture alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no
+      QUOTE gives exactly release 1's package, apart from the deviation the module's docstring names (refutation round
+      1's loss[6]; its loss[2] deviation is refused by the canonical package gate).
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -1344,9 +1344,16 @@ class _PartReader:
 
     # release 2
     def _in_a_result(self) -> bool:
-        """Whether what just ended lies in another field's result (asked while no field's instruction is open): an open
-        complex field, or a w:fldSimple around it (R2-30)."""
-        return bool(self.fields) or any(_ROLES.get(element[_NAME]) == _FLDSIMPLE for element in self.stack)
+        """Whether what just ended lies in the result of a field that stays (asked while no field's instruction is open,
+        so every open complex field is past its separate mark and its type is read): an open complex field that is not
+        removed, or a w:fldSimple around it whose instruction is no removed type (R2-30). A removed field that only
+        removed fields enclose is unwrapped as release 1 unwraps it - once they are unwrapped too, no field is left to
+        drop its words - so a package that needs no QUOTE stays release 1's (integrated refutation round 1, coding-0:
+        7.4 shape 124, INCLUDETEXT in INCLUDETEXT's result). An encloser whose removed type only a later reading of the
+        part completes reads as kept here, so a shell made in that reading stays: never more than before."""
+        return any(not field.removed() for field in self.fields) or any(
+            _ROLES.get(element[_NAME]) == _FLDSIMPLE and not _removed_type(element[_INSTRUCTION])
+            for element in self.stack)
 
     def _removed_in_an_instruction(self, picture):
         """A removed field just went as release 1 removes it. Inside another field's instruction (release 1's re-read),
@@ -1443,10 +1450,10 @@ class _PartReader:
             self._edit(at, high)
 
     def _shell_field(self, field):
-        """R2-30: a removed complex field in another field's result stays a field, of a type LibreOffice shows by its
-        stored result: its begin mark is followed by the instruction ' QUOTE ' (an instrText of the begin mark's own
-        prefix, with any namespaces the mark declares), what stood between the begin and separate marks goes, and the
-        separate mark, the result and the end mark stay. The count stays under fields."""
+        """R2-30: a removed complex field in the result of a field that stays remains a field, of a type LibreOffice
+        shows by its stored result: its begin mark is followed by the instruction ' QUOTE ' (an instrText of the begin
+        mark's own prefix, with any namespaces the mark declares), what stood between the begin and separate marks goes,
+        and the separate mark, the result and the end mark stay. The count stays under fields."""
         separate, separate_chain = field.separates[0]
         start, end = self._span(field.begin)
         prefix = _TAG_NAME.match(self.raw, start).group(1).rpartition(b':')[0]
@@ -1460,8 +1467,8 @@ class _PartReader:
         self.shells += 1
 
     def _shell_simple_field(self, element):
-        """R2-30: a removed w:fldSimple in another field's result stays a field: every instr attribute of its start tag
-        reads ' QUOTE ', its w:fldData goes (as release 1's unwrapping takes it), its runs stay."""
+        """R2-30: a removed w:fldSimple in the result of a field that stays remains a field: every instr attribute of
+        its start tag reads ' QUOTE ', its w:fldData goes (as release 1's unwrapping takes it), its runs stay."""
         start_end = self._tag_end(element[_AT])
         values = [(match.start(2), match.end(2)) for match in _ATTRIBUTE.finditer(
             self.raw, _TAG_NAME.match(self.raw, element[_AT]).end(), start_end)
