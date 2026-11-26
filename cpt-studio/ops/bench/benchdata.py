@@ -131,7 +131,9 @@ def _paper_table() -> list[int]:
 def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int = 62, ocr: tuple = ()) -> bytes:
     """An image-only PDF (a scan): JPEG pages of noisy paper with bars of ink, the marker block and the barcode drawn
     into page 1's pixels. The walk's scan only: ``ocr`` lines are laid on every page as invisible text (render mode 3),
-    the text layer scanning software adds, so its quotes can be found; without it the bytes are the same as ever."""
+    the text layer scanning software adds, over word-shaped blocks of ink in the image, so its quotes can be found and
+    their marks lie on ink (walk.cjs requires 5% of a mark's pixels to be ink: thin glyphs drawn at 100 dpi did not
+    reach it in the viewer); without ``ocr`` the bytes are the same as ever."""
     from PIL import Image, ImageDraw
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.utils import ImageReader
@@ -160,15 +162,14 @@ def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int
             d.rectangle(box(*MARKER), fill=0)
             for square in _squares(number):
                 d.rectangle(box(*square), fill=0)
-        if ocr:  # the printed words under the text layer, each at the place the layer gives it (Helvetica 10 pt)
-            from PIL import ImageFont
+        if ocr:  # ink under the text layer: a word-shaped block where the layer puts each word (Helvetica 10 pt)
             from reportlab.pdfbase.pdfmetrics import stringWidth
-            font = ImageFont.load_default(size=max(8, round(10 / 72 * dpi)))
             for i, line in enumerate(ocr):
                 y_pt, x_pt = 700 - 12 * i, 56.0
                 for word in line.replace('{page}', str(page)).split(' '):
-                    d.text((round(w * x_pt / PAGE_W), round(h * (PAGE_H - y_pt) / PAGE_H)), word, font=font, fill=30,
-                           anchor='ls')
+                    end = x_pt + stringWidth(word, 'Helvetica', 10)
+                    d.rectangle([round(w * x_pt / PAGE_W), round(h * (PAGE_H - y_pt - 7) / PAGE_H),
+                                 round(w * end / PAGE_W), round(h * (PAGE_H - y_pt + 2) / PAGE_H)], fill=30)
                     x_pt += stringWidth(word + ' ', 'Helvetica', 10)
         buf = io.BytesIO()
         img.save(buf, 'JPEG', quality=quality)
