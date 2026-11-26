@@ -63,6 +63,9 @@ MIDDLEWARE = [
     # release 1 (RELEASE-1-SPEC 3.2; B3, B4, B5, A2): the session policy, which reads the signed-in user
     'studio.sessions.SessionPolicyMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # integrated refutation round 1, avail-0: a database that cannot be reached answers 503 (studio.db_unavailable, with
+    # the urlconfs' handler500 for what another middleware raises)
+    'studio.db_unavailable.DatabaseUnavailableMiddleware',
 ]
 ROOT_URLCONF = 'cptstudio.urls'
 TEMPLATES = [{
@@ -88,10 +91,11 @@ DATABASES = {'default': {
     'HOST': _env('DB_HOST', '127.0.0.1'),
     'PORT': _env('DB_PORT', '55451'),
     # The web keeps each process's one connection for an hour and checks it at the first query of each request, so a
-    # click after a pause opens no connection inside the request, and a connection the database ended is replaced, never
-    # answered with an error (R2-7). An hour, not for ever, so a changed database setting that needs a new session
-    # reaches the web within it. The worker and the commands keep 60 s and no check: a worker thread's connection holds
-    # its provider slot's session lock across a send (studio.jobs._take_slot).
+    # click after a pause opens no connection inside the request, and a connection the database ended between requests
+    # is replaced, never answered with an error (R2-7); one lost while a request runs, or a database that refuses
+    # connections, answers 503 (studio.db_unavailable). An hour, not for ever, so a changed database setting that needs
+    # a new session reaches the web within it. The worker and the commands keep 60 s and no check: a worker thread's
+    # connection holds its provider slot's session lock across a send (studio.jobs._take_slot).
     'CONN_MAX_AGE': 3600 if _web_process else 60,
     'CONN_HEALTH_CHECKS': _web_process,
     # The web waits at most 5 s for a new connection (refutation round 1 of R2-7), so a database that accepts and never

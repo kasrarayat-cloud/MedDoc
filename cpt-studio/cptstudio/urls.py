@@ -2,6 +2,10 @@ from django.urls import path
 
 from studio import api, bundle_api, console, operator, second_factor_views, views
 
+# integrated refutation round 1, avail-0: a database that cannot be reached answers 503 wherever the request was, the
+# middleware's own frames included (studio.db_unavailable); any other error is Django's own 500
+handler500 = 'studio.db_unavailable.server_error'
+
 urlpatterns = [
     path('', views.index, name='index'),
     path('health/', views.health, name='health'),

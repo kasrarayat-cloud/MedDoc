@@ -42,6 +42,11 @@ reload by the client header (below) before any of these is read, so it never rea
   its list and cursor (never search words); the same page read again within a minute by the same sign-in, showing the
   same documents in the same order, is counted on that record. A re-open of the in-page view answered `304` is recorded
   too, as shown from the page's memory (R2-15).
+- **A database that cannot be reached** (integrated refutation round 1, avail-0): a connection the database ended while
+  the request ran, or one it refuses (a restart), answers `503` with `Retry-After: 5` and nothing of the request -
+  under `/api/` `{"error": "This could not be recorded, so nothing was shown.", "details": {}}`, elsewhere a plain
+  error page (`studio/db_unavailable.py`). Any other server error is `500`, as before. A connection the database ended
+  between requests is replaced at the next request's first query and answers as usual (R2-7).
 - **Limits** (release 1, C5): 10 reports made per member in 10 minutes and 60 per practice in an hour, 30 uploads per
   member in 10 minutes. Only a report actually made counts. The stored copy answered again (200) counts toward no limit
   and is never refused by one, and neither is a refused request. Over a limit, any of these calls answers

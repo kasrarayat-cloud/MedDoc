@@ -201,8 +201,11 @@ class NothingHappensAtImportTests(SimpleTestCase):
 
 GUNICORN_CONF = Path(settings.BASE_DIR) / 'deploy' / 'gunicorn.conf.py'
 # The loopback ports a real gunicorn of this module may listen on (this host's lane W range; never the live site's 9150
-# or 9151): each is checked free first, and one taken meanwhile is skipped.
-GUNICORN_TEST_PORTS = range(9400, 9450)
+# or 9151): each is checked free first, and one taken meanwhile is skipped. CPT_STUDIO_GUNICORN_PORTS ('first-last')
+# keeps a run to another range of this host's.
+_LANE_W_PORTS_ASKED = re.fullmatch(r'(\d+)-(\d+)', os.environ.get('CPT_STUDIO_GUNICORN_PORTS', ''))
+GUNICORN_TEST_PORTS = (range(int(_LANE_W_PORTS_ASKED.group(1)), int(_LANE_W_PORTS_ASKED.group(2)) + 1)
+                       if _LANE_W_PORTS_ASKED else range(9400, 9450))
 # The line a step prints for lane W's probes, beside the tripwire probe's own PROBE line
 LANE_W_REPORT = 'LANE-W '
 # Release 1's access line (RELEASE-1-SPEC A2), which release 2 keeps byte for byte
@@ -680,6 +683,114 @@ class RealGunicornTests(SimpleTestCase):
         started = time.monotonic()
         self.assertAllAnswered(server.many(4, 1), 4, status=503)
         self.assertLess(time.monotonic() - started, 30)
+        self.assertEqual(server.stop(), 0)
+
+    def test_a_database_lost_while_requests_run_or_restarted_answers_503_never_500(self):
+        # integrated refutation round 1, avail-0 (I1-15; studio.db_unavailable): a member signed in at a real web, four
+        # clients reading the API's session, list, document and view at once. The database ends the web's connections
+        # five times while requests run, then refuses every connection for 2.5 s, as a restart does - faults made on the
+        # database itself, on this run's own test database and this web's own sessions (its application name) alone.
+        # Every answer is 200 or 503 (Django's HTML 500 before), a 503 the API's fail-closed JSON with Retry-After, and
+        # the web answers 200 again once the database does
+        from studio import client_contract, read_audit
+        from studio.models import Membership
+        from tests.support import coding as f
+        ws = f.workspace('Synthetic restart practice')
+        member = f.member(ws, role=Membership.OWNER)
+        document = f.encounter(ws, member, title='Synthetic restart note')
+        f.upload(document, member)
+        server = ReleaseGunicorn(self).start()
+        self.assertEqual(len(server.until_sessions(4)), 4)
+
+        def call(method, path, body=None, headers=None):
+            client = http.client.HTTPConnection('127.0.0.1', server.port, timeout=60)
+            try:
+                client.request(method, path, body=body, headers={'Host': 'localhost', **(headers or {})})
+                answer = client.getresponse()
+                return answer.status, dict(answer.getheaders()), answer.read()
+            finally:
+                client.close()
+        _, headers, _ = call('GET', '/login/')
+        csrf = re.search(r'cptstudio_csrf=([^;]+)', headers['Set-Cookie']).group(1)
+        form = urllib.parse.urlencode({'username': member.get_username(), 'password': 'synthetic-pass-123!',
+                                       'csrfmiddlewaretoken': csrf})
+        status, headers, _ = call('POST', '/login/', form, {'Content-Type': 'application/x-www-form-urlencoded',
+                                                             'Cookie': f'cptstudio_csrf={csrf}'})
+        self.assertEqual(status, 302)
+        cookie = f"cptstudio_session={re.search(r'cptstudio_session=([^;]+)', headers['Set-Cookie']).group(1)}"
+        asked = {'Cookie': cookie, client_contract.HEADER: client_contract.VERSION}
+        paths = ('/api/session', '/api/encounters', f'/api/encounters/{document.pk}',
+                 f'/api/encounters/{document.pk}/original?view=1')
+        self.assertEqual([call('GET', path, headers=asked)[0] for path in paths], [200, 200, 200, 200])
+        answers, lock, running = [], threading.Lock(), threading.Event()
+        running.set()
+
+        def client_loop(index):
+            turn = index
+            while running.is_set():
+                path = paths[turn % len(paths)]
+                turn += 1
+                try:
+                    status, headers, body = call('GET', path, headers=asked)
+                except (OSError, http.client.HTTPException) as error:
+                    status, headers, body = type(error).__name__, {}, b''
+                with lock:
+                    answers.append((time.monotonic(), path, status, headers.get('Content-Type', ''),
+                                    headers.get('Retry-After', ''), body))
+        clients = [threading.Thread(target=client_loop, args=(index,), name=f'lane-w-db-client-{index}', daemon=True)
+                   for index in range(4)]
+        # the restart is made from a session of the server's own maintenance database: PostgreSQL refuses to close a
+        # database to new connections from a session of that database
+        import psycopg
+        conf = connection.settings_dict
+        name = connection.ops.quote_name(conf['NAME'])
+        maintenance = psycopg.connect(host=conf['HOST'], port=conf['PORT'], user=conf['USER'],
+                                      password=conf['PASSWORD'], dbname='postgres', autocommit=True)
+        self.addCleanup(maintenance.close)
+
+        def end_the_webs_connections():
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT count(*) FILTER (WHERE pg_terminate_backend(pid)) FROM pg_stat_activity '
+                               'WHERE application_name = %s', [server.name])
+        outage = back = None
+        for client in clients:
+            client.start()
+        try:
+            time.sleep(0.5)
+            for _ in range(5):  # ended while requests run
+                end_the_webs_connections()
+                time.sleep(0.3)
+            maintenance.execute(f'ALTER DATABASE {name} ALLOW_CONNECTIONS false')  # a restart: refused for 2.5 s
+            outage = time.monotonic()
+            end_the_webs_connections()
+            time.sleep(2.5)
+        finally:
+            maintenance.execute(f'ALTER DATABASE {name} ALLOW_CONNECTIONS true')
+            back = time.monotonic()
+            time.sleep(1.5)
+            running.clear()
+            for client in clients:
+                client.join(60)
+        statuses = sorted({str(answer[2]) for answer in answers})
+        self.assertEqual(statuses, ['200', '503'], f'{len(answers)} answers')
+        in_the_outage = [answer for answer in answers if outage + 0.2 < answer[0] < back]
+        self.assertTrue(in_the_outage and all(answer[2] == 503 for answer in in_the_outage),
+                        [answer[:3] for answer in in_the_outage][:12])
+        # a 503 is the lost database's (studio.db_unavailable: Retry-After), or the read record's own fail-closed answer
+        # when the loss lands on the record's write (studio.api._recorded, as before): the same JSON, no PDF byte
+        kinds = {'Retry-After': 0, 'the record\'s own': 0}
+        for _, path, status, kind, retry, body in answers:
+            if status == 503:
+                self.assertIn(retry, ('5', ''), path)
+                self.assertEqual((kind, json.loads(body)),
+                                 ('application/json', {'error': read_audit.NOT_RECORDED, 'details': {}}), path)
+                self.assertNotIn(b'%PDF', body)
+                kinds['Retry-After' if retry else 'the record\'s own'] += 1
+        self.assertTrue(all(answer[4] == '5' for answer in in_the_outage), 'the outage: the lost database\'s 503 alone')
+        self.assertEqual([call('GET', path, headers=asked)[0] for path in paths], [200, 200, 200, 200])
+        print(f'{LANE_W_REPORT}I1-15 answers {len(answers)}: '
+              f'{json.dumps({key: sum(1 for answer in answers if str(answer[2]) == key) for key in statuses})}; '
+              f'in the outage {len(in_the_outage)} (503); 503 kinds {json.dumps(kinds)}', flush=True)
         self.assertEqual(server.stop(), 0)
 
 
