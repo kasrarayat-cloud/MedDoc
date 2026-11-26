@@ -81,7 +81,7 @@ CODE_KEYS = set(CONTRACT['types']['code']['keys'])
 SESSION_KEYS = set(CONTRACT['session']['keys'])
 ROW_KEYS = set(CONTRACT['types']['list_row']['keys'])
 STATES = set(CONTRACT['types']['state']['enum'])
-PDF_TYPE = 'application/pdf'  # a document block's media_type of a PDF upload
+LIST_ROW_PDF_MEDIA_TYPE = 'application/pdf'  # a document block's media_type of a PDF upload
 # What a customer surface never names (the build specification, section 0): vendor and model names, and the words the
 # customer copy never uses.
 FORBIDDEN = re.compile(r'(?<![a-z0-9])(?:corti|astra|fable|openai|anthropic|claude|gemini|google)(?![a-z0-9])'
@@ -359,7 +359,7 @@ class CustomerFixtureTests(SimpleTestCase):
         for row in listing['encounters']:
             document = documents[row['id']]
             with self.subTest(row['id']):
-                self.assertIs(row['opens_pdf'], document['kind'] == 'upload' and document['media_type'] == PDF_TYPE
+                self.assertIs(row['opens_pdf'], document['kind'] == 'upload' and document['media_type'] == LIST_ROW_PDF_MEDIA_TYPE
                               and document['size'] <= 1024 * 1024)
         self.assertEqual({row['opens_pdf'] for row in listing['encounters']}, {True, False})
         self.assertEqual(_customer('encounters-empty.json'), {'encounters': [], 'next': None, 'total': 0})
