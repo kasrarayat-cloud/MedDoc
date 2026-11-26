@@ -26,7 +26,8 @@ from tests.support import rounds as r
 Round = models.CodingRound
 SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
 ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind', 'opens_pdf'}
-LIST_KEYS = {'encounters', 'next', 'total'}  # release 2 (R2-19, R2-24): one page, its next cursor, the list's total
+# release 2 (R2-19, R2-24): one page, its next cursor, the list's total, and the practice it was read in (I1-2)
+LIST_KEYS = {'encounters', 'next', 'total', 'workspace'}
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',
                   'activity'}

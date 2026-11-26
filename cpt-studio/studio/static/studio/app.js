@@ -1307,10 +1307,12 @@ function listPage(data) {
   const rows = whole ? data : data?.encounters;
   const next = whole ? null : data?.next ?? null;
   const total = whole ? null : data?.total ?? null;
-  if (!Array.isArray(rows) || (next !== null && typeof next !== 'string') || (total !== null && !(Number.isInteger(total) && total >= 0))) {
+  const workspace = whole ? null : data?.workspace ?? null;
+  if (!Array.isArray(rows) || (next !== null && typeof next !== 'string') || (total !== null && !(Number.isInteger(total) && total >= 0))
+    || (workspace !== null && typeof workspace !== 'string')) {
     throw new ApiError('The server answered with a document list this page cannot read.');
   }
-  return { rows: objects(rows), next: next || null, total };
+  return { rows: objects(rows), next: next || null, total, workspace };
 }
 
 // The list's description for `count` documents.
@@ -2128,7 +2130,7 @@ async function showList(name, serial) {
   }
   if (serial !== state.routeSerial || list !== state.list) return;
   const next = name === 'workspace' ? null : page.next;
-  Object.assign(list, { loaded: true, total: page.total,
+  Object.assign(list, { loaded: true, total: page.total, workspace: page.workspace,
     browse: { rows: page.rows, next, auto: 0, failed: false, problem: '',
       button: next !== null && typeof IntersectionObserver !== 'function' } });
   // C2: the search runs in the page up to LOCAL_SEARCH_MAX documents, else on the server
@@ -2142,6 +2144,15 @@ async function showList(name, serial) {
   watchListEnd(list);
   drawListMore();
   applySearch();
+}
+
+// I1-2: a later page or a search of another practice than the list's first page (the member's access changed meanwhile)
+// is never drawn: the session is read again and the route drawn afresh.
+function otherPractice(list, page) {
+  if (page.workspace === list.workspace) return false;
+  loadSession();
+  route();
+  return true;
 }
 
 function closeList() {
@@ -2211,7 +2222,7 @@ async function loadMore(list, why) {
     failure = error.message;
   }
   list.loading = false;
-  if (list !== state.list) return;
+  if (list !== state.list || (page && otherPractice(list, page))) return;
   const shown = source === (list.found || list.browse);
   if (page) {
     // a page with no rows, or naming the same place again, is the end
@@ -2347,7 +2358,7 @@ async function searchDocuments(list) {
     failure = error.message;
   }
   list.searching = false;
-  if (list !== state.list) return;
+  if (list !== state.list || (page && otherPractice(list, page))) return;
   const due = list.again;
   list.again = false;
   if (list.query !== query) {

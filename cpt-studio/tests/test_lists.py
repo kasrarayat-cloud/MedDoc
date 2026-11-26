@@ -204,7 +204,7 @@ class PagedListTests(ListCase):
 
     def test_no_documents(self):
         self.check(0)
-        self.assertEqual(self.page(), {'encounters': [], 'next': None, 'total': 0})
+        self.assertEqual(self.page(), {'encounters': [], 'next': None, 'total': 0, 'workspace': str(self.ws.pk)})
 
     def test_one_document(self):
         self.check(1)
@@ -787,7 +787,8 @@ class SearchTests(SearchCase):
     def test_the_answer_is_the_lists_shape_newest_first_with_no_total(self):
         made = mixed_practice(self.ws, self.reviewer, 30)
         answer = self.search('list note')
-        self.assertEqual(set(answer), {'encounters', 'next', 'total'})
+        self.assertEqual(set(answer), {'encounters', 'next', 'total', 'workspace'})
+        self.assertEqual(answer['workspace'], str(self.ws.pk))
         self.assertEqual((answer['next'], answer['total']), (None, None))
         joined, _pages = self.walk()
         self.assertEqual(answer['encounters'], joined)  # every row holds the words: the whole list, rows identical
@@ -882,7 +883,8 @@ class SearchTests(SearchCase):
         f.encounter(self.ws, self.reviewer, title='Synthetic note')
         for words in ('n' * 241, 'note\x00', 'note\ud800', '\ud800'):
             with self.subTest(words=repr(words)), mock.patch.object(customer, 'search_page') as asked:
-                self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None,
+                                                       'workspace': str(self.ws.pk)})
                 asked.assert_not_called()
         with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
             self.assertEqual(self.search('n' * 240)['encounters'], [])  # at the bound: searched
@@ -914,7 +916,8 @@ class SearchTests(SearchCase):
             with self.subTest(words=f'{len(words)} characters'):
                 self.assertEqual(customer.search_length(words), length)
                 with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
-                    self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                    self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None,
+                                                           'workspace': str(self.ws.pk)})
                 self.assertEqual(asked.called, read)
         membership = membership_of(self.reviewer)  # search_page's own guard counts the same way
         self.assertEqual(searched(membership, 'i\u0307' * 121), [str(dotted.pk)])
@@ -974,6 +977,48 @@ class SearchTests(SearchCase):
         built.assert_not_called()  # refused unread: the refused search never ran
         self.assertEqual((answer.status_code, answer.json()['error'], listed.status_code), (429, 'rate_limited', 200))
         self.assertEqual(models.SecurityEvent.objects.filter(event='list.rate_limited').count(), 1)
+
+
+class PracticeNamedTests(SearchCase):
+    """Integrated refutation round 1, exact-0 (I1-2): a member active in two practices - the oldest active membership
+    is the one read, on every request - whose access to it is turned off between a list's pages, or a search's. Every
+    page and search answer names the practice it was read in, as its member.list record does, so the page can tell
+    another practice's page from its own list's (the page then draws none of it: app.js, I1-2)."""
+
+    def setUp(self):
+        super().setUp()
+        models.Membership.objects.create(user=self.reviewer, workspace=self.other_ws, role=models.Membership.REVIEWER)
+        self.ids = {'A': set(), 'B': set()}
+        for _ in range(60):  # interleaved by created_at, so A's cursor has B's older rows to page to
+            for name, ws, title in (('A', self.ws, 'Synthetic list note'), ('B', self.other_ws, 'Synthetic B list note')):
+                self.ids[name] |= {str(enc.pk) for enc in mixed_practice(ws, self.reviewer, 1, title=title)}
+        self.names = {'A': str(self.ws.pk), 'B': str(self.other_ws.pk)}
+
+    def access_to_a(self, active):
+        models.Membership.objects.filter(user=self.reviewer, workspace=self.ws).update(active=active)
+
+    def read_in(self, answer, practice, *, rows_given=True):
+        """The answer names ``practice``, its rows are that practice's, and its record names both."""
+        record = models.AccessRecord.objects.filter(view=read_audit.MEMBER_LIST).latest('created_at')
+        rows = {row['id'] for row in answer['encounters']}
+        self.assertEqual(answer['workspace'], self.names[practice])
+        self.assertTrue((rows or not rows_given) and rows <= self.ids[practice], practice)
+        self.assertEqual((str(record.workspace_id), set(record.encounter_ids)), (self.names[practice], rows))
+
+    def test_each_page_and_search_names_the_practice_it_was_read_in_across_an_access_change(self):
+        first = self.page('documents')
+        self.read_in(first, 'A')
+        self.access_to_a(False)  # A's owner turns the member's access to A off: B is read now, with A's cursor
+        self.read_in(self.page('documents', before=first['next']), 'B')
+        self.read_in(self.search('list note'), 'B')  # a first search, too
+        self.access_to_a(True)  # and back: the oldest active membership, A, is read again
+        found = self.search('list note')
+        self.read_in(found, 'A')
+        self.access_to_a(False)
+        self.read_in(self.search('list note', before=found['next']), 'B')
+        self.read_in(self.page('queue'), 'B', rows_given=False)
+        recent = self.page('recent')
+        self.assertEqual(recent['workspace'], self.names['B'])
 
 
 @override_settings(STORAGES=PLAIN_STATIC)

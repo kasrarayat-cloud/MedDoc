@@ -512,8 +512,8 @@ test('the fixtures cover every state the page draws, and the list matches them, 
   for (const name of ['session.json', 'session-agent.json']) {
     assert.deepEqual(fixture(name).counts, { documents: rows.length, queue: rows.filter(app.inQueue).length }, name);
   }
-  // R2-19: a list answer carries next and total
-  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [], next: null, total: 0 });
+  // R2-19: a list answer carries next and total, and (I1-2) the practice it was read in, the session's
+  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [], next: null, total: 0, workspace: fixture('session.json').workspace.id });
 });
 
 test('every quote in the fixtures is the synthetic document\'s own text, on the page it names', () => {
@@ -7028,13 +7028,14 @@ test('R2-22: the list addresses; listPage reads either server\'s answer and refu
   assert.deepEqual(app.LIST_ADDRESS, { workspace: '/api/encounters?list=recent', documents: '/api/encounters?list=documents', queue: '/api/encounters?list=queue' });
   assert.deepEqual([app.SEARCH_URL, app.SEARCH_PAUSE_MS, app.AUTO_PAGES, app.LOCAL_SEARCH_MAX, app.MORE_TEXT], ['/api/encounters/search', 300, 3, 200, 'Show more documents']);
   const rows = fixture('encounters.json').encounters;
-  assert.deepEqual(app.listPage({ encounters: rows }), { rows, next: null, total: null }, 'release 1\'s answer: one whole page');
-  assert.deepEqual(app.listPage(rows), { rows, next: null, total: null }, 'a bare list too');
-  assert.deepEqual(app.listPage({ encounters: rows.slice(0, 2), next: 'c2', total: 12 }), { rows: rows.slice(0, 2), next: 'c2', total: 12 });
-  assert.deepEqual(app.listPage({ encounters: [], next: null, total: 0 }), { rows: [], next: null, total: 0 });
+  assert.deepEqual(app.listPage({ encounters: rows }), { rows, next: null, total: null, workspace: null }, 'release 1\'s answer: one whole page');
+  assert.deepEqual(app.listPage(rows), { rows, next: null, total: null, workspace: null }, 'a bare list too');
+  assert.deepEqual(app.listPage({ encounters: rows.slice(0, 2), next: 'c2', total: 12, workspace: 'w-a' }), { rows: rows.slice(0, 2), next: 'c2', total: 12, workspace: 'w-a' },
+    'the practice it was read in (I1-2)');
+  assert.deepEqual(app.listPage({ encounters: [], next: null, total: 0 }), { rows: [], next: null, total: 0, workspace: null });
   assert.deepEqual(app.listPage({ encounters: [null, 7, 'x', rows[0]] }).rows, [rows[0]], 'a row that is no object is never drawn');
   for (const bad of [null, 7, {}, { encounters: {} }, { encounters: [], next: 7 }, { encounters: [], next: {} }, { encounters: [], total: -1 },
-    { encounters: [], total: 1.5 }, { encounters: [], total: '12' }]) {
+    { encounters: [], total: 1.5 }, { encounters: [], total: '12' }, { encounters: [], workspace: 7 }, { encounters: [], workspace: {} }]) {
     assert.throws(() => app.listPage(bad), { message: 'The server answered with a document list this page cannot read.' }, JSON.stringify(bad));
   }
   assert.equal(app.listDescription('queue', 6), '6 documents wait on you: questions to answer, or codes to review or approve.');
@@ -7311,6 +7312,95 @@ test('I1-3 (rollback-0): after a switch-back, release 1\'s HTML 404 to a search 
       assert.deepEqual([app.state.outdated, element('#updateNotice').hidden], [outdated, !outdated], what);
     });
     app.state.outdated = false;
+  }
+});
+
+// Two practices a member is active in (exact-0): each answers as release 2's server does, naming the practice read, and
+// `active` is the member's active practice at each request (the oldest active membership: A until A's owner turns the
+// member's access to A off). A cursor is a position only, so A's cursor read in B pages B's rows.
+function twoPractices(count) {
+  const rows = { A: listRowsOf(count) };
+  rows.B = rows.A.map(row => ({ ...row, id: row.id.replace(/^f0/, 'b0'), title: row.title.replace('Synthetic', 'Synthetic B') }));
+  const ids = { A: 'fa000000-0000-4000-8000-0000000000a1', B: 'fa000000-0000-4000-8000-0000000000b1' };
+  const servers = { A: pagedServer(rows.A), B: pagedServer(rows.B) };
+  const practice = { active: 'A', rows, ids };
+  practice.answer = (method, url, body) => {
+    const session = fixture('session.json');
+    if (url === '/api/session') return { status: 200, body: { ...session, workspace: { ...session.workspace, id: ids[practice.active] } } };
+    const reply = servers[practice.active](method, url, body);
+    return reply.status === 200 ? { ...reply, body: { ...reply.body, workspace: ids[practice.active] } } : reply;
+  };
+  return practice;
+}
+
+test('I1-2 (exact-0): a later page or a search that names another practice than the list\'s first page is never drawn - nothing appended or shown under it - and the route is read afresh, with the session', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ofB = row => row.href.startsWith('#doc/b0');
+  // later pages of the list (110 documents: two more pages, each loaded as its end comes near)
+  const later = twoPractices(110);
+  await withListPage(later.answer, async ({ calls, table, near }) => {
+    global.location.hash = '#documents';
+    app.state.routeSerial = 41;
+    await app.showList('documents', 41);
+    const first = app.state.list;
+    assert.deepEqual([first.workspace, table.rows.length, table.rows.some(ofB)], [later.ids.A, 50, false]);
+    const appended = [];
+    const append = table.append.bind(table);
+    table.append = content => { appended.push(...content.rows); append(content); };
+    near();  // a later page of A, named A: appended, as before
+    await settle(() => appended.length === 50);
+    assert.deepEqual(appended.map(row => row.href), later.rows.A.slice(50, 100).map(hrefOf), 'the list\'s own practice: appended');
+    assert.equal(app.state.list, first);
+    later.active = 'B';  // A's owner turns the member's access to A off: B is the member's active practice now
+    const at = calls.length;
+    near();
+    await settle(() => app.state.list !== first && app.state.list?.loaded);
+    assert.ok(calls.some(call => call.url === '/api/encounters?list=documents&before=c100'), 'the later page was asked, and answered by B');
+    assert.equal(appended.length, 50, 'none of B\'s rows appended to A\'s list');
+    assert.ok(calls.slice(at).some(call => call.url === '/api/session'), 'the session read again');
+    assert.equal(app.state.list.workspace, later.ids.B, 'the route drawn afresh: B\'s own list');
+    assert.deepEqual(table.rows.map(row => row.href), later.rows.B.slice(0, 50).map(hrefOf), 'B\'s first page, from its start');
+    assert.equal(first.observer.disconnected, true, 'A\'s list closed');
+  });
+  // a search (above 200 documents, on the server): its first page, then a later page of an answer A gave
+  for (const what of ['first', 'later']) {
+    const search = twoPractices(260);
+    await withListPage(search.answer, async ({ calls, table, type, near }) => {
+      global.location.hash = '#documents';
+      app.state.routeSerial = 42;
+      await app.showList('documents', 42);
+      const first = app.state.list;
+      assert.equal(first.local, false);
+      if (what === 'later') {  // A answers the search's first page; B its next
+        type('Synthetic');
+        t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+        await settle(() => first.found?.query === 'synthetic');
+        assert.equal(first.found.next, 'c50');
+      }
+      const drawn = [];
+      const own = Object.getOwnPropertyDescriptor(table, 'innerHTML');
+      Object.defineProperty(table, 'innerHTML', { get: own.get, set(value) { drawn.push(value); own.set.call(this, value); }, configurable: true });
+      const appended = [];
+      const append = table.append.bind(table);
+      table.append = content => { appended.push(...content.rows); append(content); };
+      search.active = 'B';
+      const at = calls.length;
+      if (what === 'first') {
+        type('polyp report 9');
+        t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      } else {
+        near();
+      }
+      await settle(() => app.state.list !== first && app.state.list?.loaded);
+      const asked = calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body);
+      assert.deepEqual(asked.at(-1), what === 'first' ? { text: 'polyp report 9', before: null } : { text: 'Synthetic', before: 'c50' }, what);
+      assert.deepEqual(appended, [], `${what}: none of B's rows appended`);
+      assert.equal(drawn.length, 1, `${what}: the table drawn once, by B's own list`);
+      assert.deepEqual(dom(drawn[0]).all('a.document-row').map(row => row.attr('href')), search.rows.B.slice(0, 50).map(hrefOf), `${what}: B's first page`);
+      assert.deepEqual([app.state.list.workspace, first.found?.rows?.some(row => row.id.startsWith('b0')) ?? false], [search.ids.B, false], what);
+      assert.ok(calls.slice(at).some(call => call.url === '/api/session'), `${what}: the session read again`);
+      app.state.list.observer?.disconnect();
+    });
   }
 });
 

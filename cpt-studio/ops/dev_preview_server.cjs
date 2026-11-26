@@ -517,12 +517,12 @@ async function handleApi(req, res, url) {
     if (!['documents', 'queue', 'recent'].includes(which)) return json(res, 400, { error: LIST_UNKNOWN });
     const rows = practiceRows(req);
     const [status, payload] = listAnswer(which === 'queue' ? rows.filter(row => QUEUE_STATES.has(row.state)) : rows, which, url.searchParams.get('before'));
-    return json(res, status, payload);
+    return json(res, status, status === 200 ? { ...payload, workspace: session.workspace.id } : payload);  // the practice read (I1-2)
   }
   if (route === '/api/encounters/search') {
     if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
     const [status, payload] = searchAnswer(practiceRows(req), parseJson(await readBody(req)));
-    return json(res, status, payload);
+    return json(res, status, status === 200 ? { ...payload, workspace: session.workspace.id } : payload);
   }
   if (method === 'POST' && route === '/api/encounters') {
     const body = (await readBody(req)).toString('latin1');

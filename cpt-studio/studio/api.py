@@ -313,6 +313,14 @@ def _later_page_counted(request, membership):
              workspace_id=membership.workspace_id)
 
 
+def _page_in_practice(page, membership) -> dict:
+    """A list or search page naming the practice it was read in (integrated refutation round 1, exact-0): the caller's
+    active practice is read on every request, so after the member's access changes a later page or a search may be
+    another practice's; the page keeps its first page's practice and draws none of another's (app.js). The membership is
+    already read: no statement."""
+    return {**page, 'workspace': str(membership.workspace_id)}
+
+
 @api_view
 @read_audit.phi_read(read_audit.MEMBER_LIST)
 def encounters(request):
@@ -331,7 +339,7 @@ def encounters(request):
         shown = [row['id'] for row in page['encounters']]
         _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
                   count=len(shown), as_of=as_of, filters={'list': which, 'before': before})
-        return JsonResponse(page)
+        return JsonResponse(_page_in_practice(page, membership))
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -408,7 +416,7 @@ def search_encounters(request):
     shown = [row['id'] for row in page['encounters']]
     _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
               count=len(shown), as_of=as_of, filters={'list': 'search', 'before': before})
-    return JsonResponse(page)
+    return JsonResponse(_page_in_practice(page, membership))
 
 
 @require_GET

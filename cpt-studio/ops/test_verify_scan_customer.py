@@ -51,6 +51,9 @@ DECISION_IDS = 'id' in sc.CONTRACT['types']['decision']['keys']
 DECISION_ID = 'f6000000-0000-4000-8000-0000000000e1'
 
 
+WORKSPACE_ID = 'fa000000-0000-4000-8000-000000000002'  # session_json's practice, which its list pages name (I1-2)
+
+
 def session_json() -> dict:
     return {'user': {'id': 'fa000000-0000-4000-8000-000000000001', 'label': 'Review agent', 'initials': 'RA',
                      'actor_kind': 'agent'},
@@ -598,14 +601,15 @@ class StubSite:
             if request.path == '/api/encounters':  # the first page: release 2's next and total
                 more = bool(self.leak.get('two_pages'))
                 return self.send(request, 200, {'encounters': [row], 'next': NEXT_PAGE if more else None,
-                                                'total': 2 if more else 1})
+                                                'total': 2 if more else 1, 'workspace': WORKSPACE_ID})
             if self.leak.get('refused') and request.path != '/api/encounters':  # the list limit (R2-21): 429
                 self.leak['refused'] -= 1
                 wait = self.leak.get('retry_after', '1')
                 return self.send(request, 429, {'error': 'rate_limited', 'retry_after': 1},
                                  headers=[('Retry-After', wait)] if wait is not None else [])
             if self.leak.get('two_pages') and parse_qs(request.path.split('?', 1)[1]) == {'before': [NEXT_PAGE]}:
-                return self.send(request, 200, {'encounters': [{**row, 'id': SECOND_ID}], 'next': None, 'total': None})
+                return self.send(request, 200, {'encounters': [{**row, 'id': SECOND_ID}], 'next': None, 'total': None,
+                                                'workspace': WORKSPACE_ID})
             return self.send(request, 400, {'error': 'That part of the list could not be read. Open the list again.',
                                             'details': {}})
         ids = (self.id, SECOND_ID) if self.leak.get('two_pages') else (self.id,)

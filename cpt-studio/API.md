@@ -95,7 +95,8 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
 {"encounters": [{"id": "...", "title": "...", "state": "ready", "state_label": "Ready for approval",
                  "service_date": "2026-11-02", "insurance": "medicare", "created_at": "2026-11-20T08:00:00Z",
                  "kind": "upload|paste", "opens_pdf": true}],
- "next": "20261120T075959.123456Z~f5000000-0000-4000-8000-000000000001", "total": 117}
+ "next": "20261120T075959.123456Z~f5000000-0000-4000-8000-000000000001", "total": 117,
+ "workspace": "fa000000-0000-4000-8000-000000000002"}
 ```
 
 - `list`: `documents` (the default, with no `list`), `queue` (the documents waiting on a member: a state of
@@ -107,6 +108,11 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
   counted. It is `null` for `recent` and for a later page.
 - `opens_pdf` (R2-16) is true when the document's first stored file is a PDF of at most 1 MiB, so the page may ask for
   its view at the click. A Word document's converted view is not hinted.
+- `workspace` is the id of the practice the page was read in: the caller's active practice at that request (for a
+  member active in two practices, the oldest active membership), as the page's read record names it. After the
+  member's access changes, a later page or a search may be another practice's: the page keeps its first page's
+  `workspace` and never draws a page or a search naming another, but reads the session and the list afresh
+  (integrated refutation round 1, exact-0).
 - An unknown `list`, a parameter given twice, or a cursor this API did not write (or any cursor on `recent`) answers
   `400 {"error": "That list is not available."}` or `400 {"error": "That part of the list could not be read. Open the
   list again."}`, with nothing read or recorded. Another practice's cursor shows only the caller's own documents.
@@ -115,8 +121,9 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
 ### `POST /api/encounters/search` (any member)
 
 `{"text": "<the words>", "before": "<cursor>"|null}` -> one page of the practice's documents whose row, as the page
-draws it, holds the words (release 2, R2-20): the list's answer above, with `total` `null`. The page uses it for a
-Documents list of more than 200 documents and searches a smaller list itself, with release 1's rule.
+draws it, holds the words (release 2, R2-20): the list's answer above (its `workspace` included), with `total`
+`null`. The page uses it for a Documents list of more than 200 documents and searches a smaller list itself, with
+release 1's rule.
 
 - It is a POST, so the words never sit in an address, a query string or an access log; CSRF is required.
 - The row's text is the page's: the title (or "Untitled document"), the kind, the insurance when it is shown, the

@@ -99,7 +99,7 @@ def listing():
     # release 2 (R2-19, R2-24): one page of a list, its next cursor and the list's total; each row's opens_pdf
     return {'encounters': [{'id': 'e1', 'title': 'Synthetic', 'state': 'processing', 'state_label': 'Processing',
                             'service_date': None, 'insurance': 'unknown', 'created_at': '2026-11-20T10:00:00Z',
-                            'kind': 'paste', 'opens_pdf': False}], 'next': None, 'total': 1}
+                            'kind': 'paste', 'opens_pdf': False}], 'next': None, 'total': 1, 'workspace': 'w1'}
 
 
 def mutated(make, change):

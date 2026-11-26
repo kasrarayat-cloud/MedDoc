@@ -1229,10 +1229,13 @@ test('the encounter JSON is held to customer-contract.json: every key it lists, 
   }
   // the session and the list are held to theirs; a read is matched to its contract by its route
   // release 2 (R2-19, R2-24): a page of a list carries its next cursor and the list's total, each row its opens_pdf
-  assert.deepEqual(walk.shapeProblems({ encounters: [], next: null, total: 0 }, CONTRACT.list), []);
-  assert.deepEqual(walk.shapeProblems({ encounters: [], next: '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', total: null }, CONTRACT.list), []);
-  assert.deepEqual(walk.shapeProblems({ encounters: [] }, CONTRACT.list), ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)']);
-  assert.deepEqual(walk.shapeProblems({ encounters: [{ id: 'x' }], next: null, total: 1 }, CONTRACT.list).length, 8);
+  // and the practice it was read in (I1-2)
+  const workspace = 'fa000000-0000-4000-8000-000000000002';
+  assert.deepEqual(walk.shapeProblems({ encounters: [], next: null, total: 0, workspace }, CONTRACT.list), []);
+  assert.deepEqual(walk.shapeProblems({ encounters: [], next: '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', total: null, workspace }, CONTRACT.list), []);
+  assert.deepEqual(walk.shapeProblems({ encounters: [] }, CONTRACT.list), ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)',
+    '$.workspace: missing (the contract lists it)']);
+  assert.deepEqual(walk.shapeProblems({ encounters: [{ id: 'x' }], next: null, total: 1, workspace }, CONTRACT.list).length, 8);
   assert.deepEqual(['GET /api/session', 'GET /api/encounters (page)', 'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666',
     'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original', 'POST /api/encounters (page)'].map(walk.contractFor),
   ['session', 'list', 'encounter', null, null]);
