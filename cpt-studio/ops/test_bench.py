@@ -256,6 +256,15 @@ class BenchDriverResumeTests(unittest.TestCase):
         self.assertEqual(self.calls_made(), ['A-r1-server.json', 'A-r101-server.json'])  # round 1 itself never again
         self.assertIn('measured before, INVALID: load average 12.0', (self.out / 'protocol.log').read_text())
 
+    def test_a_round_with_a_failed_part_is_run_again(self):
+        """The driver's retry rule is the judge's own: a part error, not only a load above 8, is INVALID."""
+        (self.dir / 'tree' / 'cpt-studio' / 'manage.py').write_text(STUB_MANAGE.replace(
+            "'errors': []", "'errors': [{'part': 'server', 'error': 'x'}] if number == 1 else []"))
+        done = self.drive({'*': 1.0})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.calls_made(), ['A-r1-server.json', 'A-r101-server.json'])
+        self.assertIn("A:1 server INVALID (exit 0, load 1.0; a part failed", (self.out / 'protocol.log').read_text())
+
     def test_the_driver_fails_when_a_round_is_still_invalid_with_no_retries_left(self):
         done = self.drive({'*': 12.0}, retries=1)
         self.assertEqual(done.returncode, 3, done.stderr)  # protocol[0]: it exited 0 after 'no retries left'
@@ -285,6 +294,7 @@ class BenchRoundRecordTests(unittest.TestCase):
 
     def test_a_round_records_the_host_it_ran_on(self):
         """protocol[4]: a reboot separated release 1's rounds more than load did; each round names its boot."""
+        self.assertIn("'host': host_state(),", (BENCH / 'bench_run.py').read_text())
         host = RUN.host_state()
         self.assertRegex(host['boot_id'] or '', r'^[0-9a-f-]{36}$')
         self.assertGreater(host['uptime_s'], 0)
@@ -661,6 +671,24 @@ class BenchBrowserFlowPinsTests(unittest.TestCase):
         self.assertIn('the queue tab never became opaque', source)
         self.assertIn('the overview tab never became opaque', source)
 
+    def test_the_records_and_fail_closed_flows_plant_what_their_gates_need(self):
+        """records[8]: the records flow downloads three files; records[10]: a kept re-open's view is held 300 ms in the
+        records and fail-closed flows; records[9]: a document is held for the detail arm, and every painted list row
+        counts; records[4]: the page is read for the marker. (Their red on a planted fault: laneM/PROOFS.md.)"""
+        source = (BENCH / 'bench.cjs').read_text()
+        flow = source[source.index('async function flowRecords('):source.index('async function flowFailClosed(')]
+        self.assertIn("for (const [label, query] of [['text-2p', ''], ['word-3p', ''], "
+                      "['word-3p', '?format=original']])", flow)
+        self.assertIn("if (kept.has(label)) await proxyRule({ kind: 'delay',", flow)
+        self.assertIn('result.markerPage = [...new Set([...typed, ...(await pageMarkerHits(s, urls, DATA.marker))])];',
+                      flow)
+        closed = source[source.index('async function flowFailClosed('):source.index('async function flowLeftBehind(')]
+        self.assertIn("await openDoc(s, 'control-held', 'fail-warm'); await back(s);", closed)
+        self.assertIn("seen.detail_kept = await openNoWait(s, 'control-held');", closed)
+        self.assertIn("await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['text-2p'].id}", closed)
+        self.assertIn("const drawn = ['inline_kept', 'inline_fresh', 'detail_kept', 'detail']", closed)
+        self.assertIn('Math.max(window.__bench.cur.rowCount || 0,', closed)
+
     def test_a_warm_page_load_s_standby_requests_are_counted(self):
         """bench[8]: 'only on a cold browser cache' was never measured."""
         source = (BENCH / 'bench.cjs').read_text()
@@ -830,6 +858,16 @@ class JudgeTests(unittest.TestCase):
         JUDGE._and_merge(merged, {'left.no_store': {'ok': True}})
         self.assertFalse(merged['left.no_store']['ok'])
         self.assertEqual(len(merged['left.no_store']['by_file']), 2)
+
+    def test_a_file_needs_the_controls_only_where_its_open_part_ran_at_p0(self):
+        """Only the P0 open flow plants the controls; an open@P1 file without them is valid on its own, an open@P0 or
+        an all-profile open file without them is not (the driver keeps and retries by this rule)."""
+        bare = _round('B', 1, {'x': [1]}, controls=False)
+        self.assertEqual(JUDGE.attempt_reasons('B-r1-open@P1.json', bare, TABLE['controls']), [])
+        for name in ('B-r1-open@P0.json', 'B-r1-open.json'):
+            self.assertTrue(JUDGE.attempt_reasons(name, bare, TABLE['controls']), name)
+        self.assertEqual(JUDGE.attempt_reasons('B-r1-lists@P0.json', dict(bare, parts=['lists']), TABLE['controls']),
+                         [])
 
     def test_an_operation_that_never_finished_is_invalid(self):
         """judge[1], bench[0]: a tab that never became opaque left no sample, and the row still met its count."""
@@ -1142,6 +1180,11 @@ class JudgeTests(unittest.TestCase):
         self.assertNotEqual(moved['rows'][0]['gate'][0]['floor_factor'], once['rows'][0]['gate'][0]['floor_factor'])
         self.assertEqual(moved['derived']['rows']['k'], [7, 9, 8.0])
         self.assertEqual(moved['derived']['sha256'], JUDGE.derived_digest(moved['derived']['rows']))
+        stopped = json.loads(json.dumps(once))
+        stopped['rows'][1]['needs_a'] = False  # a row that stops reading A loses its old derived values
+        again = JUDGE.derive(stopped, first, second, 'pair 1')
+        self.assertFalse([k for k in ('a_recorded', 'a_spread', 'spread') if k in again['rows'][1]])
+        self.assertNotIn('k', again['derived']['rows'])
         base = JUDGE.base_table(once)
         self.assertIsNone(base['derived'])
         self.assertFalse([r for r in base['rows'] for k in ('a_recorded', 'a_spread', 'spread') if k in r])
@@ -1321,7 +1364,7 @@ class RecordsJudgementTests(unittest.TestCase):
         self.assertFalse(got['polls']['ok'], got['polls'])
         day = 86400000
         midnight = [dict(r, created_at=r['created_at'] + day - 7000) for r in rows]  # the open at 23:59:55 (UTC)
-        new_day = midnight + [_row('p1', 'member.detail', [DOC_A], at=2 * day + 6210)]  # its poll at 00:00:06.21
+        new_day = midnight + [_row('p1', 'member.detail', [DOC_A], at=day + 6210)]  # its poll at 00:00:06.21
         self.assertTrue(RUN.judge_records(crowded, new_day, 1, actions, lists, docs=DOCS)['polls']['ok'])  # by design
         refused = rows + [_row('p1', 'member.detail', [DOC_A], at=5000, outcome='refused')]
         self.assertTrue(RUN.judge_records(crowded, refused, 1, actions, lists, docs=DOCS)['polls']['ok'])
@@ -1578,6 +1621,34 @@ class BenchTreeReadingTests(unittest.TestCase):
 DERIVED_SHA256 = None  # the committed table's derived rows: set by the commit that derives a new A/A (D-R2-44)
 
 
+def _derived_problems(table: dict, pin) -> list:
+    """Why ``table`` is neither its base (no A-derived value anywhere, and no pin) nor exactly its own derivation (every
+    value recomputed from the inputs judge.py floors recorded, the inputs hashing to their sha256, that sha256 the
+    pinned one, every row that reads A among them)."""
+    derived = table.get('derived')
+    values = [(r['id'], k) for r in table['rows'] for k in JUDGE.DERIVED_ROW_KEYS if k in r]
+    values += [(r['id'], k) for r in table['rows'] for g in r.get('gate', []) for k in JUDGE.DERIVED_GATE_KEYS
+               if k in g]
+    if derived is None:
+        return ([f'a base table carries A-derived values: {values[:5]}'] if values else []) + \
+            ([f'a base table with a pinned derivation {pin}'] if pin is not None else [])
+    problems = []
+    if derived.get('sha256') != JUDGE.derived_digest(derived.get('rows') or {}):
+        problems.append('the recorded inputs do not hash to the sha256 the table names')
+    if derived.get('sha256') != pin:
+        problems.append(f'the derived inputs {str(derived.get("sha256"))[:16]} are not the pinned {str(pin)[:16]}')
+    again = JUDGE.base_table(table)
+    for row in again['rows']:
+        if row['id'] in derived.get('rows', {}):
+            JUDGE.derive_row(row, *derived['rows'][row['id']])
+    again['derived'] = derived
+    if again != table:
+        problems.append('a derived value is not the one its recorded inputs give')
+    if sorted(derived.get('rows', {})) != sorted(r['id'] for r in table['rows'] if JUDGE.reads_a(r)):
+        problems.append('the recorded inputs are not exactly the rows that read A')
+    return problems
+
+
 class AcceptanceTableTests(unittest.TestCase):
     """acceptance.json is section 8's table: every row whole, named once, and judged on something the bench measures."""
 
@@ -1623,24 +1694,29 @@ class AcceptanceTableTests(unittest.TestCase):
         exactly its own derivation: each derived value recomputed from the per-row inputs judge.py floors recorded,
         those inputs hashing to the sha256 the table names, and that sha256 the one pinned here, which only the
         commit deriving a new A/A pair moves."""
-        derived = self.table.get('derived')
         self.assertNotIn('spread', self.table)  # the old block of median spreads is gone
-        values = [(r['id'], k) for r in self.table['rows'] for k in JUDGE.DERIVED_ROW_KEYS if k in r]
-        values += [(r['id'], k) for r in self.table['rows'] for g in r.get('gate', []) for k in JUDGE.DERIVED_GATE_KEYS
-                   if k in g]
-        if derived is None:
-            self.assertEqual(values, [], 'a base table carries no A-derived value')
-            self.assertIsNone(DERIVED_SHA256)
-            return
-        self.assertEqual(derived['sha256'], JUDGE.derived_digest(derived['rows']))
-        self.assertEqual(derived['sha256'], DERIVED_SHA256, 'the derived rows moved without the pin that names them')
-        again = JUDGE.base_table(self.table)
-        for row in again['rows']:
-            if row['id'] in derived['rows']:
-                JUDGE.derive_row(row, *derived['rows'][row['id']])
-        again['derived'] = derived
-        self.assertEqual(again, self.table)
-        self.assertEqual(sorted(derived['rows']), sorted(r['id'] for r in self.table['rows'] if JUDGE.reads_a(r)))
+        self.assertEqual(_derived_problems(self.table, DERIVED_SHA256), [])
+
+    def test_a_derived_table_is_held_to_its_recorded_inputs(self):
+        """protocol[3]: on a derived table the check recomputes every value from the recorded inputs and pins their
+        sha256, so a floor moved with its spread copy, or inputs rewritten with their sha256, both fail."""
+        reads = [r for r in self.table['rows'] if JUDGE.reads_a(r)]
+        pair = [{'metrics': {r['metric']: [100 + 3 * n] for r in reads}} for n in (0, 1)]
+        derived = JUDGE.derive(self.table, pair[0], pair[1], 'test pair')
+        pin = derived['derived']['sha256']
+        self.assertEqual(_derived_problems(derived, pin), [])
+        moved = json.loads(json.dumps(derived))
+        row = next(r for r in moved['rows'] if any(JUDGE.needs_floor(g) for g in r.get('gate', [])))
+        gate = next(g for g in row['gate'] if JUDGE.needs_floor(g))
+        gate['spread'], gate['floor_factor'] = 0.5, 2.0  # a floor moved together with its spread copy
+        self.assertTrue(_derived_problems(moved, pin))
+        rewritten = json.loads(json.dumps(derived))
+        rewritten['derived']['rows'][row['id']] = [100, 150, 125]
+        rewritten['derived']['sha256'] = JUDGE.derived_digest(rewritten['derived']['rows'])
+        for r in rewritten['rows']:
+            if r['id'] == row['id']:
+                JUDGE.derive_row(r, 100, 150, 125)
+        self.assertTrue(_derived_problems(rewritten, pin))  # consistent with itself, not with the pinned inputs
 
     def test_every_row_that_reads_a_gets_its_recorded_a_and_floors_when_derived(self):
         """protocol[1]: eight rows whose limit is A carried no recorded A; derive writes one on every row that reads
