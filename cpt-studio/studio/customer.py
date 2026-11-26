@@ -356,9 +356,14 @@ def list_page(membership, which, before=None) -> dict:
 # review" for a document with no coding round; the service date as "6 Nov 2026" when it is a calendar date the page reads
 # (app.js parseIsoDate: four-digit years from 0100), else "Not entered". Matching is strpos over both sides lower-cased in
 # PostgreSQL's builtin pg_c_utf8 collation (PostgreSQL 17 or newer), the words a bound parameter, so nothing in them is a
-# wildcard. The browser lower-cases two letters otherwise - a final sigma by its neighbours, a dotted capital I into two
-# letters - so when the words hold either (or the combining dot), both sides are also folded (translate: final sigma to
-# sigma, the combining dot dropped), and the search never finds fewer documents than the page's rule, more only there.
+# wildcard. The browser lower-cases some letters otherwise - a final sigma by its neighbours, a dotted capital I into two
+# letters, and 27 capitals of Unicode 16.0 that PostgreSQL 17's tables (Unicode 15.1) leave as they are (SEARCH_NEWER:
+# U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65) - so when the words hold any of these, in either
+# case, or the combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital to the
+# browser's small letter, the combining dot dropped), and the search never finds fewer documents than the page's rule,
+# more only there. The words are at most SEARCH_MAX_CHARS characters, not counting the combining dot above (U+0307): the
+# one letter whose lower case is longer (U+0130, to i and U+0307) adds only that dot, so the count is the same before and
+# after the page lower-cases the words (search_length).
 # One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
 # (list_rows_of). The text needs each row's revision kind and whether it has a round (and, for an earlier system's row,
 # a file): each is looked up per row, as a one-row subquery, so the walk stops at the 51st match - a join made
@@ -369,9 +374,16 @@ def list_page(membership, which, before=None) -> dict:
 
 JS_WHITE_SPACE = ('\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f'
                   '\u205f\u3000\ufeff')  # what JavaScript's String.prototype.trim removes (measured on node 22)
-SEARCH_FOLDED = '\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
-SEARCH_FOLD_FROM, SEARCH_FOLD_TO = '\u03c2\u0307', '\u03c3'
-SEARCH_MAX_CHARS = 240  # a row's text is at most about 224 characters
+# Unicode 16.0 capitals the browser lower-cases and PostgreSQL 17's tables (Unicode 15.1) do not, each to the letter the
+# browser lowers it to (node 22.22.0 with ICU 77.1, and Chromium 147, against PostgreSQL 17.11's pg_c_utf8;
+# tests/test_lists.py compares the two tables over every code point)
+SEARCH_NEWER = {'\u1c89': '\u1c8a', '\ua7cb': '\u0264', '\ua7cc': '\ua7cd', '\ua7da': '\ua7db', '\ua7dc': '\u019b',
+                **{chr(cp): chr(cp + 0x20) for cp in range(0x10d50, 0x10d66)}}  # and Garay's 22 capitals
+SEARCH_FOLDED = ('\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
+                 + ''.join(SEARCH_NEWER) + ''.join(SEARCH_NEWER.values()))  # and the newer letters, in either case
+SEARCH_FOLD_FROM = '\u03c2' + ''.join(SEARCH_NEWER) + '\u0307'  # the dot last, past the end of TO: dropped
+SEARCH_FOLD_TO = '\u03c3' + ''.join(SEARCH_NEWER.values())
+SEARCH_MAX_CHARS = 240  # not counting the combining dot above: a row's text is at most about 224 characters
 # app.js's own words for the row (KIND_LABELS, INSURANCE_SHOWN, MONTHS' first three letters); tests/test_lists.py holds the
 # rebuilt text to the shipped documentRow's (tests/frontend/row_text.cjs)
 SEARCH_KIND_TEXT = {Revision.UPLOAD: 'Uploaded file', Revision.PASTE: 'Pasted text'}
@@ -382,6 +394,12 @@ SEARCH_MONTHS = 'JanFebMarAprMayJunJulAugSepOctNovDec'
 def search_words(text) -> str:
     """The words a search looks for: ``text`` trimmed as the page trims what was typed (JavaScript's trim)."""
     return text.strip(JS_WHITE_SPACE)
+
+
+def search_length(words) -> int:
+    """How long ``words`` are against SEARCH_MAX_CHARS: their characters, not counting the combining dot above (U+0307),
+    so the same as typed and as the page lower-cases them (see above)."""
+    return len(words) - words.count('\u0307')
 
 
 def _sql_text(value) -> str:
@@ -443,10 +461,11 @@ def _search_sql(fold, later) -> str:
 
 def search_page(membership, words, before=None) -> dict:
     """One page of POST /api/encounters/search (see above) of ``membership``'s practice: the documents whose row holds
-    ``words`` (search_words', at most SEARCH_MAX_CHARS, storable - the API reads them first), 50 a page from the cursor
-    ``before`` (None: the first page). {'encounters': rows, 'next': the next page's cursor or None, 'total': None}."""
+    ``words`` (search_words', at most SEARCH_MAX_CHARS by search_length, storable - the API reads them first), 50 a page
+    from the cursor ``before`` (None: the first page). {'encounters': rows, 'next': the next page's cursor or None,
+    'total': None}."""
     position = paging.parse(before) if before is not None else None
-    if not isinstance(words, str) or not words or len(words) > SEARCH_MAX_CHARS or '\x00' in words or (
+    if not isinstance(words, str) or not words or search_length(words) > SEARCH_MAX_CHARS or '\x00' in words or (
             before is not None and position is None):
         raise ValueError('search_page is given words and a cursor the API has read.')
     params = {'workspace': membership.workspace_id, 'words': words, 'space': JS_WHITE_SPACE,

@@ -378,9 +378,10 @@ def encounters(request):
 # documents whose row holds the words (customer.search_page), in the list's shape with total null. It is a POST, so the
 # words - possibly a name - never sit in an address, a query string or an access log; the middleware enforces CSRF and
 # the request's body limit. Text that is not text, or blank once trimmed as the page trims, is answered 400; text longer
-# than customer.SEARCH_MAX_CHARS, or holding a character PostgreSQL text cannot hold (UNSTORABLE), is an empty page,
-# recorded with count 0. Every search first counts toward the member's limit (list.member), then is recorded as a
-# member.list row naming the documents found, with the filters {"list": "search", "before": cursor} - never the words.
+# than customer.SEARCH_MAX_CHARS characters, not counting the combining dot above (U+0307; customer.search_length), or
+# holding a character PostgreSQL text cannot hold (UNSTORABLE), is an empty page, recorded with count 0. Every search
+# first counts toward the member's limit (list.member), then is recorded as a member.list row naming the documents
+# found, with the filters {"list": "search", "before": cursor} - never the words.
 
 SEARCH_TEXT_REQUIRED = 'Type the words to search for.'
 
@@ -400,8 +401,8 @@ def search_encounters(request):
         raise ApiError(400, LIST_CURSOR_UNREADABLE)
     _later_page_counted(request, membership)
     as_of = timezone.now()
-    if len(words) > customer.SEARCH_MAX_CHARS or UNSTORABLE.search(words):
-        page = {'encounters': [], 'next': None, 'total': None}  # no row's text holds such words
+    if customer.search_length(words) > customer.SEARCH_MAX_CHARS or UNSTORABLE.search(words):
+        page = {'encounters': [], 'next': None, 'total': None}  # no row's text holds such words, lower-cased or not
     else:
         page = customer.search_page(membership, words, before)
     shown = [row['id'] for row in page['encounters']]

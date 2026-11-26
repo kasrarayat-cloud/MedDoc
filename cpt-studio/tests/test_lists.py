@@ -526,6 +526,7 @@ from django.conf import settings  # noqa: E402
 
 SEARCH = '/api/encounters/search'
 ROW_TEXT = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'row_text.cjs'
+LOWER_TABLE = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'lower_table.cjs'
 # Awkward rows (R2-20's property test): titles a browser and PostgreSQL may lower-case or trim differently, SQL's own
 # characters, ligatures, emoji, JavaScript's white space at either end, the longest title; dates that are and are not a
 # calendar date the page reads; insurance and user_values of every odd shape.
@@ -570,6 +571,24 @@ def node_rows(rows, queries):
                           capture_output=True, text=True, timeout=300, check=False)
     assert done.returncode == 0, done.stderr[-2000:]
     return json.loads(done.stdout)
+
+
+def node_lowered() -> dict:
+    """{code point: [code points]} for every code point the page's JavaScript lower-cases (tests/frontend/lower_table.cjs,
+    run by node: the browser's tables, as the page's own rule reads them)."""
+    done = subprocess.run([shutil.which('node'), str(LOWER_TABLE)], capture_output=True, text=True, timeout=300,
+                          check=False)
+    assert done.returncode == 0, done.stderr[-2000:]
+    return {int(point): pieces for point, pieces in json.loads(done.stdout)['lowered'].items()}
+
+
+def database_lowered() -> dict:
+    """{code point: [code points]} for every code point the search's lower() changes (PostgreSQL's pg_c_utf8)."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT point, low FROM (SELECT point, lower(chr(point) COLLATE "pg_c_utf8") AS low '
+                       'FROM generate_series(1, 1114111) AS point WHERE point NOT BETWEEN 55296 AND 57343) AS letters '
+                       'WHERE low <> chr(point)')
+        return {point: [ord(piece) for piece in low] for point, low in cursor.fetchall()}
 
 
 def sql_row_texts(ws) -> dict:
@@ -644,7 +663,7 @@ class SearchPropertyTests(SearchCase):
         exact = more = 0
         for query, wanted in zip(queries, page['found']):
             words = customer.search_words(query)
-            if len(words) > customer.SEARCH_MAX_CHARS:
+            if customer.search_length(words) > customer.SEARCH_MAX_CHARS:
                 continue
             with self.subTest(query=query):
                 found = searched(membership, words)
@@ -656,6 +675,50 @@ class SearchPropertyTests(SearchCase):
                 exact, more = exact + (not extra), more + bool(extra)
         self.assertGreater(exact, 400)
         self.assertGreater(more, 0)  # the superset was met, so the rule above was tested
+
+
+class SearchLetterTests(SearchCase):
+    """The page lower-cases with the browser's tables (node 22: Unicode 16.0), the search with PostgreSQL 17's pg_c_utf8
+    (Unicode 15.1). Compared over every code point, in both directions, they differ exactly where the search folds - the
+    capitals only the browser lower-cases (customer.SEARCH_NEWER) and U+0130, which both lower-case, differently - so an
+    upgrade of node, ICU or PostgreSQL fails here and names its letters; and each letter only the browser lower-cases is
+    found in either case, its partner taken from the browser's table, never from Python's (Unicode 15.0)."""
+
+    def setUp(self):
+        super().setUp()
+        if shutil.which('node') is None:
+            self.skipTest('node is not here: the page cannot be run')
+
+    def test_the_browser_and_the_database_lower_case_alike_except_where_the_search_folds(self):
+        page, database = node_lowered(), database_lowered()
+        only_page = {chr(point): ''.join(map(chr, page[point])) for point in set(page) - set(database)}
+        self.assertEqual(only_page, customer.SEARCH_NEWER,
+                         sorted(f'U+{ord(letter):04X}' for letter in set(only_page) ^ set(customer.SEARCH_NEWER)))
+        self.assertEqual(set(database) - set(page), set())  # nothing the database alone lower-cases
+        self.assertEqual({point for point in set(page) & set(database) if page[point] != database[point]}, {0x130})
+        self.assertEqual((page[0x130], database[0x130]), ([0x69, 0x307], [0x69]))  # i and the dot above, or i
+        # the dot above is the one character a lower case adds, so customer.search_length is the same before and after
+        self.assertEqual({point for point, pieces in page.items() if len(pieces) != 1}, {0x130})
+        # the fold: each letter of FROM to the letter at its place in TO, and the dot last, past TO's end (dropped)
+        self.assertEqual(dict(zip(customer.SEARCH_FOLD_FROM, customer.SEARCH_FOLD_TO)),
+                         {'\u03c2': '\u03c3', **customer.SEARCH_NEWER})
+        self.assertEqual((len(customer.SEARCH_FOLD_FROM) - len(customer.SEARCH_FOLD_TO), customer.SEARCH_FOLD_FROM[-1]),
+                         (1, '\u0307'))
+
+    def test_each_letter_only_the_browser_lower_cases_is_found_in_either_case(self):
+        page, database = node_lowered(), database_lowered()
+        pairs = [(chr(point), ''.join(map(chr, page[point]))) for point in sorted(set(page) - set(database))]
+        self.assertEqual(len(pairs), 27)
+        for capital, small in pairs:  # one title in each case
+            f.encounter(self.ws, self.reviewer, title=f'Synthetic {capital} letter note')
+            f.encounter(self.ws, self.reviewer, title=f'Synthetic {small} letter note')
+        rows, _pages = self.walk()
+        queries = [letter for pair in pairs for letter in pair]
+        membership = membership_of(self.reviewer)
+        for query, wanted in zip(queries, node_rows(rows, queries)['found']):
+            with self.subTest(letter=f'U+{ord(query):04X}'):
+                self.assertEqual(len(wanted), 2)  # the page's rule finds the letter's title in either case
+                self.assertLessEqual(set(wanted), set(searched(membership, query)))  # never fewer
 
 
 class SearchTests(SearchCase):
@@ -766,6 +829,26 @@ class SearchTests(SearchCase):
         (row,) = Record.objects.filter(view=read_audit.MEMBER_LIST)
         self.assertEqual((row.count, row.encounter_ids, row.filters), (0, [], {'list': 'search', 'before': None}))
         self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats, 4)
+
+    def test_the_words_are_counted_without_the_combining_dot_above(self):
+        # the page lower-cases a dotted capital I to two characters (i and U+0307; SearchLetterTests), so 121 of them
+        # typed lower-case are 242 characters its rule matches: counted without the dot they are 121 - searched, found,
+        # as when typed as capitals; more than 240 letters, dots or none, are still an empty page, unsearched
+        dotted = f.encounter(self.ws, self.reviewer, title='\u0130' * 121)
+        for words in ('i\u0307' * 121, '\u0130' * 121):
+            with self.subTest(words=f'{len(words)} characters'):
+                self.assertEqual([row['id'] for row in self.search(words)['encounters']], [str(dotted.pk)])
+        for words, length, read in (('n' * 241, 241, False), ('n' * 241 + '\u0307', 241, False),
+                                    ('n' * 240 + '\u0307' * 3, 240, True)):
+            with self.subTest(words=f'{len(words)} characters'):
+                self.assertEqual(customer.search_length(words), length)
+                with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
+                    self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                self.assertEqual(asked.called, read)
+        membership = membership_of(self.reviewer)  # search_page's own guard counts the same way
+        self.assertEqual(searched(membership, 'i\u0307' * 121), [str(dotted.pk)])
+        with self.assertRaises(ValueError):
+            customer.search_page(membership, 'n' * 241 + '\u0307')
 
     def test_a_get_or_head_answers_405_and_the_search_needs_the_csrf_token(self):
         self.assertEqual(self.member.get(SEARCH).status_code, 405)

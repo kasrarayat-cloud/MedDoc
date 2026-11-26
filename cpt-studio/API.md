@@ -122,10 +122,13 @@ Documents list of more than 200 documents and searches a smaller list itself, wi
 - The row's text is the page's: the title (or "Untitled document"), the kind, the insurance when it is shown, the
   state's label, and the service date as "6 Nov 2026" or "Not entered". The words match it as the page's own search
   does (lower-cased, trimmed), and nothing in them is a wildcard. Where a browser and the database lower-case a letter
-  differently (a final sigma, a dotted capital I), the search finds those documents too: never fewer than the page.
+  differently (a final sigma, a dotted capital I, and 27 capitals new in Unicode 16.0 that PostgreSQL 17 does not
+  lower-case: U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65), the search finds those documents
+  too: never fewer than the page.
 - Text that is not text, or blank, answers `400 {"error": "Type the words to search for."}`; a text longer than 240
-  characters, or holding a character the database cannot store, an empty page; an unreadable `before` the list's
-  `400`. A `GET` answers `405`.
+  characters, not counting the combining dot above (U+0307, which the page's lower-casing adds to a dotted capital I),
+  or holding a character the database cannot store, an empty page; an unreadable `before` the list's `400`. A `GET`
+  answers `405`.
 - Every search counts toward the member's limit, and each page is recorded naming the documents found, with the list
   `search` and its cursor - never the words. It needs PostgreSQL 17 or newer.
 
