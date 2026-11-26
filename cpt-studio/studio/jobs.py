@@ -368,12 +368,14 @@ def _update_round(round_, **fields):
         setattr(round_, name, value)
 
 
-def _fail(round_, kind, *, text=None, document=None):
-    """End ``round_`` failed with ``kind`` and the customer's sentence, and fail the stage."""
+def _fail(round_, kind, *, text=None, document=None, data=None):
+    """End ``round_`` failed with ``kind`` and the customer's sentence, and fail the stage. ``data``: what its
+    coding.round_failed event adds - a refused Word file's code and counts (DocumentError.recorded, R2-31), never
+    text."""
     text = text or failure_text(kind, document)
     _update_round(round_, state=Round.FAILED, failure_kind=kind, error=text, finished_at=timezone.now())
     audit.record(round_.encounter.workspace, 'coding.round_failed', encounter=round_.encounter,
-                 round=str(round_.pk), failure_kind=kind)
+                 round=str(round_.pk), failure_kind=kind, **(data or {}))
     raise StageFailure(text)
 
 
@@ -446,8 +448,9 @@ def _code(job, round_):
     try:
         document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_), reader=own)
     except fable_document.DocumentError as exc:
-        log.info('round %s: the document was not sent (%s)', round_.pk, exc.detail or exc.failure_kind)
-        _fail(round_, exc.failure_kind, text=exc.text)
+        # a refused Word file's code is one fixed word, which the installer's kept log keeps (R2-31)
+        log.info('round %s: the document was not sent (%s)', round_.pk, exc.code or exc.detail or exc.failure_kind)
+        _fail(round_, exc.failure_kind, text=exc.text, data=exc.recorded())
     _keep_view(round_, document, encounter)
     context = round_.context or {}
     reader_request = fable_client.build_request(system=prompts.READER_SYSTEM, document=document,

@@ -31,10 +31,23 @@ before it waits on it, so the parent's finally kills that group as well as the c
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
   spell), keeping the result the reader sees - a field's type read from its live instruction text, text a tracked
   change deleted counting only when nothing live names a type (_Field); w:object (its preview picture kept), w:control
-  and w:altChunk, with the parts only they named, and their Overrides in the content types. Each part is edited by byte
-  ranges of its own bytes, never written out again, and a part with nothing to remove passes through byte for byte: a
-  Word file with none of these features gives exactly the package it gave before release 1. A formula ('=' first) is
-  never removed. What was removed is reported as counts only.
+  and a w:altChunk that holds nothing, with the parts only they named, and their Overrides in the content types. Each
+  part is edited by byte ranges of its own bytes, never written out again, and a part with nothing to remove passes
+  through byte for byte: a Word file with none of these features gives exactly the package it gave before release 1. A
+  formula ('=' first) is never removed. What was removed is reported as counts only.
+- Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
+  would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
+  rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty, in any format,
+  story or namespace form, and - on purpose, although the file holds nothing of it - one whose relationship is External,
+  and every w:subDoc, which the doctor's own Word can pull in (R2-28); an object, control or pointer that would leave no
+  picture - a v:imagedata or a:blip naming a part that is sent - in its place (R2-29); a field kept, not HYPERLINK or
+  TOC, whose stored result holds what a reader sees and no field while a removed field stood in its instruction, which
+  LibreOffice 7.4 drops (R2-30's fallback). An altChunk that holds nothing (no r:id, or one naming no relationship, a
+  missing part or an empty part) is removed as release 1 removes it, counted in 'chunks'. A removed field in another
+  field's result, and in no field's instruction, stays a field whose instruction is QUOTE - a type LibreOffice shows by
+  its stored result - unless it is INCLUDEPICTURE (R2-30). Everything else is edited as release 1 edits it, so a Word
+  file that needs no refusal and no QUOTE gives exactly release 1's package. check_in_child runs the same check on a
+  Word file whose conversion a round stored, before that conversion is read again (R2-28 step 7, C8).
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -116,6 +129,8 @@ WORD_NAMESPACES = ('http://schemas.openxmlformats.org/wordprocessingml/2006/main
 RELATIONSHIP_ID_NAMESPACES = ('http://schemas.openxmlformats.org/officeDocument/2006/relationships',
                               'http://purl.oclc.org/ooxml/officeDocument/relationships')
 VML_NAMESPACE = 'urn:schemas-microsoft-com:vml'
+DRAWINGML_NAMESPACES = ('http://schemas.openxmlformats.org/drawingml/2006/main',  # transitional
+                        'http://purl.oclc.org/ooxml/drawingml/main')  # strict
 SVG_TYPE = 'image/svg+xml'  # an SVG picture may declare a DOCTYPE; no other part of a Word package may (OPC)
 
 
@@ -128,8 +143,35 @@ class _OutOfTime(PackageRefused):
     """safe_package passed PACKAGE_SECONDS."""
 
 
+# --- release 2 (R2-28 to R2-30): what E2 would take out of a Word file and leave nothing of in the PDF ----------------
+INSERTED_DOCUMENT, INSERTED_OBJECT = 'inserted_document', 'inserted_object'  # ContentNotShown's codes (R2-28)
+REFUSAL_CODES = (INSERTED_DOCUMENT, INSERTED_OBJECT)
+# What ContentNotShown counts: inserted documents (a w:altChunk that holds content or reaches outside, a w:subDoc:
+# R2-28), objects and controls that would leave no picture (R2-29), and fields whose stored result LibreOffice 7.4
+# loses once a field in their instruction is removed (R2-30's fallback, its own count).
+LOST_KINDS = ('documents', 'objects', 'controls', 'fields')
+CONTENT_NOT_SHOWN = 'it holds inserted content that could not be shown in the PDF'  # names no part and no text
+
+
+class ContentNotShown(PackageRefused):
+    """E2 would take content out of the Word file and leave nothing of it in the PDF (release 2, Group F's rule): the
+    file is refused, and nothing of it is converted. ``counts``: how many of each of LOST_KINDS; ``code``:
+    INSERTED_DOCUMENT when it holds an inserted document, else INSERTED_OBJECT - which of the two sentences a member
+    reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
+
+    def __init__(self, counts):
+        self.counts = {kind: counts.get(kind, 0) for kind in LOST_KINDS}
+        self.code = INSERTED_DOCUMENT if self.counts['documents'] else INSERTED_OBJECT
+        super().__init__(CONTENT_NOT_SHOWN)
+
+
 class ConversionRefused(Exception):
-    """convert_in_child: safe_package refused the Word file; the reason is in fixed words."""
+    """convert_in_child (and check_in_child): safe_package refused the Word file; the reason is in fixed words.
+    ``code`` and ``counts``: a ContentNotShown's (R2-31), else '' and {}."""
+
+    def __init__(self, reason, code='', counts=None):
+        super().__init__(reason)
+        self.code, self.counts = code, dict(counts or {})
 
 
 class ConversionBusy(Exception):
@@ -173,8 +215,8 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
         shutil.rmtree(work, ignore_errors=True)
     if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'busy':
         raise ConversionBusy(answer[1])
-    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'refused':
-        raise ConversionRefused(answer[1])
+    if isinstance(answer, tuple) and len(answer) == 4 and answer[0] == 'refused':
+        raise ConversionRefused(*answer[1:])
     if not (isinstance(answer, tuple) and len(answer) == 3 and answer[0] == 'pdf'):
         raise ConversionFailed('the conversion produced no PDF')
     _, pdf, removed = answer
@@ -189,15 +231,59 @@ def convert_in_child(data: bytes, *, runner=None, seconds=CONVERT_SECONDS, memor
 
 def _convert_package(runner, data: bytes, work: str):
     """In the bounded child (its memory cap and wall clock bound the zip and XML reading too): ('pdf', what ``runner``
-    makes of safe_package(data) in the work folder ``work``, the removal counts), ('refused', reason), or ('busy',
-    reason) when the checks ran out of PACKAGE_SECONDS."""
+    makes of safe_package(data) in the work folder ``work``, the removal counts), ('refused', reason, code, counts) - a
+    ContentNotShown's code and counts, else '' and {} (R2-31) -, or ('busy', reason) when the checks ran out of
+    PACKAGE_SECONDS."""
     try:
         package, removed = _safe_package(data)
     except _OutOfTime as exc:
         return ('busy', str(exc))
+    except ContentNotShown as exc:
+        return ('refused', str(exc), exc.code, dict(exc.counts))
     except PackageRefused as exc:
-        return ('refused', str(exc))
+        return ('refused', str(exc), '', {})
     return ('pdf', runner(package, Path(work)), removed)
+
+
+def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT_MEMORY_BYTES) -> bool:
+    """Release 2, R2-28 step 7 (C8): release 2's package check of ``data`` - a Word file a round of whose revision
+    stored its conversion - before that conversion is read again, run as a conversion's check runs (in a bounded child
+    of ``seconds`` and ``memory_bytes``, safe_package's own PACKAGE_SECONDS inside it) and converting nothing.
+
+    False: the stored conversion may be read again - the check refused nothing and made none of R2-30's edits, so the
+    package is the one release 1 gave; or the file is no Word package at all (refused before any part of it was read,
+    by the checks release 1 runs too), which no stored conversion came of. True: the round converts afresh - R2-30's
+    edit applies to the file, or the check refused it once its parts were read for a reason that is not
+    ContentNotShown, which a fresh conversion then gives. ConversionRefused (with ContentNotShown's code and counts),
+    ConversionBusy or ConversionFailed otherwise, as convert_in_child raises them."""
+    try:
+        answer = bounded.run_bounded(_check_package, data, seconds=seconds, memory_bytes=memory_bytes)
+    except bounded.Overrun as exc:
+        raise ConversionFailed(f'the check passed its {exc.reason} limit') from None
+    except Exception as exc:  # noqa: BLE001 - the child's failure is logged by run_bounded
+        raise ConversionFailed(type(exc).__name__) from None
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'busy':
+        raise ConversionBusy(answer[1])
+    if isinstance(answer, tuple) and len(answer) == 4 and answer[0] == 'refused':
+        raise ConversionRefused(*answer[1:])
+    if isinstance(answer, tuple) and len(answer) == 2 and answer[0] == 'checked' and answer[1] in (True, False):
+        return answer[1]
+    raise ConversionFailed('the check gave no answer')
+
+
+def _check_package(data: bytes):
+    """In check_in_child's bounded child: ('checked', whether the round converts afresh), ('refused', reason, code,
+    counts) for ContentNotShown, or ('busy', reason)."""
+    report = {}
+    try:
+        _package(data, report)
+    except _OutOfTime as exc:
+        return ('busy', str(exc))
+    except ContentNotShown as exc:
+        return ('refused', str(exc), exc.code, dict(exc.counts))
+    except PackageRefused:
+        return ('checked', bool(report.get('read')))
+    return ('checked', report.get('shells', 0) > 0)
 
 
 def safe_package(data: bytes) -> bytes:
@@ -212,7 +298,13 @@ def safe_package(data: bytes) -> bytes:
     - Every relationship with a TargetMode other than Internal is dropped from every relationships part, and any part
       only such relationships named is dropped with its own relationships. A relationships part that declares a DTD, or
       is not a Relationships element, is refused.
-    - E2's removals (fields, objects, controls, imported documents), by byte ranges.
+    - E2's removals (fields, objects, controls, imported documents that hold nothing), by byte ranges.
+    - Release 2 (Group F's rule): a file E2 would take content out of while leaving nothing of it in the PDF is refused,
+      ContentNotShown, and nothing of it is rebuilt or converted - an imported document that holds content or reaches
+      outside and every subdocument (R2-28), an object or a control that would leave no picture (R2-29), a field whose
+      stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
+      another field's result stays a field whose instruction is QUOTE (R2-30). Everything else is edited as release 1
+      edits it: a Word file that needs no refusal and no QUOTE gives exactly release 1's package.
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -220,6 +312,13 @@ def safe_package(data: bytes) -> bytes:
 
 def _safe_package(data: bytes):
     """(safe_package's bytes, the counts of what E2 removed: {'fields', 'objects', 'controls', 'chunks'})."""
+    return _package(data, {})
+
+
+def _package(data: bytes, report: dict):
+    """_safe_package's work. ``report`` is told how far it got, whether it returns or raises: 'read', once every part
+    was read and the package found a Word one (E2 then begins); 'shells', how many of R2-30's QUOTE shells it made in
+    the parts still sent (check_in_child reads both)."""
     deadline = time.monotonic() + PACKAGE_SECONDS
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
@@ -245,12 +344,12 @@ def _safe_package(data: bytes):
             _check_time(deadline)
     by_folded = {name.casefold(): name for name in parts}
     _require_word_main_part(parts, by_folded)
-    rewritten, dropped_targets, kept_targets, kept_rows = {}, set(), set(), {}
+    rewritten, dropped_targets, kept_targets, kept_rows, dropped_rows = {}, set(), set(), {}, {}
     for name in parts:
         if not name.casefold().endswith('.rels'):
             continue
         kept, dropped = _relationships(name, parts[name])
-        kept_rows[name] = kept
+        kept_rows[name], dropped_rows[name] = kept, dropped
         folder = _source_folder(name)
         for relationship in kept:
             target = _part_name(folder, relationship.get('Target', ''))
@@ -269,7 +368,10 @@ def _safe_package(data: bytes):
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
-    removed, held = _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline)
+    report['read'] = True
+    removed, held, unshown, shells = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten,
+                                                            special, orphans, deadline)
+    report['shells'] = sum(made for name, made in shells.items() if name not in orphans)
     released = orphans - external_orphans  # what E2 dropped, with the content it removed
     if released:  # a part E2 dropped takes its Override with it
         types = _without_overrides(parts[CONTENT_TYPES_PART], {name.casefold() for name in released})
@@ -278,6 +380,10 @@ def _safe_package(data: bytes):
     for name, refusal in held.items():  # a part that could not be checked is refused only if it is still sent
         if name not in orphans:
             raise refusal
+    # release 2: what E2 would leave nothing of, in the parts still sent - the file is refused, and never rebuilt
+    lost = {kind: sum(counts[kind] for name, counts in unshown.items() if name not in orphans) for kind in LOST_KINDS}
+    if any(lost.values()):
+        raise ContentNotShown(lost)
     out = io.BytesIO()
     try:
         with zipfile.ZipFile(out, 'w') as rebuilt:
@@ -426,20 +532,38 @@ def _names(*local_names):
 
 
 # The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
-# with one dictionary lookup.
-_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION = range(10)
+# with one dictionary lookup. A w:subDoc shares the w:altChunk's role (R2-28 step 5); a w:pict is read for R2-29 only.
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION, _PICT = range(11)
 _ROLES = {name: role for role, local_names in (
     (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
-    (_ALTCHUNK, ('altChunk',)), (_POINTER, ('objectEmbed', 'objectLink')),
+    (_ALTCHUNK, ('altChunk', 'subDoc')), (_POINTER, ('objectEmbed', 'objectLink')),
     (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')),
-    (_DELETION, ('del', 'moveFrom')))
+    (_DELETION, ('del', 'moveFrom')), (_PICT, ('pict',)))
     for name in _names(*local_names)}
 # Text a tracked change deleted: these elements inside a w:del or w:moveFrom (repair round 1, C5: see _Field).
 _DELETED_TEXT = _names('delInstrText', 'delText')
 # What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
-_ROLES['urn:schemas-microsoft-com:office:office OLEObject'] = _POINTER
+OLE_OBJECT = 'urn:schemas-microsoft-com:office:office OLEObject'
+_ROLES[OLE_OBJECT] = _POINTER
 _CONTAINERS = (_OBJECT, _CONTROL, _ALTCHUNK, _POINTER)  # removed whole (an object but for its preview)
 _OBJECTS, _DRAWINGS, _FLDDATAS = _names('object'), _names('drawing'), _names('fldData')
+# Release 2, R2-28: a w:subDoc is always an inserted document (a master document's subdocuments are other files); a
+# w:altChunk is one when its r:id names a relationship that reaches outside, or a part present and not empty.
+_SUBDOCS = _names('subDoc')
+_ALTCHUNK_IDS = tuple(f'{namespace} id' for namespace in RELATIONSHIP_ID_NAMESPACES)
+# R2-29: what a w:object may hold beside VML and a w:drawing - the pointers, which show nothing themselves, and a
+# movie - and what a picture is: a v:imagedata (r:id or o:relid) or an a:blip (r:embed) whose part is sent.
+_OBJECT_POINTERS = _names('objectEmbed', 'objectLink', 'control', 'movie') | {OLE_OBJECT}
+_SHAPETYPE = f'{VML_NAMESPACE} shapetype'
+_PICTURE_KEYS = {f'{VML_NAMESPACE} imagedata': tuple(f'{namespace} id' for namespace in RELATIONSHIP_ID_NAMESPACES)
+                 + ('urn:schemas-microsoft-com:office:office relid',)}
+_PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
+                                                 for relationships in RELATIONSHIP_ID_NAMESPACES)
+                      for namespace in DRAWINGML_NAMESPACES})
+# R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object.
+_SHOWN = _names('drawing', 'pict', 'object')
+_EXEMPT_OUTER_TYPES = ('HYPERLINK', 'TOC')  # outer types whose stored result 7.4 keeps (R2-30)
+_PICTURE_TYPE = 'INCLUDEPICTURE'  # a removed type whose result is a picture LibreOffice draws wherever it stands
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
 # type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
@@ -458,20 +582,24 @@ _VML_PREFIX = f'{VML_NAMESPACE} '
 # A part is read for E2 only when its bytes hold one of these elements' tags (any prefix): element names are literal in
 # a part's bytes, so a part without one has nothing E2 removes.
 _TRIGGER = re.compile(rb'<(?:[^\s<>/:!?"\'=]+:)?(?:fldChar|fldSimple|instrText|delInstrText|object|control|altChunk'
-                      rb'|OLEObject|objectEmbed|objectLink)[\s/>]')
+                      rb'|OLEObject|objectEmbed|objectLink|subDoc)[\s/>]')
 _DOCTYPE = re.compile(rb'<!DOCTYPE')
 _TAG = re.compile(rb'<(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>')  # one tag, from its '<' to its '>' (quotes may hold '>')
 _TAG_NAME = re.compile(rb'<([^\s/>]+)')
+_ATTRIBUTE = re.compile(rb'([^\s=/>"\']+)\s*=\s*("[^"]*"|\'[^\']*\')')  # one attribute of a tag, and its quoted value
 _DECLARED_ENCODING = re.compile(rb'^(?:\xef\xbb\xbf)?<\?xml[^>]*?encoding\s*=\s*["\']([A-Za-z0-9._-]+)["\']')
 _SKIP_PREFIX = re.compile('[\\s\\\\"\'\\u201c\\u201d\\u2018\\u2019]*')  # white space, backslashes and quotes
 _LETTER_RUN = re.compile(r'[A-Za-z]*')
-_TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED)  # letters enough to decide a type
+# Letters enough to decide a type, and one more, so that INCLUDEPICTURE is told from a longer word (R2-30): a type is
+# removed when its letters begin with a removed one, which the extra letter never changes.
+_TYPE_LETTERS = max(len(name) for name in FIELD_INSTRUCTIONS_REMOVED) + 1
 _TIME_CHECK_ELEMENTS = 0xFFF  # the deadline is checked every 4,096 elements too
 _REMOVED_KINDS = ('fields', 'objects', 'controls', 'chunks')
 _REREADS = 4  # how often a part may be read again after a removal inside another field's instruction (see below)
 # An element as the reader keeps it: a list [name, offset of its start tag, the namespaces its start tag declares, its
 # property children (only while a field's instruction is open), its children (a w:fldSimple's or w:object's only),
-# expat's index at its end (an end tag's '<', or the end of an empty element), a w:fldSimple's instruction].
+# expat's index at its end (an end tag's '<', or the end of an empty element), a w:fldSimple's instruction - or, for a
+# w:altChunk or w:subDoc, whether it is refused as an inserted document (R2-28)].
 _NAME, _AT, _DECLARED, _PROPS, _CHILDREN, _END, _INSTRUCTION = range(7)
 
 
@@ -524,6 +652,14 @@ def _removed_type(text) -> bool:
     return reading.removed()
 
 
+def _names_a_picture(text) -> bool:
+    """Whether ``text`` (a w:fldSimple's instruction) names INCLUDEPICTURE and nothing longer, read as _Reading reads
+    one (R2-30: its result, a picture, is unwrapped as release 1 unwraps it)."""
+    reading = _Reading()
+    reading.feed(text or '')
+    return reading.letters.upper() == _PICTURE_TYPE
+
+
 def _symbol_character(attrs) -> str:
     """The character a w:sym stands for (its w:char, hexadecimal), as a reader would put it in an instruction."""
     try:
@@ -544,12 +680,16 @@ class _Field:
     on a real LibreOffice (24.2): it renders the base's 'deleted LINK, inserted PAGE' as a live page number, a deleted
     'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
     left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
-    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction')
+    __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction', 'holds_removed',
+                 'watched', 'result_field', 'result_shown')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
         self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
+        # R2-30's fallback: a removed field stood in this field's instruction; its result is read (from its first
+        # separate), and holds a field, or something a reader sees outside any field
+        self.holds_removed = self.watched = self.result_field = self.result_shown = False
 
     def feed(self, text, name=None, deleted=False):
         """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
@@ -581,19 +721,53 @@ class _Field:
         return any((live if live.state != _Reading.BEFORE or deleted is None else deleted).removed()
                    for live, deleted in self.readings)
 
+    def _types(self) -> set:
+        """The type every reading names (its letters, as removed() reads them), in capitals."""
+        return {(live if live.state != _Reading.BEFORE or deleted is None else deleted).letters.upper()
+                for live, deleted in self.readings}
+
+    def names_a_picture(self) -> bool:
+        """INCLUDEPICTURE in every reading (R2-30): its result, a picture, is unwrapped as release 1 unwraps it."""
+        return self._types() == {_PICTURE_TYPE}
+
+    def loses_its_result(self) -> bool:
+        """R2-30's fallback, read at a kept field's end once a removed field stood in its instruction: a type every
+        reading names other than HYPERLINK or TOC, and a stored result that holds something a reader sees and no field -
+        7.4's 'H01' shape, whose result LibreOffice 7.4 drops, with or without R2-30's QUOTE."""
+        types = self._types()
+        exempt = len(types) == 1 and next(iter(types)) in _EXEMPT_OUTER_TYPES
+        return bool(self.separates) and self.result_shown and not self.result_field and not exempt
+
 
 class _PartReader:
     """One part read once with expat (namespaces resolved): the byte ranges E2 removes from it, the tags it renames,
     the counts, and the relationship ids found where a removal can reach. ``editable``: whether edits can be made in its
     bytes (UTF-8 only); when not, a part that needs one is refused. ``nested_removal``: a field was removed inside
-    another field's instruction, whose type its result may now complete (_edited_part reads the part again)."""
+    another field's instruction, whose type its result may now complete (_edited_part reads the part again).
 
-    def __init__(self, raw, deadline, *, editable=True):
+    Release 2: ``lost`` counts what E2 would leave nothing of in the PDF (LOST_KINDS: ContentNotShown), and ``shells``
+    the removed fields kept as QUOTE fields (R2-30). ``pictures``: the part's relationship ids that name a part present
+    and not empty, ``external``: those that reach outside (_relationship_ids). ``carried``: the offsets of the fields
+    an earlier reading of the part found a removed field in the instruction of (R2-30's fallback, decided once no field
+    of the part is removed inside an instruction any more: _edited_part)."""
+
+    def __init__(self, raw, deadline, *, editable=True, pictures=frozenset(), external=frozenset(),
+                 carried=frozenset()):
         self.raw, self.deadline, self.editable = raw, deadline, editable
+        self.pictures, self.external, self.carried = pictures, external, carried
         self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
+        self.lost = dict.fromkeys(LOST_KINDS, 0)
+        # R2-29: the open w:object and w:pict, each [element, 'controls' once it holds a control, its pointers], and the
+        # offsets of the pictures that stand in them (in document order)
+        self.holders, self.pictured = [], []
+        # R2-30: QUOTE shells made; the fields found holding a removed field in their instruction (their offsets) and
+        # how many of them lose their result (counted in lost['fields'] by the reading that removes nothing more inside
+        # an instruction)
+        self.shells, self.candidates, self.unshown = 0, [], 0
         self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
-        self.text_field = self.text_name = self.parser = None
+        self.watched = 0  # open fields whose result is read for R2-30's fallback
+        self.text_field = self.text_name = self.parser = self.shown_field = None
         self.nested_removal = self.text_deleted = False
 
     def read(self):
@@ -613,6 +787,8 @@ class _PartReader:
         for field in self.fields:
             if field.removed():
                 raise PackageRefused('a field to be removed is not closed')
+        if not self.nested_removal:  # R2-30's fallback: no field's type can change by another reading of the part
+            self.lost['fields'] += self.unshown
         return self
 
     # expat's handlers
@@ -640,6 +816,11 @@ class _PartReader:
             for key, value in attrs.items():
                 if key.startswith(_RELATIONSHIP_ID_PREFIXES):
                     self.references.append((element[_AT], value))
+        if self.holders and name in _PICTURE_KEYS and any(attrs.get(key) in self.pictures
+                                                          for key in _PICTURE_KEYS[name]):
+            self.pictured.append(element[_AT])  # R2-29: a picture whose part is sent, in an open object or w:pict
+        if self.watched and name in _SHOWN and self.fields and self.fields[-1].watched:
+            self.fields[-1].result_shown = True  # R2-30's fallback: a picture in the result a field holds
         stack.append(element)
 
     def _role_starts(self, role, element, attrs):
@@ -650,6 +831,8 @@ class _PartReader:
             if kind == 'begin':
                 if open_type:
                     field.nested()
+                if field is not None and field.watched:
+                    field.result_field = True  # R2-30's fallback: a field in the result being read
                 self.fields.append(_Field(element, list(self.stack)))
                 self.instructions += 1
             elif kind == 'separate' and field is not None:
@@ -657,6 +840,9 @@ class _PartReader:
                 if field.in_instruction:
                     field.in_instruction = False
                     self.instructions -= 1
+                    if field.holds_removed or field.begin[_AT] in self.carried:  # R2-30's fallback: read its result
+                        field.watched = True
+                        self.watched += 1
                 field.decided = True
             elif kind == 'end' and field is not None:
                 field.end = (element, list(self.stack))
@@ -664,21 +850,41 @@ class _PartReader:
         elif role == _FLDSIMPLE:
             if open_type:
                 field.nested()
+            if field is not None and field.watched:
+                field.result_field = True
             element[_CHILDREN] = []
             element[_INSTRUCTION] = next((attrs[key] for key in _INSTR if key in attrs), '')
         elif role in _CONTAINERS:
             self.containers += 1
             if role == _OBJECT:
                 element[_CHILDREN] = []
+                self.holders.append([element, '', 0])
+            elif role == _ALTCHUNK:  # R2-28 step 4: refused when it holds content or reaches outside; every w:subDoc
+                element[_INSTRUCTION] = element[_NAME] in _SUBDOCS or any(
+                    attrs[key] in self.pictures or attrs[key] in self.external for key in _ALTCHUNK_IDS if key in attrs)
+            elif self.holders:  # R2-29 step 4: a pointer or a control counts in the w:object or w:pict it stands in
+                holder = self.holders[-1]
+                holder[2] += 1
+                if role == _CONTROL:
+                    holder[1] = 'controls'
+            else:  # and in neither, it is lost
+                self.lost['controls' if role == _CONTROL else 'objects'] += 1
+        elif role == _PICT:
+            self.holders.append([element, '', 0])
         elif role == _TEXT:
             if open_type:
                 self.text_field, self.text_name = field, element[_NAME]
                 self.text_deleted = bool(self.deletions) and element[_NAME] in _DELETED_TEXT
                 self.parser.CharacterDataHandler = self._text
+            elif field is not None and field.watched and not field.result_shown:
+                self.shown_field = field  # R2-30's fallback: text in the result being read
+                self.parser.CharacterDataHandler = self._shown_text
         elif role == _DELETION:
             self.deletions += 1
         elif open_type:  # a symbol stands for its character, a tab or a break for white space
             field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
+        elif role == _SYMBOL and field is not None and field.watched:
+            field.result_shown = True
 
     def _end(self, name):
         element = self.stack.pop()
@@ -692,8 +898,8 @@ class _PartReader:
                 parent[_PROPS].append(element)
             return
         if role == _TEXT:
-            if self.text_field is not None:
-                self.text_field = None
+            if self.text_field is not None or self.shown_field is not None:
+                self.text_field = self.shown_field = None
                 self.parser.CharacterDataHandler = None
         elif role == _DELETION:
             self.deletions -= 1
@@ -703,30 +909,94 @@ class _PartReader:
                 self.fields.pop()
                 if field.in_instruction:
                     self.instructions -= 1
+                if field.watched:
+                    self.watched -= 1
                 if field.removed():
-                    self._remove_field(field)
-                    self.nested_removal = self.nested_removal or bool(self.instructions)
+                    if not self.instructions and field.separates and self._in_a_result() \
+                            and not field.names_a_picture():
+                        self._shell_field(field)
+                    else:
+                        self._remove_field(field)
+                        self._removed_in_an_instruction(field.names_a_picture())
+                elif field.holds_removed or field.begin[_AT] in self.carried:
+                    self.candidates.append(field.begin[_AT])  # R2-30's fallback (read)
+                    self.unshown += field.loses_its_result()
         elif role == _FLDSIMPLE:
             if _removed_type(element[_INSTRUCTION]):
-                self._remove_simple_field(element)
-                self.nested_removal = self.nested_removal or bool(self.instructions)
+                picture = _names_a_picture(element[_INSTRUCTION])
+                if not self.instructions and self._in_a_result() and not picture \
+                        and self.raw[self._tag_end(element[_AT]) - 2] != 0x2F:
+                    self._shell_simple_field(element)
+                else:
+                    self._remove_simple_field(element)
+                    self._removed_in_an_instruction(picture)
         elif role in _CONTAINERS:
             self.containers -= 1
             if role == _OBJECT:
-                self._remove_object(element)
+                self._end_object(element, self.holders.pop())
+            elif role == _ALTCHUNK:
+                if element[_INSTRUCTION]:  # R2-28: refused as an inserted document; no edit is made
+                    self.lost['documents'] += 1
+                else:  # it holds nothing: removed as release 1 removes it
+                    self._remove(element)
+                    self.removed['chunks'] += 1
             else:
                 self._remove(element)
                 if role == _CONTROL:
                     self.removed['controls'] += 1
-                elif role == _ALTCHUNK:
-                    self.removed['chunks'] += 1
                 elif not any(ancestor[_NAME] in _OBJECTS for ancestor in self.stack):
                     self.removed['objects'] += 1  # a pointer outside an object; inside one the object counts
+        elif role == _PICT:  # R2-29 step 4: lost when its pictures are fewer than the pointers or controls it holds
+            _, kind, pointers = self.holders.pop()
+            if self._pictures_in(element) < pointers:
+                self.lost[kind or 'objects'] += 1
 
     def _text(self, data):
         field = self.text_field
         if field is not None and not field.decided:
             field.feed(data, self.text_name, self.text_deleted)
+
+    def _shown_text(self, data):
+        if data.strip():
+            self.shown_field.result_shown = True
+
+    # release 2
+    def _in_a_result(self) -> bool:
+        """Whether what just ended lies in another field's result (asked while no field's instruction is open): an open
+        complex field, or a w:fldSimple around it (R2-30)."""
+        return bool(self.fields) or any(_ROLES.get(element[_NAME]) == _FLDSIMPLE for element in self.stack)
+
+    def _removed_in_an_instruction(self, picture):
+        """A removed field just went as release 1 removes it. Inside another field's instruction (release 1's re-read),
+        every field whose instruction is open holds it - unless it was INCLUDEPICTURE (R2-30's fallback)."""
+        if self.instructions:
+            self.nested_removal = True
+            if not picture:
+                for field in self.fields:
+                    if field.in_instruction:
+                        field.holds_removed = True
+
+    def _pictures_in(self, element) -> int:
+        """How many pictures whose part is sent stand in ``element`` (R2-29)."""
+        return (bisect.bisect_left(self.pictured, element[_END])
+                - bisect.bisect_left(self.pictured, element[_AT]))
+
+    def _end_object(self, element, holder):
+        """R2-29 step 3: a w:object is lost - under 'controls' when it held a control, else 'objects' - when its
+        pictures are fewer than its pointers, when it holds anything but VML, w:drawing and pointers, when it has both a
+        drawing and a VML shape, or when it points at something with no drawing and other than exactly one VML shape:
+        the file is refused and the object left as it is. Otherwise it is removed as release 1 removes it."""
+        _, kind, pointers = holder
+        children = element[_CHILDREN] or []
+        drawings = [child for child in children if child[_NAME] in _DRAWINGS]
+        shapes = [child for child in children if child[_NAME].startswith(_VML_PREFIX) and child[_NAME] != _SHAPETYPE]
+        beside = [child for child in children if child[_NAME] not in _DRAWINGS and child[_NAME] not in _OBJECT_POINTERS
+                  and not child[_NAME].startswith(_VML_PREFIX)]
+        if self._pictures_in(element) < pointers or beside or (drawings and shapes) \
+                or (pointers and not drawings and len(shapes) != 1):
+            self.lost[kind or 'objects'] += 1
+            return
+        self._remove_object(element)
 
     # the removals
     def _edit(self, start, end, replacement=b''):
@@ -750,16 +1020,17 @@ class _PartReader:
     def _remove(self, element):
         self._edit(*self._span(element))
 
-    def _remove_between(self, first, first_chain, last, last_chain):
+    def _remove_between(self, first, first_chain, last, last_chain, marks=True):
         """Removes everything from the start of ``first`` to the end of ``last`` (a field's begin mark and its separate
         or end mark), keeping only what the elements around them need to stay whole: below the element both are in, the
-        end tags of ``first``'s ancestors and the start tags and property children (pPr, rPr, ...) of ``last``'s."""
+        end tags of ``first``'s ancestors and the start tags and property children (pPr, rPr, ...) of ``last``'s. With
+        ``marks`` False, ``first`` and ``last`` themselves stay: what stands between them goes (R2-30)."""
         common = 0
         for mine, theirs in zip(first_chain, last_chain):
             if mine is not theirs:
                 break
             common += 1
-        low, high = first[_AT], self._span(last)[1]
+        low, high = (first[_AT], self._span(last)[1]) if marks else (self._span(first)[1], last[_AT])
         kept = [(element[_END], self._tag_end(element[_END])) for element in first_chain[common:]]
         for element in last_chain[common:]:
             kept.append((element[_AT], self._tag_end(element[_AT])))
@@ -774,6 +1045,40 @@ class _PartReader:
             at = max(at, end)
         if high > at:
             self._edit(at, high)
+
+    def _shell_field(self, field):
+        """R2-30: a removed complex field in another field's result stays a field, of a type LibreOffice shows by its
+        stored result: its begin mark is followed by the instruction ' QUOTE ' (an instrText of the begin mark's own
+        prefix, with any namespaces the mark declares), what stood between the begin and separate marks goes, and the
+        separate mark, the result and the end mark stay. The count stays under fields."""
+        separate, separate_chain = field.separates[0]
+        start, end = self._span(field.begin)
+        prefix = _TAG_NAME.match(self.raw, start).group(1).rpartition(b':')[0]
+        tag = prefix + b':instrText' if prefix else b'instrText'
+        declarations = ''.join(f' xmlns={quoteattr(uri)}' if declared is None else f' xmlns:{declared}={quoteattr(uri)}'
+                               for declared, uri in field.begin[_DECLARED]).encode('utf-8')
+        self._edit(start, end, self.raw[start:end] + b'<' + tag + declarations + b' xml:space="preserve"> QUOTE </'
+                   + tag + b'>')
+        self._remove_between(field.begin, field.begin_chain, separate, separate_chain, marks=False)
+        self.removed['fields'] += 1
+        self.shells += 1
+
+    def _shell_simple_field(self, element):
+        """R2-30: a removed w:fldSimple in another field's result stays a field: every instr attribute of its start tag
+        reads ' QUOTE ', its w:fldData goes (as release 1's unwrapping takes it), its runs stay."""
+        start_end = self._tag_end(element[_AT])
+        values = [(match.start(2), match.end(2)) for match in _ATTRIBUTE.finditer(
+            self.raw, _TAG_NAME.match(self.raw, element[_AT]).end(), start_end)
+            if match.group(1).rpartition(b':')[2] == b'instr']
+        if not values:
+            raise PackageRefused('a document part cannot be edited safely')
+        for value_start, value_end in values:
+            self._edit(value_start, value_end, b'" QUOTE "')
+        for child in element[_CHILDREN]:
+            if child[_NAME] in _FLDDATAS:
+                self._remove(child)
+        self.removed['fields'] += 1
+        self.shells += 1
 
     def _remove_field(self, field):
         """A complex field's instruction goes - begin to separate, and the end mark - and its result stays; with no
@@ -915,35 +1220,67 @@ def _well_formed(data):
         raise PackageRefused('a document part could not be edited safely') from None
 
 
-def _edited_part(raw, deadline):
-    """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named), or None when
-    nothing is to be removed - the part then passes through byte for byte.
+def _edited_part(raw, deadline, pictures=frozenset(), external=frozenset()):
+    """(``raw`` with E2's removals made, their counts, the relationship ids only removed content named, the counts of
+    what E2 would leave nothing of - LOST_KINDS -, the QUOTE shells made), or None when nothing is to be removed - the
+    part then passes through byte for byte. When anything is lost, the file is refused (ContentNotShown), so the part is
+    returned unedited. ``pictures`` and ``external``: _relationship_ids of the part.
 
     The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
     take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
     (well-formed, every prefix bound); and an id some kept attribute still holds keeps its relationship, found by its
     bytes. The one way an edit can make a new instruction is a field removed inside another field's instruction: its
     result, kept, now stands in that instruction, and may complete the outer field's type ('LI' and a removed field's
-    result 'NK'). Only then is the part read again, and edited again, until nothing more is removed."""
-    reader = _PartReader(raw, deadline, editable=_editable(raw)).read()
+    result 'NK'). Only then is the part read again, and edited again, until nothing more is removed. Each reading is
+    given the offsets, moved by the edits, of the fields an earlier one found holding a removed field in their
+    instruction, and the reading that removes nothing more inside an instruction - when every field's type is final -
+    counts those whose result 7.4 would lose (R2-30's fallback)."""
+    reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, external=external).read()
+    if any(reader.lost.values()):
+        return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0
     if not reader.edits:
         return None
-    data, removed, gone = raw, dict.fromkeys(_REMOVED_KINDS, 0), set()
+    data, removed, gone, shells, lost = raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), 0, dict.fromkeys(LOST_KINDS, 0)
     for _ in range(_REREADS):
         edits = _merged(reader.edits)
         gone |= _named_by(reader.references, edits)
         for kind in _REMOVED_KINDS:
             removed[kind] += reader.removed[kind]
+        for kind in LOST_KINDS:
+            lost[kind] += reader.lost[kind]
+        shells += reader.shells
         data = _applied(data, edits)
         if not reader.nested_removal:
             break
-        reader = _PartReader(data, deadline).read()
+        reader = _PartReader(data, deadline, pictures=pictures, external=external,
+                             carried=_moved(reader.candidates, edits)).read()
         if not reader.edits:
+            for kind in LOST_KINDS:
+                lost[kind] += reader.lost[kind]
             break
     else:
         raise PackageRefused('a document part could not be edited safely')
     _well_formed(data)
-    return data, removed, gone - _still_named(data, gone)
+    return data, removed, gone - _still_named(data, gone), lost, shells
+
+
+def _moved(offsets, edits) -> frozenset:
+    """``offsets`` of a part where they stand once ``edits`` (merged: in order, apart) are made; one an edit takes is
+    gone."""
+    moved = set()
+    for offset in offsets:
+        shift = 0
+        for start, end, replacement in edits:
+            if end <= offset:
+                shift += len(replacement) - (end - start)
+            elif start <= offset:
+                break
+            else:
+                moved.add(offset + shift)
+                break
+        else:
+            moved.add(offset + shift)
+    return frozenset(moved)
 
 
 def _content_types(raw):
@@ -1003,14 +1340,14 @@ def _refuse_any_dtd(raw):
         pass
 
 
-def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, special, orphans, deadline):
+def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten, special, orphans, deadline):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
     SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
     relationships only removed content named are dropped (``kept_rows`` and ``rewritten`` updated) and the parts only
     they named added to ``orphans``. Returns (the counts, {part: the refusal held until it is known whether the part is
-    still sent})."""
-    removed, held, dropped_ids = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}
+    still sent}, {part: what E2 would leave nothing of in it}, {part: the QUOTE shells made in it})."""
+    removed, held, dropped_ids, unshown, shells = dict.fromkeys(_REMOVED_KINDS, 0), {}, {}, {}, {}
     types = _content_types(parts[CONTENT_TYPES_PART])
     for info in infos:
         name = info.filename
@@ -1021,13 +1358,20 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
         try:
             triggered = _TRIGGER.search(view) is not None
             if triggered:
-                outcome = _edited_part(raw, deadline)
+                pictures, external = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows)
+                outcome = _edited_part(raw, deadline, pictures, external)
                 if outcome is not None:
-                    rewritten[name], counts, ids = outcome
-                    for kind in _REMOVED_KINDS:
-                        removed[kind] += counts[kind]
-                    if ids:
-                        dropped_ids[name] = ids
+                    edited, counts, ids, lost, made = outcome
+                    if any(lost.values()):  # the file is refused: nothing of the part is edited
+                        unshown[name] = lost
+                    else:
+                        rewritten[name] = edited
+                        for kind in _REMOVED_KINDS:
+                            removed[kind] += counts[kind]
+                        if ids:
+                            dropped_ids[name] = ids
+                        if made:
+                            shells[name] = made
             elif _DOCTYPE.search(view) and _content_type(name, types) != SVG_TYPE:
                 _refuse_any_dtd(raw)
         except _OutOfTime:
@@ -1052,7 +1396,24 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, rewritten, specia
             if target is not None:
                 candidates.add(target.casefold())
     orphans |= _released(candidates, kept_rows, by_folded, special, orphans)
-    return removed, held
+    return removed, held, unshown, shells
+
+
+def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
+    """(the ids of the part ``name``'s kept relationships whose target is a part of the package that is not empty, by
+    its name as written or percent-decoded; the ids of its relationships that reach outside - TargetMode other than
+    Internal, dropped): what a preview picture must name (R2-29 step 1), and what makes a w:altChunk an inserted
+    document (R2-28 step 2)."""
+    folder, _, leaf = name.rpartition('/')
+    rels = by_folded.get((f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels').casefold())
+    present = set()
+    for row in kept_rows.get(rels, ()):
+        target = _part_name(_source_folder(rels), row.get('Target', ''))
+        for form in {target, unquote(target)} if target is not None else ():
+            part = by_folded.get(form.casefold())
+            if part is not None and parts[part]:
+                present.add(row.get('Id'))
+    return frozenset(present), frozenset(row.get('Id') for row in dropped_rows.get(rels, ()))
 
 
 def _released(candidates, kept_rows, by_folded, special, dropped):

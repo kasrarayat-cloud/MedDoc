@@ -957,12 +957,21 @@ class FieldInstructionTests(SimpleTestCase):
 
     def test_nesting_removes_exactly_the_dangerous_instruction(self):
         inner = complex_field(DANGEROUS['INCLUDETEXT'], 'INNER RESULT')
+        # release 2: the harmless outer's stored result holds a field (Word's stored evaluation of the nested one), so
+        # it is edited exactly as release 1 edits it; with a plain stored result it is refused (R2-30's fallback, below)
         harmless_outer = ('<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
                           '<w:r><w:instrText xml:space="preserve"> IF 1 = 1 "</w:instrText></w:r>'
                           f'{inner}<w:r><w:instrText xml:space="preserve">" "" </w:instrText></w:r>'
-                          '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>OUTER RESULT</w:t></w:r>'
+                          '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+                          f'{complex_field(" QUOTE ", "OUTER RESULT")}'
                           '<w:r><w:fldChar w:fldCharType="end"/></w:r>')
         data = word_package(paragraph(harmless_outer))
+        plain = word_package(paragraph(harmless_outer.replace(complex_field(' QUOTE ', 'OUTER RESULT'),
+                                                              '<w:r><w:t>OUTER RESULT</w:t></w:r>')))
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package.safe_package(plain)
+        self.assertEqual((caught.exception.code, caught.exception.counts),
+                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 0, 'controls': 0, 'fields': 1}))
         xml = document_xml(docx_package.safe_package(data))
         inner_marks = ('<w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">'
                        f'{escape(DANGEROUS["INCLUDETEXT"])}</w:instrText></w:r>'
@@ -1137,7 +1146,14 @@ class EmbeddedContentTests(SimpleTestCase):
         for b in safe.values():
             self.assertNotIn(b'secret', b)
 
-    def test_an_object_with_a_drawing_keeps_the_drawing_in_its_place_and_one_with_no_preview_goes(self):
+    def refused(self, body, rels=(), parts=()):
+        """The ContentNotShown the package of ``body`` (and ``rels``, ``parts``) raises (release 2)."""
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package._safe_package(full_package(body, document_rels=rels, parts=parts, defaults=OLE_DEFAULTS))
+        self.assertEqual(str(caught.exception), docx_package.CONTENT_NOT_SHOWN)
+        return caught.exception
+
+    def test_an_object_with_a_drawing_keeps_the_drawing_in_its_place(self):
         drawing_object = (f'<w:object>{EMBEDDED_DRAWING}<w:objectEmbed w:drawAspect="content" r:id="rIdOle" '
                           'w:progId="Excel.Sheet.12" w:shapeId="1" w:fieldCodes=""/></w:object>')
         data, safe, removed = self.safe(paragraph(f'<w:r>{drawing_object}</w:r>'),
@@ -1147,10 +1163,17 @@ class EmbeddedContentTests(SimpleTestCase):
         self.assertNotIn('objectEmbed', safe['word/document.xml'].decode('utf-8'))
         self.assertNotIn('word/embeddings/Microsoft_Excel_Worksheet.xlsx', safe)
         self.assertEqual(safe['word/media/image1.png'], PNG)
+        # nothing else changed: the part is the original with the object's two tags and its pointer taken out
+        original = parts_of(data)['word/document.xml'].decode('utf-8')
+        self.assertEqual(original.count(drawing_object), 1)
+        self.assertEqual(safe['word/document.xml'].decode('utf-8'), original.replace(drawing_object, EMBEDDED_DRAWING))
+
+    def test_an_object_with_no_preview_makes_the_file_refused(self):
+        # release 2, R2-29: release 1 removed it whole, so whatever it held was coded as if it had never been there
         bare = '<w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object>'
-        data, safe, removed = self.safe(paragraph(f'<w:r><w:t>KEPT</w:t>{bare}</w:r>'), OLE_RELS[1:], OLE_PARTS[1:])
-        self.assertIn('<w:p><w:r><w:t>KEPT</w:t></w:r></w:p>', safe['word/document.xml'].decode('utf-8'))
-        self.assertNotIn('word/embeddings/Microsoft_Excel_Worksheet.xlsx', safe)
+        refusal = self.refused(paragraph(f'<w:r><w:t>KEPT</w:t>{bare}</w:r>'), OLE_RELS[1:], OLE_PARTS[1:])
+        self.assertEqual((refusal.code, refusal.counts),
+                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}))
 
     def test_a_control_goes_with_its_part_and_what_only_that_part_named(self):
         control = ('<w:pict>' + OLE_SHAPE + '<w:control r:id="rIdAx" w:name="CheckBox1" w:shapeid="_x0000_i1025"/>'
@@ -1173,27 +1196,22 @@ class EmbeddedContentTests(SimpleTestCase):
         self.assertNotIn('rIdAx', safe['word/_rels/document.xml.rels'].decode('utf-8'))
         self.assertEqual(removed['controls'], 1)
 
-    def test_an_imported_document_goes_with_its_part(self):
-        chunk = (b'MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\n<html><body><img src="http://192.0.2.1/'
-                 b'secret.png"><object data="file:///synthetic/secret"></object></body></html>')
-        data, safe, removed = self.safe(TEXT + '<w:altChunk r:id="rIdChunk"/>' + TEXT,
-                                        (relationship('rIdChunk', 'aFChunk', 'afchunk.mht'),),
-                                        (('word/afchunk.mht', chunk),))
-        self.assertNotIn('altChunk', safe['word/document.xml'].decode('utf-8'))
-        self.assertEqual(safe['word/document.xml'].decode('utf-8').count('SYNTHETIC NOTE'), 2)
-        self.assertNotIn('word/afchunk.mht', safe)
-        self.assertNotIn('rIdChunk', safe['word/_rels/document.xml.rels'].decode('utf-8'))
-        self.assertEqual(removed['chunks'], 1)
-
-    def test_an_object_pointer_outside_an_object_goes_too(self):
+    def test_an_object_pointer_in_a_picture_with_its_preview_goes(self):
         stray = ('<w:r><w:pict>' + OLE_SHAPE + '<o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:pict>'
-                 '</w:r><w:r><w:objectEmbed r:id="rIdOle"/><w:t>KEPT</w:t></w:r>')
+                 '</w:r><w:r><w:t>KEPT</w:t></w:r>')
         data, safe, removed = self.safe(paragraph(stray), OLE_RELS, OLE_PARTS)
         xml = safe['word/document.xml'].decode('utf-8')
         self.assertIn('<w:r><w:pict>' + OLE_SHAPE + '</w:pict></w:r><w:r><w:t>KEPT</w:t></w:r>', xml)
         self.assertNotIn('word/embeddings/Microsoft_Excel_Worksheet.xlsx', safe)
         self.assertNotIn('rIdOle', safe['word/_rels/document.xml.rels'].decode('utf-8'))
-        self.assertEqual(removed['objects'], 2)
+        self.assertEqual(removed['objects'], 1)
+
+    def test_an_object_pointer_in_neither_an_object_nor_a_picture_makes_the_file_refused(self):
+        # release 2, R2-29 step 4: no picture of what it points at stands anywhere
+        refusal = self.refused(paragraph('<w:r><w:objectEmbed r:id="rIdOle"/><w:t>KEPT</w:t></w:r>'), OLE_RELS,
+                               OLE_PARTS)
+        self.assertEqual((refusal.code, refusal.counts),
+                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}))
 
     def test_a_dropped_part_loses_its_override_and_nothing_else_of_the_content_types_changes(self):
         # the lens's finding 4: the content types named a part E2 dropped
@@ -1243,6 +1261,222 @@ class EmbeddedContentTests(SimpleTestCase):
         unwrap = f'<w:object xmlns:q="{REL}">{EMBEDDED_DRAWING}<w:objectEmbed q:id="rIdOle"/></w:object>'
         with self.assertRaises(docx_package.PackageRefused):
             self.safe(paragraph(f'<w:r>{unwrap}</w:r>'), OLE_RELS, OLE_PARTS)
+
+
+# --- release 2, R2-28: an inserted document is refused; one that holds nothing is removed as in release 1 (C9) -------
+
+R2_IMPORTED_TEXT = 'SYNTHETIC IMPORTED TEXT - FICTIONAL - NO PATIENT DATA'
+R2_ALT = '<w:altChunk r:id="rIdChunk"/>'
+R2_STRICT_REL = 'http://purl.oclc.org/ooxml/officeDocument/relationships'
+R2_DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+R2_INSERTED = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
+
+
+def r2_zipped(entries):
+    """``entries`` zipped as zipped() zips them, with one fixed timestamp, so two packages built apart compare byte for
+    byte (a zip entry carries the time it was written)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        for name, content in entries:
+            info = zipfile.ZipInfo(name, date_time=(2026, 11, 26, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, content)
+    return buffer.getvalue()
+
+
+def r2_imported_docx():
+    """The Word file a w:altChunk imports in these tests: one paragraph of synthetic text."""
+    return word_package(paragraph(shown(R2_IMPORTED_TEXT)))
+
+
+def r2_flat_xml():
+    """A flat-OPC Word document (the XML a Word file can import whole): one paragraph of synthetic text."""
+    return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?mso-application progid="Word.Document"?>'
+            '<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/_rels/'
+            '.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"><pkg:xmlData>'
+            f'<Relationships xmlns="{RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="{REL}/officeDocument" '
+            'Target="word/document.xml"/></Relationships></pkg:xmlData></pkg:part><pkg:part pkg:name="/word/document.'
+            f'xml" pkg:contentType="{WORD_MAIN}"><pkg:xmlData><w:document xmlns:w="{WORD_NS}"><w:body><w:p><w:r><w:t>'
+            f'{R2_IMPORTED_TEXT}</w:t></w:r></w:p></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>')
+
+
+@override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False)
+class InsertedDocumentTests(SimpleTestCase):
+    """Release 2, R2-28 (D421, D422; C9): a w:altChunk whose r:id names an Internal relationship to a part present and
+    not empty - whatever its format, story or namespace form - is refused as an inserted document, and so, on purpose,
+    are one whose relationship is External and every w:subDoc (the doctor's own Word can pull that content in). An
+    altChunk that holds nothing is removed as release 1 removes it, counted in 'chunks', and the package is the one
+    release 1 made."""
+
+    def setUp(self):
+        private_tempdir(self)
+
+    def assert_inserted(self, data, counts=R2_INSERTED, *, named=('afchunk', 'subdoc', 'header1', 'footnotes')):
+        """``data`` is refused as an inserted document, with ``counts``, in a reason that names no part and no text; and
+        converting it never reaches the runner: the refusal is the conversion's outcome, with its sentence and
+        record."""
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package._safe_package(data)
+        self.assertEqual((caught.exception.code, caught.exception.counts), (docx_package.INSERTED_DOCUMENT, counts))
+        self.assertEqual(str(caught.exception), docx_package.CONTENT_NOT_SHOWN)
+        for word in (*named, 'SYNTHETIC', 'word/'):
+            self.assertNotIn(word.casefold(), str(caught.exception).casefold())
+        with self.assertRaises(document.DocumentError) as converted:
+            document.convert_docx(data, runner=failing_runner)  # had the runner run, the outcome would be a failure
+        error = converted.exception
+        self.assertEqual((error.failure_kind, error.text, error.code, error.counts),
+                         (CONVERT, document.REFUSED_PACKAGE_TEXT[docx_package.INSERTED_DOCUMENT],
+                          docx_package.INSERTED_DOCUMENT, counts))
+        self.assertEqual(error.recorded(), {'refused': docx_package.INSERTED_DOCUMENT, 'inserted': counts})
+
+    def imported(self, body=TEXT + R2_ALT + TEXT, *, target='afchunk1.docx', content=None, defaults='', rels=None,
+                 **stories):
+        """A Word file importing ``content`` (default: a Word file of synthetic text) at ``target`` from the main part,
+        where ``body`` puts its w:altChunk (or from a story given, with its own relationships in ``rels``)."""
+        content = r2_imported_docx() if content is None else content
+        defaults = defaults or f'<Default Extension="docx" ContentType="{R2_DOCX_TYPE}"/>'
+        chunk = relationship('rIdChunk', 'aFChunk', target)
+        parts = [(f'word/{target}', content)] + list(rels or ())
+        return full_package(body, document_rels=() if rels else (chunk,), parts=parts, defaults=defaults, **stories)
+
+    def test_an_imported_document_is_refused_whatever_it_is(self):
+        docx_default = f'<Default Extension="docx" ContentType="{R2_DOCX_TYPE}"/>'
+        formats = {
+            'a .docx, typed as a Word document': dict(defaults=docx_default),
+            'a .docx, typed as a main document part': dict(defaults=override('word/afchunk1.docx', WORD_MAIN)),
+            'a Word file typed as octet-stream': dict(
+                target='afchunk1.dat', defaults='<Default Extension="dat" ContentType="application/octet-stream"/>'),
+            'html': dict(target='afchunk1.html', content=f'<html><body><p>{R2_IMPORTED_TEXT}</p></body></html>',
+                         defaults='<Default Extension="html" ContentType="text/html"/>'),
+            'xhtml': dict(target='afchunk1.xhtml', content='<html xmlns="http://www.w3.org/1999/xhtml"><body><p>'
+                                                          f'{R2_IMPORTED_TEXT}</p></body></html>',
+                          defaults='<Default Extension="xhtml" ContentType="application/xhtml+xml"/>'),
+            'mht': dict(target='afchunk1.mht', content='MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\n<html>'
+                                                      f'<body><p>{R2_IMPORTED_TEXT}</p></body></html>'),
+            'txt': dict(target='afchunk1.txt', content=R2_IMPORTED_TEXT,
+                        defaults='<Default Extension="txt" ContentType="text/plain"/>'),
+            'rtf': dict(target='afchunk1.rtf', content='{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\f0\\fs24 '
+                                                      f'{R2_IMPORTED_TEXT}\\par}}',
+                        defaults='<Default Extension="rtf" ContentType="application/rtf"/>'),
+            'flat xml': dict(target='afchunk1.xml', content=r2_flat_xml()),
+        }
+        for label, shape in formats.items():
+            with self.subTest(f'format: {label}'):
+                self.assert_inserted(self.imported(**shape))
+        cell = ('<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr/>' + R2_ALT
+                + '<w:p/></w:tc></w:tr></w:tbl>')
+        box = ('<w:p><w:r><w:pict><v:shape id="tb1" type="#_x0000_t202" style="width:300pt;height:60pt"><v:textbox>'
+               f'<w:txbxContent>{R2_ALT}<w:p/></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>')
+        own_rels = [('word/_rels/header1.xml.rels', relationships(relationship('rIdChunk', 'aFChunk',
+                                                                               'afchunk1.docx')))]
+        note_rels = [('word/_rels/footnotes.xml.rels', relationships(relationship('rIdChunk', 'aFChunk',
+                                                                                  'afchunk1.docx')))]
+        positions = {
+            'the body': self.imported(),
+            'a table cell': self.imported(TEXT + cell),
+            'a header': self.imported(TEXT, header=TEXT + R2_ALT, rels=own_rels),
+            'a footnote': self.imported(TEXT, footnote=TEXT + R2_ALT, rels=note_rels),
+            'a text box': self.imported(TEXT + box),
+            'a content control': self.imported(
+                TEXT + f'<w:sdt><w:sdtPr/><w:sdtContent>{R2_ALT}</w:sdtContent></w:sdt>'),
+            'mc:Choice': self.imported(TEXT + f'<mc:AlternateContent><mc:Choice Requires="w14">{R2_ALT}</mc:Choice>'
+                                              f'<mc:Fallback>{TEXT}</mc:Fallback></mc:AlternateContent>'),
+            'the result of a kept field': self.imported(paragraph(BEGIN, instruction(' PAGE '), SEPARATE) + R2_ALT
+                                                        + paragraph(END)),
+            'a removed instruction': self.imported(paragraph(BEGIN, instruction(DANGEROUS['INCLUDETEXT'])) + R2_ALT
+                                                   + paragraph(SEPARATE, shown('RESULT'), END)),
+        }
+        for label, data in positions.items():
+            with self.subTest(f'in {label}'):
+                self.assert_inserted(data)
+        strict = f'xmlns:w="{STRICT_WORD_NS}" xmlns:r="{R2_STRICT_REL}"'
+        utf16_header = ('<?xml version="1.0" encoding="UTF-16"?>\n'
+                        f'<w:hdr {NAMESPACES}>{TEXT}{R2_ALT}</w:hdr>').encode('utf-16')
+        forms = {
+            # refused on purpose, although the file holds nothing of it: the doctor's own Word can pull it in (C9)
+            'an External relationship': full_package(TEXT + R2_ALT, document_rels=(relationship(
+                'rIdChunk', 'aFChunk', 'file:///synthetic/other.docx', 'External'),)),
+            'the strict namespace': word_package(TEXT + R2_ALT, [relationship('rIdChunk', 'aFChunk', 'afchunk1.docx')],
+                                                 namespaces=strict, parts=[('word/afchunk1.docx', r2_imported_docx())]),
+            'another prefix': word_package(TEXT + '<ns0:altChunk q:id="rIdChunk"/>', [relationship(
+                'rIdChunk', 'aFChunk', 'afchunk1.docx')], namespaces=f'{NAMESPACES} xmlns:ns0="{WORD_NS}" '
+                                                                     f'xmlns:q="{REL}"',
+                parts=[('word/afchunk1.docx', r2_imported_docx())]),
+            'a UTF-16 part (refused for the import, not as not UTF-8)': word_package(
+                TEXT, [relationship('rIdHeader', 'header', 'header1.xml')], parts=[
+                    ('word/header1.xml', utf16_header), ('word/_rels/header1.xml.rels', relationships(relationship(
+                        'rIdChunk', 'aFChunk', 'afchunk1.docx'))), ('word/afchunk1.docx', r2_imported_docx())],
+                overrides=override('word/header1.xml', STORY.format('header'))),
+            'a w:subDoc in the body, External': full_package(TEXT + '<w:subDoc r:id="rIdSub"/>' + TEXT, document_rels=(
+                relationship('rIdSub', 'subDocument', 'file:///synthetic/chapter.docx', 'External'),)),
+            'a w:subDoc in the body, Internal': full_package(TEXT + '<w:subDoc r:id="rIdSub"/>', document_rels=(
+                relationship('rIdSub', 'subDocument', 'subdoc1.docx'),), parts=[('word/subdoc1.docx',
+                                                                                 r2_imported_docx())]),
+            'a w:subDoc in a header': full_package(TEXT, header=TEXT + '<w:subDoc r:id="rIdSub"/>', parts=[
+                ('word/_rels/header1.xml.rels', relationships(relationship(
+                    'rIdSub', 'subDocument', 'file:///synthetic/chapter.docx', 'External')))]),
+            'a w:subDoc that names nothing at all': full_package(TEXT + '<w:subDoc/>'),
+        }
+        for label, data in forms.items():
+            with self.subTest(label):
+                self.assert_inserted(data)
+
+    def holding_nothing(self):
+        """(label, the package with a w:altChunk that holds nothing, the package as release 1 leaves it): the element,
+        and the relationship and part only it named, gone - built apart, so the bytes are compared, not derived."""
+        picture = relationship('rIdPic', 'image', 'media/image1.png')
+
+        def package(body, rows=(), parts=(), overrides=''):
+            entries = [('[Content_Types].xml', content_types(override('word/document.xml', WORD_MAIN), overrides,
+                                                             defaults='<Default Extension="txt" ContentType='
+                                                                      '"text/plain"/>')),
+                       ('_rels/.rels', relationships(relationship('rId1', 'officeDocument', 'word/document.xml'))),
+                       ('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                                             f'<w:document {NAMESPACES}><w:body>{body}</w:body></w:document>'),
+                       ('word/_rels/document.xml.rels', relationships(picture, *rows)),
+                       ('word/media/image1.png', PNG)]
+            return r2_zipped(entries + list(parts))
+        without = package(TEXT + TEXT)
+        chunk_row = relationship('rIdChunk', 'aFChunk', 'afchunk1.txt')
+        empty_override = override('word/afchunk1.txt', 'text/plain')
+        return [
+            ('no r:id', package(TEXT + '<w:altChunk/>' + TEXT), without),
+            ('an r:id that names no relationship', package(TEXT + '<w:altChunk r:id="rIdNone"/>' + TEXT), without),
+            ('an r:id naming a part that is missing', package(TEXT + R2_ALT + TEXT, [chunk_row]), without),
+            ('an r:id naming an empty part', package(TEXT + R2_ALT + TEXT, [chunk_row], [('word/afchunk1.txt', b'')]),
+             without),
+            ('an r:id naming an empty part that has an Override', package(
+                TEXT + R2_ALT + TEXT, [chunk_row], [('word/afchunk1.txt', b'')], empty_override), without),
+            ('an altChunk with properties and no r:id', package(
+                TEXT + '<w:altChunk><w:altChunkPr><w:matchSrc/></w:altChunkPr></w:altChunk>' + TEXT), without),
+        ]
+
+    def test_an_import_that_holds_nothing_is_removed_as_in_release_1(self):
+        # the critic's shapes (C9): the file holds nothing of such an import, so removing it loses nothing
+        for label, data, without in self.holding_nothing():
+            with self.subTest(label):
+                package, removed = docx_package._safe_package(data)
+                self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 1})
+                self.assertEqual(package, legacy_safe_package(without))
+                self.assertEqual(document.convert_docx(data, runner=_echo_package), CONVERTED + package)
+
+    def test_the_same_package_without_the_element_is_the_one_made_before(self):
+        # the positive control of the test above: what it compares with is a package E2 leaves untouched
+        for label, _, without in self.holding_nothing():
+            with self.subTest(label):
+                self.assertEqual(docx_package._safe_package(without),
+                                 (legacy_safe_package(without), {'fields': 0, 'objects': 0, 'controls': 0,
+                                                                 'chunks': 0}))
+
+    def test_two_imports_and_an_object_are_counted(self):
+        two = TEXT + R2_ALT + '<w:altChunk r:id="rIdChunk2"/>' + paragraph(
+            '<w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object></w:r>')
+        data = full_package(two, document_rels=(
+            relationship('rIdChunk', 'aFChunk', 'afchunk1.docx'), relationship('rIdChunk2', 'aFChunk', 'afchunk2.html'),
+            OLE_RELS[1]), parts=[('word/afchunk1.docx', r2_imported_docx()), ('word/afchunk2.html',
+                                 f'<html><body>{R2_IMPORTED_TEXT}</body></html>'), OLE_PARTS[1]],
+            defaults=OLE_DEFAULTS + f'<Default Extension="docx" ContentType="{R2_DOCX_TYPE}"/>')
+        self.assert_inserted(data, {'documents': 2, 'objects': 1, 'controls': 0, 'fields': 0})
 
 
 # --- E2: a Word file with nothing to remove gives exactly today's package -----------------------------------------
