@@ -587,6 +587,12 @@ class ObjectAndControlTests(ReleaseOneCase):
             refused[f'a target written {target!r}'] = preview_object(target)
         refused['a target written \'media//../image1.emf\', the part word/image1.emf'] = preview_object(
             'media//../image1.emf', part_name='word/image1.emf')
+        # a '.' or '..' left names no part even where a zip entry is so named: lane D cannot tell whether LibreOffice's
+        # storage would resolve it (fail closed)
+        refused['a target written \'./media/image1.emf\', a zip entry word/./media/image1.emf'] = preview_object(
+            './media/image1.emf', part_name='word/./media/image1.emf')
+        refused['a target written \'/word/../word/media/image1.emf\', a zip entry so named'] = preview_object(
+            '/word/../word/media/image1.emf', part_name='word/../word/media/image1.emf')
         for label, data in refused.items():
             with self.subTest(f'refused: {label}'):
                 with self.assertRaises(docx_package.ContentNotShown) as caught:
