@@ -2246,6 +2246,12 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   (`cptstudio/settings.py`) ends the wait, and the worker then serves while
   `/health/` reports the database.
   A database that refuses the connection, or is gone, fails it at once.
+- Release 2's web loads the application in gunicorn's master before gunicorn
+  writes its first line (R2-5). A web whose application cannot load - a
+  setting its environment refuses, a part of the warm-up that cannot load -
+  writes one fixed line the installer keeps, `CPT Studio web: the application
+  could not be loaded.`, and exits; why is in the error's text, which is never
+  kept. To read it, start the image by hand with the same environment.
 - Release 2's search (`POST /api/encounters/search`, R2-20) matches text in
   PostgreSQL's builtin `pg_c_utf8` collation, which PostgreSQL 17 introduced:
   the database must stay PostgreSQL 17 or newer - on this host (17.11) and on

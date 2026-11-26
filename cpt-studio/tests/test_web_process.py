@@ -670,20 +670,27 @@ CRASH_REPORT = 'Exception in worker process'
 # Every life-cycle shape the installer's kept pattern names, each of which the runs below must write (their control)
 LIFE_CYCLE_SHAPES = (r'Starting gunicorn [\d.]+$', r'Listening at: http://0\.0\.0\.0:8000 \(\d+\)$',
                      'Using worker: sync$', r'Booting worker with pid: \d+$', r'Handling signal: term$',
-                     r'Worker exiting \(pid: \d+\)$', 'Shutting down: Master$', r'Worker \(pid:\d+\) was sent SIGKILL! Perhaps out of memory\?$',
+                     r'Worker exiting \(pid: \d+\)$', 'Shutting down: Master$',
+                     r'Worker \(pid:\d+\) was sent SIGKILL! Perhaps out of memory\?$',
                      r'WORKER TIMEOUT \(pid:\d+\)$', r'Autorestarting worker after current request\.$',
                      r'Worker \(pid:\d+\) exited with code 1$', r'Worker \(pid:\d+\) exited with code 1\.$',
                      r'Worker \(pid:\d+\) exited with code 3$', r'Reason: Worker failed to boot\.$',
                      r'Worker \(pid:\d+\) exited with code 4$', r'Reason: App failed to load\.$')
+# The one line release 2's web writes when its application cannot load (cptstudio/wsgi.py): gunicorn's master loads it
+# before gunicorn writes a line of its own (preload_app), so without it such a web's output keeps nothing
+WEB_LOAD_FAILED = 'CPT Studio web: the application could not be loaded.'
 
 
 class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
     """R2-9's acceptance: every life-cycle line real runs of the release's settings write is one the installer keeps
     (ops/install.py ids_only_lines over KEPT_LOG_FORMATS['web'], as keep_container_log reads a web's output), and no
-    line of another shape is kept. The runs: of four workers one killed as the kernel kills for memory and one aborted,
-    then all of them recycled, then stopped as Docker stops a web; a worker that stopped answering, timed out; and the two ways a web
-    cannot start - a worker that fails to boot, and (an earlier revision's web, which loads the application in each
-    worker) one that cannot load it - each made by a settings file that is the release's own with that one change."""
+    line of another shape is kept. The runs, with the release's settings file: of four workers one killed as the kernel
+    kills for memory and one aborted, then all of them recycled, then stopped as Docker stops a web; a worker that
+    stopped answering, timed out. Two more, each a settings file that is the release's own with one change: a worker
+    that fails to boot (the release's own post_worker_init swallows every failure, so only a changed hook can), and an
+    earlier revision's web, which loads the application in each worker (preload_app off), that cannot load it - the
+    only web that writes 'Reason: App failed to load.'. And release 2's own web, its settings file unchanged, when its
+    application cannot load in gunicorn's master: the settings refuse their environment, or the warm-up fails."""
 
     databases = {'default'}
 
@@ -761,3 +768,34 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         self.assertTrue([body for body in expected
                          if ACCESS_LINE.match(body) and '"GET /health/ HTTP/1.1" 200 ' in body])
         self.assertTrue([body for body in bodies if body not in expected])  # and the runs wrote lines that are dropped
+
+    def release_web_that_cannot_load(self, environment) -> str:
+        """The release's settings file unchanged; its application fails in gunicorn's master (preload_app), before
+        gunicorn writes a line: gunicorn exits 1."""
+        server = ReleaseGunicorn(self, environment=environment)
+        self.assertEqual(server.run_to_exit(timeout=60), 1)  # it exits within seconds; one that serves never does
+        return server.text()
+
+    def test_release_2s_web_that_cannot_load_its_application_keeps_one_fixed_line(self):
+        install = lane_w_installer()
+        if install is None:
+            self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
+        shadow = tempfile.TemporaryDirectory(prefix='lane-w-argon2-')
+        self.addCleanup(shadow.cleanup)
+        (Path(shadow.name) / 'argon2.py').write_text("raise ImportError('lane W test: no hasher library')\n",
+                                                    encoding='utf-8')
+        runs = {
+            # the settings refuse their environment (a relative state folder), inside get_wsgi_application
+            'settings refused': {'CPT_STUDIO_STATE_DIR': 'relative/state'},
+            # the warm-up fails after the application is built: its 'import argon2' finds a module that raises
+            'warm-up failed': {'PYTHONPATH': shadow.name},
+        }
+        for what, environment in runs.items():
+            with self.subTest(what=what):
+                lines = self.release_web_that_cannot_load(environment).splitlines()
+                stamped = [f'2026-11-26T10:00:00.{index:09d}Z {line}' for index, line in enumerate(lines)]
+                kept, dropped = install.ids_only_lines('web', '\n'.join(stamped).encode())
+                # exactly the one fixed line - never the error's text, which gunicorn or the traceback writes after it
+                self.assertEqual([line.split(' ', 1)[1] for line in kept], [WEB_LOAD_FAILED])
+                self.assertEqual(dropped, len(lines) - 1)
+                self.assertGreater(dropped, 0)

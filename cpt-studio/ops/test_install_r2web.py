@@ -195,6 +195,18 @@ class KeptLifeCycleLinesTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(install.ids_only_lines('web', gunicorn_line(level, message).encode()), ([], 1))
 
+    def test_a_release_2_web_that_cannot_load_its_application_keeps_one_fixed_line(self):
+        # cptstudio/wsgi.py writes it, unprefixed, before gunicorn writes anything (preload_app; refutation round 1)
+        line = '2026-11-26T10:00:01.000000000Z CPT Studio web: the application could not be loaded.'
+        self.assertEqual(install.ids_only_lines('web', line.encode()), ([line], 0))
+        for text in ('CPT Studio web: the application could not be loaded. Jane Doe',
+                     'CPT Studio web: the application could not be loaded: CPT_STUDIO_STATE_DIR must be absolute',
+                     'CPT Studio web: the application could not be loaded',
+                     'Error: CPT_STUDIO_STATE_DIR must be an absolute path.'):
+            with self.subTest(text=text):
+                self.assertEqual(install.ids_only_lines('web', f'2026-11-26T10:00:01.000000000Z {text}'.encode()),
+                                 ([], 1))
+
     def test_the_kept_worker_class_is_the_settings_files_own_and_no_other(self):
         # a change of worker class in deploy/gunicorn.conf.py must change the kept 'Using worker: sync' with it
         def kept(word):

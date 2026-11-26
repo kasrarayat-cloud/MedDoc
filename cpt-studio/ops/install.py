@@ -1131,15 +1131,22 @@ KEPT_LOG_FORMATS = {
         rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
         rf'\d{{3}} (?:\d+|-) \d+ms',
         # gunicorn's own life cycle; since release 2 (R2-9) also how a worker ended - the kernel's kill with gunicorn
-        # 23's own hint ('Perhaps out of memory?'), an exit code, or a web that could not boot a worker or load the
-        # application - each in numbers and fixed words only, so a deploy that removes the container keeps the evidence.
-        # The worker class is a fixed word: deploy/gunicorn.conf.py's own (ops/test_install_r2web.py ties the two).
+        # 23's own hint ('Perhaps out of memory?'), an exit code, or a web that could not boot a worker - each in
+        # numbers and fixed words only, so a deploy that removes the container keeps the evidence. 'Reason: App failed
+        # to load.' comes only from a web that loads the application in each worker (an earlier revision's, after a
+        # switch-back), and with two or more workers failing at once gunicorn 23 may write no 'Reason:' line at all.
+        # Release 2's web loads the application in gunicorn's master before gunicorn writes a line
+        # (deploy/gunicorn.conf.py, preload_app): one that cannot load writes the fixed line below instead, then the
+        # error's text, which is never kept. The worker class is a fixed word: deploy/gunicorn.conf.py's own
+        # (ops/test_install_r2web.py ties the two).
         r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
         r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
         r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
         r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?(?: Perhaps out of memory\?)?|WORKER TIMEOUT \(pid:\d+\)|'
         r'Autorestarting worker after current request\.|Reason: (?:Worker failed to boot|App failed to load)\.|'
         r'Worker \(pid:\d+\) exited with code \d+\.?)',
+        # release 2's web whose application cannot load in gunicorn's master (cptstudio/wsgi.py, refutation round 1)
+        r'CPT Studio web: the application could not be loaded\.',
         # django.request's warning and error lines name the path alone (its traceback lines are dropped)
         rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
         rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
