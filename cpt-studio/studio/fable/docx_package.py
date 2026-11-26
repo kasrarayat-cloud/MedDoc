@@ -155,6 +155,10 @@ REFUSAL_CODES = (INSERTED_DOCUMENT, INSERTED_OBJECT)
 # loses once a field in their instruction is removed (R2-30's fallback, its own count; told as an inserted document,
 # the lead's decision in refutation round 1: every removed field type pulls content from outside the file).
 LOST_KINDS = ('documents', 'objects', 'controls', 'fields')
+# the largest count a refusal carries (R2-31); a larger one is carried as this, so every path that builds the refusal -
+# the converter's answer, the worker's own check, a conversion in the worker - gives the same sentence and record
+# (refutation round 1, protocol[1])
+MAX_REFUSAL_COUNT = 1_000_000
 CONTENT_NOT_SHOWN = 'it holds inserted content that could not be shown in the PDF'  # names no part and no text
 
 
@@ -165,7 +169,7 @@ class ContentNotShown(PackageRefused):
     which of the two sentences a member reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
 
     def __init__(self, counts):
-        self.counts = {kind: counts.get(kind, 0) for kind in LOST_KINDS}
+        self.counts = {kind: min(counts.get(kind, 0), MAX_REFUSAL_COUNT) for kind in LOST_KINDS}
         self.code = INSERTED_DOCUMENT if self.counts['documents'] or self.counts['fields'] else INSERTED_OBJECT
         super().__init__(CONTENT_NOT_SHOWN)
 
@@ -256,10 +260,11 @@ def check_in_child(data: bytes, *, seconds=CONVERT_SECONDS, memory_bytes=CONVERT
     of ``seconds`` and ``memory_bytes``, safe_package's own PACKAGE_SECONDS inside it) and converting nothing.
 
     False: the stored conversion may be read again - the check refused nothing and made none of R2-30's edits, so the
-    package is the one release 1 gave; or the file is no Word package at all (refused before any part of it was read,
-    by the checks release 1 runs too), which no stored conversion came of. True: the round converts afresh - R2-30's
-    edit applies to the file, or the check refused it once its parts were read for a reason that is not
-    ContentNotShown, which a fresh conversion then gives. ConversionRefused (with ContentNotShown's code and counts),
+    package is the one release 1 gave; or the file is no zip at all, which every deployed version refused at that same
+    line, so no stored conversion came of it (the stand-ins of the job tests). True: the round converts afresh -
+    R2-30's edit applies to the file, or the check refused it for a reason that is not ContentNotShown, before its
+    parts were read or after (refutation round 1, protocol[2]: a zip that passes a limit is no exception), which a
+    fresh conversion then gives. ConversionRefused (with ContentNotShown's code and counts),
     ConversionBusy or ConversionFailed otherwise, as convert_in_child raises them."""
     try:
         answer = bounded.run_bounded(_check_package, data, seconds=seconds, memory_bytes=memory_bytes)
@@ -287,7 +292,7 @@ def _check_package(data: bytes):
     except ContentNotShown as exc:
         return ('refused', str(exc), exc.code, dict(exc.counts))
     except PackageRefused:
-        return ('checked', bool(report.get('read')))
+        return ('checked', bool(report.get('zip')))
     return ('checked', report.get('shells', 0) > 0)
 
 
@@ -322,14 +327,16 @@ def _safe_package(data: bytes):
 
 
 def _package(data: bytes, report: dict):
-    """_safe_package's work. ``report`` is told how far it got, whether it returns or raises: 'read', once every part
-    was read and the package found a Word one (E2 then begins); 'shells', how many of R2-30's QUOTE shells it made in
-    the parts still sent (check_in_child reads both)."""
+    """_safe_package's work. ``report`` is told how far it got, whether it returns or raises: 'zip', once the file
+    opened as a zip archive; 'read', once every part was read and the package found a Word one (E2 then begins);
+    'shells', how many of R2-30's QUOTE shells it made in the parts still sent (check_in_child reads 'zip' and
+    'shells')."""
     deadline = time.monotonic() + PACKAGE_SECONDS
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except (zipfile.BadZipFile, zipfile.LargeZipFile, ValueError, OSError):
         raise PackageRefused('it is not a zip archive') from None
+    report['zip'] = True
     with archive:
         infos = archive.infolist()
         for info in infos:  # a name without the UTF-8 flag is read as LibreOffice reads it: UTF-8, where it is valid
@@ -1281,12 +1288,20 @@ def _named_by(references, edits) -> set:
 
 def _still_named(data, values) -> set:
     """Which of ``values`` (relationship ids) some attribute of ``data`` still holds, found by their bytes (as written,
-    or with XML's escapes): a relationship whose id any kept attribute holds is kept."""
+    or with XML's escapes), or as expat reads the attribute: a relationship whose id any kept attribute holds is kept.
+    The parse runs only for an id the bytes miss - one a kept attribute writes with a character reference, or with
+    white space expat normalizes (refutation round 1, loss[6]: such an id's relationship was dropped, and the picture a
+    kept element named with it lost) - over bytes _well_formed has already parsed."""
     found = set()
     for value in values:
         for form in {value, escape(value, {'"': '&quot;', "'": '&apos;'})}:
             if re.search(rb'=\s*(["\'])' + re.escape(form.encode('utf-8')) + rb'\1', data):
                 found.add(value)
+    missing = set(values) - found
+    if missing:
+        parser = expat.ParserCreate(namespace_separator=' ')
+        parser.StartElementHandler = lambda name, attrs: found.update(missing.intersection(attrs.values()))
+        parser.Parse(data, True)
     return found
 
 
@@ -1307,12 +1322,12 @@ def _edited_part(raw, deadline, pictures=frozenset(), inserted=frozenset()):
     The part is read once. What the edit must not break is confirmed without reading it again in Python: the edits only
     take whole elements, or whole tags of one element, so expat - in C, with no handler - confirms it still parses
     (well-formed, every prefix bound); and an id some kept attribute still holds keeps its relationship, found by its
-    bytes. The one way an edit can make a new instruction is a field removed inside another field's instruction: its
-    result, kept, now stands in that instruction, and may complete the outer field's type ('LI' and a removed field's
-    result 'NK'). Only then is the part read again, and edited again, until nothing more is removed. Each reading is
-    given the offsets, moved by the edits, of the fields an earlier one found holding a removed field in their
-    instruction, and the reading that removes nothing more inside an instruction - when every field's type is final -
-    counts those whose result 7.4 would lose (R2-30's fallback)."""
+    bytes or as expat reads the attribute (_still_named). The one way an edit can make a new instruction is a field
+    removed inside another field's instruction: its result, kept, now stands in that instruction, and may complete the
+    outer field's type ('LI' and a removed field's result 'NK'). Only then is the part read again, and edited again,
+    until nothing more is removed. Each reading is given the offsets, moved by the edits, of the fields an earlier one
+    found holding a removed field in their instruction, and the reading that removes nothing more inside an instruction
+    - when every field's type is final - counts those whose result 7.4 would lose (R2-30's fallback)."""
     reader = _PartReader(raw, deadline, editable=_editable(raw), pictures=pictures, inserted=inserted).read()
     if any(reader.lost.values()):
         return raw, dict.fromkeys(_REMOVED_KINDS, 0), set(), dict(reader.lost), 0

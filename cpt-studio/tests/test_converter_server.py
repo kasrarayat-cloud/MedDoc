@@ -622,6 +622,39 @@ class RefusalReasonTests(SimpleTestCase):
                          ('inserted_document', fields, document.REFUSED_PACKAGE_TEXT['inserted_document']))
         self.assertEqual(converter_server.MAX_COUNT, 1_000_000)
 
+    def test_a_count_past_the_bound_gives_one_sentence_and_record_on_every_path(self):
+        # refutation round 1, protocol[1]: the converter sent a count past the bound unclamped and the worker, which
+        # believes none past it, gave the general sentence and no record - while the same file through the worker's
+        # own check (C8) or an in-process conversion gave R2-31's. ContentNotShown carries every count at most at the
+        # bound, so each path gives the same refusal. The bound is lowered to 2 here, in both modules alike as in
+        # production, so three objects pass it.
+        self.assertEqual((docx_package.MAX_REFUSAL_COUNT, converter_server.MAX_COUNT), (1_000_000, 1_000_000))
+        past = docx_package.MAX_REFUSAL_COUNT + 1
+        self.assertEqual(docx_package.ContentNotShown({'objects': past}).counts['objects'],
+                         docx_package.MAX_REFUSAL_COUNT)
+        bare = '<w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object></w:r>'
+        three = full_package(paragraph(bare * 3), document_rels=(
+            '<Relationship Id="rIdOle" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'package" Target="embeddings/object.bin"/>',), parts=[('word/embeddings/object.bin',
+                                                                   b'\xd0\xcf synthetic')])
+        counts = {'documents': 0, 'objects': 2, 'controls': 0, 'fields': 0}
+        expected = (CONVERT, document.REFUSED_PACKAGE_TEXT['inserted_object'], 'inserted_object', counts,
+                    {'refused': 'inserted_object', 'inserted': counts})
+        with mock.patch.object(docx_package, 'MAX_REFUSAL_COUNT', 2), \
+                mock.patch.object(converter_server, 'MAX_COUNT', 2), Running(fake_runner) as running, \
+                self.assertLogs('studio', 'INFO'):
+            for path in (running.path, ''):  # the converter's answer, and a conversion in the worker
+                with self.subTest(socket=bool(path)), override_settings(CONVERTER_SOCKET=path), \
+                        self.assertRaises(document.DocumentError) as caught:
+                    document.convert_docx(three, runner=failing_runner)
+                error = caught.exception
+                self.assertEqual((error.failure_kind, error.text, error.code, error.counts, error.recorded()),
+                                 expected)
+            with self.subTest('the worker\'s own check (C8)'), self.assertRaises(document.DocumentError) as caught:
+                document.needs_fresh_conversion(three)
+            error = caught.exception
+            self.assertEqual((error.failure_kind, error.text, error.code, error.counts, error.recorded()), expected)
+
     def test_release_1s_worker_and_converter_meet_release_2s_across_the_switch(self):
         release_1 = r2_release_1_converter_module()
         self.assertFalse(hasattr(release_1.docx_package, 'ContentNotShown'))  # the control: release 1's own package

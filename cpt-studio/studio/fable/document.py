@@ -200,9 +200,10 @@ def needs_fresh_conversion(data: bytes) -> bool:
     worker, in the bounded child and under the limits a conversion's check runs under, converting nothing, with no
     converter call). DocumentError CONVERT when the check refuses the file (ContentNotShown): the sentence and the
     record of its code, as a fresh conversion of it would end. True when the round must convert afresh: R2-30's QUOTE
-    applies to the file, or the check could not decide (it ran out of time, failed, or refused the file once its parts
-    were read) - the converter then decides, as for any fresh conversion. False when the stored conversion may be read
-    again: a clean revision's view stays byte-identical, with no converter call."""
+    applies to the file, or the check could not decide (it ran out of time, failed, or refused the file for another
+    reason once it opened as a zip) - the converter then decides, as for any fresh conversion. False when the stored
+    conversion may be read again: a clean revision's view stays byte-identical, with no converter call; or the file is
+    no zip at all, of which no conversion was ever made."""
     try:
         return docx_package.check_in_child(data)
     except docx_package.ConversionRefused as exc:

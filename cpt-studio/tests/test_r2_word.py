@@ -669,6 +669,44 @@ class ZipNameTests(ReleaseOneCase):
             docx_package.check_in_child(data)
 
 
+class CharacterReferenceTests(ReleaseOneCase):
+    """Refutation round 1, loss[6]: a relationship that removed content named is kept while a kept attribute still
+    holds its id - also when that attribute writes the id with a character reference, as expat reads it - so the picture
+    it shows stays. Release 1 searched the bytes alone, dropped the relationship and lost the picture."""
+
+    def shape(self, kept_id, *, in_object=False, named=True):
+        removed = p(fc('begin'), instr(INC), '<w:r>' + drawing('rIdPic') + '</w:r>' if named else '', fc('separate'),
+                    t('Kept result words.'), fc('end'))
+        picture_rel, picture_part = rel('rIdPic', 'image', 'media/image1.png'), ('word/media/image1.png', PNG_BYTES)
+        if in_object:
+            shown = p('<w:r><w:object w:dxaOrig="6000" w:dyaOrig="900">' + SHAPETYPE + vshape(rid=kept_id)
+                      + ole('Package') + '</w:object></w:r>')
+            return package(BEFORE + removed + shown + AFTER,
+                           (picture_rel, rel('rIdOle', 'package', 'embeddings/o.bin')),
+                           (picture_part, ('word/embeddings/o.bin', b'\xd0\xcf synthetic object')))
+        return package(BEFORE + removed + p('<w:r>' + drawing(kept_id) + '</w:r>') + AFTER, (picture_rel,),
+                       (picture_part,))
+
+    def test_a_picture_named_with_a_character_reference_keeps_its_relationship(self):
+        for label, data in (('decimal', self.shape('&#114;IdPic')), ('hexadecimal', self.shape('&#x72;IdPic')),
+                            ('an object\'s preview, decimal', self.shape('&#114;IdPic', in_object=True))):
+            with self.subTest(label):
+                out, removed = docx_package._safe_package(data)
+                self.assertEqual(removed['fields'], 1)
+                with zipfile.ZipFile(io.BytesIO(out)) as archive:
+                    self.assertIn('Id="rIdPic"', archive.read('word/_rels/document.xml.rels').decode('utf-8'))
+                    self.assertEqual(archive.read('word/media/image1.png'), PNG_BYTES)
+                with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(data)[0])) as archive:
+                    self.assertNotIn('word/media/image1.png', archive.namelist())  # the bad shape: release 1 lost it
+
+    def test_written_literally_or_not_named_by_what_goes_the_package_is_release_1s(self):
+        for label, data in (('literal', self.shape('rIdPic')),
+                            ('the removed field names nothing', self.shape('&#114;IdPic', named=False)),
+                            ('an object\'s preview, literal', self.shape('rIdPic', in_object=True))):
+            with self.subTest(label):
+                self.assert_release_1_package(data)
+
+
 # --- R2-30: a removed field inside another field's result stays a field ----------------------------------------------
 
 QUOTE_BEGIN = '<w:r><w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>'
@@ -1337,6 +1375,32 @@ class StoredConversionTests(r.CustomerCase, TestCase):
         self.assertEqual((round_.state, round_.view_pdf_sha256), (Round.DONE, digest))
         convert.assert_not_called()
         check.assert_called_once_with(NOT_A_PACKAGE)
+
+    def test_a_stored_conversion_of_a_zip_refused_before_its_parts_are_read_converts_afresh(self):
+        # refutation round 1, protocol[2]: a zip the check refuses before reading its parts - here a part past
+        # MAX_PART_BYTES once inflated, beside an import - is no exception: the round converts afresh and the converter
+        # refuses the file as a fresh conversion of it would, so the stored PDF (one made before release 1's limits) is
+        # never read again. Only a file that is no zip at all, of which no conversion was ever made, is reused.
+        big = package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
+                      (('word/afchunk1.docx', inner_docx('IMPORTED SYNTHETIC TEXT')),
+                       ('word/media/large.bin', b'\0' * (docx_package.MAX_PART_BYTES + 1))))
+        enc, rev, _, _ = self.stored(big)
+        jobs.start_round(enc, rev, Round.ANSWERS, self.reviewer)
+        coder = f.FakeCoder()  # it fails the test if anything is sent
+        self.use(coder)
+        real = fable_document.convert_docx
+        with mock.patch.object(fable_document, 'convert_docx',
+                               side_effect=lambda d, **kw: real(d, runner=failing_runner, **kw)) as convert, \
+                mock.patch.object(docx_package, 'check_in_child', wraps=docx_package.check_in_child) as check, \
+                override_settings(CONVERTER_SOCKET='', CONVERTER_REQUIRED=False):
+            self.run_next()
+        round_ = jobs.latest_round(enc)
+        self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                         (Round.FAILED, CONVERT, fable_document.CONVERT_TEXT))
+        check.assert_called_once_with(big)
+        convert.assert_called_once_with(big)
+        self.assertEqual((coder.counts, coder.calls), ([], []))
+        self.assertIsNone(round_.view_pdf_storage_name)
 
     def test_a_stored_original_refused_once_its_parts_are_read_converts_afresh(self):
         # the converter then gives its refusal, as for any fresh conversion (here a stand-in converts it)
