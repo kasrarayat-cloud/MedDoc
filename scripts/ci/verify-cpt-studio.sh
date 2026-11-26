@@ -48,6 +48,7 @@ require_request_identity() {  # <log>
   local pinned
   for pinned in TheCoderIsSentWhatRelease1SentTests.test_the_settings_are_release_1_s \
       TheCoderIsSentWhatRelease1SentTests.test_each_request_is_release_1_s \
+      TheCoderIsSentWhatRelease1SentTests.test_each_request_goes_on_the_wire_as_release_1_s \
       TheCodingFilesKeepTheirBlobsTests.test_each_file_on_disk_is_release_1_s_blob \
       TheCodingFilesKeepTheirBlobsTests.test_git_s_head_names_the_same_blobs; do
     if ! grep -qF "(tests.test_request_identity.$pinned) ... ok" "$1" || ! grep -qx 'OK' "$1"; then
