@@ -6573,6 +6573,34 @@ test('R2 V4: the view is asked for with the click only once the library has star
     ? new Promise(resolve => { release = resolve; }) : new Promise(() => {})));
 });
 
+test('I1-1: a Word document a later round refused draws no copy the page keeps - its detail names no view: no viewer, no converted note, no "Download PDF"; the click\'s view, asked with the kept tag and answered 404, drops the copy, overwritten, and nothing is drawn', async () => {
+  const word = fixture('encounter-word.json');
+  const view = `/api/encounters/${word.id}/original?view=1`;
+  const refused = clone(word);  // the server's detail once a later round refused the file (customer.shown_view)
+  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false });
+  const panel = dom(app.viewerPanel(refused)).one('section.viewer-panel');
+  assert.deepEqual([panel.one('#documentViewer'), panel.one('.viewer-note'), panel.one('#downloadOriginal')], [null, null, null],
+    'no viewer, no converted note, no "Download PDF"');
+  assert.equal(panel.one('#downloadWord').attr('data-word-original'), `${refused.document.original_url}?format=original`, 'the Word file by name');
+  const library = fakeLibrary();
+  await withPdfPage(() => Promise.resolve(library.library), async ({ fetches }) => {
+    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
+    const data = Uint8Array.from([37, 80, 68, 70]);
+    app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);  // kept from an open before the refusal
+    global.location.hash = `#doc/${word.id}`;
+    app.route();
+    assert.deepEqual(fetches.filter(item => item.url === view).map(item => item.init.headers['If-None-Match']),
+      ['"abcdef00-0000-4000-8000-000000000000"'], 'the click asks once, with the tag it holds');
+    await settle(() => app.state.doc?.id === word.id && !app.state.keptViews.has(view));
+    assert.equal(app.state.doc?.document?.view_url, null);
+    assert.deepEqual([app.state.viewer, app.state.early], [null, null], 'no viewer mounted, no view left asked for');
+    assert.deepEqual([app.state.keptViews.has(view), [...data]], [false, [0, 0, 0, 0]], 'the copy dropped and overwritten');
+    assert.equal(library.made.tasks.length, 0, 'nothing drawn');
+    app.forgetMemory();
+  }, url => (url === view ? taggedView(404, [], '') : url === `/api/encounters/${word.id}`
+    ? Promise.resolve(response({ status: 200, body: refused })) : new Promise(() => {})));
+});
+
 test('R2-18: a document the server refuses (404: another practice\'s, or access ended) wipes page memory - the copies, the hints and the worker made ready ahead', async () => {
   const id = 'f5000000-0000-4000-8000-0000000000ff';
   await withPage({ answers: [{ match: (method, url) => url === `/api/encounters/${id}`, status: 404, body: { error: 'Not found.' } }] }, async ({ element }) => {

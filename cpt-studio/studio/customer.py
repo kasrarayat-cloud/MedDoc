@@ -47,10 +47,11 @@ from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
 from django.db import connection
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
 from . import decisions, jobs, models, paging, state
+from .fable import CONVERT
 from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_own_original
 
@@ -521,9 +522,26 @@ def _root_revision(encounter):
 
 
 def converted_view(encounter):
-    """The newest round of the encounter that stored the PDF its Word document was converted to, or None."""
+    """The newest round of the encounter that stored the PDF its Word document was converted to, or None: the record of
+    what a round read, which the record bundle and the operator's console keep. The doctor's page reads shown_view."""
     return (Round.objects.filter(encounter_id=encounter.pk, view_pdf_storage_name__isnull=False)
             .exclude(view_pdf_storage_name='').order_by('-number').first())
+
+
+def shown_view(encounter):
+    """The converted PDF the doctor's page shows and downloads (document_json, view_source, download_content): the newest
+    round that stored one, unless that round, or a round after it, ended failed on the Word file itself (CONVERT: the
+    file refused - R2-28 step 7, C8, at a later round - or not converted), when there is none; a refused file then reads
+    as one refused at its first round: no view (?view=1 404, a kept tag included), the PDF download 409 OriginalOnly, the
+    Word file by name only (integrated refutation round 1, bypass-0 and failclosed-0). A later round that stores a view of
+    its own shows it again. One statement, as converted_view."""
+    newest = (Round.objects.filter(encounter_id=encounter.pk)
+              .filter((Q(view_pdf_storage_name__isnull=False) & ~Q(view_pdf_storage_name=''))
+                      | Q(state=Round.FAILED, failure_kind=CONVERT))
+              .order_by('-number').first())
+    if newest is None or (newest.state == Round.FAILED and newest.failure_kind == CONVERT):
+        return None  # a resumed round refused at its check fails CONVERT beside the view it recorded: none is shown
+    return newest
 
 
 def safe_name(name, fallback='original') -> str:
@@ -554,7 +572,7 @@ class Shown(NamedTuple):
 def view_source(encounter) -> Optional[Shown]:
     """What GET /api/encounters/<id>/original?view=1 shows, by view_content's own branches, or None when there is
     nothing to show - reading no stored file: the original PDF or text file, the pasted text, or for a Word document the
-    PDF the coding review read (converted_view)."""
+    PDF the coding review read (shown_view: none once a later round refused the file)."""
     source = original_file(encounter)
     if source is None:
         revision = _root_revision(encounter)
@@ -566,7 +584,7 @@ def view_source(encounter) -> Optional[Shown]:
     if source.media_type == TEXT:
         return Shown(source, None, TEXT_SERVED, safe_name(source.original_name))
     if source.media_type == DOCX:
-        view = converted_view(encounter)
+        view = shown_view(encounter)
         if view is None:
             return None
         return Shown(_converted_file(view), None, PDF, converted_name(source))
@@ -619,15 +637,16 @@ class Download(NamedTuple):
     extension: str
 
 
-def download_content(encounter, *, original=False) -> Optional[Download]:
+def download_content(encounter, *, original=False, recorded=False) -> Optional[Download]:
     """The document's download (see above), or None for a paste, which has none. A stored file that no longer matches
     its sha256 raises storage.OriginalCorrupted; a Word document with no converted PDF yet raises OriginalOnly unless
-    ``original`` asks for the Word file."""
+    ``original`` asks for the Word file - the doctor's, by shown_view (none once a later round refused the file); with
+    ``recorded`` (the operator's console), the record's, by converted_view."""
     source = original_file(encounter)
     if source is None:
         return None
     if source.media_type == DOCX and not original:
-        view = converted_view(encounter)
+        view = converted_view(encounter) if recorded else shown_view(encounter)
         if view is None:
             raise OriginalOnly(ORIGINAL_ONLY)
         return Download(read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source),
@@ -651,7 +670,7 @@ def document_json(encounter) -> dict:
     view_type, converted = None, False
     if source.media_type in (PDF, TEXT):
         view_type = source.media_type
-    elif source.media_type == DOCX and converted_view(encounter) is not None:
+    elif source.media_type == DOCX and shown_view(encounter) is not None:
         view_type, converted = PDF, True
     return {'name': source.original_name, 'media_type': source.media_type, 'size': source.size,
             'kind': Revision.UPLOAD, 'original_url': base, 'view_url': f'{base}?view=1' if view_type else None,

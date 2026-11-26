@@ -657,7 +657,10 @@ def original(request, encounter_id):
     if content_open_until(request, encounter.pk) is None:
         return HttpResponse(OPEN_FIRST, status=403, content_type=TEXT_PLAIN)
     try:
-        found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)
+        # the record's converted PDF (converted_view), as the page above names it: kept after a later round refused the
+        # file, which the doctor's page no longer shows (customer.shown_view)
+        found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL,
+                                          recorded=True)
     except customer.OriginalOnly:
         return HttpResponse(customer.ORIGINAL_ONLY, status=409, content_type=TEXT_PLAIN)
     except (OriginalCorrupted, OSError):
