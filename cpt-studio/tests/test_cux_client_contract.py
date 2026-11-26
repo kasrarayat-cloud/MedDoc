@@ -39,11 +39,12 @@ LATER_PAGE_CURSOR = '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b1
 # Generated or installed trees inside cpt-studio/ that are not the tree's own files
 NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv'}
 # RELEASE-2-SPEC section 7: every file that holds a copy of the value
-VERSION_COPIES = ('studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
-          'ops/scan_customer.py', 'ops/verification/customer-contract.json', 'tests/test_frontend.py',
-          'tests/test_api_customer.py', 'tests/test_stale_actions.py', 'tests/frontend/app.test.cjs',
-          'ops/test_verify_login.py', 'ops/test_walk.cjs', 'ops/verification/test_contract_v2.py', 'API.md',
-          'CORE-UX-DESIGN.md', 'ops/INSTALL.md', 'studio/api.py', 'studio/customer.py', 'ops/dev_preview_server.cjs')
+VERSION_COPIES = (
+    'studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
+    'ops/scan_customer.py', 'ops/verification/customer-contract.json', 'tests/test_frontend.py',
+    'tests/test_api_customer.py', 'tests/test_stale_actions.py', 'tests/frontend/app.test.cjs',
+    'ops/test_verify_login.py', 'ops/test_walk.cjs', 'ops/verification/test_contract_v2.py', 'API.md',
+    'CORE-UX-DESIGN.md', 'ops/INSTALL.md', 'studio/api.py', 'studio/customer.py', 'ops/dev_preview_server.cjs')
 
 
 def without_contract(client):
