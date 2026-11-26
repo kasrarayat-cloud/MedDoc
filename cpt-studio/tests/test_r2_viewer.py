@@ -13,7 +13,9 @@ import uuid
 from datetime import timedelta
 from unittest import mock
 
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from studio import api, customer, models, read_audit, record_bundle, request_meta, storage
@@ -231,3 +233,15 @@ class ShellSessionTests(ViewerCase):
         self.assertNotIn(TITLE_MARKER, body)  # no document is named: the payload holds none
         self.assertFalse(Record.objects.exists())  # and the shell records no read
         self.assertIn('data-entrance', body)
+
+    def test_the_shell_costs_at_most_three_statements_more_than_release_1s(self):
+        # RELEASE-2-SPEC section 8: the shell <= A + 3 statements, since it carries the session's counts; release 1's
+        # shell carried no session (data-session-json, lane F's attribute, renders empty without it)
+        self.member.get('/')  # a first load writes whatever the session writes once
+        with CaptureQueriesContext(connection) as carried:
+            self.assertEqual(self.member.get('/').status_code, 200)
+        with mock.patch.object(customer, 'session_json', return_value=None), \
+                CaptureQueriesContext(connection) as bare:
+            self.assertEqual(self.member.get('/').status_code, 200)
+        self.assertLessEqual(len(carried.captured_queries) - len(bare.captured_queries), 3)
+        self.assertGreater(len(carried.captured_queries), len(bare.captured_queries))  # the counts are read
