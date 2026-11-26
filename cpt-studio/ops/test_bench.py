@@ -1733,6 +1733,17 @@ class JudgeTests(unittest.TestCase):
                                          {1: {'metrics': {'m': [390]}}})['verdict'], 'INVALID')
         above = {**row, 'gate': [{'abs_max': 500}]}  # a limit above A asks for no gain
         self.assertEqual(JUDGE.judge_row(above, a, {1: {'metrics': {'m': [440]}}})['verdict'], 'PASS')
+        # the round-2 replay of refute-m1 judge[10]'s case 3: A came in low, inside its 20% tolerance of the recorded
+        # 436 and below the 400 ms limit, so no gain was asked and a B slower than that very A passed
+        for low in (380, 360, 350):
+            with self.subTest(a=low):
+                got = JUDGE.judge_row(row, {1: {'metrics': {'m': [low]}}}, {1: {'metrics': {'m': [398]}}})
+                self.assertEqual(got['verdict'], 'FAIL', got['why'])
+        # a relative no-worse-than-A limit is built from the session's A alone: a low A asks it no gain
+        worse = {'id': 'n', 'metric': 'm', 'min_samples': 1, 'a_recorded': 436, 'spread': 0.0461,
+                 'gate': [{'rel_max': 1.0, 'spread': 0.0461, 'floor_factor': 1.0922}]}
+        self.assertEqual(JUDGE.judge_row(worse, {1: {'metrics': {'m': [380]}}}, {1: {'metrics': {'m': [400]}}})[
+            'verdict'], 'PASS')
         rate = {'id': 'r', 'metric': 'm', 'min_samples': 1, 'gate': [{'abs_min': 100}], 'spread': 0.05}
         slow = {1: {'metrics': {'m': [95]}}}
         self.assertEqual(JUDGE.judge_row(rate, slow, {1: {'metrics': {'m': [101]}}})['verdict'], 'FAIL')  # 6% <= 10%
@@ -2622,6 +2633,40 @@ class AcceptanceTableTests(unittest.TestCase):
                 self.assertEqual(row.get('a_recorded'), JUDGE.stat([10, 11], row.get('stat', 'median')), row['id'])
                 self.assertEqual(row.get('spread'), JUDGE.up_spread(10, 11), row['id'])
                 self.assertIsNotNone(JUDGE.a_reference(row)[0], row['id'])
+
+    def test_every_metric_a_row_names_is_one_the_bench_writes(self):
+        """judge[7] (refute-m1; the finder's mutation proof, replayed in round 2): renaming opaque-P0's metric to
+        open.later.opaque.P5, which no flow writes, passed every test while the judge answered INVALID in every
+        session. Every metric a row names must match a name the bench writes: bench.cjs's metric() templates and
+        bench_run.py's self.metric() names, a profile being P0-P3, a nav tab one of the three, and the queries part's
+        keys as it builds them."""
+        cjs, py = (BENCH / 'bench.cjs').read_text(), (BENCH / 'bench_run.py').read_text()
+        templates = (re.findall(r"\bmetric\(`([^`]+)`", cjs) + re.findall(r"\bmetric\('([^']+)'", cjs) +
+                     re.findall(r"\bself\.metric\(f?'([^']+)'", py))
+        start = py.index('    def part_queries(')
+        queries = py[start:py.index('\n    def ', start + 10)]
+        keys = re.findall(r"\bout\[f?'([^']+)'\]", queries) + re.findall(r"\('(\w+)', '(?:GET|POST)', ", queries)
+
+        def rx(text, key='[A-Za-z0-9_]+'):
+            out, i = '', 0
+            for m in re.finditer(r'\$\{([^}]+)\}|\{([^}]+)\}', text):
+                name = (m.group(1) or m.group(2)).strip()
+                out += re.escape(text[i:m.start()]) + {'PROFILE': 'P[0-3]', 'nav': '(?:queue|workspace|documents)',
+                                                       'key': key}.get(name, '[A-Za-z0-9_]+')
+                i = m.end()
+            return out + re.escape(text[i:])
+        key = '(?:' + '|'.join(rx(k) for k in keys) + ')'
+        written = [re.compile(rx(t, key)) for t in templates]
+        named = []
+        for row in self.table['rows']:
+            named += [(row['id'], row[k]) for k in ('metric',) if isinstance(row.get(k), str)]
+            named += [(row['id'], m) for m in row.get('metrics') or [] if isinstance(m, str)]
+            named += [(row['id'], g['plus_metric']) for g in row.get('gate', [])
+                      if isinstance(g.get('plus_metric'), str)]
+        self.assertGreater(len(named), 150)  # an empty filter cannot pass
+        self.assertEqual([(rid, m) for rid, m in named if not any(w.fullmatch(m) for w in written)], [])
+        for wrong in ('open.later.opaque.P5', 'open.tab.opaque.archive.P0', 'queries.list_frist.51'):
+            self.assertFalse(any(w.fullmatch(wrong) for w in written), wrong)  # the check itself can fail
 
     def test_the_memory_limits_are_in_the_metric_s_unit(self):
         """judge[5]: the heap limit was 40.2, in MB, against a metric in MiB; both memory rows are in MiB now. Round 2

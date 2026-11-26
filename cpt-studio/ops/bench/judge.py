@@ -490,9 +490,18 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
             out['why'].append(f'{b} vs {label} limit {round(limit, 2)}')
     out['limits'] = [[d, round(v, 2), lab] for d, v, lab in limits]
     # section 8: a gain counts only when it exceeds twice the A/A spread of its metric - wherever a limit, absolute or
-    # relative, lies below A (above it for a rate), not only on a row flagged gain (judge[10]: scan20's 400 ms)
-    below = [v for d, v, _ in limits if d == 'max' and a is not None and v < a]
-    above = [v for d, v, _ in limits if d == 'min' and a is not None and v > a]
+    # relative, lies below A (above it for a rate), not only on a row flagged gain (judge[10]: scan20's 400 ms). An
+    # absolute limit is held against the A measured in the session and the A the table records (its recorded A, else
+    # section 8's), so a session whose A came in low inside its tolerance still asks the gain (the round-2 replay of
+    # refute-m1 judge[10]: A 380, B 398 against 400 passed); a relative limit is built from the session's A alone
+    ref = row.get('a_recorded', row.get('a_section8'))
+    def under(v, lab):
+        return (a is not None and v < a) or (lab == 'absolute' and ref is not None and v < ref)
+
+    def over(v, lab):
+        return (a is not None and v > a) or (lab == 'absolute' and ref is not None and v > ref)
+    below = [v for d, v, lab in limits if d == 'max' and under(v, lab)]
+    above = [v for d, v, lab in limits if d == 'min' and over(v, lab)]
     if out['verdict'] == 'PASS' and reads_a(row) and (row.get('gain') or below or above):  # needs_a false: B alone
         s = row.get('spread')
         if s is None:
