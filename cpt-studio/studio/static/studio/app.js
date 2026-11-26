@@ -1250,8 +1250,10 @@ const state = {
   // release 1: what the confirmation dialog runs on Continue (askConfirm), and the object addresses the page made, which
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
-  // release 2: when the session was last read (R2-17)
-  sessionReadAt: 0,
+  // release 2: when the session was last read (R2-17); the worker made ready ahead (R2-10: warming on once the page has
+  // routed, its failures, the waiting worker and its timer), and whether the library and a worker have started in this
+  // page, so both are in the browser's cache (R2-12)
+  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
 };
 
 function uiState(overrides = {}) {
@@ -1952,14 +1954,20 @@ function endEntrance() {
 }
 
 // The page's first route (boot): from the session its shell carries, drawn at once with no request before it (R2-17);
-// where it carries none it can read, the session is read first, as in release 1.
+// where it carries none it can read, the session is read first, as in release 1. The worker made ready ahead is asked
+// for PDF_STANDBY.first after that route (R2-10).
 function firstRoute() {
   const carried = shellSession();
-  if (!carried) return loadSession().then(route);
+  const begin = () => {
+    route();
+    state.standbyOn = true;
+    scheduleStandby(PDF_STANDBY.first);
+  };
+  if (!carried) return loadSession().then(begin);
   state.session = carried;
   state.sessionReadAt = Date.now();
   renderSession(carried);
-  route();
+  begin();
   return Promise.resolve();
 }
 
@@ -2453,6 +2461,10 @@ const ZOOM_FIT = 1;
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar']);
 // How the page loads the library's module (a test stands in for it).
 const PDF_IMPORT = { load: specifier => import(specifier) };
+// R2-10: one worker of the library made ready ahead of the next document, `first` ms after the page's first route and
+// `next` ms after a viewer closed or drew a page, once the browser is idle (within `idle` ms); after `fails` failures
+// none is made.
+const PDF_STANDBY = { first: 500, next: 600, idle: 2000, fails: 2 };
 
 // A wait on the library that went past its time limit (withinLimit).
 class TimeLimit extends Error {}
@@ -2632,7 +2644,10 @@ function startWorker(viewer, address) {
     };
     const ready = event => {
       const data = event?.data;
-      if (data && typeof data === 'object' && data.sourceName === 'worker' && data.targetName === 'main' && data.action === 'ready') done(resolve, thread);
+      if (data && typeof data === 'object' && data.sourceName === 'worker' && data.targetName === 'main' && data.action === 'ready') {
+        state.pdfStarted = true;  // R2-12: the library and a worker have started here, so both are in the browser's cache
+        done(resolve, thread);
+      }
     };
     const failed = () => done(reject, new Error('The PDF library\'s worker did not start.'));
     thread.addEventListener('message', ready);
@@ -2649,7 +2664,7 @@ function startWorker(viewer, address) {
 // member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
 // counted by the server either (studio.sessions.automatic).
 async function downloadDocument(view, signal, moved) {
-  const response = await fetch(view, { credentials: 'same-origin', signal, headers: { [POLL_HEADER]: '1' } });
+  const response = await fetch(view, { credentials: 'same-origin', cache: 'no-store', signal, headers: { [POLL_HEADER]: '1' } });
   if (!response.ok) throw new Error(`The document's download was answered ${response.status}.`);
   const chunks = [];
   let size = 0;
@@ -2728,13 +2743,94 @@ function loadPdfLibrary() {
       })
       : Promise.reject(new Error('The page names no PDF library.'));
     state.pdfLibrary = loading;
-    loading.catch(() => {});  // forgotten by the viewer that waits on it (openPdf), on a failure or past its time limit
+    // a load that fails is forgotten at once (R2-11); one past its time limit, by the viewer that waits on it (openPdf)
+    loading.catch(() => forgetPdfLibrary(loading));
   }
   return state.pdfLibrary;
 }
 
 function forgetPdfLibrary(loading) {
-  if (state.pdfLibrary === loading) state.pdfLibrary = null;
+  if (state.pdfLibrary !== loading) return;
+  state.pdfLibrary = null;
+  state.pdfStarted = false;  // tried again at fresh addresses, so fetched again (R2-12)
+}
+
+// R2-10: the worker made ready ahead, asked for `ms` from now, once the browser is idle (or at once where it cannot say).
+function scheduleStandby(ms) {
+  clearTimeout(state.standbyTimer);
+  state.standbyTimer = 0;
+  if (!state.standbyOn) return;
+  state.standbyTimer = setTimeout(() => {
+    state.standbyTimer = 0;
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(startStandby, { timeout: PDF_STANDBY.idle });
+    else startStandby();
+  }, ms);
+}
+
+// Starts the one worker made ready ahead (and the library, where it is not loaded): only on a page that has routed, holds
+// none, is not leaving or signed out, does not save data and can draw a PDF. It holds no document: the next document
+// takes it as its own (takeWorker), so each document still has its own worker, ended with its viewer (DECISIONS D368,
+// A4). One that fails, or does not start within the library's time limit, is ended; after PDF_STANDBY.fails failures
+// none is made, and each document starts its own, as in release 1.
+function startStandby() {
+  if (!state.standbyOn || state.pdfStandby || state.leaving || idle.gone || globalThis.navigator?.connection?.saveData === true || !pdfCapable()) return;
+  const standby = { thread: null, address: '', ready: null, taken: false, failed: null, end: null };
+  state.pdfStandby = standby;
+  standby.failed = () => {
+    if (standby.taken) return;
+    if (state.pdfStandby === standby) {
+      state.pdfStandby = null;
+      state.standbyFails += 1;
+      if (state.standbyFails >= PDF_STANDBY.fails) state.standbyOn = false;
+    }
+    standby.thread?.terminate();
+  };
+  const loading = loadPdfLibrary();
+  // ended before it is ready (endStandby), its wait settles at once rather than at the time limit
+  const ended = new Promise((resolve, reject) => { standby.end = () => reject(new Error('The worker made ready ahead was ended.')); });
+  standby.ready = withinLimit(Promise.race([ended, (async () => {
+    const library = await loading;
+    if (state.pdfStandby !== standby) throw new Error('The worker made ready ahead is no longer wanted.');
+    standby.address = library.GlobalWorkerOptions.workerSrc;
+    const thread = await startWorker(standby, standby.address);
+    thread.addEventListener('error', standby.failed);
+    return thread;
+  })()]), PDF_VIEW.limitMs);
+  standby.ready.catch(standby.failed);
+}
+
+function endStandby() {
+  clearTimeout(state.standbyTimer);
+  state.standbyTimer = 0;
+  const standby = state.pdfStandby;
+  state.pdfStandby = null;
+  standby?.end?.();
+  standby?.thread?.terminate();
+}
+
+// The viewer's own worker: the one made ready ahead, where there is one for this address - the viewer's at once
+// (viewer.thread, so closing the document ends it) - else one started now, as in release 1. One made ready for another
+// address (the library forgotten and loaded again at ?attempt=n) is ended.
+function takeWorker(viewer, address) {
+  const standby = state.pdfStandby;
+  if (!standby || standby.address !== address || !standby.thread) {
+    if (standby?.address && standby.address !== address) endStandby();
+    return startWorker(viewer, address);
+  }
+  state.pdfStandby = null;
+  standby.taken = true;
+  viewer.thread = standby.thread;
+  return standby.ready.then(thread => {
+    thread.removeEventListener('error', standby.failed);
+    return thread;
+  });
+}
+
+// R2-18: what the page keeps in its memory for speed goes at every end - the sign-out, the idle end and the cap, a 401,
+// another tab's sign-out, a forced password change, a document the server refuses, and the page left (pagehide, the
+// back-forward cache included): the worker made ready ahead.
+function forgetMemory() {
+  endStandby();
 }
 
 // Draws the PDF of a document viewed as one into #documentViewer (after a full redraw of the review page).
@@ -2763,6 +2859,7 @@ function closeViewer() {
   if (!viewer) return;
   stopPdf(viewer);
   viewer.mode = 'closed';
+  scheduleStandby(PDF_STANDBY.next);
 }
 
 async function openPdf(viewer) {
@@ -2772,19 +2869,25 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'browser');
     return;
   }
-  // the library and the viewer's own worker first, within the time limit: where either does not start, marking did not
-  // work here, whatever the document, and the next document tries the library again at fresh addresses
+  // R2-12: once the library and a worker have started in this page, the document is asked for beside them; before that,
+  // after them, as in release 1, so that on a slow line the two never share it within the library's time limit
+  let downloading = state.pdfStarted ? downloadFor(viewer, null) : null;
+  // the library and the viewer's own worker (the one made ready ahead, or its own), within the time limit: where either
+  // does not start, marking did not work here, whatever the document, and the next document tries the library again at
+  // fresh addresses - unless the viewer was closed meanwhile: its worker was ended with it, so nothing is concluded
+  // about the library (R2-11)
   const loading = loadPdfLibrary();
   try {
     await withinLimit((async () => {
       const library = await loading;
       if (!opening()) return;
       viewer.library = library;
-      const thread = await startWorker(viewer, library.GlobalWorkerOptions.workerSrc);
+      const thread = await takeWorker(viewer, library.GlobalWorkerOptions.workerSrc);
       if (!opening()) return;
       viewer.worker = new library.PDFWorker({ port: thread, verbosity: library.VerbosityLevel.ERRORS });
     })(), PDF_VIEW.limitMs);
   } catch {
+    if (!opening()) return;
     forgetPdfLibrary(loading);
     fallbackViewer(viewer, 'library');
     return;
@@ -2801,26 +2904,10 @@ async function openPdf(viewer) {
     forgetPdfLibrary(loading);
     fallbackViewer(viewer, 'library');
   });
-  // the download, read by the viewer itself: one that stops moving for this long before the document has opened is given
-  // up ('slow'); one that fails is said to have failed ('download')
-  const stalled = () => {
-    clearTimeout(viewer.stallTimer);
-    viewer.stallTimer = setTimeout(() => {
-      if (viewer.mode === 'loading') fallbackViewer(viewer, 'slow');
-    }, PDF_VIEW.stallMs);
-  };
-  viewer.download = typeof AbortController === 'function' ? new AbortController() : null;
-  stalled();
-  let data;
-  try {
-    data = await downloadDocument(viewer.view, viewer.download?.signal, stalled);
-  } catch {
-    if (!opening()) return;
-    stopStall(viewer);
-    fallbackViewer(viewer, 'download');
-    return;
-  }
-  if (!opening()) return;
+  downloading = downloading || downloadFor(viewer, null);
+  const data = await downloading;
+  if (!data || !opening()) return;
+  startStall(viewer);  // the library reads the document under the download's time limit, until it has opened
   let pdf;
   try {
     const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
@@ -2854,9 +2941,38 @@ async function openPdf(viewer) {
   buildPages(viewer, proxies);
 }
 
+function startStall(viewer) {
+  clearTimeout(viewer.stallTimer);
+  viewer.stallTimer = setTimeout(() => {
+    if (viewer.mode === 'loading') fallbackViewer(viewer, 'slow');
+  }, PDF_VIEW.stallMs);
+}
+
 function stopStall(viewer) {
   clearTimeout(viewer.stallTimer);
   viewer.stallTimer = 0;
+}
+
+// The viewer's download of its document, read by the viewer itself (R2-12): what it got, or null once it was said not to
+// have come or the viewer was closed or framed meanwhile. One that stops moving for PDF_VIEW.stallMs before the document
+// has opened is given up ('slow'); one that fails is said to have failed ('download'), at once.
+function downloadFor(viewer, early) {
+  const opening = () => state.viewer === viewer && viewer.mode === 'loading';
+  const moved = () => { if (opening()) startStall(viewer); };
+  viewer.download = early ? early.abort : typeof AbortController === 'function' ? new AbortController() : null;
+  startStall(viewer);
+  if (early) early.moved = moved;
+  const fetching = early ? early.result : downloadDocument(viewer.view, viewer.download?.signal, moved);
+  return fetching.then(got => {
+    if (!opening()) return null;
+    stopStall(viewer);
+    return got;
+  }, () => {
+    if (!opening()) return null;
+    stopStall(viewer);
+    fallbackViewer(viewer, 'download');
+    return null;
+  });
 }
 
 // Every page as a placeholder of its size; pages near the visible area are drawn (IntersectionObserver), the others
@@ -2886,6 +3002,12 @@ function buildPages(viewer, proxies) {
   });
   viewer.resize.observe(viewer.element);
   watchRatio(viewer);
+  // R2-13: page 1 is asked for now, not at the observer's first answer a frame or two later (which finds it drawing); a
+  // quote chosen while the document opened is shown on its own page instead
+  if (!viewer.pending) {
+    viewer.pages[0].near = true;
+    drawPage(viewer, viewer.pages[0]);
+  }
   viewer.onScroll = () => {
     viewer.scrolledAt = Date.now();
     if (!viewer.labelFrame) viewer.labelFrame = requestAnimationFrame(() => { viewer.labelFrame = 0; showPageLabel(viewer); });
@@ -3090,8 +3212,11 @@ async function renderPage(viewer, page) {
   try {
     page.render = page.proxy.render({ canvas, viewport, annotationMode: library.AnnotationMode.ENABLE,
       transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
+    // R2-13: the page's text is read beside its drawing; the two are still shown together, in one change of the page
+    const reading = watched(viewer, pageContent(viewer, page.number), page);
+    reading.catch(() => {});
     await watched(viewer, page.render.promise, page);
-    const content = await watched(viewer, pageContent(viewer, page.number), page);
+    const content = await reading;
     if (!live()) return;
     const text = document.createElement('div');
     text.className = 'pdf-text';
@@ -3103,6 +3228,7 @@ async function renderPage(viewer, page) {
     if (!live()) return;
     for (const item of preparedPage(viewer, page.number, content).copies) page.layer.textDivs[item]?.setAttribute('data-overprint', '1');
     page.drawn = key;
+    scheduleStandby(PDF_STANDBY.next);
     if (page.drawing === key) page.drawing = '';  // else asked for at another size meanwhile: it is queued again
     paintPage(viewer, page);
     if (viewer.reveal === page.number) {
@@ -4166,6 +4292,7 @@ function clearScreen() {
   stopPolling();
   stopTicker();
   closeViewer();
+  forgetMemory();
   releaseObjectUrls();
   closeDocumentDialogs();
   state.doc = null;
@@ -4409,6 +4536,7 @@ function startIdleWatch() {
   $('#signoutForm')?.addEventListener('submit', () => {
     if (!idle.gone) shareSession({ type: 'signed-out', reason: 'expired' });
     idle.gone = true;
+    forgetMemory();
   });
   sendActivity();
 }
@@ -4577,6 +4705,8 @@ function boot() {
   window.addEventListener('offline', () => { if (shouldPoll(state.doc)) setReconnecting(true); });
   document.addEventListener('visibilitychange', refreshIfWaiting);
   window.matchMedia('(max-width:760px)').addEventListener('change', closeNavigation);
+  window.addEventListener('pagehide', forgetMemory);
+  window.addEventListener('pageshow', event => { if (event.persisted) scheduleStandby(PDF_STANDBY.next); });
   startIdleWatch();
   firstRoute();
 }
@@ -4613,6 +4743,7 @@ if (typeof module === 'object' && module.exports) {
     refreshIfWaiting, renderSession,
     // release 2
     route, showDocument, shellSession, refreshSession, endEntrance, firstRoute, loadSession, SESSION_FRESH_MS, LOADING_AFTER_MS,
+    scheduleStandby, startStandby, endStandby, takeWorker, forgetMemory, downloadFor, forgetPdfLibrary, PDF_STANDBY,
   };
 }
 if (typeof document !== 'undefined') boot();

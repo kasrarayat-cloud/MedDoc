@@ -265,7 +265,7 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt'];
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'pdfStarted'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
   try {
@@ -277,6 +277,8 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
     Object.assign(app.idle, idleBefore);
     clearTimeout(app.state.madeTimer);
     clearTimeout(app.state.toastTimer);
+    clearTimeout(app.state.standbyTimer);
+    if (app.state.pdfStandby !== before.pdfStandby) app.state.pdfStandby?.thread?.terminate?.();
     clearTimeout(app.state.poll.timer);
     clearTimeout(app.state.tickTimer);
     Object.assign(global, saved);
@@ -1378,7 +1380,7 @@ async function withPdfPage(load, fn, download = () => Promise.resolve(viewRespon
         fetches.push({ url, init });
         return download(url, init);
       };
-      Object.assign(app.state, { pdfLibrary: null, pdfAttempt: 0, viewer: null });
+      Object.assign(app.state, { pdfLibrary: null, pdfAttempt: 0, viewer: null, pdfStarted: false });
       await fn({ ...page, loads, fetches });
       app.closeViewer();
     });
@@ -1450,7 +1452,7 @@ test('L1, A4: a library or its worker that does not start is the library\'s note
     assert.equal(options.worker, working.made.workers[0], 'the document is opened with that worker');
     assert.deepEqual([...options.data], [37, 80, 68, 70, 45, 49, 46, 52], 'the bytes the viewer downloaded, chunk after chunk');
     assert.equal(options.url, undefined, 'the library fetches nothing itself');
-    assert.deepEqual(fetches.map(({ url, init }) => [url, init.credentials, init.signal === fourth.download?.signal]), [[word.document.view_url, 'same-origin', true]]);
+    assert.deepEqual(fetches.map(({ url, init }) => [url, init.credentials, init.cache, init.signal === fourth.download?.signal]), [[word.document.view_url, 'same-origin', 'no-store', true]]);
     const kept = app.state.pdfLibrary;
     assert.ok(kept);
     // a working library is kept for the next document, which starts its own worker again (one per document)
@@ -1643,7 +1645,7 @@ test('B4, N4: a page\'s text read or drawing that does not settle within 20 s is
       const page = viewer.pages[0];
       const cleaned = [];
       Object.assign(page, { viewport: { width: 612, height: 792, scale: 1 }, proxy: { render: () => ({ promise: new Promise(() => {}), cancel() {} }),
-        cleanup: () => cleaned.push(page.number) } });
+        getTextContent: () => new Promise(() => {}), cleanup: () => cleaned.push(page.number) } });
       app.state.viewer = viewer;
       app.drawPage(viewer, page);
       app.releasePage(page);
@@ -2048,7 +2050,9 @@ test('A7: a zoom or a new width while a quote is being scrolled to keeps the quo
       const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null,
         chosen: null, markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: app.ZOOM_FIT, inputs: [], settleTimer: 0 };
       app.state.viewer = viewer;
-      const proxy = () => ({ getViewport: ({ scale }) => ({ width: 612 * scale, height: 792 * scale, scale, userUnit: 1 }) });
+      const proxy = () => ({ getViewport: ({ scale }) => ({ width: 612 * scale, height: 792 * scale, scale, userUnit: 1 }),
+        render: () => ({ promise: new Promise(() => {}), cancel() {} }), getTextContent: () => new Promise(() => {}) });
+      viewer.library = { AnnotationMode: { ENABLE: 2 } };
       app.buildPages(viewer, [proxy(), proxy(), proxy()]);
       viewer.pages.forEach((page, index) => {
         Object.defineProperty(page.element, 'offsetTop', { get: () => 12 + index * (parseFloat(page.element.style.height) + 12) });
@@ -4911,7 +4915,7 @@ test('the PDF library is named on the page as same-origin static modules, and no
   assert.match(bundle, /\n\s+worker: viewer\.worker,\n/);
   // the viewer downloads the view address itself (A5) and the library is opened on its bytes, with no eval, no WebAssembly,
   // no XFA and the page drawn on the main thread
-  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', signal, headers: \{ \[POLL_HEADER\]: '1' \} \}\)/);
+  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', cache: 'no-store', signal, headers: \{ \[POLL_HEADER\]: '1' \} \}\)/);
   assert.match(bundle, /library\.getDocument\(\{\n\s+data, isEvalSupported: false, enableXfa: false, useWasm: false,/);
   assert.ok(!/getDocument\(\{[^}]*\burl:/.test(bundle), 'the library is given no address to fetch');
   assert.match(bundle, /disableWorkerRendering: true/);
@@ -5741,4 +5745,317 @@ test('R2-14, R2-17: a document chosen in a list keeps the list in view until its
     app.route();
     assert.match(acked.innerHTML, /Uploaded\. The coding review starts shortly\./);
   });
+});
+
+// The viewer's worker made ready ahead, the download beside the library, page 1 at once (R2-10 to R2-13).
+
+// A page that has booted (standbyOn), with the standby's state kept apart and every waiting worker ended after.
+async function withStandby(fn) {
+  try {
+    Object.assign(app.state, { standbyOn: true, standbyFails: 0, pdfStandby: null });
+    await fn();
+  } finally {
+    app.endStandby();
+    Object.assign(app.state, { standbyOn: false, standbyFails: 0 });
+  }
+}
+
+test('R2 V1: one worker is made ready ahead, holds no document, is taken by the next document as its own and ends with it; a failing one is dropped, two failures stop it, and the session\'s end ends it', async () => {
+  const word = fixture('encounter-word.json');
+  const working = fakeLibrary();
+  await withPdfPage(() => Promise.resolve(working.library), async ({ element: find, loads }) => {
+    app.startStandby();
+    await settle(() => false);
+    assert.equal(FakeWorker.made.length, 0, 'nothing on a page that has not booted');
+    await withStandby(async () => {
+      app.startStandby();
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 1 && app.state.pdfStarted);
+      assert.equal(FakeWorker.made.length, 1, 'one, asked for twice');
+      await app.state.pdfStandby.ready;
+      app.startStandby();
+      await settle(() => false);
+      assert.equal(FakeWorker.made.length, 1, 'nor another once it is ready');
+      assert.deepEqual([FakeWorker.made[0].url, FakeWorker.made[0].options], [PDF_WORKER, { type: 'module' }]);
+      assert.equal(working.made.workers.length, 0, 'the library is handed no worker before a document takes it');
+      assert.equal(working.made.tasks.length, 0, 'and it holds no document');
+      // the next document takes it as its own, and starts none
+      const first = FakeWorker.made[0];
+      const viewer = await mount(word, find, () => working.made.tasks.length === 1);
+      assert.equal(FakeWorker.made.length, 1, 'the document started no worker of its own');
+      assert.equal(viewer.thread, first, 'the viewer\'s own, so closing the document ends it');
+      assert.equal(app.state.pdfStandby, null, 'it is the document\'s now');
+      assert.equal(working.made.workers[0].options.port, first);
+      app.closeViewer();
+      await settle(() => first.terminated);
+      assert.ok(first.terminated, 'it ends with its document');
+      // one that fails is dropped and ended, and the next document starts its own, as in release 1
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 2);
+      await app.state.pdfStandby.ready;
+      FakeWorker.made[1].emit('error', {});
+      assert.equal(app.state.pdfStandby, null);
+      assert.ok(FakeWorker.made[1].terminated);
+      assert.deepEqual([app.state.standbyFails, app.state.standbyOn], [1, true], 'one failure is not the end of it');
+      const second = await mount(word, find, () => working.made.tasks.length === 2);
+      assert.equal(FakeWorker.made.length, 3);
+      assert.equal(second.thread, FakeWorker.made[2]);
+      app.closeViewer();
+      // the session's end ends a waiting one, and its wait settles at once rather than at the time limit
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 4);
+      const waiting = app.state.pdfStandby;
+      app.forgetMemory();
+      assert.equal(app.state.pdfStandby, null);
+      assert.ok(FakeWorker.made[3].terminated);
+      const outcome = await Promise.race([waiting.ready.then(() => 'ready', () => 'ended'), new Promise(resolve => setTimeout(() => resolve('still waiting'), 200))]);
+      assert.equal(outcome, 'ended');
+      assert.equal(loads.length, 1, 'the library was loaded once');
+      // one made ready for an address no longer asked for (the library forgotten, ?attempt=2) is ended, never kept
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 5);
+      await app.state.pdfStandby.ready;
+      app.state.pdfLibrary = null;
+      await mount(word, find, () => working.made.tasks.length === 3);
+      assert.ok(FakeWorker.made[4].terminated, 'the stale one is ended');
+      assert.match(FakeWorker.made[5].url, /\?attempt=2$/);
+      app.closeViewer();
+      // a second failure stops the warming: each document starts its own, as in release 1
+      app.endStandby();
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 7);
+      FakeWorker.made[6].emit('error', {});
+      await settle(() => app.state.pdfStandby === null);
+      assert.deepEqual([app.state.standbyFails, app.state.standbyOn], [2, false]);
+      app.startStandby();
+      await settle(() => false);
+      assert.equal(FakeWorker.made.length, 7, 'none after two failures');
+    });
+    // none where the page is leaving or signed out, the member saves data, or the browser cannot draw a PDF
+    for (const [what, set, unset] of [['leaving', () => { app.state.leaving = true; }, () => { app.state.leaving = false; }],
+      ['signed out', () => { app.idle.gone = true; }, () => { app.idle.gone = false; }],
+      ['saving data', () => { Object.defineProperty(global, 'navigator', { value: { connection: { saveData: true } }, configurable: true, writable: true }); },
+        () => {}],
+      ['no IntersectionObserver', () => { global.IntersectionObserver = undefined; }, () => { global.IntersectionObserver = function () { this.observe = () => {}; this.disconnect = () => {}; }; }]]) {
+      const saved = Object.getOwnPropertyDescriptor(global, 'navigator');
+      await withStandby(async () => {
+        set();
+        try {
+          const before = FakeWorker.made.length;
+          app.startStandby();
+          await settle(() => false);
+          assert.equal(FakeWorker.made.length, before, what);
+          assert.equal(app.state.pdfStandby, null, what);
+        } finally {
+          unset();
+          if (saved) Object.defineProperty(global, 'navigator', saved);
+          else delete global.navigator;
+        }
+      });
+    }
+  });
+});
+
+test('R2 V1: the worker is made ready ahead when the browser is idle, after the delay asked for; boot asks 500 ms after its first route, a closed viewer or a drawn page 600 ms after', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const asked = [];
+  const savedIdle = global.requestIdleCallback;
+  global.requestIdleCallback = (fn, options) => asked.push({ fn, options });
+  try {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      assert.deepEqual(app.PDF_STANDBY, { first: 500, next: 600, idle: 2000, fails: 2 });
+      app.scheduleStandby(500);
+      t.mock.timers.tick(10000);
+      assert.equal(asked.length, 0, 'not on a page that has not booted');
+      await withStandby(async () => {
+        app.scheduleStandby(500);
+        app.scheduleStandby(500);
+        t.mock.timers.tick(499);
+        assert.equal(asked.length, 0);
+        t.mock.timers.tick(1);
+        assert.equal(asked.length, 1, 'once, asked twice');
+        assert.deepEqual(asked[0].options, { timeout: 2000 }, 'when the browser is idle, or 2 s at the latest');
+        assert.equal(FakeWorker.made.length, 0, 'nothing before the browser says it is idle');
+        asked[0].fn();
+        await settle(() => FakeWorker.made.length === 1);
+        assert.equal(FakeWorker.made.length, 1);
+        // the session's end clears a pending one
+        app.endStandby();
+        app.scheduleStandby(600);
+        app.forgetMemory();
+        t.mock.timers.tick(10000);
+        assert.equal(asked.length, 1, 'cleared');
+        // where the browser cannot say it is idle, at once after the delay
+        global.requestIdleCallback = undefined;
+        app.scheduleStandby(600);
+        t.mock.timers.tick(600);
+        await settle(() => FakeWorker.made.length === 2);
+        assert.equal(FakeWorker.made.length, 2);
+      });
+    });
+  } finally {
+    global.requestIdleCallback = savedIdle;
+  }
+  // boot: after its first route
+  await withPage({}, async () => {
+    global.document.body.dataset = { sessionJson: JSON.stringify(fixture('session.json')) };
+    global.location.hash = '#how-it-works';
+    Object.assign(app.state, { route: null, standbyOn: false });
+    try {
+      await app.firstRoute();
+      assert.equal(app.state.standbyOn, true, 'on, from the page\'s first route');
+      assert.ok(app.state.standbyTimer, 'and asked for');
+    } finally {
+      app.endStandby();
+      app.state.standbyOn = false;
+    }
+  });
+  const source = fs.readFileSync(BUNDLE, 'utf8');
+  assert.match(source, /function closeViewer\(\) \{[^}]*stopPdf\(viewer\);\n  viewer\.mode = 'closed';\n  scheduleStandby\(PDF_STANDBY\.next\);\n\}/);
+  assert.match(source, /    page\.drawn = key;\n    scheduleStandby\(PDF_STANDBY\.next\);\n/);
+  assert.match(source, /window\.addEventListener\('pageshow', event => \{ if \(event\.persisted\) scheduleStandby\(PDF_STANDBY\.next\); \}\);/);
+  assert.match(source, /window\.addEventListener\('pagehide', forgetMemory\);/);
+});
+
+test('R2 V1: leaving a document while its worker starts never makes the page forget a working library', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const working = fakeLibrary();
+  await withPdfPage(() => Promise.resolve(working.library), async ({ element: find, loads }) => {
+    FakeWorker.start = 'never';
+    await mount(word, find, () => FakeWorker.made.length === 1);
+    const kept = app.state.pdfLibrary;
+    assert.ok(kept);
+    app.closeViewer();
+    t.mock.timers.tick(60000);
+    await settle(() => false);
+    assert.equal(app.state.pdfLibrary, kept, 'the library works: it stays');
+    FakeWorker.start = 'ready';
+    await mount(word, find, () => working.made.tasks.length === 1);
+    assert.equal(loads.length, 1, 'the next document loads nothing again');
+    assert.equal(FakeWorker.made.at(-1).url, PDF_WORKER, 'at the same address, never ?attempt=2');
+    // an import that itself fails is still forgotten at once, with no viewer waiting on it
+    app.closeViewer();
+    app.state.pdfLibrary = null;
+  });
+  await withPdfPage(() => Promise.reject(new Error('404')), async ({ loads }) => {
+    const failing = app.loadPdfLibrary();
+    await failing.catch(() => {});
+    await settle(() => app.state.pdfLibrary === null);
+    assert.equal(app.state.pdfLibrary, null, 'a failed import is not kept');
+    assert.equal(loads.length, 1);
+  });
+});
+
+test('R2 V2: the document is asked for beside the library and its worker once both have started in the page; before that, after them; a refused download is said at once', async t => {
+  const word = fixture('encounter-word.json');
+  let arrive;
+  const cold = fakeLibrary();
+  await withPdfPage(() => new Promise(resolve => { arrive = resolve; }), async ({ element: find, fetches, loads }) => {
+    FakeWorker.start = 'never';
+    const viewer = await mount(word, find, () => loads.length === 1);
+    assert.equal(fetches.length, 0, 'the page\'s first document: not while the library loads');
+    arrive(cold.library);
+    await settle(() => FakeWorker.made.length === 1);
+    assert.equal(fetches.length, 0, 'nor while its worker starts');
+    FakeWorker.made[0].emit('message', { data: { sourceName: 'worker', targetName: 'main', action: 'ready' } });
+    await settle(() => cold.made.tasks.length === 1);
+    assert.equal(fetches.length, 1, 'after them: release 1\'s order');
+    assert.equal(app.state.pdfStarted, true, 'the library and a worker have started in this page');
+    assert.equal(viewer.mode, 'loading');
+    // the next document: asked for at once, its worker not started yet
+    const next = await mount(word, find, () => fetches.length === 2);
+    assert.equal(fetches.length, 2, 'beside them');
+    assert.equal(FakeWorker.made.length, 2);
+    assert.equal(cold.made.tasks.length, 1, 'its worker has not said it is ready');
+    FakeWorker.made[1].emit('message', { data: { sourceName: 'worker', targetName: 'main', action: 'ready' } });
+    await settle(() => cold.made.tasks.length === 2);
+    assert.deepEqual([...cold.made.tasks[1].options.data], [37, 80, 68, 70, 45, 49, 46, 52], 'the bytes downloaded beside them');
+    assert.notEqual(next.stallTimer, 0, 'the library reads them under the download\'s time limit, until the document opens');
+    // a worker that fails once started: the library is asked for again at fresh addresses, so the order is the first one's
+    FakeWorker.made[1].emit('error', {});
+    assert.equal(app.state.pdfStarted, false, 'a forgotten library is fetched again: release 1\'s order');
+    const third = await mount(word, find, () => loads.length === 2);
+    assert.equal(fetches.length, 2, 'not before the library and its worker');
+    assert.equal(third.mode, 'loading');
+    app.closeViewer();
+    arrive(cold.library);  // its wait on the library settles, so nothing is left waiting
+    await settle(() => false);
+  });
+  // a refused download, on a page where they have started: said at once, the worker still starting
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element: find }) => {
+    app.state.pdfStarted = true;
+    FakeWorker.start = 'never';
+    const viewer = await mount(word, find, opened => opened.mode === 'frame');
+    assert.equal(viewer.fallback, 'download', 'a refused download is said at once');
+    await settle(() => FakeWorker.made.every(made => made.terminated));
+    assert.ok(FakeWorker.made.every(made => made.terminated), 'and the worker starting for it is ended');
+    t.mock.timers.tick(app.PDF_VIEW.limitMs);  // the closed viewer's wait on its worker gives up, concluding nothing
+    await settle(() => false);
+    assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'download']);
+    assert.ok(app.state.pdfLibrary, 'and the library is kept');
+  }, () => Promise.resolve(viewResponse({ status: 503, chunks: [] })));
+});
+
+test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text read beside its drawing; the two are shown together', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const style = global.getComputedStyle;
+  global.getComputedStyle = () => ({ paddingLeft: '12px', paddingRight: '12px' });
+  const globals = { IntersectionObserver: global.IntersectionObserver, ResizeObserver: global.ResizeObserver };
+  global.IntersectionObserver = function IntersectionObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  global.ResizeObserver = function ResizeObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  try {
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url }, clientWidth: 636, clientHeight: 800, scrollTop: 0, scrollLeft: 0,
+      scrollWidth: 636, addEventListener() {} });
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      global.window.devicePixelRatio = 1;
+      const made = () => ({ className: '', dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, children: [],
+        append(...nodes) { this.children.push(...nodes); }, setAttribute() {}, replaceChildren(...nodes) { this.children = nodes; }, querySelector: () => null });
+      global.document.createElement = made;
+      Object.assign(app.state, { doc: word, route: null });
+      const order = [];
+      let drawn;
+      let read;
+      const proxy = number => ({ getViewport: ({ scale }) => ({ width: 612 * scale, height: 792 * scale, scale, userUnit: 1 }),
+        render: () => { order.push(`render ${number}`); return { promise: new Promise(resolve => { drawn = resolve; }), cancel() {} }; },
+        getTextContent: () => { order.push(`text ${number}`); return new Promise(resolve => { read = resolve; }); }, cleanup() {} });
+      const layers = [];
+      const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), prepared: new Map(), mark: null,
+        pending: null, chosen: null, markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: app.ZOOM_FIT,
+        inputs: [], settleTimer: 0, library: { AnnotationMode: { ENABLE: 2 }, TextLayer: class {
+          constructor(options) { layers.push(options); this.textDivs = []; this.textContentItemsStr = []; }
+
+          render() { return Promise.resolve(); }
+
+          cancel() {}
+        } } };
+      app.state.viewer = viewer;
+      app.buildPages(viewer, [proxy(1), proxy(2)]);
+      assert.deepEqual(order, ['render 1', 'text 1'], 'page 1 at once - its drawing and its text read together - before any observer answers');
+      assert.equal(viewer.pages[0].near, true);
+      const page = viewer.pages[0];
+      read({ items: [] });
+      await settle(() => false);
+      assert.deepEqual(page.element.children, [], 'the text alone is not shown');
+      drawn();
+      await settle(() => page.drawn !== '');
+      assert.equal(page.element.children.length, 2, 'canvas and text layer, shown together');
+      assert.equal(layers.length, 1);
+      app.closeViewer();
+      // a quote chosen while the document opened is shown on its own page instead: page 1 is not asked for first
+      order.length = 0;
+      const waiting = { ...viewer, mode: 'loading', pages: [], texts: new Map(), prepared: new Map(), pending: { quote: { text: 'x', page: 2 }, key: 'L1#0' },
+        watchdog: null };
+      app.state.viewer = waiting;
+      app.buildPages(waiting, [proxy(1), proxy(2)]);
+      assert.ok(!order.includes('render 1'), 'not page 1 first');
+      app.closeViewer();
+    });
+  } finally {
+    global.getComputedStyle = style;
+    Object.assign(global, globals);
+    Object.assign(app.state, saved);
+  }
 });
