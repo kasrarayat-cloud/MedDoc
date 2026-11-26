@@ -646,8 +646,8 @@ LIFE_CYCLE_SHAPES = (r'Starting gunicorn [\d.]+$', r'Listening at: http://0\.0\.
 class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
     """R2-9's acceptance: every life-cycle line real runs of the release's settings write is one the installer keeps
     (ops/install.py ids_only_lines over KEPT_LOG_FORMATS['web'], as keep_container_log reads a web's output), and no
-    line of another shape is kept. The runs: four workers recycled, one killed as the kernel kills for memory and one
-    aborted, then stopped as Docker stops a web; a worker that stopped answering, timed out; and the two ways a web
+    line of another shape is kept. The runs: of four workers one killed as the kernel kills for memory and one aborted,
+    then all of them recycled, then stopped as Docker stops a web; a worker that stopped answering, timed out; and the two ways a web
     cannot start - a worker that fails to boot, and (an earlier revision's web, which loads the application in each
     worker) one that cannot load it - each made by a settings file that is the release's own with that one change."""
 
@@ -661,20 +661,25 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                         encoding='utf-8')
         return path
 
-    def recycled_killed_and_aborted(self) -> str:
+    def killed_aborted_and_recycled(self) -> str:
         server = ReleaseGunicorn(self, '--max-requests', '6', '--max-requests-jitter', '0').start()
-        answers = server.many(4, 8)
-        self.assertEqual((len(answers), set(answers)), (32, {200}))
+        # every worker has opened its connection, so each has its signal handlers, and none is being recycled: no
+        # request has been made yet
+        self.assertEqual(len(server.until_sessions(4)), 4)
         killed, aborted = server.workers()[:2]
         os.kill(killed, signal.SIGKILL)  # a worker of the master this test started
         server.until_text(f'Worker (pid:{killed}) was sent SIGKILL!')
         os.kill(aborted, signal.SIGABRT)
         server.until_text(f'Worker (pid:{aborted}) exited with code 1.')
+        answers = server.many(4, 8)  # then the workers are recycled
+        self.assertEqual((len(answers), set(answers)), (32, {200}))
         self.assertEqual(server.stop(), 0)
         return server.text()
 
     def timed_out(self) -> str:
-        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '3').start(booted=1)
+        # a timeout well above the idle heartbeat (half of it), so a loaded host never times out a worker this test has
+        # not stopped
+        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '6').start(booted=1)
         hung, = server.workers()
         # it has answered, so its heartbeat runs (gunicorn 23 times a worker out only after its first heartbeat)
         self.assertEqual(server.get(), 200)
@@ -700,7 +705,7 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         install = lane_w_installer()
         if install is None:
             self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
-        texts = [self.recycled_killed_and_aborted(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
+        texts = [self.killed_aborted_and_recycled(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
         bodies, expected = [], []
         for text in texts:
             for line in text.splitlines():
