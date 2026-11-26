@@ -186,10 +186,13 @@ PDF_SHA256 = '094d41072aae677ca5c1c5cf2fa57a865c43fdb0350364105f063f9ddc790d23'
 
 # Refutation round 1, item A: the normalisation the document step gives a text before the coder reads it
 # (studio.fable.document, which lane D's Word changes edit beside: CRLF and CR line ends become LF, a leading
-# byte-order mark is dropped, Unicode becomes NFC), reached by text files and a paste.
+# byte-order mark is dropped, Unicode becomes NFC), reached by text files and a paste. The accented text also holds
+# what NFC keeps and NFKC rewrites (cm², 10³ and the micro sign), so its pair tells NFC from NFKC too (refutation
+# round 2, pins[3]).
 LINES = ('SYNTHETIC NOTE', 'Procedure: colonoscopy to the cecum.',
          'Findings: one 6 mm polyp in the sigmoid colon, removed by cold snare.')
-ACCENTED = 'SYNTHETIC NOTE: a caf\u00e9-au-lait macule on the flank; one polyp removed by cold snare.'
+ACCENTED = ('SYNTHETIC NOTE: a caf\u00e9-au-lait macule on the flank, 2 cm\u00b2; WBC 6.4 x 10\u00b3/\u00b5L; '
+            'one polyp removed by cold snare.')
 
 
 def text_file(text: str, filename: str) -> dict:
@@ -197,8 +200,8 @@ def text_file(text: str, filename: str) -> dict:
 
 
 # label -> the upload as the member made it, or {'paste': its text}. Item A's equal pins are what the normalisation
-# does: the CRLF and CR files equal the LF one, the file with a BOM equals 'txt', the NFD file equals the NFC one,
-# and the CRLF paste equals 'paste'.
+# does: the CRLF and CR files equal the LF one, the file with a BOM equals 'txt', the NFD file equals the NFC one (and
+# neither equals what NFKC would give), and the CRLF paste equals 'paste'.
 CASES = {
     'txt': {'data': TEXT_FILE, 'filename': 'n.txt', 'media_type': 'text/plain'},
     'paste': {'paste': PASTED},
@@ -258,16 +261,16 @@ RELEASE_1_REQUESTS = {
          '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906', 2),
     ),
     'txt-nfc': (
-        ('reader', '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f',
-         '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f', 2),
-        ('checker', 'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55',
-         'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55', 2),
+        ('reader', '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6',
+         '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6', 2),
+        ('checker', '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8',
+         '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8', 2),
     ),
     'txt-nfd': (
-        ('reader', '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f',
-         '57f8c1974ba37d5b7240ac2ac8d5fb438147b0c61ed386f492360273fdea972f', 2),
-        ('checker', 'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55',
-         'ba86a0e0cf404e9869b26851f09fd4a97806506537b9fa2b1709d809c641ca55', 2),
+        ('reader', '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6',
+         '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6', 2),
+        ('checker', '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8',
+         '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8', 2),
     ),
     'paste-crlf': (
         ('reader', '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b',
@@ -329,16 +332,16 @@ RELEASE_1_WIRE = {
          'd42741df8e27fbf5b406332db98cebd552c69d396bec88241f961d42199f0627'),
     ),
     'txt-nfc': (
-        ('reader', '98528f8d73504c60b1cc74a1ba31ad4b40996c6d7a0bf6f6e29913d77d559e1b',
-         'af521bef875064ec0e37f8cb2fea7c2729242be75ef07f398e5653efcb9483c8'),
-        ('checker', 'c2c176e2e4892b7278466b38315ca8223e3fe16b8e9a274f10f45d433c945b1f',
-         '0a291cefddbcc176ec7bdbc32a8bc83dda8d3e1d208f16b0ee684c3de84bbadb'),
+        ('reader', 'e17184ca7f3c538c942cf62696d2873f52b5e9a9f8bfc0f822ccab454ed38b0d',
+         '2478ebeda18839a6b8e685b0b095b3b8c7672d2f2f61bdd21c5f992e3678b94c'),
+        ('checker', '5218853defdfbb6a454f909e971a69b3ac81256f3f59f3e316eb5fa5882efe92',
+         '412782dd771b3a69170fe6441f8ce86602a29fb411d36e798bb50f7bb7a1f46e'),
     ),
     'txt-nfd': (
-        ('reader', '98528f8d73504c60b1cc74a1ba31ad4b40996c6d7a0bf6f6e29913d77d559e1b',
-         'af521bef875064ec0e37f8cb2fea7c2729242be75ef07f398e5653efcb9483c8'),
-        ('checker', 'c2c176e2e4892b7278466b38315ca8223e3fe16b8e9a274f10f45d433c945b1f',
-         '0a291cefddbcc176ec7bdbc32a8bc83dda8d3e1d208f16b0ee684c3de84bbadb'),
+        ('reader', 'e17184ca7f3c538c942cf62696d2873f52b5e9a9f8bfc0f822ccab454ed38b0d',
+         '2478ebeda18839a6b8e685b0b095b3b8c7672d2f2f61bdd21c5f992e3678b94c'),
+        ('checker', '5218853defdfbb6a454f909e971a69b3ac81256f3f59f3e316eb5fa5882efe92',
+         '412782dd771b3a69170fe6441f8ce86602a29fb411d36e798bb50f7bb7a1f46e'),
     ),
     'paste-crlf': (
         ('reader', '39f2828f7bd0126d2284c06d4ed31805e5a51cacc4cda5549a50f5f7ea182d98',
