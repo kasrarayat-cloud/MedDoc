@@ -1311,14 +1311,18 @@ class InsertedDocumentTests(SimpleTestCase):
     def setUp(self):
         private_tempdir(self)
 
-    def assert_inserted(self, data, counts=R2_INSERTED, *, named=('afchunk', 'subdoc', 'header1', 'footnotes')):
+    def assert_inserted(self, data, counts=R2_INSERTED, *, named=('afchunk', 'subdoc', 'header1', 'footnotes'),
+                        gate=False):
         """``data`` is refused as an inserted document, with ``counts``, in a reason that names no part and no text; and
         converting it never reaches the runner: the refusal is the conversion's outcome, with its sentence and
-        record."""
+        record. ``gate``: refused by the canonical package gate (D-R2-46) - its spelling is no form Word writes - before
+        E2 reads a part, with the same code, count, sentence and record, and the gate's reason."""
         with self.assertRaises(docx_package.ContentNotShown) as caught:
             docx_package._safe_package(data)
         self.assertEqual((caught.exception.code, caught.exception.counts), (docx_package.INSERTED_DOCUMENT, counts))
-        self.assertEqual(str(caught.exception), docx_package.CONTENT_NOT_SHOWN)
+        self.assertIs(isinstance(caught.exception, docx_package.PackageNotCanonical), gate)
+        if not gate:
+            self.assertEqual(str(caught.exception), docx_package.CONTENT_NOT_SHOWN)
         for word in (*named, 'SYNTHETIC', 'word/'):
             self.assertNotIn(word.casefold(), str(caught.exception).casefold())
         with self.assertRaises(document.DocumentError) as converted:
@@ -1448,7 +1452,9 @@ class InsertedDocumentTests(SimpleTestCase):
                 parts=[(part, r2_imported_docx())], defaults=docx_default)
         for label, data in forms.items():
             with self.subTest(label):
-                self.assert_inserted(data)
+                # since the canonical package gate (D-R2-46) every spelling of rounds 1 and 2 above is refused before E2
+                # reads a part - no target or zip name in the one form - still as an inserted document
+                self.assert_inserted(data, gate=label.startswith('named '))
 
     def holding_nothing(self):
         """(label, the package with a w:altChunk that holds nothing, the package as release 1 leaves it): the element,
@@ -1471,18 +1477,12 @@ class InsertedDocumentTests(SimpleTestCase):
         return [
             ('no r:id', package(TEXT + '<w:altChunk/>' + TEXT), without),
             ('an r:id that names no relationship', package(TEXT + '<w:altChunk r:id="rIdNone"/>' + TEXT), without),
-            ('an r:id naming a part that is missing', package(TEXT + R2_ALT + TEXT, [chunk_row]), without),
             ('an r:id naming an empty part', package(TEXT + R2_ALT + TEXT, [chunk_row], [('word/afchunk1.txt', b'')]),
              without),
             ('an r:id naming an empty part that has an Override', package(
                 TEXT + R2_ALT + TEXT, [chunk_row], [('word/afchunk1.txt', b'')], empty_override), without),
             ('an altChunk with properties and no r:id', package(
                 TEXT + '<w:altChunk><w:altChunkPr><w:matchSrc/></w:altChunkPr></w:altChunk>' + TEXT), without),
-            # refutation round 1, loss[4]: read by its URI path, the name still names no part
-            ('a missing part named with a query', package(
-                TEXT + R2_ALT + TEXT, [relationship('rIdChunk', 'aFChunk', 'missing.docx?v=1')]), without),
-            ('a missing part named by a file URI', package(
-                TEXT + R2_ALT + TEXT, [relationship('rIdChunk', 'aFChunk', 'file:///word/missing.docx')]), without),
         ]
 
     def test_an_import_that_holds_nothing_is_removed_as_in_release_1(self):
@@ -1493,6 +1493,16 @@ class InsertedDocumentTests(SimpleTestCase):
                 self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 1})
                 self.assertEqual(package, legacy_safe_package(without))
                 self.assertEqual(document.convert_docx(data, runner=_echo_package), CONVERTED + package)
+
+    def test_an_import_whose_internal_target_names_no_part_is_refused_by_the_gate(self):
+        # C9 removed these as holding nothing (release 1's bytes); since the canonical package gate (D-R2-46) an
+        # Internal relationship must name a part present by its exact name, in the one form - Word writes no other
+        for label, target in (('an r:id naming a part that is missing', 'afchunk1.txt'),
+                              ('a missing part named with a query', 'missing.docx?v=1'),  # round 1, loss[4]
+                              ('a missing part named by a file URI', 'file:///word/missing.docx')):
+            data = full_package(TEXT + R2_ALT + TEXT, document_rels=(relationship('rIdChunk', 'aFChunk', target),))
+            with self.subTest(label):
+                self.assert_inserted(data, gate=True)
 
     def test_the_same_package_without_the_element_is_the_one_made_before(self):
         # the positive control of the test above: what it compares with is a package E2 leaves untouched
@@ -1668,7 +1678,6 @@ class SafePackageTests(SimpleTestCase):
              relationship('rIdImg', 'image', 'http://192.0.2.1/x.png', 'External'),
              relationship('rIdFile', 'image', 'file:///synthetic/secret.png', 'External'),
              relationship('rIdUp', 'image', '../secret.png', 'External'),
-             relationship('rIdLower', 'image', 'http://192.0.2.1/y.png', 'external'),
              relationship('rIdLink', 'hyperlink', 'https://example.test/', 'External'),
              relationship('rIdKept', 'image', 'media/image1.png', 'Internal')],
             parts=[('word/styles.xml', f'<w:styles xmlns:w="{WORD_NS}"/>'),
@@ -1694,6 +1703,12 @@ class SafePackageTests(SimpleTestCase):
         original = parts_of(crafted)
         for name in ('[Content_Types].xml', 'word/document.xml', 'word/styles.xml', 'word/media/image1.png'):
             self.assertEqual(safe[name], original[name], name)
+        # a TargetMode in another case ('external') was dropped as reaching outside too; since the canonical package
+        # gate (D-R2-46) it is no form Word writes - LibreOffice reads it as External for a picture and Internal for a
+        # stream - and the file is refused (release 2)
+        lower = word_package(TEXT, [relationship('rIdLower', 'image', 'http://192.0.2.1/y.png', 'external')])
+        with self.assertRaises(docx_package.PackageNotCanonical):
+            document.safe_package(lower)
 
     def test_a_part_only_dropped_relationships_named_is_dropped_with_its_relationships(self):
         crafted = word_package(TEXT, [relationship('rIdOdd', 'image', 'media/only-external.png', 'External'),

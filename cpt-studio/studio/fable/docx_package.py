@@ -35,6 +35,11 @@ before it waits on it, so the parent's finally kills that group as well as the c
   part is edited by byte ranges of its own bytes, never written out again, and a part with nothing to remove passes
   through byte for byte: a Word file with none of these features gives exactly the package it gave before release 1. A
   formula ('=' first) is never removed. What was removed is reported as counts only.
+- Release 2, the canonical package gate (refutation round 3, D-R2-46): once release 1's own checks pass, the package's
+  structure - its zip archive and entry names, every relationships part and its targets, the content types, and the id a
+  preview names - must be in the one form a Word package takes, where lane D, LibreOffice and the doctor's Word read
+  every structural reference alike; any other form is refused (PackageNotCanonical, told as an inserted document) before
+  E2 reads a part, whatever the file holds. Word and the real tools measured write only that form.
 - Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
   would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
   rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
@@ -52,9 +57,9 @@ before it waits on it, so the parent's finally kills that group as well as the c
   field whose instruction is QUOTE - a type LibreOffice shows by its stored result - unless it is an INCLUDEPICTURE
   whose stored result shows no text, symbol or mark: a picture alone (R2-30, refutation rounds 1 and 2). Everything
   else is edited as release 1 edits it, so a Word file that needs no refusal and no QUOTE gives exactly release 1's
-  package - apart from a zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed, and, in a part E2
-  edits, a relationship id a kept attribute writes with a character reference or with white space expat normalizes,
-  whose relationship and part release 1 dropped (_still_named, refutation round 1's loss[6]).
+  package - apart from, in a part E2 edits, a relationship id a kept attribute writes with a character reference, whose
+  relationship and part release 1 dropped (_still_named, refutation round 1's loss[6]). (Round 1's other deviation, a
+  zip name stored as UTF-8 without the UTF-8 flag, which release 1 renamed, is refused by the canonical package gate.)
   check_in_child runs the same check on a Word file whose conversion a round stored, before that conversion is read
   again (R2-28 step 7, C8); a package that differs from release 1's - a QUOTE or either deviation - converts afresh.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
@@ -173,10 +178,22 @@ class ContentNotShown(PackageRefused):
     INSERTED_DOCUMENT when it holds an inserted document or a field R2-30's fallback counts, else INSERTED_OBJECT -
     which of the two sentences a member reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
 
-    def __init__(self, counts):
+    def __init__(self, counts, reason=CONTENT_NOT_SHOWN):
         self.counts = {kind: min(counts.get(kind, 0), MAX_REFUSAL_COUNT) for kind in LOST_KINDS}
         self.code = INSERTED_DOCUMENT if self.counts['documents'] or self.counts['fields'] else INSERTED_OBJECT
-        super().__init__(CONTENT_NOT_SHOWN)
+        super().__init__(reason)
+
+
+class PackageNotCanonical(ContentNotShown):
+    """Release 2, the canonical package gate (refutation round 3, D-R2-46): the Word file's package is not in the one
+    form a Word package takes (_require_canonical_zip, _require_canonical_structure, and a preview's id in
+    _PartReader), so lane D, LibreOffice and the doctor's Word could each read one of its structural references - a zip
+    name, a relationship, its target, a content type, the id a preview names - as another. It is refused before E2 reads
+    a part, whatever it holds, told as an inserted document, as D-R2-43's swap is: one count, the package. ``form``:
+    which form it breaks, in fixed words that name no part (the operator's log)."""
+
+    def __init__(self, form):
+        super().__init__({'documents': 1}, f'its package is not in the one form a Word package takes: {form}')
 
 
 class ConversionRefused(Exception):
@@ -325,14 +342,16 @@ def safe_package(data: bytes) -> bytes:
       only such relationships named is dropped with its own relationships. A relationships part that declares a DTD, or
       is not a Relationships element, is refused.
     - E2's removals (fields, objects, controls, imported documents that hold nothing), by byte ranges.
+    - Release 2, the canonical package gate (D-R2-46): a package whose structure is not in the one form a Word package
+      takes is refused (PackageNotCanonical) before E2 reads a part.
     - Release 2 (Group F's rule): a file E2 would take content out of while leaving nothing of it in the PDF is refused,
       ContentNotShown, and nothing of it is rebuilt or converted - an imported document that holds content or reaches
       outside and every subdocument (R2-28), an object or a control that would leave no picture (R2-29), a field whose
       stored result LibreOffice 7.4 loses once a field in its instruction goes (R2-30's fallback). A removed field in
       another field's result stays a field whose instruction is QUOTE, but for an INCLUDEPICTURE that is a picture
       alone (R2-30). Everything else is edited as release 1 edits it: a Word file that needs no refusal and no QUOTE
-      gives exactly release 1's package, apart from the two deviations the module's docstring names (refutation round
-      1's loss[2] and loss[6]).
+      gives exactly release 1's package, apart from the deviation the module's docstring names (refutation round 1's
+      loss[6]; its loss[2] deviation is refused by the canonical package gate).
     - The zip is rebuilt from the parts as read, in their order.
     """
     return _safe_package(data)[0]
@@ -373,6 +392,7 @@ def _package(data: bytes, report: dict):
         renamed_by_field = _renamed_by_unicode_path(data, infos)
         if renamed_by_field:  # loss[6] (b), the lead's decision: one part checked here, another opened by LibreOffice
             raise ContentNotShown({'documents': renamed_by_field})
+        _require_canonical_zip(data, infos)  # the canonical package gate, its zip half (D-R2-46)
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):
@@ -416,6 +436,7 @@ def _package(data: bytes, report: dict):
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
+    _require_canonical_structure(parts)  # the canonical package gate, its parts' half (D-R2-46): before E2 reads a part
     report['read'] = True
     removed, held, unshown, shells, parsed = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows,
                                                                     rewritten, special, orphans, deadline, reader_names)
@@ -574,6 +595,200 @@ def _require_word_main_part(parts, by_folded):
         raise PackageRefused('its main document part is not a Word document')
 
 
+# --- release 2: the canonical package gate (refutation round 3, D-R2-46) -------------------------------------------
+# Lane D, LibreOffice and the doctor's Word each read a package's structure - its zip names, its relationships parts,
+# their targets, its content types, the id a preview names - and each reads a spelling Word never writes its own way:
+# three refutation rounds found, in every repair that taught lane D one more of LibreOffice's readings, the next
+# spelling read otherwise. So the structure is held to the one form a Word package takes, in which every structural
+# reference has exactly one reading and the three readers' coincide by construction; any other form is refused
+# (PackageNotCanonical) before E2 reads a part, whatever the file holds. The forms are those Word and the real tools
+# measured write (Word, LibreOffice, pandoc, python-docx and the committed templates): a file any of them wrote passes.
+# A path segment is of RFC 3986's unreserved characters but '~' - which no reader escapes, decodes or folds - and is
+# never empty, '.' or '..' ('..' only leads a relative target): no scheme, authority, query, fragment, escape, backslash
+# or white space. A package's own name for its content types is the one name outside that alphabet.
+_SEGMENT = re.compile(r'[A-Za-z0-9._-]+')
+_RELATIONSHIP_ID = re.compile(r'[A-Za-z_][A-Za-z0-9._-]*')  # an XML name of ASCII letters, as Word's 'rId7' and 'R0f1e'
+_RELATIONSHIPS_NAME = re.compile(r'(?:(.+)/)?_rels/([^/]+)\.rels')  # 'word/_rels/document.xml.rels'
+_TARGET_MODES = ('Internal', 'External')
+# The relationships a part has at most one of (ECMA-376 Part 1 and Office's own): a reader finds that part by the
+# relationship's Type, not by an id, so a second one lets LibreOffice read one part where Word reads another - a
+# footnotes, comments or styles part swapped, as refutation round 3's loss[5] swapped the document. (A Type's case is
+# not held: real tools write 'officedocument' for 'officeDocument' in core-properties' Type, measured.)
+_SINGLE_TYPES = frozenset(
+    [f'{base}{kind}' for base in ('http://schemas.openxmlformats.org/officeDocument/2006/relationships/',
+                                  'http://purl.oclc.org/ooxml/officeDocument/relationships/')
+     for kind in ('officeDocument', 'styles', 'numbering', 'settings', 'webSettings', 'fontTable', 'footnotes',
+                  'endnotes', 'comments', 'theme', 'glossaryDocument', 'extended-properties', 'custom-properties')]
+    + ['http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+       'http://schemas.openxmlformats.org/officedocument/2006/relationships/metadata/core-properties',
+       'http://schemas.microsoft.com/office/2007/relationships/stylesWithEffects',
+       'http://schemas.microsoft.com/office/2011/relationships/people',
+       'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
+       'http://schemas.microsoft.com/office/2016/09/relationships/commentsIds',
+       'http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible'])
+
+
+def _canonical_name(name) -> bool:
+    """Whether a zip entry's name is in the one form: '/'-separated segments (_SEGMENT, none '.' or '..'), or a folder's
+    entry - the same, then '/' -, or the content types' own name."""
+    segments = (name[:-1] if name.endswith('/') else name).split('/')
+    return name == CONTENT_TYPES_PART or all(_SEGMENT.fullmatch(segment) and segment not in ('.', '..')
+                                             for segment in segments)
+
+
+def _canonical_part(folder, target):
+    """The zip name an Internal ``target`` of a part in ``folder`` names when the target is in the one form - '/' and a
+    part's name, or a part's name relative to ``folder``, led by as many '..' as stay inside the package (every other
+    segment _SEGMENT, none '.' or '..') -, else None. A target in this form is read alike as release 1 reads it
+    (_part_name), as LibreOffice opens a picture (_opened_name) or an import (_uri_path_name), and as RFC 3986 resolves
+    it (_word_name, the doctor's Word)."""
+    rooted = target.startswith('/')
+    segments = (target[1:] if rooted else target).split('/')
+    base = [] if rooted else folder.split('/') if folder else []
+    ups = 0
+    while not rooted and ups < len(segments) and segments[ups] == '..':
+        ups += 1
+    rest = segments[ups:]
+    if ups > len(base) or not rest or not all(_SEGMENT.fullmatch(segment) and segment not in ('.', '..')
+                                               for segment in rest):
+        return None
+    return '/'.join(base[:len(base) - ups] + rest)
+
+
+def _require_canonical_zip(data: bytes, infos):
+    """The gate's zip half, before any part is read: one archive from its first byte - a local header - to its last -
+    its end record, with no comment -, so no reader finds another archive in it; every entry named in the one form
+    (_canonical_name) as stored, so zipfile, LibreOffice and Word read one name (ASCII: the UTF-8 flag and cp437 agree;
+    no name a Unicode Path field, a NUL or a separator renames); a folder's entry holding nothing; every part stored or
+    deflated, the two methods Word reads; and every entry's local header agreeing with its directory record
+    (_local_header_agrees), so a reader that streams the archive reads the bytes zipfile reads. Two names one reader
+    folds alike are release 1's refusal ('named twice'), and a Unicode Path field naming an entry otherwise is
+    D-R2-43's (both before this)."""
+    if not data.startswith(b'PK\x03\x04') or (infos and min(info.header_offset for info in infos) != 0) \
+            or data[-22:-18] != b'PK\x05\x06' or data[-2:] != b'\x00\x00':
+        raise PackageNotCanonical('its zip archive does not run from its first byte to its last')
+    for info in infos:
+        if info.orig_filename != info.filename or not _canonical_name(info.orig_filename):
+            raise PackageNotCanonical('a zip entry is not named in the one form')
+        if not _local_header_agrees(data, info):
+            raise PackageNotCanonical('a zip entry\'s local header and its directory record differ')
+        if info.orig_filename.endswith('/') and info.file_size:
+            raise PackageNotCanonical('a folder entry holds bytes')
+        if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            raise PackageNotCanonical('a part is compressed in a way Word does not read')
+
+
+def _local_header_agrees(data: bytes, info) -> bool:
+    """Whether an entry's local header - which a reader that streams the archive reads, as zipfile reads the central
+    directory's record - gives it the same flags, method and name, and the same CRC and sizes, or zeros where the flags
+    say a data descriptor carries them (as LibreOffice writes it)."""
+    head = data[info.header_offset:info.header_offset + 30]
+    if len(head) < 30 or head[:4] != b'PK\x03\x04':
+        return False
+    flags, method, crc, compressed, size, name_length = struct.unpack_from('<HH4xIIIH', head, 6)
+    name = data[info.header_offset + 30:info.header_offset + 30 + name_length]
+    stored = info.orig_filename.encode('utf-8' if info.flag_bits & 0x800 else 'cp437', 'replace')
+    sizes = (crc, compressed, size)
+    return flags == info.flag_bits and method == info.compress_type and name == stored and (
+        sizes == (info.CRC, info.compress_size, info.file_size) or (flags & 0x08 and sizes == (0, 0, 0)))
+
+
+def _plain_rows(raw):
+    """((the root's name, its attributes), [(each child's name, its attributes)], whether any element stands deeper) of
+    an XML part, its names as written - no namespace resolved: an 'xmlns' declaration is one more attribute -, as
+    LibreOffice's package reader matches them (comphelper's relationships and content types reader). Over bytes _xml has
+    already parsed: well-formed, with no DTD."""
+    root, rows, depth, deeper = [], [], [0], [False]
+    parser = expat.ParserCreate()
+
+    def start(name, attrs):
+        depth[0] += 1
+        if depth[0] == 1:
+            root.append((name, attrs))
+        elif depth[0] == 2:
+            rows.append((name, attrs))
+        else:
+            deeper[0] = True
+
+    def end(name):
+        depth[0] -= 1
+    parser.StartElementHandler, parser.EndElementHandler = start, end
+    parser.Parse(raw, True)
+    return root[0], rows, deeper[0]
+
+
+def _require_canonical_structure(parts):
+    """The gate's parts' half, once release 1's package checks have passed and before E2 reads a part:
+    - every relationships part is named for a part present by its exact name ('_rels/.rels', the package's own), so a
+      reader that folds case finds no relationships another does not;
+    - each is a Relationships element of the package relationships namespace, unprefixed and declaring nothing else,
+      whose every child is a Relationship of that namespace, unprefixed, with exactly Id, Type, Target and at most
+      TargetMode - 'Internal' or 'External' -, and nothing deeper: so a reader that matches names as written
+      (LibreOffice) and one that resolves namespaces (lane D, Word) read the same rows (refutation round 3, loss[3] and
+      loss[5]);
+    - an Id is an XML name of ASCII letters, digits, '.', '-' and '_', once in its part: one row per id (loss[1]'s first
+      row needs no rule); and a Type a part has one of (_SINGLE_TYPES: its styles, footnotes, comments ...) once;
+    - an Internal target is in the one form (_canonical_part) and names a part present by its exact name: one part for
+      every reader (loss[0], loss[2]); an External one is dropped, as release 1 drops it;
+    - the content types are a Types element of their namespace in the same form, holding only a Default (exactly
+      Extension and ContentType; no extension twice, without case) or an Override (exactly PartName and ContentType;
+      '/' and a name in the one form, naming a part present only by its exact name - one that names no part is one
+      every reader passes over, as release 1's own package leaves it; no part twice, without case), and the main
+      document part has its own Override, so the type lane D checks is the type LibreOffice detects."""
+    names = set(parts)
+    for name in parts:
+        if name.endswith('/'):
+            continue  # a folder's entry (_require_canonical_zip: it holds nothing)
+        folded = name.casefold()
+        if not (folded.endswith('.rels') or '_rels' in folded.split('/')):
+            continue
+        if name != ROOT_RELATIONSHIPS_PART:
+            match = _RELATIONSHIPS_NAME.fullmatch(name)
+            source = None if match is None else f'{match.group(1)}/{match.group(2)}' if match.group(1) \
+                else match.group(2)
+            if source not in names:
+                raise PackageNotCanonical('a relationships part is not named for a part of the package')
+            if source.casefold().endswith('.rels'):  # OPC: a relationships part has no relationships of its own
+                raise PackageNotCanonical('a relationships part describes a part that has none')
+        (root, declared), rows, deeper = _plain_rows(parts[name])
+        if root != 'Relationships' or declared != {'xmlns': RELATIONSHIPS_NS} or deeper:
+            raise PackageNotCanonical('a relationships part is not in the one form')
+        folder, ids, single = _source_folder(name), set(), set()
+        for row, attrs in rows:
+            if row != 'Relationship' or not {'Id', 'Type', 'Target'} <= attrs.keys() <= \
+                    {'Id', 'Type', 'Target', 'TargetMode'} or attrs.get('TargetMode', 'Internal') not in _TARGET_MODES:
+                raise PackageNotCanonical('a relationship is not in the one form')
+            if not _RELATIONSHIP_ID.fullmatch(attrs['Id']) or attrs['Id'] in ids or not attrs['Type']:
+                raise PackageNotCanonical('a relationship id is not in the one form or is not its own')
+            ids.add(attrs['Id'])
+            if attrs['Type'] in _SINGLE_TYPES and attrs['Type'] in single:
+                raise PackageNotCanonical('a part has two relationships of a kind it has one of')
+            single.add(attrs['Type'])
+            if attrs.get('TargetMode', 'Internal') == 'Internal' and \
+                    _canonical_part(folder, attrs['Target']) not in names:
+                raise PackageNotCanonical('an internal target is not in the one form or names no part')
+    (root, declared), rows, deeper = _plain_rows(parts[CONTENT_TYPES_PART])
+    if root != 'Types' or declared != {'xmlns': CONTENT_TYPES_NS} or deeper:
+        raise PackageNotCanonical('the content types are not in the one form')
+    extensions, overridden, folded = set(), set(), {name.casefold(): name for name in names}
+    for row, attrs in rows:
+        if row == 'Default' and attrs.keys() == {'Extension', 'ContentType'} and attrs['Extension'] \
+                and attrs['Extension'].casefold() not in extensions:
+            extensions.add(attrs['Extension'].casefold())
+        elif row == 'Override' and attrs.keys() == {'PartName', 'ContentType'} and attrs['PartName'].startswith('/') \
+                and _canonical_part('', attrs['PartName']) is not None \
+                and folded.get(attrs['PartName'][1:].casefold(), attrs['PartName'][1:]) == attrs['PartName'][1:] \
+                and attrs['PartName'][1:].casefold() not in overridden:
+            overridden.add(attrs['PartName'][1:].casefold())
+        else:
+            raise PackageNotCanonical('a content type is not in the one form')
+    main = [attrs['Target'] for row, attrs in _plain_rows(parts[ROOT_RELATIONSHIPS_PART])[1]
+            if attrs.get('Type') in OFFICE_DOCUMENT_TYPES]
+    part = _canonical_part('', main[0]) if len(main) == 1 else None
+    if part is None or part.casefold() not in overridden:
+        raise PackageNotCanonical('the main document part has no content type of its own')
+
+
 # --- E2: field instructions and embedded content, removed by byte ranges -------------------------------------------
 
 def _names(*local_names):
@@ -613,6 +828,12 @@ _PICTURE_KEYS = {f'{VML_NAMESPACE} imagedata': tuple(f'{namespace} id' for names
 _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
                                                  for relationships in RELATIONSHIP_ID_NAMESPACES)
                       for namespace in DRAWINGML_NAMESPACES})
+# The canonical package gate (D-R2-46): the ids a reader may draw a preview's picture from - those, and a v:imagedata's
+# r:pict (ECMA-376's alternate image data, which Word may read) -, of which a preview in a w:object or w:pict names one
+# at most: LibreOffice reads o:relid where present, else the first r:id (refutation round 3, loss[1]), Word its own.
+_PICTURE_IDS = {name: keys + (tuple(f'{namespace} pict' for namespace in RELATIONSHIP_ID_NAMESPACES)
+                              if name.endswith(' imagedata') else ())
+                for name, keys in _PICTURE_KEYS.items()}
 # A preview is a picture only when its part's bytes begin as one LibreOffice decodes - EMF, placeable WMF, standard WMF
 # (memory or disk), PNG, JPEG, GIF (its whole signature), TIFF in either byte order, BMP (_is_picture) and, from
 # refutation round 2, PDF, which LibreOffice 7.4 draws as Mac Word writes it (D-R2-40, R1-L0e): a part that is not empty
@@ -927,9 +1148,12 @@ class _PartReader:
             for key, value in attrs.items():
                 if key.startswith(_RELATIONSHIP_ID_PREFIXES):
                     self.references.append((element[_AT], value))
-        if self.holders and name in _PICTURE_KEYS and any(attrs.get(key) in self.pictures
-                                                          for key in _PICTURE_KEYS[name]):
-            self.pictured.append(element[_AT])  # R2-29: a picture whose part is sent, in an open object or w:pict
+        if self.holders and name in _PICTURE_KEYS:
+            ids = [key for key in _PICTURE_IDS[name] if key in attrs]
+            if len(ids) > 1:  # the canonical package gate: one reading of its id (refutation round 3, loss[1])
+                raise PackageNotCanonical('a preview names more than one relationship id')
+            if ids and ids[0] in _PICTURE_KEYS[name] and attrs[ids[0]] in self.pictures:
+                self.pictured.append(element[_AT])  # R2-29: a picture whose part is sent, in an open object or w:pict
         if self.watched and name in _SHOWN and self.fields and self.fields[-1].watched \
                 and self.simple <= self.fields[-1].simple:
             self.fields[-1].result_shown = True  # R2-30's fallback: a picture in the result a field holds

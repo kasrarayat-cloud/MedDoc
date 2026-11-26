@@ -7,8 +7,11 @@
   sees outside the fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and
   nothing else; a seeded fuzz.
 - The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
-- Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package (apart from the deviations
-  ZipNameTests and CharacterReferenceTests pin): the reference is release 1's own docx_package.py, vendored as a test
+- The canonical package gate (refutation round 3, D-R2-46): a package not in the one form a Word package takes - its
+  zip, its relationships parts and targets, its content types, a preview's id - is refused before E2 reads a part, told
+  as an inserted document (CanonicalPackageTests); the forms Word and the real tools write pass it unchanged.
+- Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package (apart from the deviation
+  CharacterReferenceTests pins): the reference is release 1's own docx_package.py, vendored as a test
   fixture checked against its git blob id (RELEASE_1_PACKAGE_BLOB, immutable), so the comparisons run wherever the
   tests run - CI's shallow clone and the image included - and are never skipped.
 - R2-31: a refused Word upload through the shipped job path - its sentence, its three audit rows with the code and
@@ -94,6 +97,20 @@ class ReleaseOneCase(SimpleTestCase):
         theirs = self.release_1()._safe_package(data)
         self.assertEqual(ours[0], theirs[0])
         self.assertEqual(ours[1], theirs[1])
+
+    def assert_not_canonical(self, data, form=''):
+        """``data`` is refused by the canonical package gate (D-R2-46) - told as an inserted document, one count, its
+        reason naming the form it breaks (``form``, when given) - fresh and before a stored conversion of it is read
+        again (C8: the check decides, no converter is asked)."""
+        with self.assertRaises(docx_package.PackageNotCanonical) as caught:
+            docx_package._safe_package(data)
+        self.assertEqual((caught.exception.code, caught.exception.counts),
+                         (docx_package.INSERTED_DOCUMENT, GATE_COUNTS))
+        self.assertIn(form, str(caught.exception))
+        with self.assertRaises(docx_package.ConversionRefused) as checked:
+            docx_package.check_in_child(data)
+        self.assertEqual((checked.exception.code, checked.exception.counts), (docx_package.INSERTED_DOCUMENT,
+                                                                              GATE_COUNTS))
 
 
 # --- synthetic Word files (the Word area's shape builders, rebuilt; every text invented) ----------------------------
@@ -269,6 +286,9 @@ DOCX_PARTS = (('word/media/image1.emf', EMF), ('word/embeddings/Microsoft_Word_D
 DOCX_RELS = (rel('rIdPrev', 'image', 'media/image1.emf'),
              rel('rIdOle', 'package', 'embeddings/Microsoft_Word_Document.docx'))
 OBJECTS, CONTROLS = 'objects', 'controls'
+# refused by the canonical package gate (D-R2-46) before E2 reads a part: told as an inserted document, one count
+GATE = 'gate'
+GATE_COUNTS = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
 
 
 def in_object(*inner, attributes=' w:dxaOrig="6000" w:dyaOrig="900"'):
@@ -302,7 +322,7 @@ def object_shapes():
         ('B08 object, imagedata relationship missing', in_object(SHAPETYPE, vshape('rIdGone'), ole('Word.Document.12')),
          DOCX_RELS[1:], (embedded,), OBJECTS),
         ('B09 object, imagedata part missing', in_object(preview, ole('Word.Document.12')), DOCX_RELS, (embedded,),
-         OBJECTS),
+         GATE),  # an Internal target that names no part (the gate, D-R2-46)
         ('B10 object, imagedata External', in_object(preview, ole('Word.Document.12')),
          (rel('rIdPrev', 'image', 'file:///nonexistent/x.emf', 'External'), DOCX_RELS[1]), (embedded,), OBJECTS),
         ('B11 object, EMF preview, embedded docx', in_object(preview, ole('Word.Document.12')), DOCX_RELS, DOCX_PARTS,
@@ -376,7 +396,8 @@ def object_shapes():
             '<w:txbxContent>' + p(t('BOX1 '), fc('begin'), instr(INC)) + p(t('BOX2')) + '</w:txbxContent></v:textbox>'
             '</v:shape></w:pict></w:r>', t('INBODY ')) + p(t('BODY2 '), fc('end'), t(' TAIL')) + AFTER, (), (), None),
         ('E06 field begun in one footnote, ended in another', None, None, None, None),
-        ('E07 header relationship with TargetMode="internal"', None, None, None, None),
+        ('E07 header relationship with TargetMode="internal"', None, None, None, GATE),  # a TargetMode Word never
+        # writes, which lane D drops as External and LibreOffice reads as Internal (the gate, D-R2-46)
         ('E08 bare object in a tracked deletion',
          BEFORE + p('<w:del w:id="1" w:author="S" w:date="2026-11-25T00:00:00Z">' + bare + '</w:del>', t('LIVE'))
          + AFTER, DOCX_RELS[1:], (embedded,), OBJECTS),
@@ -496,6 +517,10 @@ class ObjectAndControlTests(ReleaseOneCase):
                     self.assert_release_1_package(data)
                     compared += 1
                     continue
+                if expected == GATE:  # not in the one form a Word package takes: refused before E2 reads a part
+                    self.assert_not_canonical(data)
+                    self.release_1()._safe_package(data)  # the positive control: release 1 coded it
+                    continue
                 with self.assertRaises(docx_package.ContentNotShown) as caught:
                     docx_package._safe_package(data)
                 counts = {'documents': 0, 'objects': 0, 'controls': 0, 'fields': 0, expected: 1}
@@ -507,7 +532,8 @@ class ObjectAndControlTests(ReleaseOneCase):
     def test_an_object_keeps_its_preview_or_the_file_is_refused(self):
         packages = object_packages()
         self.assertEqual(len(packages), 44)
-        self.assertEqual(sum(expected is None for _, _, expected in packages), 19)
+        self.assertEqual(sum(expected is None for _, _, expected in packages), 18)
+        self.assertEqual([label[:3] for label, _, expected in packages if expected == GATE], ['B09', 'E07'])
         self.assert_outcomes(packages)
 
     def test_a_control_keeps_its_preview_or_the_file_is_refused(self):
@@ -523,10 +549,65 @@ class ObjectAndControlTests(ReleaseOneCase):
             return package(in_object(SHAPETYPE, vshape(inner=inner), ole('Word.Document.12')),
                            (*(rows or (rel('rIdPrev', 'image', target, mode),)), DOCX_RELS[1]), parts + tuple(extra))
         drawn = in_object(drawing(), '<w:objectEmbed r:id="rIdOle" w:progId="Word.Document.12"/>', attributes='')
+        # the canonical package gate (D-R2-46) refuses these before E2 reads a part, whatever the object holds: each
+        # spells a relationship, its target or a zip name in a form Word never writes, which lane D, LibreOffice and
+        # the doctor's Word could read as three parts (refutation rounds 1 to 3 found one such reading per repair)
+        not_canonical = {
+            'its part missing': preview_object('media/image1.emf', part_name=None),
+            # loss[5] (round 1): LibreOffice opens a preview by its exact name only, Word also finds these
+            'a percent-encoded name that is present': preview_object('media/image%201.emf',
+                                                                     part_name='word/media/image 1.emf'),
+            'a name present only without case': preview_object('media/IMAGE1.EMF'),
+            'a drawing whose a:blip embeds a percent-encoded name that is present': package(
+                drawn, (rel('rIdPic', 'image', 'media/image%201.emf'), DOCX_RELS[1]),
+                (('word/media/image 1.emf', EMF), DOCX_PARTS[1])),
+            'a drawing whose a:blip embeds ./media/image1.emf': package(
+                drawn, (rel('rIdPic', 'image', './media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
+            # loss[1] (round 2): an id written twice, whatever its first row - one row per id is the one form (the
+            # last four were kept before the gate, the first row LibreOffice reads naming the picture)
+            'an id written twice, its first row naming a missing part': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/missing.emf'), rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row naming a part that is no picture': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/words.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
+                extra=(('word/media/words.emf', b'plain words, no picture'),)),
+            'an id written twice, its first row naming an empty part': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/empty.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
+                extra=(('word/media/empty.emf', b''),)),
+            'a relationship with no Type': preview_object('', rows=(
+                '<Relationship Id="rIdPrev" Target="media/image1.emf"/>',)),
+            'an id written twice, the picture first': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/image1.emf'), rel('rIdPrev', 'image', 'media/missing.emf'))),
+            'an id written twice, an External row first': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'file:///synthetic/x.emf', 'External'),
+                rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row with no Type': preview_object('', rows=(
+                '<Relationship Id="rIdPrev" Target="media/missing.emf"/>',
+                rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row with an empty Target': preview_object('', rows=(
+                rel('rIdPrev', 'image', ''), rel('rIdPrev', 'image', 'media/image1.emf'))),
+        }
+        # loss[0] and refuse[0] (round 2), loss[0] (round 3): a '.' segment, a fragment, a '..' under a root or past it,
+        # an empty segment - the last three were kept before the gate (LibreOffice opened them), and round 3 found the
+        # rebuild dropping the part they name as an orphan
+        for target in ('./media/image1.emf', 'media/./image1.emf', '/./word/media/image1.emf',
+                       '/word/./media/image1.emf', '/word/../word/media/image1.emf', 'media/image1.emf#frag',
+                       'media/image1.emf#', '../../word/media/image1.emf', 'media//image1.emf',
+                       '//word/media/image1.emf'):
+            not_canonical[f'a target written {target!r}'] = preview_object(target)
+        not_canonical['a target written \'media//../image1.emf\', the part word/image1.emf'] = preview_object(
+            'media//../image1.emf', part_name='word/image1.emf')
+        # a '.' or '..' in a zip entry's own name is no name in the one form either
+        not_canonical['a target written \'./media/image1.emf\', a zip entry word/./media/image1.emf'] = preview_object(
+            './media/image1.emf', part_name='word/./media/image1.emf')
+        not_canonical['a target written \'/word/../word/media/image1.emf\', a zip entry so named'] = preview_object(
+            '/word/../word/media/image1.emf', part_name='word/../word/media/image1.emf')
+        for label, data in not_canonical.items():
+            with self.subTest(f'refused by the gate: {label}'):
+                self.assert_not_canonical(data)
+        # in the one form, and no picture in the object's place: R2-29 refuses them (inserted_object)
         refused = {
             'its relationship missing': package(in_object(SHAPETYPE, vshape('rIdGone'), ole('Word.Document.12')),
                                                 DOCX_RELS[1:], DOCX_PARTS[1:]),
-            'its part missing': preview_object('media/image1.emf', part_name=None),
             'External': preview_object('file:///synthetic/preview.emf', mode='External', part_name=None),
             'External, though a part of that name is present': preview_object('media/image1.emf', mode='External'),
             'absent (no imagedata)': preview_object('media/image1.emf', inner=''),
@@ -540,18 +621,6 @@ class ObjectAndControlTests(ReleaseOneCase):
             'one byte': preview_object('media/image1.emf', content=b'\x00'),
             'bytes in no picture format': preview_object('media/image1.emf', content=b'plain words, no picture'),
             'the embedded document itself': preview_object('media/image1.emf', inner='<v:imagedata r:id="rIdOle"/>'),
-            # loss[5]: LibreOffice opens a preview by its exact name only (Word also finds these; LibreOffice draws
-            # nothing)
-            'a percent-encoded name that is present': preview_object('media/image%201.emf',
-                                                                     part_name='word/media/image 1.emf'),
-            'a name present only without case': preview_object('media/IMAGE1.EMF'),
-            'a drawing whose a:blip embeds a percent-encoded name that is present': package(
-                drawn, (rel('rIdPic', 'image', 'media/image%201.emf'), DOCX_RELS[1]),
-                (('word/media/image 1.emf', EMF), DOCX_PARTS[1])),
-            # refutation round 2, loss[0] and refuse[0]: LibreOffice opens a picture's target as a string - no '.'
-            # segment, fragment or '..' under a root resolved - so these name no part it opens, and it draws nothing
-            'a drawing whose a:blip embeds ./media/image1.emf': package(
-                drawn, (rel('rIdPic', 'image', './media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
             # loss[5]: words that begin as a signature's first bytes are no picture; nor is a BMP LibreOffice does not
             # detect (a 108-byte header with its reserved bytes set: not drawn on 24.2.7)
             'words that begin BM': preview_object('media/image1.emf', content=b'BMI 31.4 kg/m2, words, no picture'),
@@ -575,53 +644,18 @@ class ObjectAndControlTests(ReleaseOneCase):
             'a gzip whose deflate stream is corrupt': preview_object(
                 'media/image1.emz', part_name='word/media/image1.emz',
                 content=gzip.compress(EMF, mtime=0)[:10] + b'\xff' * 24),
-            # loss[1]: LibreOffice reads an id's first row that has an Id, a Type and a Target; a later row with a
-            # picture is never opened
-            'an id written twice, its first row naming a missing part': preview_object('', rows=(
-                rel('rIdPrev', 'image', 'media/missing.emf'), rel('rIdPrev', 'image', 'media/image1.emf'))),
-            'an id written twice, its first row naming a part that is no picture': preview_object('', rows=(
-                rel('rIdPrev', 'image', 'media/words.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
-                extra=(('word/media/words.emf', b'plain words, no picture'),)),
-            'an id written twice, its first row naming an empty part': preview_object('', rows=(
-                rel('rIdPrev', 'image', 'media/empty.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
-                extra=(('word/media/empty.emf', b''),)),
-            'a relationship with no Type': preview_object('', rows=(
-                '<Relationship Id="rIdPrev" Target="media/image1.emf"/>',)),
         }
-        for target in ('./media/image1.emf', 'media/./image1.emf', '/./word/media/image1.emf',
-                       '/word/./media/image1.emf', '/word/../word/media/image1.emf', 'media/image1.emf#frag',
-                       'media/image1.emf#'):
-            refused[f'a target written {target!r}'] = preview_object(target)
-        refused['a target written \'media//../image1.emf\', the part word/image1.emf'] = preview_object(
-            'media//../image1.emf', part_name='word/image1.emf')
-        # a '.' or '..' left names no part even where a zip entry is so named: lane D cannot tell whether LibreOffice's
-        # storage would resolve it (fail closed)
-        refused['a target written \'./media/image1.emf\', a zip entry word/./media/image1.emf'] = preview_object(
-            './media/image1.emf', part_name='word/./media/image1.emf')
-        refused['a target written \'/word/../word/media/image1.emf\', a zip entry so named'] = preview_object(
-            '/word/../word/media/image1.emf', part_name='word/../word/media/image1.emf')
         for label, data in refused.items():
             with self.subTest(f'refused: {label}'):
                 with self.assertRaises(docx_package.ContentNotShown) as caught:
                     docx_package._safe_package(data)
-                self.assertEqual(caught.exception.counts['objects'], 1)
+                self.assertEqual((caught.exception.code, caught.exception.counts['objects']),
+                                 (docx_package.INSERTED_OBJECT, 1))
         kept = {
             'a name present as written': preview_object('media/image1.emf'),
             'o:relid': preview_object('media/image1.emf', inner='<v:imagedata o:relid="rIdPrev"/>'),
             'a drawing whose a:blip embeds a name present as written': package(
                 drawn, (rel('rIdPic', 'image', 'media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
-            # refutation round 2, loss[1]: the first row LibreOffice reads names the picture (an External row is
-            # dropped from the package; a row with no Type or no Target is one LibreOffice does not read)
-            'an id written twice, the picture first': preview_object('', rows=(
-                rel('rIdPrev', 'image', 'media/image1.emf'), rel('rIdPrev', 'image', 'media/missing.emf'))),
-            'an id written twice, an External row first': preview_object('', rows=(
-                rel('rIdPrev', 'image', 'file:///synthetic/x.emf', 'External'),
-                rel('rIdPrev', 'image', 'media/image1.emf'))),
-            'an id written twice, its first row with no Type': preview_object('', rows=(
-                '<Relationship Id="rIdPrev" Target="media/missing.emf"/>',
-                rel('rIdPrev', 'image', 'media/image1.emf'))),
-            'an id written twice, its first row with an empty Target': preview_object('', rows=(
-                rel('rIdPrev', 'image', ''), rel('rIdPrev', 'image', 'media/image1.emf'))),
             # D-R2-40 (the lead's 7.4 run on 3ad91321e, R1-L0e): a PDF preview, as Mac Word writes it, is drawn
             'a PDF preview (R1-L0e)': preview_object('media/image1.pdf', part_name='word/media/image1.pdf',
                                                      content=SYNTHETIC_PDF_PREVIEW),
@@ -631,9 +665,8 @@ class ObjectAndControlTests(ReleaseOneCase):
             'a WMZ preview': preview_object('media/image1.wmz', part_name='word/media/image1.wmz',
                                             content=gzip.compress(WMF, mtime=0)),
         }
-        # loss[0] and refuse[0]: the names LibreOffice does open - rooted, a '..' to the root, an empty segment
-        for target in ('/word/media/image1.emf', '../word/media/image1.emf', '../../word/media/image1.emf',
-                       'media//image1.emf', '//word/media/image1.emf'):
+        # the target in the one form, rooted or led by a '..' that stays inside the package
+        for target in ('/word/media/image1.emf', '../word/media/image1.emf'):
             kept[f'a target written {target!r}'] = preview_object(target)
         # each picture format a preview is (loss[0]): EMF, placeable WMF, standard WMF in memory and on disk, PNG, JPEG,
         # GIF, BMP (a 40-byte header; refutation round 2, loss[5]), TIFF in both byte orders, and PDF (D-R2-40)
@@ -735,13 +768,9 @@ class ObjectAndControlTests(ReleaseOneCase):
                            (('word/activeX/activeX1.xml', bag), ('word/media/image1.wmf', WMF)),
                            (override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml'),))
         refused = check_box('./media/image1.wmf')
-        with self.assertRaises(docx_package.ContentNotShown) as caught:
-            docx_package._safe_package(refused)
-        self.assertEqual((caught.exception.code, caught.exception.counts),
-                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 0, 'controls': 1, 'fields': 0}))
-        with self.assertRaises(docx_package.ConversionRefused) as checked:
-            docx_package.check_in_child(refused)
-        self.assertEqual(checked.exception.code, docx_package.INSERTED_OBJECT)
+        # since the canonical package gate (D-R2-46): a target with a '.' segment is no target in the one form - the
+        # file is refused before E2 reads a part, told as an inserted document, fresh and through check_in_child
+        self.assert_not_canonical(refused, 'an internal target')
         self.release_1()._safe_package(refused)  # the bad shape: release 1 coded it
         self.assertEqual(docx_package._safe_package(check_box('media/image1.wmf'))[1]['controls'], 1)
         self.assert_release_1_package(check_box('media/image1.wmf'))
@@ -756,29 +785,29 @@ class ImportHoldingNothingTests(ReleaseOneCase):
         shapes = {
             'no r:id': package(BEFORE + '<w:altChunk/>' + AFTER),
             'an r:id that names no relationship': package(BEFORE + '<w:altChunk r:id="rIdNone"/>' + AFTER),
-            'a part that is missing': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),)),
             'an empty text part': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'empty.txt'),),
                                           (('word/empty.txt', b''),)),
             'an empty part with an Override': package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', 'empty.txt'),),
                                                       (('word/empty.txt', b''),),
                                                       (override('word/empty.txt', 'text/plain'),)),
-            # refutation round 1, loss[4]: a name read by its URI path that names no part holds nothing either
-            'a missing part named with a query': package(BEFORE + alt + AFTER,
-                                                         (rel('rIdChunk', 'aFChunk', 'missing.docx?v=1'),)),
-            'a missing part named by a file URI': package(BEFORE + alt + AFTER,
-                                                          (rel('rIdChunk', 'aFChunk', 'file:///word/missing.docx'),)),
-            # refutation round 2, loss[3]: a rootless path under a scheme that names no part, as LibreOffice opens it
-            'a missing part named x:afchunk1.docx': package(BEFORE + alt + AFTER,
-                                                            (rel('rIdChunk', 'aFChunk', 'x:afchunk1.docx'),)),
-            # D-R2-40: a '..' past the root, dropped as the doctor's Word drops it, still names no part
-            'a missing part named past the root': package(BEFORE + alt + AFTER,
-                                                          (rel('rIdChunk', 'aFChunk', '../../word/missing.docx'),)),
         }
         for label, data in shapes.items():
             with self.subTest(label):
                 removed = docx_package._safe_package(data)[1]
                 self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 1})
                 self.assert_release_1_package(data)
+        # since the canonical package gate (D-R2-46), a relationship whose Internal target names no part - or names it
+        # in a form Word never writes - is refused before E2 reads a part, whatever the import holds: Word never writes
+        # one, and each of these was a repair that taught lane D one more reading (C9's 'missing part' now needs none)
+        for label, target in (('a part that is missing', 'afchunk1.docx'),
+                              ('a missing part named with a query', 'missing.docx?v=1'),  # round 1, loss[4]
+                              ('a missing part named by a file URI', 'file:///word/missing.docx'),
+                              ('a missing part named x:afchunk1.docx', 'x:afchunk1.docx'),  # round 2, loss[3]
+                              ('a missing part named past the root', '../../word/missing.docx')):  # D-R2-40
+            data = package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk', target),))
+            with self.subTest(f'refused by the gate: {label}'):
+                self.assertEqual(self.release_1()._safe_package(data)[1]['chunks'], 1)  # release 1 removed it
+                self.assert_not_canonical(data, 'an internal target')
         for label, data in (('External', package(BEFORE + alt + AFTER, (rel('rIdChunk', 'aFChunk',
                                                                             'file:///synthetic/x.docx',
                                                                             'External'),))),
@@ -908,17 +937,18 @@ class ZipNameTests(ReleaseOneCase):
                     docx_package.check_in_child(shape)
                 self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
 
-    def test_a_picture_named_without_the_flag_keeps_its_name(self):
+    def test_a_picture_named_without_the_flag_is_refused_by_the_gate(self):
+        # round 1 kept such a picture by its UTF-8 name, a deviation from release 1's bytes; since the canonical package
+        # gate (D-R2-46) a zip name outside the one form's ASCII alphabet - flagged or not - is refused, so zipfile,
+        # LibreOffice and Word read every accepted name alike and no package renames a part
         data = flagless_picture_word()
-        out, removed = docx_package._safe_package(data)
-        self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 0})
-        names = entry_names(out)
-        self.assertEqual(names.get(b'word/media/photo_\xc3\x9f.png'), True)  # its bytes kept, the flag now set
-        with zipfile.ZipFile(io.BytesIO(out)) as archive:
-            self.assertEqual(archive.read('word/media/photo_\u00df.png'), PNG_BYTES)
-        # release 1 renamed it (read as cp437, written as UTF-8): the deviation from its bytes is this name alone
         self.assertNotIn(b'word/media/photo_\xc3\x9f.png', entry_names(self.release_1()._safe_package(data)[0]))
-        self.assertEqual(docx_package._safe_package(out)[0], out)  # read again, nothing changes
+        self.assert_not_canonical(data, 'a zip entry')
+        flagged = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                          (rel('rIdPic', 'image', 'media/photo_\u00df.png'),),
+                          (('word/media/photo_\u00df.png', PNG_BYTES),))
+        self.assertEqual(entry_names(flagged).get(b'word/media/photo_\xc3\x9f.png'), True)  # stored with the flag
+        self.assert_not_canonical(flagged, 'a zip entry')
 
     def test_a_unicode_path_name_is_left_as_zipfile_reads_it(self):
         # zipfile names the entry from the extra field: a name cp437 cannot write ('O' with a double acute) is not read
@@ -1024,13 +1054,14 @@ class UnicodePathTests(ReleaseOneCase):
             b'word/media/photo_XX.png', final)
         with zipfile.ZipFile(io.BytesIO(flagless_same)) as archive:
             self.assertIn(final, archive.namelist())  # zipfile took the field's name
-        for label, data in (('a field naming the stored name', same), ('a flagless UTF-8 name, a field naming it so',
-                                                                        flagless_same), ('no field', self.picture())):
+        for label, data in (('a field naming the stored name', same), ('no field', self.picture())):
             with self.subTest(label):
                 self.assertEqual(docx_package._safe_package(data)[1], {'fields': 0, 'objects': 0, 'controls': 0,
                                                                        'chunks': 0})
                 self.assert_release_1_package(data)
                 self.assertIs(docx_package.check_in_child(data), False)
+        with self.subTest('a flagless UTF-8 name, a field naming it so'):  # coded before the canonical package gate:
+            self.assert_not_canonical(flagless_same, 'a zip entry')  # a name outside the one form's alphabet
 
 
 def character_reference_word(kept_id, *, in_object=False, named=True):
@@ -1078,16 +1109,15 @@ class CharacterReferenceTests(ReleaseOneCase):
 
     def test_an_id_a_kept_attribute_writes_with_white_space_expat_normalizes_keeps_its_relationship(self):
         # refutation round 3, rounds[2]: the id 'rId 5', which a kept attribute writes 'rId<TAB>5' - expat reads it
-        # 'rId 5' - is found by the parse the guard runs for an id holding white space
+        # 'rId 5' - is found by the parse the guard runs for an id holding white space. Since the canonical package
+        # gate (D-R2-46) a relationship id holding white space is no id in the one form, and such a file is refused
+        # before E2 reads a part; the guard's white-space clause stays, a second line behind the gate (the parse
+        # itself is pinned on bytes in the next test)
         removed = p(fc('begin'), instr(INC), '<w:r>' + drawing('rId 5') + '</w:r>', fc('separate'),
                     t('Kept result words.'), fc('end'))
         data = package(BEFORE + removed + p('<w:r>' + drawing('rId\t5') + '</w:r>') + AFTER,
                        (rel('rId 5', 'image', 'media/image1.png'),), (('word/media/image1.png', PNG_BYTES),))
-        out, removed_counts = docx_package._safe_package(data)
-        self.assertEqual(removed_counts['fields'], 1)
-        with zipfile.ZipFile(io.BytesIO(out)) as archive:
-            self.assertIn('Id="rId 5"', archive.read('word/_rels/document.xml.rels').decode('utf-8'))
-            self.assertEqual(archive.read('word/media/image1.png'), PNG_BYTES)
+        self.assert_not_canonical(data, 'a relationship id')
         with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(data)[0])) as archive:
             self.assertNotIn('word/media/image1.png', archive.namelist())  # the bad shape: release 1 lost it
 
@@ -1121,6 +1151,406 @@ class CharacterReferenceTests(ReleaseOneCase):
                             ('an object\'s preview, literal', self.shape('rIdPic', in_object=True))):
             with self.subTest(label):
                 self.assert_release_1_package(data)
+
+
+# --- the canonical package gate (refutation round 3, D-R2-46) -------------------------------------------------------
+
+def with_entry(data, name, content, *, rename=None):
+    """``data`` (a zip) with its entry ``name`` holding ``content`` (added last when absent; None: dropped) and, with
+    ``rename``, named so instead - every other entry as it was, in its order."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        entries = [(entry, archive.read(entry)) for entry in archive.namelist()]
+    if name not in dict(entries):
+        entries.append((name, content))
+    return zipped([((rename or entry) if entry == name else entry, content if entry == name else old)
+                   for entry, old in entries if not (entry == name and content is None)])
+
+
+def with_document_rels(*rows, data=None):
+    """A Word file whose document part's relationships part holds ``rows`` (as written) and nothing else."""
+    return with_entry(data or package(BEFORE + AFTER), 'word/_rels/document.xml.rels', rels(*rows))
+
+
+def renamed_bytes(data, placeholder, raw):
+    """``data`` with the stored name ``placeholder`` (local header and central directory) replaced by the bytes ``raw``
+    of the same length - a name zipfile would not write."""
+    assert len(raw) == len(placeholder) and data.count(placeholder) == 2
+    return data.replace(placeholder, raw)
+
+
+def with_local_header(data, name, change):
+    """``data`` with the 30-byte local header of its entry ``name`` passed through ``change`` (its central directory
+    record left as it is): a header zipfile does not compare with the record, which a streaming reader reads."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        at = archive.getinfo(name).header_offset
+    changed = change(data[at:at + 30])
+    assert len(changed) == 30 and changed != data[at:at + 30]
+    return data[:at] + changed + data[at + 30:]
+
+
+def word_forms():
+    """(label, a Word file in the forms Word and the real tools measured write): every one passes the gate unchanged.
+    Measured (canon-gate/out/survey-real.jsonl) on the committed templates - 'WM IOV Template.docx', the colonoscopy
+    template and the E2E fixtures - LibreOffice 24.2.7 re-saves, pandoc 3.1.3 and python-docx 1.2.0 files."""
+    word = package(BEFORE + p('<w:r>' + drawing('rId8') + '</w:r>') + AFTER,
+                   (rel('rId1', 'styles', 'styles.xml'), rel('rId2', 'customXml', '../customXml/item1.xml'),
+                    rel('rId8', 'image', 'media/image1.jpeg'), rel('rIdHeader', 'header', 'header1.xml'),
+                    rel('R4f8a2c1e9b7d3a60', 'hyperlink', 'https://example.invalid/a?b=1&amp;c=2#x y', 'External'),
+                    rel('rId9', 'glossaryDocument', 'glossary/document.xml')),
+                   (('word/styles.xml', f'<w:styles {NS}/>'), ('word/media/image1.jpeg', b'\xff\xd8\xff\xe0 synthetic'),
+                    ('word/header1.xml', f'<w:hdr {NS}>{p(t("HEADER words"))}</w:hdr>'),
+                    ('word/_rels/header1.xml.rels', rels(rel('rId1', 'image', 'media/image1.jpeg'))),
+                    ('word/glossary/document.xml', f'<w:glossaryDocument {NS}/>'),
+                    ('word/glossary/_rels/document.xml.rels', rels(rel('rId1', 'styles', 'styles.xml'))),
+                    ('word/glossary/styles.xml', f'<w:styles {NS}/>'),
+                    ('customXml/item1.xml', '<b:Sources xmlns:b="urn:x-synthetic"/>'),
+                    ('customXml/itemProps1.xml', '<ds:datastoreItem xmlns:ds="urn:x-synthetic"/>'),
+                    ('customXml/_rels/item1.xml.rels', rels(rel('rId1', 'customXmlProps', 'itemProps1.xml'))),
+                    ('docProps/core.xml', '<cp:coreProperties xmlns:cp="urn:x-synthetic"/>'),
+                    ('docProps/thumbnail.jpeg', b'\xff\xd8\xff\xe0 synthetic thumbnail')),
+                   (override('word/styles.xml', 'application/xml'),))
+    word = with_entry(word, '_rels/.rels', rels(
+        rel('rId1', 'officeDocument', 'word/document.xml'),
+        rel('rId2', 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+            'docProps/core.xml'),
+        rel('rId3', 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail',
+            'docProps/thumbnail.jpeg')))
+    rooted = with_entry(word, '_rels/.rels', rels(rel('rId1', 'officeDocument', '/word/document.xml')))
+    out = io.BytesIO()  # a folder's entry for each folder (as JSZip writes), and parts stored, not deflated
+    with zipfile.ZipFile(io.BytesIO(word)) as source, zipfile.ZipFile(out, 'w') as rebuilt:
+        for folder in ('_rels/', 'word/', 'word/_rels/'):
+            rebuilt.writestr(zipfile.ZipInfo(folder, date_time=(2026, 11, 26, 0, 0, 0)), b'')
+        for info in source.infolist():
+            rebuilt.writestr(zipfile.ZipInfo(info.filename, date_time=info.date_time), source.read(info))
+    return [('Word\'s own forms: relative, \'..\' to customXml, a glossary, named and hexadecimal ids', word),
+            ('the main part named by a rooted target (System.IO.Packaging writes it)', rooted),
+            ('folder entries and stored parts (a JSZip-made package)', out.getvalue()),
+            ('Word\'s growth-hint field (0xA220) in a local header', with_local_extra(
+                word, 'word/document.xml', struct.pack('<HHH', 0xA220, 2, 0)))]
+
+
+def picture_in_object(imagedata, *, rows=None, parts=()):
+    """An object (the E table's form) whose VML preview is ``imagedata``, its picture media/image1.emf (an EMF)."""
+    return package(in_object(SHAPETYPE, vshape(inner=imagedata), ole('Word.Document.12')),
+                   rows or DOCX_RELS, DOCX_PARTS + tuple(parts))
+
+
+class CanonicalPackageTests(ReleaseOneCase):
+    """The canonical package gate (refutation round 3, D-R2-46): a Word package is accepted only in the one form a Word
+    package takes - every structural reference with exactly one reading, the same for lane D, LibreOffice and Word -
+    and refused otherwise before E2 reads a part, whatever it holds (PackageNotCanonical: ContentNotShown, told as an
+    inserted document, one count). Rounds 1 to 3 each taught lane D one more of LibreOffice's readings and each found
+    the next spelling in the repair; these pin the form instead."""
+
+    def test_a_package_in_the_forms_word_and_the_real_tools_write_passes_unchanged(self):
+        for label, data in word_forms():
+            with self.subTest(label):
+                docx_package._safe_package(data)
+                self.assert_release_1_package(data)
+                self.assertIs(docx_package.check_in_child(data), False)
+
+    def test_a_zip_archive_not_in_the_one_form_is_refused(self):
+        plain = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
+                        (rel('rIdPic', 'image', 'media/aXX.png'),), (('word/media/aXX.png', PNG_BYTES),))
+        commented = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(plain)) as source, zipfile.ZipFile(commented, 'w') as rebuilt:
+            for info in source.infolist():
+                rebuilt.writestr(info, source.read(info))
+            rebuilt.comment = b'synthetic comment'
+        compressed = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(plain)) as source, zipfile.ZipFile(compressed, 'w') as rebuilt:
+            for info in source.infolist():
+                fresh = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                fresh.compress_type = zipfile.ZIP_BZIP2 if info.filename.endswith('.png') else zipfile.ZIP_DEFLATED
+                rebuilt.writestr(fresh, source.read(info))
+        cases = [('bytes before its first local header', b'synthetic prefix ' + plain, 'its zip archive'),
+                 ('bytes after its end record', plain + b'\x00', 'its zip archive'),
+                 ('an archive comment', commented.getvalue(), 'its zip archive'),
+                 ('a part compressed as Word does not read it (bzip2)', compressed.getvalue(), 'compressed'),
+                 ('a folder entry that holds bytes', with_entry(plain, 'word/media/', b'synthetic'), 'a folder entry')]
+        for label, raw in (('a space', b'word/media/a X.png'), ('a percent sign', b'word/media/a%X.png'),
+                           ('a colon', b'word/media/a:X.png'), ('a backslash', b'word/media\\aXX.png'),
+                           ('a NUL', b'word/media/a\x00X.png'), ('a \'.\' segment', b'word/./media/a.png'),
+                           ('an empty segment', b'word//media/aX.png'), ('a leading \'/\'', b'/ord/media/aXX.png'),
+                           ('a byte outside ASCII, stored without the flag', b'word/media/a\xc3\xa9.png'),
+                           ('a tilde', b'word/media/a~X.png')):
+            cases.append((f'a zip name with {label}', renamed_bytes(plain, b'word/media/aXX.png', raw), 'a zip entry'))
+        for label, change in (('another method', lambda head: head[:8] + b'\x0c\x00' + head[10:]),  # bzip2
+                              ('other flags', lambda head: head[:6] + b'\x08\x00' + head[8:]),
+                              ('another CRC', lambda head: head[:14] + bytes(4) + head[18:]),
+                              ('other sizes', lambda head: head[:18] + struct.pack('<II', 1, 1) + head[26:])):
+            cases.append((f'a local header with {label} than its directory record',
+                          with_local_header(plain, 'word/media/aXX.png', change), 'local header'))
+        cases.append(('a zip name outside ASCII, stored with the UTF-8 flag',
+                      with_entry(plain, 'word/media/aXX.png', PNG_BYTES, rename='word/media/a\u00e9.png'),
+                      'a zip entry'))
+        for label, data, form in cases:
+            with self.subTest(label):
+                self.assert_not_canonical(data, form)
+        self.assert_release_1_package(plain)  # the control
+
+    def test_a_relationships_part_not_in_the_one_form_is_refused(self):
+        image = rel('rIdPic', 'image', 'media/image1.png')
+        body = BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER
+        plain = package(body, (image,), (('word/media/image1.png', PNG_BYTES),))
+        opc = f'"{PKG}"'
+        forms = {
+            # refutation round 3, loss[3]: a row LibreOffice reads by its name as written, outside the OPC namespace
+            'a row in another namespace': image.replace('<Relationship ', '<Relationship xmlns="urn:x-synthetic" '),
+            'a row in no namespace': image.replace('<Relationship ', '<Relationship xmlns="" '),
+            'a row with an attribute OPC does not define': image.replace('/>', ' Foo="1"/>'),
+            'a row with an xml:base': image.replace('/>', ' xml:base="media/"/>'),
+            'a row with no Type': '<Relationship Id="rIdPic" Target="media/image1.png"/>',
+            'a row with an empty Type': image.replace(f'Type="{R}/image"', 'Type=""'),
+            'a row with no Target': f'<Relationship Id="rIdPic" Type="{R}/image"/>',
+            'a row with no Id': image.replace('Id="rIdPic" ', ''),
+            'a row holding an element': image.replace('/>', '><Extra/></Relationship>'),
+            'an id twice': image + rel('rIdPic', 'image', 'media/image1.png'),
+            # a part a reader finds by its Type, twice: LibreOffice could show one footnotes part, Word the other
+            'two footnotes parts': image + rel('rIdFn1', 'footnotes', 'media/image1.png')
+            + rel('rIdFn2', 'footnotes', 'media/image1.png'),
+            'two styles parts': image + rel('rIdSt1', 'styles', 'media/image1.png')
+            + rel('rIdSt2', 'styles', 'media/image1.png'),
+            'an id with a space': image.replace('rIdPic', 'rId Pic'),
+            'an id led by a digit': image.replace('rIdPic', '1rIdPic'),
+            'a TargetMode in another case': image.replace('/>', ' TargetMode="internal"/>'),
+            'an empty TargetMode': image.replace('/>', ' TargetMode=""/>'),
+            'a TargetMode of another word': image.replace('/>', ' TargetMode="Package"/>'),
+        }
+        cases = [(label, with_document_rels(row, data=plain), 'relationship') for label, row in forms.items()]
+        root = rels(image)
+        for label, written in (
+                ('a prefixed root in the OPC namespace', root.replace(f'<Relationships xmlns={opc}>',
+                                                                      f'<p:Relationships xmlns:p={opc}>')
+                 .replace('<Relationship ', '<p:Relationship ').replace('</Relationships>', '</p:Relationships>')),
+                ('a root declaring another prefix', root.replace(f'xmlns={opc}', f'xmlns={opc} xmlns:x="urn:x"')),
+                ('a root with an xml:base', root.replace(f'xmlns={opc}', f'xmlns={opc} xml:base="/word/"'))):
+            cases.append((label, with_entry(plain, 'word/_rels/document.xml.rels', written), 'relationships part'))
+        for label, name in (('named in another case', 'word/_rels/Document.xml.rels'),
+                            ('its folder in another case', 'word/_RELS/document.xml.rels'),
+                            ('its suffix in another case', 'word/_rels/document.xml.RELS')):
+            cases.append((f'a relationships part {label}',
+                          with_entry(plain, 'word/_rels/document.xml.rels', rels(image), rename=name),
+                          'not named for a part'))
+        cases.append(('a relationships part for a relationships part',
+                      with_entry(plain, 'word/_rels/_rels/document.xml.rels.rels', rels(image)),
+                      'describes a part that has none'))
+        cases.append(('a relationships part for the content types (no zip name in the one form)',
+                      with_entry(plain, '_rels/[Content_Types].xml.rels', rels()), 'a zip entry'))
+        cases.append(('a relationships part for a part the package does not hold',
+                      with_entry(plain, 'word/_rels/gone.xml.rels', rels()), 'not named for a part'))
+        cases.append(('a part in a relationships folder that is no relationships part',
+                      with_entry(plain, 'word/_rels/notes.xml', b'<notes/>'), 'not named for a part'))
+        for label, data, form in cases:
+            with self.subTest(label):
+                self.assert_not_canonical(data, form)
+        self.assert_release_1_package(plain)  # the control
+        two_headers = with_document_rels(image, rel('rIdH1', 'header', 'media/image1.png'),
+                                         rel('rIdH2', 'header', 'media/image1.png'), data=plain)
+        self.assert_release_1_package(two_headers)  # a Type a part may have many of (as 'WM IOV Template.docx' has)
+
+    def test_an_internal_target_not_in_the_one_form_is_refused(self):
+        parts = (('word/media/image1.png', PNG_BYTES), ('word/a/afchunk1.docx', inner_docx('CHUNKTOKEN')),
+                 ('a/afchunk1.docx', inner_docx('CHUNKTOKEN')))
+        plain = package(BEFORE + AFTER, (rel('rIdX', 'image', 'media/image1.png'),), parts)
+        targets = [
+            # refutation round 3, loss[2]: a scheme, an authority or white space before a '..', read by RFC 3986
+            '//host/a//../afchunk1.docx', '//host/word/a//../afchunk1.docx', 'x:/a//../afchunk1.docx',
+            'file:///word/a//../afchunk1.docx', ' a/afchunk1.docx', 'a/afchunk1.docx ',
+            # refutation round 3, loss[0]: names oox opens and normpath does not
+            '//word/media/image1.png', '../../word/media/image1.png', 'media//../media/image1.png',
+            # rounds 1 and 2: dot segments, '..' past the root or under it, escapes, queries, fragments, case, schemes
+            './media/image1.png', 'media/./image1.png', 'media/../media/image1.png', '/word/../word/media/image1.png',
+            '../../../a/afchunk1.docx', 'media/image1%2Epng', 'media%2Fimage1.png', 'media\\image1.png',
+            'media/image1.png?v=1', 'media/image1.png#f', 'media/IMAGE1.PNG', 'MEDIA/image1.png', 'x:media/image1.png',
+            'file:media/image1.png', 'https://example.invalid/media/image1.png', '', '/', 'media/', '.', '..',
+            # an Internal target that names no part
+            'media/missing.png', '../a/missing.docx']
+        cases = [(f'{target!r}', with_document_rels(rel('rIdX', 'image', target), data=plain)) for target in targets]
+        for label, data in cases:
+            with self.subTest(label):
+                self.assert_not_canonical(data, 'an internal target')
+        for target in ('media/image1.png', '/word/media/image1.png', 'a/afchunk1.docx', '../a/afchunk1.docx',
+                       '/a/afchunk1.docx'):  # the one form: coded with release 1's bytes
+            with self.subTest(f'the one form: {target!r}'):
+                self.assert_release_1_package(with_document_rels(rel('rIdX', 'image', target), data=plain))
+
+    def test_every_target_in_the_one_form_is_read_alike_by_each_of_lane_ds_readings(self):
+        # the gate's premise, pinned: a target in the one form names the same part for release 1's reading
+        # (_part_name), LibreOffice's picture reading (_opened_name), its import reading (_uri_path_name) and RFC 3986
+        # (_word_name, the doctor's Word) - so no reading of one can differ from another
+        segments = ('a', 'word', 'media', 'image1.png', 'x-y_z.9', '..a', 'b..')
+        read = 0
+        for folder in ('', 'word', 'word/glossary', 'customXml/a'):
+            depth = len(folder.split('/')) if folder else 0
+            for ups in range(depth + 1):
+                for length in (1, 2, 3):
+                    for names in zip(*(segments[i:] + segments[:i] for i in range(length))):
+                        for target in ('../' * ups + '/'.join(names), *(('/' + '/'.join(names),) if not ups else ())):
+                            part = docx_package._canonical_part(folder, target)
+                            self.assertIsNotNone(part, target)
+                            readings = (docx_package._part_name(folder, target),
+                                        docx_package._opened_name(folder, target),
+                                        docx_package._uri_path_name(folder, target),
+                                        docx_package._word_name(folder, target))
+                            self.assertEqual(set(readings), {part}, (folder, target, readings))
+                            read += 1
+        self.assertGreater(read, 250)
+
+    def test_the_content_types_not_in_the_one_form_are_refused(self):
+        plain = package(BEFORE + AFTER, parts=(('word/styles.xml', f'<w:styles {NS}/>'),),
+                        overrides=(override('word/styles.xml', 'application/xml'),))
+        with zipfile.ZipFile(io.BytesIO(plain)) as archive:
+            types = archive.read('[Content_Types].xml').decode('utf-8')
+        main = override('word/document.xml', MAIN)
+        ct = f'"{CT}"'
+        forms = {
+            'a prefixed root': types.replace(f'<Types xmlns={ct}>', f'<c:Types xmlns:c={ct}>').replace(
+                '<Default ', '<c:Default ').replace('<Override ', '<c:Override ').replace('</Types>', '</c:Types>'),
+            'a root declaring another prefix': types.replace(f'xmlns={ct}', f'xmlns={ct} xmlns:x="urn:x"'),
+            # a second type for the main part that a reader matching names as written takes, lane D does not
+            'an Override in another namespace': types.replace('</Types>', override(
+                'word/document.xml', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
+                .replace('<Override ', '<Override xmlns="urn:x" ') + '</Types>'),
+            'an Override with another attribute': types.replace(main, main.replace('/>', ' Foo="1"/>')),
+            'an Override naming a part only by case': types.replace(
+                override('word/styles.xml', 'application/xml'), override('word/STYLES.xml', 'application/xml')),
+            'an Override not in the one form': types.replace('/word/styles.xml', '/word//styles.xml'),
+            'a part overridden twice': types.replace('</Types>', main + '</Types>'),
+            'a part overridden twice, without case': types.replace('</Types>', override('WORD/document.xml', MAIN)
+                                                                   + '</Types>'),
+            'an extension given twice': types.replace('</Types>', '<Default Extension="XML" ContentType="'
+                                                      'application/xml"/></Types>'),
+            'an empty extension': types.replace('</Types>', '<Default Extension="" ContentType="text/plain"/></Types>'),
+            'a child that is neither': types.replace('</Types>', '<Other/></Types>'),
+            'a child holding an element': types.replace(main, main.replace('/>', '><Extra/></Override>')),
+            # LibreOffice detects the main part's type by its Default with case, lane D without: so it has its own
+            'the main part typed by its Default alone': types.replace(main, '').replace(
+                'Extension="xml" ContentType="application/xml"', f'Extension="xml" ContentType="{MAIN}"'),
+        }
+        for label, written in forms.items():
+            with self.subTest(label):
+                self.assertNotEqual(written, types)
+                self.assert_not_canonical(with_entry(plain, '[Content_Types].xml', written), 'content type')
+        self.assert_release_1_package(plain)  # the control
+        # an Override that names no part has one reading - every reader passes over it, as release 1's own package
+        # leaves one when it drops a part - so it is no ambiguity, and the file is coded
+        stale = with_entry(plain, '[Content_Types].xml', types.replace(
+            '</Types>', override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml') + '</Types>'))
+        self.assert_release_1_package(stale)
+
+    def test_a_preview_naming_more_than_one_relationship_id_is_refused(self):
+        strict = 'xmlns:rs="http://purl.oclc.org/ooxml/officeDocument/relationships"'
+        refused = {
+            # refutation round 3, loss[1]: LibreOffice reads o:relid when present, else the first r:id; Word its own
+            'r:id and o:relid, each naming a picture': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" o:relid="rIdOther" o:title=""/>',
+                rows=DOCX_RELS + (rel('rIdOther', 'image', 'media/image1.emf'),)),
+            'o:relid first': picture_in_object('<v:imagedata o:relid="rIdPrev" r:id="rIdPrev"/>'),
+            'r:id and the strict r:id': picture_in_object(f'<v:imagedata {strict} r:id="rIdPrev" rs:id="rIdPrev"/>'),
+            'r:id and r:pict': picture_in_object('<v:imagedata r:id="rIdPrev" r:pict="rIdPrev"/>'),
+            'a:blip with r:embed and the strict r:embed': package(
+                in_object(drawing(attribute=f'{strict} rs:embed="rIdPic" r:embed'),
+                          '<w:objectEmbed r:id="rIdOle" w:progId="Word.Document.12"/>', attributes=''),
+                (rel('rIdPic', 'image', 'media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
+            'in a w:pict holding a control': package(
+                BEFORE + p('<w:r><w:pict>' + SHAPETYPE + vshape(inner='<v:imagedata r:id="rIdPrev" o:relid="rIdPrev"/>',
+                                                                sid='_x0000_i1026')
+                           + '<w:control r:id="rIdCtl" w:name="CheckBox1" w:shapeid="_x0000_i1026"/></w:pict></w:r>')
+                + AFTER, (DOCX_RELS[0], rel('rIdCtl', 'control', 'activeX/activeX1.xml')),
+                (DOCX_PARTS[0], ('word/activeX/activeX1.xml', '<ax:ocx xmlns:ax="urn:x-synthetic"/>'))),
+        }
+        for label, data in refused.items():
+            with self.subTest(f'refused: {label}'):
+                self.assert_not_canonical(data, 'more than one relationship id')
+        kept = {
+            'r:id alone': picture_in_object('<v:imagedata r:id="rIdPrev" o:title=""/>'),
+            'o:relid alone': picture_in_object('<v:imagedata o:relid="rIdPrev" o:title=""/>'),
+            'the strict r:id alone': picture_in_object(f'<v:imagedata {strict} rs:id="rIdPrev"/>'),
+            'r:id beside r:href (a hyperlink, no picture id)': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" r:href="rIdHref"/>',
+                rows=DOCX_RELS + (rel('rIdHref', 'hyperlink', 'https://example.invalid/', 'External'),)),
+            'a:blip with r:embed and r:link (one picture id)': package(
+                in_object(drawing(attribute='r:link="rIdLink" r:embed'),
+                          '<w:objectEmbed r:id="rIdOle" w:progId="Word.Document.12"/>', attributes=''),
+                (rel('rIdPic', 'image', 'media/image1.emf'), rel('rIdLink', 'image', 'file:///synthetic/x.emf',
+                                                                 'External'), DOCX_RELS[1]), DOCX_PARTS),
+        }
+        for label, data in kept.items():
+            with self.subTest(f'kept: {label}'):
+                self.assertEqual(docx_package._safe_package(data)[1]['objects'], 1)
+                self.assert_release_1_package(data)
+
+    def test_a_document_swap_through_the_package_relationships_is_refused(self):
+        # refutation round 3, loss[5]: LibreOffice opens the first officeDocument row it reads by its name as written,
+        # lane D (and Word) the one row of the OPC namespace - one part checked, another converted
+        with zipfile.ZipFile(io.BytesIO(self.release_1()._safe_package(DOCUMENT_SWAP_WORD)[0])) as archive:
+            self.assertIn(b'SWAPTOKEN', archive.read('word/document.xml'))  # release 1 checked the real note
+        with zipfile.ZipFile(io.BytesIO(DOCUMENT_SWAP_WORD)) as archive:
+            types = archive.read('[Content_Types].xml').decode('utf-8')
+        untyped = types.replace(override('word/decoy.xml', MAIN), '')
+        self.assertNotEqual(untyped, types)
+        foreign = f'<Relationship xmlns="urn:x-synthetic-other" Id="rIdX" Type="{R}/officeDocument" ' \
+                  'Target="word/decoy.xml"/>'
+        for label, data in (('a row in another namespace first', DOCUMENT_SWAP_WORD),
+                            ('a row in no namespace first', with_entry(DOCUMENT_SWAP_WORD, '_rels/.rels', rels(
+                                foreign.replace('urn:x-synthetic-other', ''),
+                                rel('rId1', 'officeDocument', 'word/document.xml')))),
+                            ('the decoy typed as no Word document (its Override gone)',
+                             with_entry(DOCUMENT_SWAP_WORD, '[Content_Types].xml', untyped)),
+                            ('a row in another namespace after the real one', with_entry(
+                                DOCUMENT_SWAP_WORD, '_rels/.rels', rels(
+                                    rel('rId1', 'officeDocument', 'word/document.xml'), foreign)))):
+            with self.subTest(label):
+                self.assert_not_canonical(data, 'relationship')
+
+    def test_the_five_round_3_readings_are_refused_and_their_one_form_coded(self):
+        # refutation round 3's class, each finding's input in the verifier's form: lane D read the package otherwise
+        # than LibreOffice, and coded it with content silently missing; the gate refuses each, before any reading
+        external_sibling = rel('rIdExt', 'image', 'media/image1.emf', 'External')
+        import_body = BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER
+        chunk = inner_docx('CHUNKTOKEN imported words')
+        refused = {
+            'loss[0]: a preview //word/... beside an External row naming its part': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" o:title=""/>', rows=(rel('rIdPrev', 'image', '//word/media/image1.emf'),
+                                                               external_sibling, DOCX_RELS[1])),
+            'loss[0]: a preview ../../word/... beside it': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" o:title=""/>',
+                rows=(rel('rIdPrev', 'image', '../../word/media/image1.emf'), external_sibling, DOCX_RELS[1])),
+            'loss[0]: a preview media//../... beside it': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" o:title=""/>', rows=(rel('rIdPrev', 'image', 'media//../image1.emf'),
+                                                               external_sibling, DOCX_RELS[1])),
+            'loss[1]: r:id the picture, o:relid a part that is missing': picture_in_object(
+                '<v:imagedata r:id="rIdPrev" o:relid="rIdMiss" o:title=""/>',
+                rows=DOCX_RELS + (rel('rIdMiss', 'image', 'media/missing.emf'),)),
+            'loss[2]: //host/a//../afchunk1.docx, the part a/afchunk1.docx': package(
+                import_body, (rel('rIdChunk', 'aFChunk', '//host/a//../afchunk1.docx'),),
+                (('a/afchunk1.docx', chunk),)),
+            'loss[2]: file:///word/a//../afchunk1.docx': package(
+                import_body, (rel('rIdChunk', 'aFChunk', 'file:///word/a//../afchunk1.docx'),),
+                (('word/a/afchunk1.docx', chunk),)),
+            'loss[3]: the import\'s row in another namespace': with_document_rels(
+                rel('rIdChunk', 'aFChunk', 'afchunk1.docx').replace('<Relationship ',
+                                                                    '<Relationship xmlns="urn:x-other" '),
+                data=package(import_body, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
+                             (('word/afchunk1.docx', chunk),))),
+            'loss[5]: the document swap': DOCUMENT_SWAP_WORD,
+        }
+        for label, data in refused.items():
+            with self.subTest(f'refused: {label}'):
+                self.release_1()._safe_package(data)  # the bad shape: release 1 coded it
+                self.assert_not_canonical(data)
+        # the one form of each: a preview named media/image1.emf (beside the External row) is kept with release 1's
+        # bytes; an import named afchunk1.docx is refused for what it holds (R2-28), not by the gate
+        coded = picture_in_object('<v:imagedata r:id="rIdPrev" o:title=""/>',
+                                  rows=(DOCX_RELS[0], external_sibling, DOCX_RELS[1]))
+        self.assertEqual(docx_package._safe_package(coded)[1]['objects'], 1)
+        self.assert_release_1_package(coded)
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package._safe_package(package(import_body, (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
+                                               (('word/afchunk1.docx', chunk),)))
+        self.assertNotIsInstance(caught.exception, docx_package.PackageNotCanonical)
+        self.assertEqual(str(caught.exception), docx_package.CONTENT_NOT_SHOWN)
 
 
 # --- R2-30: a removed field inside another field's result stays a field ----------------------------------------------
@@ -1622,6 +2052,17 @@ COLLIDING_NAMES_WORD = flagless(flagless(
     b'word/media/aXX.png', 'word/media/a\u00c9.png'), b'word/media/aYY.png', 'word/media/a\u00e9.png')
 IMPORTED_COUNTS = {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}
 OBJECT_COUNTS = {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}
+# refutation round 3, loss[5]: a document swap through the package relationships - LibreOffice opens the first
+# officeDocument row it reads by its name as written (one outside the OPC namespace), lane D the OPC row; release 1
+# codes it, release 2's canonical package gate refuses it (D-R2-46)
+DOCUMENT_SWAP_WORD = with_entry(
+    package(p(t('SWAPTOKEN the real note')),
+            parts=(('word/decoy.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                                      f'<w:document {NS}><w:body>{p(t("DECOYTOKEN other words"))}</w:body>'
+                                      '</w:document>'),),
+            overrides=(override('word/decoy.xml', MAIN),)),
+    '_rels/.rels', rels(f'<Relationship xmlns="urn:x-synthetic-other" Id="rIdX" Type="{R}/officeDocument" '
+                        'Target="word/decoy.xml"/>', rel('rId1', 'officeDocument', 'word/document.xml')))
 
 
 class StoredCheckTests(SimpleTestCase):
@@ -1637,15 +2078,19 @@ class StoredCheckTests(SimpleTestCase):
         self.assertIs(docx_package.check_in_child(NOT_A_PACKAGE), False)  # no Word package: no conversion came of it
         # refused for another reason once it opened as a zip: the check cannot decide, and the converter decides, as for
         # any file (refutation round 2, rounds[0]: told apart from R2-30's edit)
-        for data in (UNREADABLE_PART_WORD, COLLIDING_NAMES_WORD):
-            self.assertEqual(docx_package.check_in_child(data), docx_package.CHECK_UNDECIDED)
+        self.assertEqual(docx_package.check_in_child(UNREADABLE_PART_WORD), docx_package.CHECK_UNDECIDED)
         self.assertEqual(release_1_package()._safe_package(COLLIDING_NAMES_WORD)[1]['chunks'], 1)  # release 1 coded it
-        for data, code, counts in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS),
-                                   (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)):
-            with self.subTest(code=code), self.assertRaises(docx_package.ConversionRefused) as caught:
+        for data, code, counts, reason in (
+                (IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS, docx_package.CONTENT_NOT_SHOWN),
+                (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS, docx_package.CONTENT_NOT_SHOWN),
+                # round 2's undecided case, decided since the canonical package gate (D-R2-46): names outside the one
+                # form's alphabet are refused before the parts are read, so no two readings of them can collide
+                (COLLIDING_NAMES_WORD, docx_package.INSERTED_DOCUMENT, GATE_COUNTS,
+                 'its package is not in the one form a Word package takes: a zip entry is not named in the one form')):
+            with self.subTest(code=code, reason=reason), self.assertRaises(docx_package.ConversionRefused) as caught:
                 docx_package.check_in_child(data)
             self.assertEqual((str(caught.exception), caught.exception.code, caught.exception.counts),
-                             (docx_package.CONTENT_NOT_SHOWN, code, counts))
+                             (reason, code, counts))
 
     def test_it_runs_in_the_bounded_child_under_a_conversions_limits_and_converts_nothing(self):
         with mock.patch.object(docx_package.bounded, 'run_bounded', wraps=docx_package.bounded.run_bounded) as child, \
@@ -1684,11 +2129,12 @@ class StoredCheckTests(SimpleTestCase):
         # stored without the UTF-8 flag keeps its UTF-8 reading, where release 1 lost the picture; their stored
         # conversions (release 1's) are not read again
         release_1 = release_1_package()
+        # (a picture named without the UTF-8 flag converted afresh too, until the canonical package gate refused it:
+        # ZipNameTests)
         for label, data in (('a picture id by a decimal reference', character_reference_word('&#114;IdPic')),
                             ('a picture id by a hexadecimal reference', character_reference_word('&#x72;IdPic')),
                             ('an object preview\'s id by a decimal reference',
-                             character_reference_word('&#114;IdPic', in_object=True)),
-                            ('a picture named without the UTF-8 flag', flagless_picture_word())):
+                             character_reference_word('&#114;IdPic', in_object=True))):
             with self.subTest(f'converted afresh: {label}'):
                 self.assertIs(docx_package.check_in_child(data), True)
                 self.assertNotEqual(docx_package._safe_package(data)[0], release_1._safe_package(data)[0])
@@ -1769,6 +2215,10 @@ class RefusedWordUploadTests(r.CustomerCase, TestCase):
     def test_a_word_upload_with_a_bare_object_is_refused_with_its_sentence_and_record(self):
         self.assert_refused(BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)
 
+    def test_a_word_upload_the_canonical_package_gate_refuses_is_refused_with_its_sentence_and_record(self):
+        # D-R2-46: told as an inserted document (D-R2-43's swap is), one count - the package - and the same record
+        self.assert_refused(DOCUMENT_SWAP_WORD, docx_package.INSERTED_DOCUMENT, GATE_COUNTS)
+
     def test_the_two_sentences_carry_nothing_the_customer_denylist_forbids(self):
         scan = r.scan_customer()
         for code, sentence in fable_document.REFUSED_PACKAGE_TEXT.items():
@@ -1821,7 +2271,11 @@ class StoredConversionTests(r.CustomerCase, TestCase):
 
     def test_a_stored_conversion_of_a_file_the_check_refuses_is_refused_at_its_next_round(self):
         for data, code, counts in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS),
-                                   (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)):
+                                   (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS),
+                                   # the canonical package gate (D-R2-46): release 1 coded and stored it, renaming the
+                                   # picture; release 2 refuses it at its next round, as a fresh conversion
+                                   (flagless_picture_word(), docx_package.INSERTED_DOCUMENT, GATE_COUNTS),
+                                   (DOCUMENT_SWAP_WORD, docx_package.INSERTED_DOCUMENT, GATE_COUNTS)):
             with self.subTest(code=code):
                 enc, rev, _, _ = self.stored(data)
                 before = AuditEvent.objects.filter(encounter=enc).count()
@@ -1948,8 +2402,8 @@ class StoredConversionTests(r.CustomerCase, TestCase):
         # refutation round 2, rounds[1]: release 1's stored conversion of a file whose release-2 package keeps a picture
         # release 1's lost (an id a character reference writes - R1-L6a; a name stored without the UTF-8 flag - R1-L2b)
         # is not read again: the next round converts afresh, with one converter call, and both reads carry the fresh PDF
-        for label, data in (('a picture id by a decimal reference', character_reference_word('&#114;IdPic')),
-                            ('a picture named without the UTF-8 flag', flagless_picture_word())):
+        # (R1-L2b's flagless name is refused by the canonical package gate since D-R2-46: the test above)
+        for label, data in (('a picture id by a decimal reference', character_reference_word('&#114;IdPic')),):
             with self.subTest(label):
                 enc, rev, name, _ = self.stored(data)
                 coder = self.answering()
@@ -2164,9 +2618,9 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
     def test_an_own_view_whose_check_cannot_decide_is_read_again_only_once_the_converter_accepts_the_file(self):
         # refutation round 2, rounds[0]: a round begun on release 1's worker recorded release 1's conversion - which
         # left the import or the object out - as its own view, and stopped: requeued with nothing sent, or after its
-        # reader. On release 2's worker its check cannot decide (out of time; a failed child; a refusal that is not
-        # ContentNotShown - two pictures whose names differ only in case): the converter decides, refuses the file, and
-        # the round ends with the converter's sentence, nothing more sent and its own view never read again
+        # reader. On release 2's worker its check cannot decide (out of time; a failed child): the converter decides,
+        # refuses the file, and the round ends with the converter's sentence, nothing more sent and its own view never
+        # read again
         real = fable_document.convert_docx
         cases = [(data, code, paid, failure)
                  for data, code in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT),
@@ -2174,7 +2628,11 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                  for paid in ('nothing', 'the reader')
                  for failure in (docx_package.ConversionBusy('synthetic: out of time'),
                                  docx_package.ConversionFailed('synthetic: the child failed'))]
-        cases += [(COLLIDING_NAMES_WORD, None, paid, None) for paid in ('nothing', 'the reader')]
+        # round 2 also met a real check that could not decide (two pictures whose names differ only in case once read
+        # as UTF-8, COLLIDING_NAMES_WORD); since the canonical package gate (D-R2-46) refuses such names before the
+        # parts are read, the check decides that file itself: the round ends at the check, the converter never asked
+        cases += [(COLLIDING_NAMES_WORD, docx_package.INSERTED_DOCUMENT, paid, None)
+                  for paid in ('nothing', 'the reader')]
         for data, code, paid, failure in cases:
             with self.subTest(code=code, paid=paid, check=type(failure).__name__ if failure else 'the real check'):
                 enc, _, round_, _, _, runs = self.begun_on_release_1(data, paid)
@@ -2187,7 +2645,10 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                 text = fable_document.REFUSED_PACKAGE_TEXT[code] if code else fable_document.CONVERT_TEXT
                 self.assertEqual((round_.state, round_.failure_kind, round_.error), (Round.FAILED, CONVERT, text))
                 checked.assert_called_once_with(data)
-                convert.assert_called_once_with(data)  # the converter decided
+                if failure is None:  # decided by the check (the gate): no converter call
+                    convert.assert_not_called()
+                else:
+                    convert.assert_called_once_with(data)  # the converter decided
                 self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)  # nothing more sent
 
     def test_an_own_view_whose_check_cannot_decide_is_never_read_again_while_the_converter_is_busy(self):
@@ -2199,6 +2660,8 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                  for paid in ('nothing', 'the reader')
                  for failure in (docx_package.ConversionBusy('synthetic: out of time'),
                                  docx_package.ConversionFailed('synthetic: the child failed'))]
+        # since the canonical package gate (D-R2-46) the real check decides COLLIDING_NAMES_WORD itself - its names are
+        # outside the one form -: the round ends at the check, with the gate's sentence, and no converter is asked
         cases += [(COLLIDING_NAMES_WORD, paid, None) for paid in ('nothing', 'the reader')]
         for data, paid, failure in cases:
             for converter in ('the service, unreachable', 'required, no socket'):
@@ -2215,9 +2678,14 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                                               wraps=fable_document.convert_docx) as convert:
                         self.run_next()
                     round_.refresh_from_db()
-                    self.assertEqual((round_.state, round_.failure_kind, round_.error),
-                                     (Round.FAILED, BUSY, fable_document.BUSY_TEXT))
-                    convert.assert_called_once_with(data)
+                    if failure is None:  # decided by the check (the gate): the busy converter is never asked
+                        self.assertEqual((round_.state, round_.failure_kind, round_.error), (
+                            Round.FAILED, CONVERT, fable_document.REFUSED_PACKAGE_TEXT[docx_package.INSERTED_DOCUMENT]))
+                        convert.assert_not_called()
+                    else:
+                        self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                         (Round.FAILED, BUSY, fable_document.BUSY_TEXT))
+                        convert.assert_called_once_with(data)
                     self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)
 
     def test_an_own_view_the_converter_accepted_is_not_decided_again_at_each_pass(self):
