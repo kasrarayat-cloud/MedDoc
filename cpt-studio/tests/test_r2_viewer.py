@@ -17,6 +17,7 @@ from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 from studio import api, customer, models, read_audit, record_bundle, request_meta, storage
 from studio.storage import store_original
@@ -66,6 +67,21 @@ class ViewTagTests(ViewerCase):
         self.assertEqual(self.view(self.enc)['ETag'], tag)  # the same sign-in, document and file: the same tag
         self.assertEqual(api.view_tag(mock.Mock(session={request_meta.SESSION_SIGN_IN_REF: str(uuid.uuid4())}),
                                       self.enc, customer.view_source(self.enc)).count('-'), 4)
+
+    def test_the_tag_is_keyed_by_the_sites_secret(self):
+        # the tag's inputs - the sign-in reference, the document id and the file's sha256 - are each in a log or a page
+        # somewhere, so only the site's key keeps a tag from being computed from them: the spec's own form, exactly, and
+        # another key gives another tag (called directly, so another SECRET_KEY cannot touch the session)
+        ref = str(uuid.uuid4())
+        request = mock.Mock(session={request_meta.SESSION_SIGN_IN_REF: ref})
+        shown = customer.view_source(self.enc)
+        tag = api.view_tag(request, self.enc, shown)
+        message = f'{ref}:{self.enc.pk}:{shown.stored.sha256}'
+        self.assertEqual(tag, str(uuid.UUID(salted_hmac('studio.api.view_tag', message,
+                                                        algorithm='sha256').hexdigest()[:32])))
+        with override_settings(SECRET_KEY='another-synthetic-secret-key-for-the-view-tag-test-only'):
+            self.assertNotEqual(api.view_tag(request, self.enc, shown), tag)
+        self.assertNotEqual(tag, str(uuid.UUID(hashlib.sha256(message.encode()).hexdigest()[:32])))
 
     def test_a_304_has_no_body_reads_no_file_and_writes_one_member_inline_row_shown_from_page_memory(self):
         tag = self.view(self.enc)['ETag']

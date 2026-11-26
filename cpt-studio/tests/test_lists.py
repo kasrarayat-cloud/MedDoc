@@ -685,6 +685,36 @@ class SearchTests(SearchCase):
         self.assertEqual(ids, [row['id'] for row in listed if 'list note' in row['title'].lower()])
         self.assertTrue(all(page['total'] is None for page in pages))
 
+    def test_a_tie_of_six_across_the_page_edge_keeps_the_id_order_whatever_the_plan(self):
+        # the search pages in the list's order - created_at, then id: with the index and without it (a sequential scan
+        # and a sort, where rows of one created_at come in no order of their own) the pages are the same, each row once
+        made = mixed_practice(self.ws, self.reviewer, 47)
+        moment = timezone.now() - timedelta(days=1)
+        for offset, enc in enumerate(reversed(made)):
+            models.Encounter.objects.filter(pk=enc.pk).update(created_at=moment + timedelta(seconds=offset + 1))
+        tied = [models.Encounter.objects.create(id=uuid.UUID(int=index + 1), workspace=self.ws, created_by=self.reviewer,
+                                                title=f'Synthetic list note tied {index}') for index in range(6)]
+        models.Encounter.objects.filter(pk__in=[enc.pk for enc in tied]).update(created_at=moment)  # rows 48 to 53
+        expected = [str(enc.pk) for enc in made] + [str(enc.pk) for enc in reversed(tied)]
+        for plan in ('the index', 'a sort'):
+            with self.subTest(plan=plan):
+                with connection.cursor() as cursor:
+                    for name in ('enable_indexscan', 'enable_bitmapscan', 'enable_indexonlyscan'):
+                        cursor.execute(f'SET {name} = {"on" if plan == "the index" else "off"}')
+                try:
+                    pages, before = [], None
+                    while True:
+                        pages.append(self.search('list note', before))
+                        before = pages[-1]['next']
+                        if before is None or len(pages) > 5:
+                            break
+                finally:
+                    with connection.cursor() as cursor:
+                        for name in ('enable_indexscan', 'enable_bitmapscan', 'enable_indexonlyscan'):
+                            cursor.execute(f'RESET {name}')
+                self.assertEqual([row['id'] for page in pages for row in page['encounters']], expected)
+                self.assertEqual([len(page['encounters']) for page in pages], [50, 3])
+
     def test_another_practice_and_tombstones_are_never_found(self):
         mine = f.encounter(self.ws, self.reviewer, title='Synthetic polypectomy note')
         f.encounter(self.other_ws, self.outsider, title='Synthetic polypectomy note of another practice')
@@ -723,6 +753,7 @@ class SearchTests(SearchCase):
         self.assertEqual((Record.objects.count(), models.RateWindow.objects.count()), before)
 
     def test_too_long_or_unstorable_words_are_an_empty_page_recorded_with_count_0(self):
+        self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))  # one UTC day for the repeats
         f.encounter(self.ws, self.reviewer, title='Synthetic note')
         for words in ('n' * 241, 'note\x00', 'note\ud800', '\ud800'):
             with self.subTest(words=repr(words)), mock.patch.object(customer, 'search_page') as asked:
@@ -745,6 +776,7 @@ class SearchTests(SearchCase):
         self.assertFalse(Record.objects.filter(view=read_audit.MEMBER_LIST).exists())
 
     def test_a_marker_searched_for_is_in_no_record_event_log_or_header(self):
+        self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))  # one window of the limit
         f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
         seen = []
 
@@ -782,8 +814,10 @@ class SearchTests(SearchCase):
         with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(2, 60)), mock.patch.object(timezone, 'now', return_value=moment):
             self.search('note')
             self.search('note')
-            answer = self.member.post(SEARCH, data=json.dumps({'text': 'note'}), content_type='application/json')
+            with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as built:
+                answer = self.member.post(SEARCH, data=json.dumps({'text': 'note'}), content_type='application/json')
             listed = self.member.get(LIST)
+        built.assert_not_called()  # refused unread: the refused search never ran
         self.assertEqual((answer.status_code, answer.json()['error'], listed.status_code), (429, 'rate_limited', 200))
         self.assertEqual(models.SecurityEvent.objects.filter(event='list.rate_limited').count(), 1)
 

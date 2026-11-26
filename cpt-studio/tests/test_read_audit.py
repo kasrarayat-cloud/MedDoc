@@ -401,6 +401,7 @@ class R2ListRecordTests(ReadCase):
         return self.rows(view=read_audit.MEMBER_LIST)
 
     def test_each_list_and_a_later_page_write_one_row_naming_exactly_their_documents(self):
+        self.enterContext(self.at(self.start()))  # every read at one moment: one UTC day (a repeat is of its own day)
         first = self.member.get(LIST).json()
         self.assertEqual(len(first['encounters']), 50)
         (row,) = self.lists()
@@ -521,8 +522,10 @@ class R2ListRecordTests(ReadCase):
             later = f'{LIST}?before={first["next"]}'
             served = [self.member.get(later).status_code for _ in range(3)]
             before = Record.objects.count()
-            refused = [self.member.get(later) for _ in range(2)]
+            with mock.patch.object(customer, 'list_page', wraps=customer.list_page) as built:
+                refused = [self.member.get(later) for _ in range(2)]
             first_pages = [self.member.get(path).status_code for path in (LIST, f'{LIST}?list=recent')]
+        built.assert_not_called()  # refused unread: neither refused page was built
         self.assertEqual(served, [200, 200, 200])
         for answer in refused:
             self.assertEqual((answer.status_code, answer.json()['error']), (429, 'rate_limited'))
@@ -538,6 +541,22 @@ class R2ListRecordTests(ReadCase):
                          ('list.member', 3, self.ws.pk))
         self.assertEqual(first_pages, [200, 200])  # a first page and the Overview pay no count
         self.assertEqual(settings.LIST_PAGES_LIMIT_PER_MEMBER, (120, 60))
+
+    def test_later_pages_and_searches_spend_one_count_of_the_members_own_limit(self):
+        # one budget a member spends on later pages and searches alike (alternating them buys nothing), and each
+        # member's own - another member of the practice is not refused by this one's reads
+        other = member_client(self.viewer)
+        start = self.start()  # every read at one moment: one window of the limit
+        with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(3, 60)), self.at(start):
+            later = f'{LIST}?before={self.member.get(LIST).json()["next"]}'
+            answers = [self.member.get(later).status_code, self.search().status_code,
+                       self.member.get(later).status_code, self.search().status_code,
+                       self.member.get(later).status_code]
+            theirs = other.get(later).status_code
+        self.assertEqual(answers, [200, 200, 200, 429, 429])
+        self.assertEqual(theirs, 200)
+        self.assertEqual(models.RateWindow.objects.get(scope='list.member', key=str(self.reviewer.pk)).count, 5)
+        self.assertEqual(models.RateWindow.objects.get(scope='list.member', key=str(self.viewer.pk)).count, 1)
 
     def test_the_reads_page_names_the_pages_documents_by_reference_and_counts_the_rest(self):
         page = self.member.get(LIST).json()['encounters']
