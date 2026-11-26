@@ -4436,3 +4436,31 @@ live database or the live files. Applied narrowly on 2026-11-25: the 40 copies m
 document the record calls real reached live) and the 18 cptg_* test databases restored from them, deleted with a manifest
 (sha256) kept; the ten copies made after that moment kept, because on 2026-11-20 (D352) he wrote "here is the lsit of real pdf
 doc with out name" and those ten may hold those PDFs. They go on his word that those PDFs were made up too, or on counsel's.
+
+
+### Session record, 2026-11-25 (738699b2) — release 2's plan and the critics' ten findings — DECISIONS D427
+
+Release 2 (speed for the GI document pages, paged lists with exact counts, the web process's settings, and E2's Word fix: a
+file with another document inserted is refused with a sentence instead of coded with that part missing) was designed by five
+area designers and checked by two critics (workflow wf_f95d77f7-345). The specification has 32 items in six lanes: F
+(foundation) merges first and alone, then M (measurement), D (Word), W (web process and front door), P (the page) and S
+(server API, records and schema), each through scripts/merge-pr.sh, then the integration, the reviewed release package, the
+committed declaration and a blue/green install through the ruled-act door, as release 1.
+
+The critics found ten things; the session checked each against the tree or the critic's own probe and took all ten into the
+specification before any lane was built:
+- search stays inside the keystroke up to 200 documents (release 1 already searched every document locally; the server
+  search is used only above 200), so the live practice's search does not get slower;
+- a stored Word conversion is checked too: a later round of a revision that release 1 converted with content missing is
+  refused with the sentence, never coded (release 2's refusals had covered fresh conversions only);
+- an inserted-document element that holds nothing (missing part, no id, empty part) is removed as before, not refused;
+  an External inserted document and a master-document link (w:subDoc) are refused on purpose, because the doctor's own
+  Word can pull that outside content in;
+- five speed gates corrected against release 1's own measured values (statements per list request, renderer memory with
+  the waiting worker and kept copies, the sign-in request count, the run-to-run spread, a gain required at 100 documents),
+  Word documents get the click-time download, and "Show more documents" appears only after the automatic loads.
+
+Decided under D422 ("Stop asking my Yes just do what ever we need it to have to do"): no yes or no is asked for a technical
+choice. No money, keys, deletion of data or product decision without precedent is involved. The new Word refusals take away
+something release 1 did (convert such a file with the part missing): that is class b, and the owner is told once in plain
+words with the plan, recorded as D428.
