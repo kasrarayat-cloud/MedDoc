@@ -28,7 +28,7 @@ const crypto = require('crypto');
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
 // Set by setup() when run as a program; a test that requires this file reads only the pure helpers it exports.
 let FLOW, PROFILE, BASE, CONTROL, ACT, OUT, CONTEXTS, SIZE, DATA, PASSWORD, DOC, chromium, INIT, result;
-let REHEARSAL = false; const cdpLog = []; let cdpSeq = 0; let cdpInFlight = 0;
+let REHEARSAL = false; let SPKI = ''; const cdpLog = []; let cdpSeq = 0; let cdpInFlight = 0;
 const PRIVATE_TLS = /^https:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d{2,5})?$/;
 function baseAllowed(base, rehearsal) {
   return /^http:\/\/127\.0\.0\.1:\d+$/.test(base || '') || (rehearsal && PRIVATE_TLS.test(base || ''));
@@ -40,6 +40,11 @@ function setup() {
   REHEARSAL = process.argv.includes('--rehearsal');
   if (!baseAllowed(BASE, REHEARSAL)) throw new Error('bench.cjs: the base must be loopback (or, with --rehearsal, https on a private address)');
   if (REHEARSAL && !['open', 'lists', 'office'].includes(FLOW)) throw new Error('bench.cjs: a rehearsal runs the open, lists and office flows only');
+  // bench[1] (round 2): a rehearsal trusts its test certificate (SPKI-pinned) instead of ignoring its errors, so its
+  // HTTP cache behaves as production's (Chromium caches nothing over a certificate accepted by ignoreHTTPSErrors).
+  // The value: openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
+  SPKI = arg('spki', '');
+  if (REHEARSAL && !/^[A-Za-z0-9+/]{43}=$/.test(SPKI)) throw new Error('bench.cjs: a rehearsal names the test certificate\'s SPKI sha256 (--spki)');
   DATA = JSON.parse(fs.readFileSync(arg('docs'), 'utf8'));
   PASSWORD = fs.readFileSync(arg('password-file'), 'utf8').trim();
   DOC = Object.fromEntries(DATA.docs.map(d => [d.label, d]));
@@ -81,15 +86,24 @@ async function logFromCdp(cdp) {
       hop.resHeaders = e.redirectResponse.headers;
       if (e.redirectResponse.fromDiskCache || e.redirectResponse.fromServiceWorker || e.redirectResponse.fromPrefetchCache) hop.cached = true;
       end({ requestId: e.requestId, timestamp: e.timestamp }, false); }
-    if (!e.request.url.startsWith(BASE)) return; cdpInFlight += 1;
+    if (!e.request.url.startsWith(BASE)) return;
+    // a dedicated worker's own script (type Script, no loader): this session sees it asked for and, when it reached the
+    // server, its responseReceivedExtraInfo - never its answer or its end, which reach only the worker's own session
+    const worker = e.type === 'Script' && !e.loaderId; if (!worker) cdpInFlight += 1;
     live.set(e.requestId, { seq: 0, t0: e.wallTime * 1000, ts: e.timestamp, tEnd: null, method: e.request.method, url: e.request.url.slice(BASE.length),
-      status: 0, bytes: 0, member, reqHeaders: e.request.headers, resHeaders: {}, cached: false }); });
+      status: 0, bytes: 0, member, reqHeaders: e.request.headers, resHeaders: {}, cached: false, worker }); });
   cdp.on('Network.requestServedFromCache', e => { const r = live.get(e.requestId); if (r) r.cached = true; });
-  // bench[5]: an answer's body bytes as proxy.cjs counts them (loadingFinished's encodedDataLength includes the headers)
+  cdp.on('Network.responseReceivedExtraInfo', e => { const r = live.get(e.requestId); if (!r || !r.worker) return; live.delete(e.requestId);
+    r.status = e.statusCode; r.resHeaders = e.headers; r.tEnd = Date.now(); r.seq = ++cdpSeq; cdpLog.push(r); });
+  // bench[5]: an answer's body bytes as the page received them, decoded (dataReceived.dataLength; loadingFinished's
+  // encodedDataLength includes the headers). They equal proxy.cjs's wire count for an answer with no content coding that
+  // the HTTP cache did not revalidate, as the view and its 304 always are (no-store; the page sends If-None-Match). A
+  // gzip answer (WhiteNoise's static files) logs its decoded size, and a 304 the HTTP cache revalidated logs the cached
+  // 200 and its body (never over a certificate accepted by ignoreHTTPSErrors: Chromium caches nothing under it).
   cdp.on('Network.dataReceived', e => { const r = live.get(e.requestId); if (r) r.body = (r.body || 0) + e.dataLength; });
   cdp.on('Network.responseReceived', e => { const r = live.get(e.requestId); if (!r) return; r.status = e.response.status; r.resHeaders = e.response.headers;
     if (e.response.fromDiskCache || e.response.fromServiceWorker || e.response.fromPrefetchCache) r.cached = true; });
-  const end = (e, failed) => { const r = live.get(e.requestId); if (!r) return; live.delete(e.requestId); cdpInFlight -= 1;
+  const end = (e, failed) => { const r = live.get(e.requestId); if (!r || r.worker) return; live.delete(e.requestId); cdpInFlight -= 1;
     r.tEnd = r.t0 + (e.timestamp - r.ts) * 1000; r.bytes = failed ? 0 : (r.body || 0); if (!r.cached) { r.seq = ++cdpSeq; cdpLog.push(r); } };
   cdp.on('Network.loadingFinished', e => end(e, false)); cdp.on('Network.loadingFailed', e => end(e, true));
 }
@@ -132,6 +146,10 @@ const INIT_FOR = geometry => `(() => {
       return { bits: bits.join(''), number: decodeSquares(bits, G.bits) }; } catch (e) { return { bits: '', number: null }; } };
   const visible = () => { const rows = [...document.querySelectorAll('#documentsTable .document-row')].filter(r => !r.hidden && r.offsetParent !== null); return rows.length + '|' + (rows[0] ? rows[0].getAttribute('href') : '') + '|' + (rows.length ? rows[rows.length - 1].getAttribute('href') : ''); };
   P.visible = visible;
+  // bench[0] (round 2): what the user sees is the element's opacity times every ancestor's, and it is seen once painted:
+  // a time stamped after the next frame (rAF, then a task), as searchKeys stamps a painted list
+  const shownOpacity = el => { let o = 1; for (let n = el; n; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity); return o; };
+  const afterPaint = f => { const s = () => setTimeout(() => f(performance.now()), 0); if (P.inFrame) s(); else requestAnimationFrame(s); };
   P.readBarcode = () => { const cv = document.querySelector('.pdf-page[data-page="1"] canvas'); return cv && cv.width > 0 && dark(cv) ? barcode(cv) : null; };
   const routed = () => { if (P.firstRoute === undefined && document.querySelector('#main > section')) P.firstRoute = performance.now(); };
   const look = () => {
@@ -140,20 +158,24 @@ const INIT_FOR = geometry => `(() => {
       requestAnimationFrame(() => setTimeout(() => { at[2] = performance.now(); }, 0)); } return; }
     const sec = document.querySelector('#main > section');
     if (sec && c.sec0 === sec) return;
-    if (!c.column && document.getElementById('reviewColumn')) c.column = now;
+    if (!c.column && document.getElementById('reviewColumn')) { c.column = now; afterPaint(t => { c.columnPainted = t; });
+      try { if (window.__benchDrawn) window.__benchDrawn(c.kind, 'column'); } catch (e) {} }
     const rows = document.querySelectorAll('#documentsTable .document-row');
     if (!c.rows && rows.length) { c.rows = now; c.rowCount = rows.length; }
     const v = document.getElementById('documentViewer');
     if (v && v.dataset.mode && !c.mode) { c.mode = v.dataset.mode; c.modeAt = now; }
     if (v && v.dataset.fallback && !c.fallback) { c.fallback = v.dataset.fallback; c.fallbackAt = now; }
     if (!c.canvas) { const cv = document.querySelector('.pdf-page[data-page="1"] canvas'); if (cv && cv.width > 0) { if (!c.attached) c.attached = now; if (dark(cv)) { c.canvas = now; c.canvasEpoch = performance.timeOrigin + now; c.barcode = barcode(cv);
-      try { if (window.__benchDrawn) window.__benchDrawn(c.kind); } catch (e) {} } } }
-    if (!c.text && document.querySelector('.pdf-text span')) c.text = now;
+      try { if (window.__benchDrawn) window.__benchDrawn(c.kind, 'canvas'); } catch (e) {} } } }
+    if (!c.text && document.querySelector('.pdf-text span')) { c.text = now; try { if (window.__benchDrawn) window.__benchDrawn(c.kind, 'text'); } catch (e) {} }
     if (!c.frame && v && v.tagName === 'IFRAME') { try { const d = v.contentDocument; if (d && d.readyState === 'complete' && d.body && d.body.textContent.length > 20) c.frame = now; } catch (e) {} }
-    if (sec && c.opaque === undefined) { const ready = c.kind === 'doc' ? Boolean(document.getElementById('reviewColumn')) : c.kind === 'list' ? rows.length > 0 : true;
-      if (ready && parseFloat(getComputedStyle(sec).opacity) >= 0.99) c.opaque = now; }
+    // bench[0] (round 2): opaque is when the tab's own content is shown at full opacity (the review column; a list's first
+    // and last rows; else the section), ancestors included, and painted - never when its rows were merely inserted
+    if (sec && c.opaque === undefined && c.shownAt === undefined) { const shown = c.kind === 'doc' ? [document.getElementById('reviewColumn')] : c.kind === 'list' ? [rows[0], rows[rows.length - 1]] : [sec];
+      if (shown.every(Boolean) && Math.min(...shown.map(shownOpacity)) >= 0.99) { c.shownAt = now; afterPaint(t => { c.opaque = t; }); } }
   };
-  const loop = () => { routed(); look(); requestAnimationFrame(loop); }; requestAnimationFrame(loop);
+  const loop = () => { P.inFrame = true; try { routed(); look(); } finally { P.inFrame = false; } requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
   const mo = new MutationObserver(() => { routed(); look(); });
   document.addEventListener('DOMContentLoaded', () => mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mode', 'data-fallback', 'hidden'] }));
   const start = e => { const c = P.cur; if (c && c.t0 === null && (c.kind !== 'search' || e.type === 'keydown')) { c.t0 = e.timeStamp; c.t0Epoch = performance.timeOrigin + e.timeStamp; } };
@@ -162,7 +184,7 @@ const INIT_FOR = geometry => `(() => {
 
 const READ = () => { const P = window.__bench; const c = P.cur; c.stop = true; const end = performance.now(); const rel = v => (v ? Math.round((v - c.t0) * 10) / 10 : null);
   const lt = P.lt.filter(([s]) => s >= c.t0 - 1 && s <= end);
-  return { t0Epoch: c.t0Epoch, column: rel(c.column), rows: rel(c.rows), rowCount: c.rowCount || 0, opaque: rel(c.opaque), attached: rel(c.attached), firstPage: rel(c.canvas), canvasEpoch: c.canvasEpoch || null,
+  return { t0Epoch: c.t0Epoch, column: rel(c.column), columnPainted: rel(c.columnPainted), rows: rel(c.rows), rowCount: c.rowCount || 0, opaque: rel(c.opaque), attached: rel(c.attached), firstPage: rel(c.canvas), canvasEpoch: c.canvasEpoch || null,
     barcode: c.barcode || null, text: rel(c.text), frame: rel(c.frame), mode: c.mode || null, fallback: c.fallback || null, fallbackAt: rel(c.fallbackAt),
     longTasks: { n: lt.length, total: Math.round(lt.reduce((a, [, d]) => a + d, 0)), max: Math.round(Math.max(0, ...lt.map(([, d]) => d))) },
     lastTaskEnd: lt.length ? Math.round(Math.max(...lt.map(([s, d]) => s + d)) - c.t0) : 0,
@@ -173,12 +195,12 @@ const READ = () => { const P = window.__bench; const c = P.cur; c.stop = true; c
 // --- contexts, sign-in, settling -------------------------------------------------------------------------------------------
 let browser;
 async function newContext(options = {}) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, ignoreHTTPSErrors: REHEARSAL, ...options });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, ...options });
   await context.addInitScript(INIT);
   // records[3]: in the gate flows a drawn page 1 is told to node at once (the probe's own record does not survive a
   // navigation); the timing flows, measured against the recorded A, get no binding
   const drawn = [];
-  if (FLOW in EXTRA) await context.exposeBinding('__benchDrawn', ({ page: p }, kind) => { drawn.push({ p, kind }); });
+  if (FLOW in EXTRA) await context.exposeBinding('__benchDrawn', ({ page: p }, kind, what) => { drawn.push({ p, kind, what: what || 'canvas' }); });
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') result.consoleErrors.push(`${FLOW}/${PROFILE}: ${m.text().slice(0, 200)}`); });
   page.on('pageerror', e => result.pageErrors.push(`${FLOW}/${PROFILE}: ${String(e).slice(0, 200)}`));
@@ -494,7 +516,7 @@ async function flowControls() {
   try {
     await signIn(r, DATA.users[SIZE]); await sleep(1500);
     const o = await openDoc(r, 'text-4p', 'control-reduced');
-    const diff = o.opaque !== null && o.column !== null ? Math.round(o.opaque - o.column) : null;
+    const diff = o.opaque !== null && o.columnPainted !== null ? Math.round(o.opaque - o.columnPainted) : null;  // bench[0]
     result.controls.reduced_motion = { ok: diff !== null && Math.abs(diff) <= 20, diff };
   } catch (e) { result.errors.push(`reduced motion: ${String(e).slice(0, 300)}`); }
   finally { await r.context.close(); }
@@ -677,7 +699,8 @@ const FLOWS = { open: flowOpen, lists: flowLists, office: flowOffice };
 async function main() {
   setup();
   const keep = REHEARSAL ? new URL(BASE).hostname : '127.0.0.1';  // every other host is unresolvable
-  browser = await chromium.launch({ headless: true, args: [`--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE ${keep}`] });
+  browser = await chromium.launch({ headless: true, args: [`--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE ${keep}`,
+    ...(REHEARSAL ? [`--ignore-certificate-errors-spki-list=${SPKI}`] : [])] });  // bench[1]: the test certificate trusted
   result.chromium = browser.version();
   try {
     const flow = FLOWS[FLOW] || (FLOW in EXTRA ? EXTRA[FLOW] : null);
@@ -710,6 +733,7 @@ async function nothingDrawn(page, ms = 4000) {
   await sleep(ms);
   return page.evaluate(() => { const c = window.__bench.cur || {}; const cv = document.querySelector('.pdf-page[data-page="1"] canvas');
     return { canvasDark: Boolean(c.canvas), canvas: Boolean(cv), column: Boolean(document.getElementById('reviewColumn')), hash: location.hash,
+      columnDrawn: Boolean(c.column) || Boolean(document.getElementById('reviewColumn')), textDrawn: Boolean(c.text) || Boolean(document.querySelector('.pdf-text span')),
       login: Boolean(document.querySelector('input[name=password]')) }; });
 }
 
@@ -722,16 +746,29 @@ async function openNoWait(s, label) {  // a re-open whose drawing must NOT happe
   if (clicked) await row.first().click();
   else await s.page.evaluate(id => { window.__bench.cur.t0 = performance.now(); location.hash = `#doc/${id}`; }, doc.id);
   const seen = await nothingDrawn(s.page);
-  const told = (s.drawn || []).slice(since).some(d => d.p === s.page && d.kind === 'doc');
-  return { ...seen, canvasDark: seen.canvasDark || told, clicked };
+  const told = what => (s.drawn || []).slice(since).some(d => d.p === s.page && d.kind === 'doc' && d.what === what);
+  return { ...seen, canvasDark: seen.canvasDark || told('canvas'), columnDrawn: seen.columnDrawn || told('column'), textDrawn: seen.textDrawn || told('text'), clicked };
 }
 
 // records[4]: every place a page could keep what was typed in its search: its URLs (pushState and replaceState
-// included), history.state, window.name, Web Storage, its cookies (HttpOnly too) and the Cache API's and IndexedDB's names
+// included), history.state, window.name, Web Storage, its cookies (HttpOnly too), every Cache API entry (request URL and
+// body) and every IndexedDB record (keys and values); each read raw, URI-decoded, and as base64 or base64url at the three
+// byte alignments (round 2: the names alone, and raw text alone, let a kept search pass)
+function markerForms(word) {
+  const forms = new Set([word]); const bytes = Buffer.from(word, 'utf8');
+  for (let pad = 0; pad < 3; pad += 1) {
+    const b64 = Buffer.concat([Buffer.alloc(pad), bytes]).toString('base64');
+    const core = b64.slice(Math.ceil(pad * 4 / 3), Math.floor((pad + bytes.length) * 4 / 3));
+    forms.add(core); forms.add(core.replace(/\+/g, '-').replace(/\//g, '_'));
+  }
+  return [...forms];
+}
 async function pageMarkerHits(s, urls, word) {
-  const has = v => { try { return decodeURIComponent(String(v)).includes(word); } catch (e) { return String(v).includes(word); } };
-  const inPage = await s.page.evaluate(async w => {
-    const hits = []; const has = v => typeof v === 'string' && (v.includes(w) || (() => { try { return decodeURIComponent(v).includes(w); } catch (e) { return false; } })());
+  const forms = markerForms(word);
+  const has = v => { const t = String(v); let d = t; try { d = decodeURIComponent(t); } catch (e) { /* raw */ } return forms.some(f => t.includes(f) || d.includes(f)); };
+  const inPage = await s.page.evaluate(async forms => {
+    const hits = [];
+    const has = v => { if (typeof v !== 'string') return false; let d = v; try { d = decodeURIComponent(v); } catch (e) { /* raw */ } return forms.some(f => v.includes(f) || d.includes(f)); };
     if (has(location.href)) hits.push('location');
     try { if (has(JSON.stringify(history.state))) hits.push('history.state'); } catch (e) {}
     if (has(window.name)) hits.push('window.name');
@@ -739,9 +776,24 @@ async function pageMarkerHits(s, urls, word) {
       try { for (let i = 0; i < store.length; i += 1) { const k = store.key(i); if (has(k) || has(store.getItem(k))) hits.push(`${name}:${k}`); } } catch (e) {}
     }
     if (has(document.cookie)) hits.push('document.cookie');
-    try { for (const k of await caches.keys()) if (has(k)) hits.push(`caches:${k}`); } catch (e) {}
-    try { for (const d of await indexedDB.databases()) if (has(d.name)) hits.push(`indexedDB:${d.name}`); } catch (e) {}
-    return hits; }, word);
+    try { for (const k of await caches.keys()) {
+      if (has(k)) hits.push(`caches:${k}`);
+      try { const c = await caches.open(k);
+        for (const req of await c.keys()) { const res = await c.match(req); if (has(req.url) || (res && has(await res.text()))) { hits.push(`caches:${k}:entry`); break; } }
+      } catch (e) { hits.push(`caches:${k}:unreadable`); }
+    } } catch (e) {}
+    try { for (const d of await indexedDB.databases()) {
+      if (has(d.name)) hits.push(`indexedDB:${d.name}`);
+      try { const db = await new Promise((ok, no) => { const r = indexedDB.open(d.name); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+        for (const name of db.objectStoreNames) {
+          const rows = await new Promise((ok, no) => { const st = db.transaction(name).objectStore(name); const v = st.getAll(); const k = st.getAllKeys();
+            k.onsuccess = () => ok({ keys: k.result, values: v.result }); k.onerror = () => no(k.error); });
+          if (has(JSON.stringify(rows))) hits.push(`indexedDB:${d.name}/${name}`);
+        }
+        db.close();
+      } catch (e) { hits.push(`indexedDB:${d.name}:unreadable`); }
+    } } catch (e) {}
+    return hits; }, forms);
   const cookies = (await s.context.cookies()).filter(c => has(c.name) || has(c.value)).map(c => `cookie:${c.name}`);
   return [...inPage, ...cookies, ...(urls.some(has) ? ['url'] : [])];
 }
@@ -782,9 +834,9 @@ async function flowRecords() {
     const seq = await proxySeq(); const before = (await act('count')).total;
     const rows = s.page.locator('#documentsTable .document-row');
     for (let i = 0; i < Math.min(5, await rows.count()); i += 1) { await rows.nth(i).hover(); await sleep(300); }
-    await sleep(800);
-    result.checks['records.hover'] = { ok: (await proxyLog(seq)).length === 0 && (await act('count')).total === before,
-      requests: (await proxyLog(seq)).length, rows: (await act('count')).total - before };
+    await sleep(3000);  // records[7]: the last row rests 3 s under the pointer: a read a hover timer starts up to ~3 s later lands in the window
+    const hover = { requests: (await proxyLog(seq)).length, rows: (await act('count')).total - before, inFlight: await inFlightNow() };
+    result.checks['records.hover'] = { ok: hover.requests === 0 && hover.rows === 0 && hover.inFlight === 0, ...hover };
     if (SIZE === 'n100') {  // three polls of one document within a minute (release 1 writes none), then the first poll
       // of a document this sign-in has not read (release 1 writes one: read_audit.detail_seen_recently)
       for (const label of ['text-4p', 'text-4p', 'text-4p', 'text-10p']) {
@@ -792,13 +844,20 @@ async function flowRecords() {
         await sleep(150);
       }
     }
-    // the marker word typed into the search, one key at a time (above 200 documents release 2 searches on the server)
-    await s.page.locator('#documentSearch').click();
-    for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(350); }
-    await sleep(2500);
-    const typed = await pageMarkerHits(s, urls, DATA.marker);
-    await s.page.locator('#documentSearch').fill(''); await sleep(800);
-    result.markerPage = [...new Set([...typed, ...(await pageMarkerHits(s, urls, DATA.marker))])];
+    // the marker word typed into the search, one key at a time (above 200 documents release 2 searches on the server).
+    // records[4]: the page is read with the words typed and after clearing them, and at each point a page could keep
+    // them: Enter, a blur, a route with the words still typed, and pagehide (a reload: the new document read)
+    const box = s.page.locator('#documentSearch');
+    const typeMarker = async () => { await box.click(); for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(350); } await sleep(2500); };
+    const read = async () => { const hits = await pageMarkerHits(s, urls, DATA.marker); result.markerPage = [...new Set([...(result.markerPage || []), ...hits])]; };
+    await typeMarker(); await read();
+    await box.fill(''); await sleep(800); await read();
+    await typeMarker(); await s.page.keyboard.press('Enter'); await sleep(800); await read();
+    await s.page.keyboard.press('Tab'); await sleep(800); await read();
+    await tab(s, 'queue', 'records-marker'); await read();
+    await tab(s, 'documents', 'records-marker'); await typeMarker();
+    for (let i = 0; i < 100 && await inFlightNow(); i += 1) await sleep(100);  // the reload leaves no request (no 499)
+    await s.page.reload(); await s.page.waitForSelector('#main > section', { timeout: 180000 }); await sleep(1500); await read();
   } catch (e) { result.errors.push(`records ${size}: ${String(e && e.stack || e).slice(0, 600)}`); }
   finally { result.lists = lists; await s.context.close(); }
 }
@@ -821,6 +880,9 @@ async function flowFailClosed() {
     seen.inline_fresh = await openNoWait(s, 'text-4p');
     await act('refuse', { view: 'member.detail' });
     await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
+    // records[1] (round 2): the held document's detail held 300 ms, so a page that draws its kept copy on the view's
+    // 304 before the detail's 503 is seen
+    await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['control-held'].id}$`, ms: 300, times: 1 });
     seen.detail_kept = await openNoWait(s, 'control-held');
     await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
     seen.detail = await openNoWait(s, 'text-10p');
@@ -835,7 +897,7 @@ async function flowFailClosed() {
     await tab(s, 'documents', 'fail-restored');
     const again = await openDoc(s, 'text-10p', 'fail-restored');
     seen.restored = again.firstPage !== null;
-    const drawn = ['inline_kept', 'inline_fresh', 'detail_kept', 'detail'].filter(k => seen[k].canvasDark);
+    const drawn = ['inline_kept', 'inline_fresh', 'detail_kept', 'detail'].filter(k => seen[k].canvasDark || seen[k].textDrawn || (k.startsWith('detail') && seen[k].columnDrawn));
     result.checks['records.fail_closed'] = { ok: drawn.length === 0 && seen.list_rows === 0 && seen.restored, seen };
   } catch (e) { result.errors.push(`fail closed: ${String(e && e.stack || e).slice(0, 600)}`); result.checks['records.fail_closed'] = { ok: false, seen }; }
   finally { try { await act('refuse', { view: '' }); } catch (e) { /* already dropped */ } await s.context.close(); }
@@ -864,6 +926,11 @@ async function flowLeftBehind() {
       if (end === 'idle') await s.page.clock.install();
       await signIn(s, DATA.users[SIZE]); await sleep(1200);
       for (const label of opened) { await openDoc(s, label, `left-${end}`); await back(s); }
+      // records[2] (round 2): a search typed and cleared before the end, so left.storage meets what a search keeps
+      if (!(await s.page.locator('#documentSearch').count())) await tab(s, 'documents', `left-search-${end}`);
+      await s.page.locator('#documentSearch').click();
+      for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(60); }
+      await sleep(1000); await s.page.locator('#documentSearch').fill(''); await sleep(800);
       if (end === 'signout') await Promise.all([s.page.waitForURL(/\/login\//, { timeout: 60000 }), s.page.locator('button[form="signoutForm"]').first().click()]);
       if (end === 'idle') { await s.page.clock.fastForward('16:00'); await s.page.waitForURL(/\/login\//, { timeout: 60000 }).catch(() => {}); }
       if (end === 'unauthorized') { await act('end_sessions'); await s.page.evaluate(() => { location.hash = 'queue'; }); await s.page.waitForURL(/\/login\//, { timeout: 60000 }).catch(() => {}); }
@@ -944,7 +1011,7 @@ async function flowCorrect() {
     }
     // a closed practice keeps reading (disposal.close; ORG-18 (4)): its document still opens. The other three are ends.
     const ends = ['membership', 'destroyed', 'session'];
-    result.checks['correct.access_ended'] = { ok: ends.every(m => !ended[m].canvasDark), ended: Object.fromEntries(ends.map(m => [m, ended[m]])) };
+    result.checks['correct.access_ended'] = { ok: ends.every(m => !ended[m].canvasDark && !ended[m].columnDrawn && !ended[m].textDrawn), ended: Object.fromEntries(ends.map(m => [m, ended[m]])) };
     result.checks['correct.closed_keeps_reading'] = { ok: Boolean(ended.closed.canvasDark), closed: ended.closed };
     // two tabs: another practice signs in in the second; the first never shows the first practice's kept documents
     await openDoc(s, 'text-2p', 'correct-tabs-warm'); await back(s);
@@ -953,7 +1020,7 @@ async function flowCorrect() {
     await Promise.all([other.waitForURL(`${BASE}/`, { timeout: 60000 }), other.click('button[type=submit]')]);
     await sleep(2000);
     const first = await openNoWait(s, 'text-2p');
-    result.checks['correct.two_tabs'] = { ok: !first.canvasDark, first };
+    result.checks['correct.two_tabs'] = { ok: !first.canvasDark && !first.columnDrawn && !first.textDrawn, first };
   } catch (e) { result.errors.push(`correct: ${String(e && e.stack || e).slice(0, 800)}`); }
   finally { await s.context.close(); }
   // a document the library hangs on (its view held 25 s at the proxy): the 20 s note appears and the next one opens
@@ -1008,7 +1075,9 @@ const EXTRA = { records: flowRecords, 'fail-closed': flowFailClosed, 'left-behin
 // For ops/test_bench.py's browser pins: the module's own context, probe and 'nothing drawn' check, with the globals a
 // flow sets (never used by a flow itself).
 const TESTING = { arm, openNoWait, nothingDrawn, newContext, pageMarkerHits, logFromCdp, watchHttpCache,
+  tab, openDoc, back,  // round 2: the per-tab and review probes pinned through the bench's own steps (bench[0])
   cdpState: () => ({ log: cdpLog, inFlight: cdpInFlight }),
-  set: o => { DOC = o.DOC; browser = o.browser; INIT = o.INIT; result = o.result; FLOW = o.FLOW; PROFILE = o.PROFILE; BASE = o.BASE; } };
+  set: o => { DOC = o.DOC; browser = o.browser; INIT = o.INIT; result = o.result; FLOW = o.FLOW; PROFILE = o.PROFILE; BASE = o.BASE;
+    if (o.CONTROL !== undefined) CONTROL = o.CONTROL; } };
 module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY, baseAllowed, TESTING };
 if (require.main === module) main().catch(e => { console.error(String(e && e.stack || e).slice(0, 3000)); process.exit(1); });

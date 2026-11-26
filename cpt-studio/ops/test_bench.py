@@ -620,6 +620,14 @@ class BenchBrowserFilesTests(unittest.TestCase):
                                   '--rehearsal', '--out', os.devnull], capture_output=True, text=True, timeout=60)
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn('the base must be loopback', refused.stderr)
+        unpinned = subprocess.run([NODE, str(BENCH / 'bench.cjs'), '--flow', 'open', '--base',
+                                   'https://172.17.0.2:8443',
+                                   '--rehearsal', '--out', os.devnull], capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(unpinned.returncode, 0)  # bench[1] (round 2): a rehearsal trusts its certificate by SPKI
+        self.assertIn("names the test certificate's SPKI sha256 (--spki)", unpinned.stderr)
+        source = (BENCH / 'bench.cjs').read_text()
+        self.assertNotIn('ignoreHTTPSErrors: REHEARSAL', source)
+        self.assertIn("...(REHEARSAL ? [`--ignore-certificate-errors-spki-list=${SPKI}`] : [])", source)
 
 
 PLAYWRIGHT = Path('/opt/meddoc-pro/node_modules/playwright')
@@ -757,6 +765,13 @@ function route() {
   if (location.hash !== '#doc/' + ID) return list();
   if (V === 'leave-clean') return location.assign('/login/');
   if (V === 'norow-clean') { main().innerHTML = '<section><p>Not available.</p></section>'; return; }
+  if (V.startsWith('col-')) {  // records[3] (round 2): a review column and a text layer from page memory, no canvas
+    main().innerHTML = '<section><div id="reviewColumn"><h2>Title</h2><p>99213</p><blockquote>quote</blockquote></div>'
+      + (V === 'col-stays' ? '' : '<div class="pdf-text"><span>page text</span></div>') + '</section>';
+    if (V === 'col-removed') setTimeout(() => { main().innerHTML = '<section><p>Not available.</p></section>'; }, 300);
+    if (V === 'col-left') setTimeout(() => location.assign('/login/'), 300);
+    return;
+  }
   draw();
   if (V === 'leave') setTimeout(() => location.assign('/login/'), 300);
 }
@@ -779,11 +794,12 @@ const server = http.createServer((req, res) => {
     BASE });
   const out = {};
   try {
-    for (const v of ['stay', 'leave', 'norow', 'leave-clean', 'norow-clean']) {
+    for (const v of ['stay', 'leave', 'norow', 'leave-clean', 'norow-clean', 'col-removed', 'col-left', 'col-stays']) {
       const s = await B.TESTING.newContext();
       try {
         await s.page.goto(`${BASE}/?v=${v}`); await s.page.waitForSelector('#documentsTable .document-row');
-        out[v] = (await B.TESTING.openNoWait(s, 'text-2p')).canvasDark;
+        const o = await B.TESTING.openNoWait(s, 'text-2p');
+        out[v] = [o.canvasDark, Boolean(o.columnDrawn), Boolean(o.textDrawn)];
       } finally { await s.context.close(); }
     }
   } finally { await browser.close(); server.close(); }
@@ -805,8 +821,382 @@ class BenchNothingDrawnTests(unittest.TestCase):
                                    json.dumps(BD.geometry())], capture_output=True, text=True, timeout=180,
                                   env={**os.environ, 'TMPDIR': d})
         self.assertEqual(done.returncode, 0, done.stderr[-1500:])
-        self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]),
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual({v: got[v][0] for v in ('stay', 'leave', 'norow', 'leave-clean', 'norow-clean')},
                          {'stay': True, 'leave': True, 'norow': True, 'leave-clean': False, 'norow-clean': False})
+        # records[3] (round 2): a column or text layer drawn from page memory is drawn, canvas or not, whether it is
+        # then removed, left by a sign-in route, or stays; the clean twins draw nothing at all
+        self.assertEqual({v: got[v] for v in ('col-removed', 'col-left', 'col-stays')},
+                         {'col-removed': [False, True, True], 'col-left': [False, True, True],
+                          'col-stays': [False, True, False]})
+        self.assertEqual([got['leave-clean'], got['norow-clean']], [[False, False, False], [False, False, False]])
+
+
+TAB_PAINT_DRIVER = r"""
+const http = require('http'); const { spawn } = require('child_process');
+const [bench, proxyPath, playwright, appPort, proxyPort, controlPort, geometryJson] = process.argv.slice(2);
+const B = require(bench); const G = JSON.parse(geometryJson); const BASE = `http://127.0.0.1:${proxyPort}`;
+const ID = '0f0e0d0c-0b0a-5909-8807-060504030201';
+const PAGE = `
+const V = new URLSearchParams(location.search).get('v') || 'clean';
+const G = ${JSON.stringify(G)}; const main = document.getElementById('main');
+const busy = ms => { const t = performance.now(); while (performance.now() - t < ms) {} };
+let serial = 0, routes = 0;
+function canvas() {
+  const cv = document.querySelector('canvas'); const g = cv.getContext('2d');
+  g.fillStyle = 'white'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = 'black'; g.fillRect(G.marker[0] * cv.width - 40, G.marker[1] * cv.height - 40, 80, 80);
+}
+async function route() {
+  const view = (location.hash || '#documents').slice(1); const my = ++serial; routes += 1;
+  if (view.startsWith('doc/')) {
+    main.innerHTML = '<section><a class="back-link" href="#documents">Back</a><div id="reviewColumn">review</div>'
+      + '<div class="pdf-page" data-page="1"><canvas width="1224" height="1584"></canvas></div></section>';
+    const col = document.getElementById('reviewColumn');
+    if (V === 'fade-review') { col.style.opacity = '0'; void col.offsetWidth;
+      col.style.transition = 'opacity .35s'; col.style.opacity = '1'; }
+    canvas(); return;
+  }
+  main.innerHTML = '<section><div id="documentsTable"></div></section>';
+  const sec = main.firstElementChild; const table = document.getElementById('documentsTable');
+  const later = routes > 1;  // a page load's own entrance is allowed; a tab change shows none (R2-14)
+  if (later && V === 'r1') sec.style.animation = 'enter .35s';  // release 1's fade, on the section
+  if (later && V === 'fade-main') { main.style.transition = 'none'; main.style.opacity = '0'; void main.offsetWidth;
+    main.style.transition = 'opacity .35s'; main.style.opacity = '1'; }
+  const body = await (await fetch('/api/encounters?view=' + view, { cache: 'no-store' })).json();
+  if (my !== serial) return;
+  if (later && V === 'fade-list') table.style.opacity = '0';
+  if (later && V === 'fade-anim') table.style.animation = 'appear .35s';
+  table.innerHTML = body.ids.map(i => '<a class="document-row" href="#doc/' + i + '">r</a>').join('');
+  if (later && V === 'fade-list') { void table.offsetWidth; table.style.transition = 'opacity .35s';
+    table.style.opacity = '1'; }
+  if (V === 'late-queue' && view === 'queue') setTimeout(() => busy(300), 0);  // painted 300 ms after the rows
+}
+window.addEventListener('hashchange', route); route();`;
+const APP = '<!doctype html><html><head><style>@keyframes enter{from{opacity:0}to{opacity:1}}'
+  + '@keyframes appear{from{opacity:0}to{opacity:1}}</style></head><body><nav><a data-nav="queue" href="#queue">Q</a>'
+  + '<a data-nav="workspace" href="#workspace">W</a><a data-nav="documents" href="#documents">D</a></nav>'
+  + '<main id="main"></main><script>' + PAGE + '</script></body></html>';
+const ids = n => Array.from({ length: n },
+  (_, i) => (i === 0 ? ID : `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`));
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://127.0.0.1');
+  if (url.pathname === '/') {
+    res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }); return res.end(APP); }
+  if (url.pathname === '/api/encounters') { const v = url.searchParams.get('view');
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ ids: ids(v === 'queue' ? 16 : v === 'workspace' ? 5 : 100) })); }
+  res.writeHead(404, { 'cache-control': 'no-store' }); res.end('');
+});
+let proxy = null;
+(async () => {
+  await new Promise(resolve => server.listen(Number(appPort), '127.0.0.1', resolve));
+  proxy = spawn(process.execPath, [proxyPath, '--listen', proxyPort, '--upstream', appPort, '--control', controlPort],
+    { stdio: ['ignore', 'pipe', 'ignore'] });
+  await new Promise((ok, no) => { proxy.stdout.on('data', d => { if (String(d).includes('proxy up')) ok(); });
+    proxy.on('exit', c => no(new Error('the proxy exited ' + c))); });
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: { 'text-2p': { label: 'text-2p', id: ID, number: 102, kind: 'pdf' } }, browser,
+    INIT: B.INIT_FOR(G),
+    result: { consoleErrors: [], pageErrors: [], blocked: [], actions: [], unfinished: [], metrics: {}, errors: [] },
+    FLOW: 'lists', PROFILE: 'P0', BASE, CONTROL: Number(controlPort) });
+  const out = {};
+  try {
+    for (const v of ['clean', 'late-queue', 'fade-list', 'fade-main', 'fade-anim', 'r1', 'fade-review']) {
+      const s = await B.TESTING.newContext();
+      try {
+        await s.page.goto(`${BASE}/?v=${v}#documents`); await s.page.waitForSelector('#documentsTable .document-row');
+        const row = {};
+        for (const nav of ['queue', 'workspace', 'documents']) {
+          const t = await B.TESTING.tab(s, nav, 'pin'); row[nav] = t && t.opaque; }
+        row.review = (await B.TESTING.openDoc(s, 'text-2p', 'pin')).opaque;
+        out[v] = row;
+      } finally { await s.context.close(); }
+    }
+  } finally { await browser.close(); server.close(); proxy.kill(); }
+  console.log(JSON.stringify(out));
+})().catch(e => {
+  console.error(String(e && e.stack || e)); server.close(); if (proxy) proxy.kill(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchTabPaintTests(unittest.TestCase):
+    def test_a_tab_is_opaque_when_its_own_content_is_shown_and_painted(self):
+        """bench[0] (round 2): the per-tab rows stopped the timer when rows were inserted and read only the section's
+        own opacity, so a Queue painted 300 ms late, or a list (or #main, or the review column) faded in over 350 ms,
+        passed at about 16 ms. Through the bench's own tab() and openDoc() and the real proxy.cjs: each is now seen,
+        release 1's fade on the section reads as before, and a clean page stays fast. (The clean bound is loose on
+        purpose: this pin runs beside the whole suite; a late or faded tab reads 300-360 ms.)"""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'driver.cjs')
+            driver.write_text(TAB_PAINT_DRIVER)
+            app, listen, control = _free_ports(3)
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(BENCH / 'proxy.cjs'),
+                                   str(PLAYWRIGHT), str(app), str(listen), str(control), json.dumps(BD.geometry())],
+                                  capture_output=True, text=True, timeout=300, env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        tabs = ('queue', 'workspace', 'documents')
+        for nav in tabs:
+            self.assertLess(got['clean'][nav], 150, got['clean'])
+            self.assertLess(got['fade-review'][nav], 150, got['fade-review'])
+            for v in ('fade-list', 'fade-main', 'fade-anim'):
+                self.assertGreaterEqual(got[v][nav], 340, (v, got[v]))
+            self.assertTrue(330 <= got['r1'][nav] <= 400, got['r1'])  # A is unchanged: release 1's 350 ms fade
+        self.assertGreaterEqual(got['late-queue']['queue'], 300, got['late-queue'])
+        self.assertLess(got['late-queue']['workspace'], 150, got['late-queue'])
+        self.assertLess(got['clean']['review'], 150, got['clean'])
+        self.assertGreaterEqual(got['fade-review']['review'], 340, got['fade-review'])
+
+
+WORKER_LOG_DRIVER = r"""
+const http = require('http');
+const [bench, playwright, port] = process.argv.slice(2);
+const B = require(bench); const BASE = `http://127.0.0.1:${port}`; const served = [];
+const PAGE = '<!doctype html><title>load</title><script type="module">'
+  + "const w = new URLSearchParams(location.search).get('w') || ''; await import('/static/pdf.min.mjs');"
+  + "const worker = new Worker('/static/pdf.worker.min.mjs' + w, { type: 'module' });"
+  + "worker.onmessage = () => fetch('/api/ping', { cache: 'no-store' }).then(r => r.text())"
+  + ".then(() => { document.title = 'done'; });"  // the body read: an unread answer never ends its load
+  + '</script>';
+const server = http.createServer((req, res) => {
+  const path = new URL(req.url, BASE).pathname; if (path !== '/favicon.ico') served.push(req.url);
+  const immutable = { 'content-type': 'text/javascript', 'cache-control': 'public, max-age=31536000, immutable' };
+  if (path === '/') {
+    res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }); return res.end(PAGE); }
+  if (path === '/static/pdf.min.mjs') { res.writeHead(200, immutable); return res.end('export const ready = 1;'); }
+  if (path === '/static/pdf.worker.min.mjs') { res.writeHead(200, immutable); return res.end("postMessage('ready');"); }
+  if (path === '/api/ping') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end('{}'); }
+  res.writeHead(404, { 'cache-control': 'no-store' }); res.end('');
+});
+(async () => {
+  await new Promise(resolve => server.listen(Number(port), '127.0.0.1', resolve));
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: {}, browser, INIT: '', result: { consoleErrors: [], pageErrors: [], blocked: [] }, FLOW: 'open',
+    PROFILE: 'P0', BASE });
+  const out = {};
+  try {
+    const s = await B.TESTING.newContext();
+    try {
+      await B.TESTING.logFromCdp(s.cdp);
+      const step = async (name, go) => {
+        const logged = B.TESTING.cdpState().log.length; const asked = served.length;
+        await go(); await s.page.waitForFunction(() => document.title === 'done', null, { timeout: 30000 });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        out[name] = { log: B.TESTING.cdpState().log.slice(logged).filter(e => !e.url.startsWith('/favicon'))
+          .map(e => `${e.method} ${e.url} ${e.status}`), served: served.slice(asked) };
+      };
+      await step('cold', () => s.page.goto(`${BASE}/`));
+      await step('warm', () => s.page.reload());
+      await step('fresh', () => s.page.goto(`${BASE}/?w=${encodeURIComponent('?nc=1')}`));
+      out.inFlight = B.TESTING.cdpState().inFlight;
+    } finally { await s.context.close(); }
+  } finally { await browser.close(); server.close(); }
+  console.log(JSON.stringify(out));
+})().catch(e => { console.error(String(e && e.stack || e)); server.close(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchWorkerLogTests(unittest.TestCase):
+    def test_the_rehearsal_log_sees_a_worker_s_own_script_and_never_waits_on_it(self):
+        """bench[1], bench[2] (round 2): the page's CDP session reports a dedicated worker's own script asked for (and
+        its responseReceivedExtraInfo) but never its answer or end, so the rehearsal's log missed pdf.worker.min.mjs
+        and counted it in flight for ever. Real Chromium, the bench's own logFromCdp: the cold log is what the server
+        served, worker file included; a warm reload asks for no library file; a fresh worker address for exactly one;
+        nothing is left in flight."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'driver.cjs')
+            driver.write_text(WORKER_LOG_DRIVER)
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(PLAYWRIGHT),
+                                   str(_free_ports(1)[0])],
+                                  capture_output=True, text=True, timeout=180, env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual(sorted(got['cold']['log']), sorted(f'GET {u} 200' for u in got['cold']['served']))
+        self.assertIn('GET /static/pdf.worker.min.mjs 200', got['cold']['log'])
+        library = re.compile(r'pdf(\.worker)?\.min\.([0-9a-f]{12}\.)?mjs')
+        self.assertEqual([x for x in got['warm']['log'] if library.search(x)], [], got['warm'])
+        self.assertEqual([u for u in got['warm']['served'] if library.search(u)], [], got['warm'])
+        self.assertEqual([x for x in got['fresh']['log'] if library.search(x)],
+                         ['GET /static/pdf.worker.min.mjs?nc=1 200'], got['fresh'])
+        self.assertEqual(got['inFlight'], 0)
+
+
+DETAIL_RACE_DRIVER = r"""
+const http = require('http'); const { spawn } = require('child_process');
+const [bench, proxyPath, playwright, appPort, proxyPort, controlPort, geometryJson] = process.argv.slice(2);
+const B = require(bench); const G = JSON.parse(geometryJson); const BASE = `http://127.0.0.1:${proxyPort}`;
+const ID = '0f0e0d0c-0b0a-5909-8807-060504030201'; const OTHER = 'a1a2a3a4-b1b2-5c1c-8d1d-e1e2e3e4e5e6';
+const PAGE = `
+const V = new URLSearchParams(location.search).get('v');
+const ID = ${JSON.stringify(ID)}; const OTHER = ${JSON.stringify(OTHER)};
+const G = ${JSON.stringify(G)}; const main = () => document.getElementById('main'); let closed = false;
+function list() {
+  const rows = [ID, OTHER].map(i => '<a class="document-row" href="#doc/' + i + '">r</a>').join('');
+  main().innerHTML = '<section><div id="documentsTable">' + rows + '</div></section>';
+}
+function draw() {
+  if (closed) return;
+  main().innerHTML = '<section><div class="pdf-page" data-page="1">'
+    + '<canvas width="1224" height="1584"></canvas></div></section>';
+  const cv = document.querySelector('canvas'); const g = cv.getContext('2d');
+  g.fillStyle = 'white'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = 'black'; g.fillRect(G.marker[0] * cv.width - 40, G.marker[1] * cv.height - 40, 80, 80);
+}
+function close() { closed = true; main().innerHTML = '<section><p>Not available.</p></section>'; }
+function route() {
+  if (location.hash !== '#doc/' + ID) return list();
+  closed = false;
+  const view = fetch('/api/encounters/' + ID + '/original?view=1', { cache: 'no-store' });
+  const detail = fetch('/api/encounters/' + ID, { cache: 'no-store' });
+  if (V === 'race') {  // the held copy drawn on the view's 304, the viewer closed on a refused detail
+    view.then(r => { if (r.status === 304 || r.ok) setTimeout(draw, 60); });
+    detail.then(r => { if (!r.ok) close(); });
+  } else {  // a page that waits for the detail before it draws anything
+    Promise.all([view, detail]).then(([, d]) => (d.ok ? draw() : close()));
+  }
+}
+window.addEventListener('hashchange', route); route();`;
+const APP = '<!doctype html><html><body><main id="main"></main><script>' + PAGE + '</script></body></html>';
+const server = http.createServer((req, res) => {
+  const path = new URL(req.url, 'http://127.0.0.1').pathname;
+  if (path === '/') {
+    res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }); return res.end(APP); }
+  if (path === `/api/encounters/${ID}/original`) {
+    return setTimeout(() => { res.writeHead(304, { 'cache-control': 'no-store' }); res.end(); }, 5); }
+  if (path === `/api/encounters/${ID}`) {
+    return setTimeout(() => { res.writeHead(503, { 'cache-control': 'no-store' }); res.end(''); }, 8); }
+  res.writeHead(404, { 'cache-control': 'no-store' }); res.end('');
+});
+const rule = r => new Promise((ok, no) => { const body = JSON.stringify(r);
+  const q = http.request({ host: '127.0.0.1', port: Number(controlPort), path: '/rule', method: 'POST',
+    headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } },
+  a => { a.resume(); a.on('end', ok); });
+  q.on('error', no); q.end(body); });
+let proxy = null;
+(async () => {
+  await new Promise(resolve => server.listen(Number(appPort), '127.0.0.1', resolve));
+  proxy = spawn(process.execPath, [proxyPath, '--listen', proxyPort, '--upstream', appPort, '--control', controlPort],
+    { stdio: ['ignore', 'pipe', 'ignore'] });
+  await new Promise((ok, no) => { proxy.stdout.on('data', d => { if (String(d).includes('proxy up')) ok(); });
+    proxy.on('exit', c => no(new Error('the proxy exited ' + c))); });
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: { 'control-held': { label: 'control-held', id: ID, number: 103, kind: 'pdf' } }, browser,
+    INIT: B.INIT_FOR(G), result: { consoleErrors: [], pageErrors: [], blocked: [], actions: [], unfinished: [] },
+    FLOW: 'fail-closed', PROFILE: 'P0', BASE, CONTROL: Number(controlPort) });
+  const out = {};
+  try {
+    const cases = [['race', 'race', false], ['race-held', 'race', true], ['waits-held', 'waits', true]];
+    for (const [name, v, held] of cases) {
+      const s = await B.TESTING.newContext();
+      try {
+        await s.page.goto(`${BASE}/?v=${v}`); await s.page.waitForSelector('#documentsTable .document-row');
+        // as flowFailClosed plants it
+        if (held) await rule({ kind: 'hold', match: `^/api/encounters/${ID}$`, ms: 300, times: 1 });
+        out[name] = (await B.TESTING.openNoWait(s, 'control-held')).canvasDark;
+      } finally { await s.context.close(); }
+    }
+  } finally { await browser.close(); server.close(); proxy.kill(); }
+  console.log(JSON.stringify(out));
+})().catch(e => {
+  console.error(String(e && e.stack || e)); server.close(); if (proxy) proxy.kill(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchDetailRaceTests(unittest.TestCase):
+    def test_a_kept_copy_drawn_before_the_refused_detail_answers_is_seen_once_the_detail_is_held(self):
+        """records[1] (round 2): on loopback the refused detail answered in about 8 ms, so a page that draws its held
+        copy on the view's 304 and closes on the detail's 503 drew nothing in time and the detail_kept arm was green.
+        With the detail held 300 ms, as flowFailClosed now plants it, that page is seen; a page that waits for the
+        detail still draws nothing."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'driver.cjs')
+            driver.write_text(DETAIL_RACE_DRIVER)
+            app, listen, control = _free_ports(3)
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(BENCH / 'proxy.cjs'),
+                                   str(PLAYWRIGHT), str(app), str(listen), str(control), json.dumps(BD.geometry())],
+                                  capture_output=True, text=True, timeout=180, env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]),
+                         {'race': False, 'race-held': True, 'waits-held': False})
+
+
+MARKER_PAGES_DRIVER = r"""
+const http = require('http');
+const [bench, playwright, port, marker] = process.argv.slice(2);
+const B = require(bench); const BASE = `http://127.0.0.1:${port}`;
+const PAGE = `
+const V = new URLSearchParams(location.search).get('v'); const box = document.getElementById('documentSearch');
+box.addEventListener('input', async () => { const q = box.value; if (!q) return;
+  if (V === 'idb') { const r = indexedDB.open('cpt-studio', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('recent');
+    r.onsuccess = () => { r.result.transaction('recent', 'readwrite').objectStore('recent').put({ q }, 'last'); }; }
+  if (V === 'cache') { const c = await caches.open('cpt-studio');
+    await c.put('/api/encounters/search?text=' + encodeURIComponent(q), new Response('{}')); }
+  if (V === 'hash-b64') history.replaceState(null, '', '#documents/' + btoa(JSON.stringify({ q })));
+  if (V === 'storage-b64') sessionStorage.setItem('cpt-list-state', btoa(JSON.stringify({ q })));
+  if (V === 'plain') sessionStorage.setItem('cpt-last-search', q);
+});`;
+const APP = '<!doctype html><html><body><input id="documentSearch"><script>' + PAGE + '</script></body></html>';
+const server = http.createServer((req, res) => {
+  const path = new URL(req.url, BASE).pathname;
+  res.writeHead(path === '/' ? 200 : 404, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+  res.end(path === '/' ? APP : '');
+});
+(async () => {
+  await new Promise(resolve => server.listen(Number(port), '127.0.0.1', resolve));
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: {}, browser, INIT: '', result: { consoleErrors: [], pageErrors: [], blocked: [] },
+    FLOW: 'records',
+    PROFILE: 'P0', BASE });
+  const out = {};
+  try {
+    for (const v of ['idb', 'cache', 'hash-b64', 'storage-b64', 'plain', 'clean']) {
+      const s = await B.TESTING.newContext();
+      try {
+        await s.page.goto(`${BASE}/?v=${v}`); await s.page.locator('#documentSearch').click();
+        for (const ch of marker) await s.page.keyboard.press(ch);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        out[v] = await B.TESTING.pageMarkerHits(s, [], marker);
+      } finally { await s.context.close(); }
+    }
+  } finally { await browser.close(); server.close(); }
+  console.log(JSON.stringify(out));
+})().catch(e => { console.error(String(e && e.stack || e)); server.close(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchMarkerPagesTests(unittest.TestCase):
+    def test_a_search_word_kept_in_a_record_a_cache_entry_or_base64_is_named(self):
+        """records[2] (round 2): the page read saw only the names of Cache API caches and IndexedDB databases, and only
+        raw or URI-encoded text. Pages keeping the typed word in an IndexedDB record, a Cache API entry, a base64 hash
+        or base64 sessionStorage are each named now (the plain control as before); the clean page gives []."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'driver.cjs')
+            driver.write_text(MARKER_PAGES_DRIVER)
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(PLAYWRIGHT), str(_free_ports(1)[0]),
+                                   'zqxmarkerword'], capture_output=True, text=True, timeout=180,
+                                  env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        for v, hit in (('idb', 'indexedDB:cpt-studio/recent'), ('cache', 'caches:cpt-studio:entry'),
+                       ('hash-b64', 'location'), ('storage-b64', 'sessionStorage:cpt-list-state'),
+                       ('plain', 'sessionStorage:cpt-last-search')):
+            self.assertIn(hit, got[v], (v, got[v]))
+        self.assertEqual(got['clean'], [])
 
 
 CDP_LOG_DRIVER = r"""
@@ -931,11 +1321,27 @@ class BenchBrowserFlowPinsTests(unittest.TestCase):
         self.assertIn(f"await act('destroy', {{ doc: 'scan-20p' }});\n      {tabs}\n"
                       f"      await act('destroy', {{ doc: 'scan-20p', on: false }});\n      {tabs}", flow)
         self.assertIn("if (kept.has(label)) await proxyRule({ kind: 'delay',", flow)
-        self.assertIn('result.markerPage = [...new Set([...typed, ...(await pageMarkerHits(s, urls, DATA.marker))])];',
-                      flow)
+        for step in ("await typeMarker(); await read();", "await box.fill(''); await sleep(800); await read();",
+                     "await typeMarker(); await s.page.keyboard.press('Enter'); await sleep(800); await read();",
+                     "await s.page.keyboard.press('Tab'); await sleep(800); await read();",
+                     "await tab(s, 'queue', 'records-marker'); await read();",
+                     "await s.page.reload(); await s.page.waitForSelector('#main > section', { timeout: 180000 }); "
+                     "await sleep(1500); await read();"):
+            self.assertIn(step, flow)  # records[4]: the page read typed, cleared, at Enter, a blur, a route, pagehide
+        # records[7] (round 2): one reading, 3 s after the last hover, an in-flight read counted
+        self.assertIn('await sleep(3000);  // records[7]', flow)
+        self.assertIn('result.checks[\'records.hover\'] = { ok: hover.requests === 0 && hover.rows === 0 && '
+                      'hover.inFlight === 0, ...hover };', flow)
         closed = source[source.index('async function flowFailClosed('):source.index('async function flowLeftBehind(')]
         self.assertIn("await openDoc(s, 'control-held', 'fail-warm'); await back(s);", closed)
         self.assertIn("seen.detail_kept = await openNoWait(s, 'control-held');", closed)
+        # records[1] (round 2): the held document's detail is held 300 ms right before its kept re-open
+        self.assertIn("await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['control-held'].id}$`, ms: 300, "
+                      "times: 1 });\n    seen.detail_kept = await openNoWait(s, 'control-held');", closed)
+        # records[2] (round 2): every end of the left-behind flow follows a search typed and cleared
+        left = source[source.index('async function flowLeftBehind('):]
+        self.assertIn("await s.page.locator('#documentSearch').click();\n"
+                      "      for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(60); }", left)
         self.assertIn("await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['text-2p'].id}", closed)
         self.assertIn("const drawn = ['inline_kept', 'inline_fresh', 'detail_kept', 'detail']", closed)
         self.assertIn('Math.max(window.__bench.cur.rowCount || 0,', closed)
