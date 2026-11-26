@@ -559,15 +559,22 @@ class ObjectAndControlTests(ReleaseOneCase):
             'a BMP whose 108-byte header has its reserved bytes set': preview_object(
                 'media/image1.emf', content=b'BM' + bytes(4) + b'AB\x00\x00' + bytes(4) + b'l\x00\x00\x00'
                 + bytes(104)),
-            # D-R2-40: PICT, SVG, EMZ and WMZ stay refused - no 7.4 measurement of them exists (24.2.7 draws them)
+            # D-R2-45: PICT and SVG stay refused on purpose - 7.4 draws them, but neither has a signature as strong as
+            # the accepted ones (a broken one could be coded with nothing in its place)
             'a PICT preview': preview_object('media/image1.pct', part_name='word/media/image1.pct',
                                              content=bytes(2) + bytes(8) + b'\x00\x11\x02\xff\x0c\x00 synthetic PICT'),
             'an SVG preview': preview_object('media/image1.svg', part_name='word/media/image1.svg',
                                              content=b'<svg xmlns="http://www.w3.org/2000/svg"><text>SVG</text></svg>'),
-            'an EMZ preview': preview_object('media/image1.emz', part_name='word/media/image1.emz',
-                                             content=gzip.compress(EMF, mtime=0)),
-            'a WMZ preview': preview_object('media/image1.wmz', part_name='word/media/image1.wmz',
-                                            content=gzip.compress(WMF, mtime=0)),
+            # D-R2-45 (refutation round 3, refuse[0]): a gzip counts only when it inflates to an EMF or WMF signature
+            'a gzip of words named .emz': preview_object('media/image1.emz', part_name='word/media/image1.emz',
+                                                         content=gzip.compress(b'plain words, no picture', mtime=0)),
+            'a gzip of a PNG named .emz': preview_object('media/image1.emz', part_name='word/media/image1.emz',
+                                                         content=gzip.compress(PNG_BYTES, mtime=0)),
+            'a gzip cut inside its header': preview_object('media/image1.emz', part_name='word/media/image1.emz',
+                                                           content=gzip.compress(EMF, mtime=0)[:6]),
+            'a gzip whose deflate stream is corrupt': preview_object(
+                'media/image1.emz', part_name='word/media/image1.emz',
+                content=gzip.compress(EMF, mtime=0)[:10] + b'\xff' * 24),
             # loss[1]: LibreOffice reads an id's first row that has an Id, a Type and a Target; a later row with a
             # picture is never opened
             'an id written twice, its first row naming a missing part': preview_object('', rows=(
@@ -618,6 +625,11 @@ class ObjectAndControlTests(ReleaseOneCase):
             # D-R2-40 (the lead's 7.4 run on 3ad91321e, R1-L0e): a PDF preview, as Mac Word writes it, is drawn
             'a PDF preview (R1-L0e)': preview_object('media/image1.pdf', part_name='word/media/image1.pdf',
                                                      content=SYNTHETIC_PDF_PREVIEW),
+            # D-R2-45 (the lead's 7.4 run on 464b60de5): an EMZ and a WMZ, which inflate to an EMF and a WMF, are drawn
+            'an EMZ preview': preview_object('media/image1.emz', part_name='word/media/image1.emz',
+                                             content=gzip.compress(EMF, mtime=0)),
+            'a WMZ preview': preview_object('media/image1.wmz', part_name='word/media/image1.wmz',
+                                            content=gzip.compress(WMF, mtime=0)),
         }
         # loss[0] and refuse[0]: the names LibreOffice does open - rooted, a '..' to the root, an empty segment
         for target in ('/word/media/image1.emf', '../word/media/image1.emf', '../../word/media/image1.emf',

@@ -619,11 +619,17 @@ _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
 # but holds no picture - one byte, words, the embedded document itself - leaves nothing in the object's place
 # (refutation round 1, loss[0]). Words cannot begin so (round 2, loss[5]: 'BM' or 'GIF8' alone counted words), but for
 # a GIF's six letters and '%PDF-'; those, and a picture header over a body LibreOffice cannot draw (an 88-byte EMF
-# header), are known limits. PICT, SVG, EMZ and WMZ are no picture here: no 7.4 run has measured them (D-R2-40).
+# header), are known limits. EMZ and WMZ count by their gzip stream's decompressed prefix, an EMF or WMF signature
+# (D-R2-45, refutation round 3: 7.4 draws them through release 1's package); PICT and SVG stay refused on purpose -
+# 7.4 draws them too, but neither has a signature as strong (PICT's header is a heuristic, SVG is text that may draw
+# nothing), so a broken one could be coded with nothing in its place (D-R2-45).
 _PICTURE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00', b'\x89PNG',
                        b'\xff\xd8\xff', b'GIF87a', b'GIF89a', b'II*\x00', b'MM\x00*', b'%PDF-')
 # the DIB header sizes of a BMP, the four bytes at its offset 14 (each holds NUL bytes, so no words match)
 _BMP_HEADER_SIZES = frozenset((12, 16, 40, 52, 56, 64, 108, 124))
+# what an EMZ or WMZ must inflate to (EMF, placeable WMF, standard WMF in memory or on disk), read from a bounded prefix
+_METAFILE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00')
+_GZIP_HEAD_BYTES = 64
 
 
 def _is_picture(data: bytes) -> bool:
@@ -633,6 +639,12 @@ def _is_picture(data: bytes) -> bool:
     if data[:2] == b'BM':
         return len(data) >= 18 and int.from_bytes(data[14:18], 'little') in _BMP_HEADER_SIZES \
             and (data[6:10] == bytes(4) or data[14] in (12, 40))
+    if data[:2] == b'\x1f\x8b':  # gzip: an EMZ or WMZ, by the first bytes it inflates to (D-R2-45)
+        try:
+            head = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data, _GZIP_HEAD_BYTES)
+        except zlib.error:
+            return False
+        return head.startswith(_METAFILE_SIGNATURES)
     return data.startswith(_PICTURE_SIGNATURES)
 # R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object (a
 # symbol and a mark: _PartReader._role_starts).
