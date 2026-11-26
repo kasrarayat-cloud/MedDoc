@@ -617,10 +617,17 @@ def report_json(export, latest_round_id, last_decision_at=None) -> dict:
             'current': current}
 
 
-def reports_json(encounter, round_) -> list:
+_NOT_READ = object()  # reports_json's ``decided`` when its caller has not read the round's decisions
+
+
+def reports_json(encounter, round_, decided=_NOT_READ) -> list:
+    """The document's exports, newest first, each marked current or earlier against ``round_`` (the latest round) and
+    ``decided`` - when the newest decision on it was recorded, revokes included (None: none was), as encounter_json reads
+    it from the round's decisions (release 2, R2-25); read here (last_decision_at) when not given."""
     exports = Export.objects.filter(encounter_id=encounter.pk).order_by('-created_at', '-pk').only(
         'pk', 'kind', 'fmt', 'filename', 'created_at', 'round_id')
-    decided = last_decision_at(round_.pk) if round_ is not None else None
+    if decided is _NOT_READ:
+        decided = last_decision_at(round_.pk) if round_ is not None else None
     return [report_json(export, round_.pk if round_ is not None else None, decided) for export in exports]
 
 
@@ -692,12 +699,18 @@ def activity_json(encounter) -> list:
 # --- the encounter ------------------------------------------------------------------------------------------------------------
 
 def encounter_json(encounter, membership, *, now=None) -> dict:
-    """GET /api/encounters/<id> (BUILD-SPEC 6)."""
+    """GET /api/encounters/<id> (BUILD-SPEC 6). Release 2 (R2-25): the latest round is read once, and its decisions once
+    (state.decisions_of), so the state, the codes' decisions and the exports' current marks are of one reading: the state
+    is state.derive's (compute's rules) over those decisions, and an export is earlier than the round's newest decision,
+    revokes included."""
     now = now or timezone.now()
     can_review = bool(membership.can_review)
     round_ = state.latest_round(encounter)
-    current = state.current_decisions(round_) if round_ is not None and round_.state == Round.DONE else {}
-    value = state.compute(encounter) if round_ is not None else EARLIER
+    decisions = state.decisions_of(round_) if round_ is not None else []
+    current_now = state.current_of(decisions)
+    current = current_now if round_ is not None and round_.state == Round.DONE else {}
+    value = state.derive(round_, current_now) if round_ is not None else EARLIER
+    decided = max((decision.created_at for decision in decisions), default=None)
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'created_at': iso(encounter.created_at),
         'updated_at': iso(encounter.updated_at), 'state': value, 'state_label': STATE_LABELS.get(value, value),
@@ -712,7 +725,7 @@ def encounter_json(encounter, membership, *, now=None) -> dict:
         'answers': answers_json(encounter),
         'notes': notes_json(round_),
         'readiness': readiness(round_, current),
-        'reports': reports_json(encounter, round_),
+        'reports': reports_json(encounter, round_, decided),
         'activity': activity_json(encounter),
     }
 
