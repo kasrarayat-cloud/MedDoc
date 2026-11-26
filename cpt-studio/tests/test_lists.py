@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from django.db import connection
 from django.db.models import Exists, OuterRef
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -462,9 +462,11 @@ class ListStatementTests(TestCase):
 
 
 class ListPlanTests(TestCase):
-    """At 20,000 documents (one practice of 2,000 among them), each statement of a list page reads an index - the
-    documents page studio_enc_ws_time, the queue page studio_enc_ws_queue - and never scans studio_encounter,
-    studio_codinground or studio_sourcefile (tests/test_r1_repair_s.py reads the reads page the same way)."""
+    """At 20,000 documents (one practice of 2,000 among them: a minority of the table), each statement of a list page and
+    of the session reads an index - the documents page studio_enc_ws_time, the queue page studio_enc_ws_queue - and
+    never scans studio_encounter, studio_codinground or studio_sourcefile, the COUNTs included (D-R2-37: a whole list's
+    COUNT reads an index when its practice is a minority; PlanAtEighteenThousandTests holds the practice that is most of
+    the table). tests/test_r1_repair_s.py reads the reads page the same way."""
 
     @classmethod
     def setUpTestData(cls):
@@ -502,15 +504,23 @@ class ListPlanTests(TestCase):
                 if which == 'documents':  # the flags are read apart, over the page's ids - never in the rows' statement
                     self.assertNotIn('studio_codinground', rows_sql)
                     self.assertNotIn('studio_sourcefile', rows_sql)
-                for sql, plan in found:
-                    # the queue's total is one COUNT of every waiting document: its round test is the planner's to
-                    # choose, a hash of the rounds when that is cheaper (customer.in_queue); every statement that
-                    # reads the page itself - its rows, their rounds and their files - reads by an index
-                    counts_the_queue = which == 'queue' and sql.startswith('SELECT COUNT(*)')
+                for sql, plan in found:  # the rows, their rounds, their files and the first page's COUNT
                     for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile'):
-                        if table == 'studio_codinground' and counts_the_queue:
-                            continue
                         self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan[:1500]))
+
+    def test_the_sessions_two_counts_read_an_index(self):
+        membership = membership_of(self.user)
+        with CaptureQueriesContext(connection) as seen:
+            counts = customer.session_json(self.user, membership)['counts']
+        self.assertEqual(counts, {'documents': 2000, 'queue': 667})  # one in three waits, with its round
+        statements = [item['sql'] for item in seen.captured_queries]
+        self.assertEqual(sum(sql.startswith('SELECT COUNT(*)') for sql in statements), 2)
+        for sql in statements:
+            with connection.cursor() as cursor:
+                cursor.execute('EXPLAIN ' + sql)
+                plan = '\n'.join(row[0] for row in cursor.fetchall())
+            for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile'):
+                self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan[:1500]))
 
 
 # --- the search (R2-20) --------------------------------------------------------------------------------------------
@@ -699,11 +709,11 @@ class SearchLetterTests(SearchCase):
         self.assertEqual((page[0x130], database[0x130]), ([0x69, 0x307], [0x69]))  # i and the dot above, or i
         # the dot above is the one character a lower case adds, so customer.search_length is the same before and after
         self.assertEqual({point for point, pieces in page.items() if len(pieces) != 1}, {0x130})
-        # the fold: each letter of FROM to the letter at its place in TO, and the dot last, past TO's end (dropped)
-        self.assertEqual(dict(zip(customer.SEARCH_FOLD_FROM, customer.SEARCH_FOLD_TO)),
-                         {'\u03c2': '\u03c3', **customer.SEARCH_NEWER})
-        self.assertEqual((len(customer.SEARCH_FOLD_FROM) - len(customer.SEARCH_FOLD_TO), customer.SEARCH_FOLD_FROM[-1]),
-                         (1, '\u0307'))
+        # the fold of words holding all of them: each letter of FROM to the letter at its place in TO, and the dot last,
+        # past TO's end (dropped)
+        fold_from, fold_to = customer.search_fold(''.join(customer.SEARCH_NEWER))
+        self.assertEqual(dict(zip(fold_from, fold_to)), {'\u03c2': '\u03c3', **customer.SEARCH_NEWER})
+        self.assertEqual((len(fold_from) - len(fold_to), fold_from[-1]), (1, '\u0307'))
 
     def test_each_letter_only_the_browser_lower_cases_is_found_in_either_case(self):
         page, database = node_lowered(), database_lowered()
@@ -830,6 +840,15 @@ class SearchTests(SearchCase):
         self.assertEqual((row.count, row.encounter_ids, row.filters), (0, [], {'list': 'search', 'before': None}))
         self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=row.pk).repeats, 4)
 
+    def test_the_fold_reads_only_the_newer_letters_the_words_hold(self):
+        # translate reads FROM for every character of every row, so a search folds only the newer letters its words hold,
+        # in either case: one they do not hold cannot take part in a match (SearchLetterTests finds each in either case)
+        self.assertEqual(customer.search_fold('\u03b1\u03c3'), ('\u03c2\u0307', '\u03c3'))
+        self.assertEqual(customer.search_fold('i\u0307 note'), ('\u03c2\u0307', '\u03c3'))
+        self.assertEqual(customer.search_fold('x\u1c89'), ('\u03c2\u1c89\u0307', '\u03c3\u1c8a'))  # a capital
+        self.assertEqual(customer.search_fold('\u0264 \U00010d70'),  # small letters: their capitals are folded
+                         ('\u03c2\ua7cb\U00010d50\u0307', '\u03c3\u0264\U00010d70'))
+
     def test_the_words_are_counted_without_the_combining_dot_above(self):
         # the page lower-cases a dotted capital I to two characters (i and U+0307; SearchLetterTests), so 121 of them
         # typed lower-case are 242 characters its rule matches: counted without the dot they are 121 - searched, found,
@@ -943,6 +962,9 @@ class SearchPlanTests(ListPlanTests):
     def test_every_statement_of_a_list_page_reads_an_index(self):  # ListPlanTests' own, not run again here
         pass
 
+    def test_the_sessions_two_counts_read_an_index(self):  # likewise
+        pass
+
     def test_the_search_reads_studio_enc_ws_time_and_scans_no_table(self):
         membership = membership_of(self.user)
         for words in ('zzz-no-such-words', 'Synthetic bulk note 1', 'σ'):
@@ -958,6 +980,108 @@ class SearchPlanTests(ListPlanTests):
                 self.assertIn('studio_enc_ws_time', plan, shape)
                 for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile', 'studio_sourcerevision'):
                     self.assertNotIn(f'Seq Scan on {table}', plan, shape)
+
+
+# Section 8's bench shape (lane M's ops/bench/benchdata.py STATE_MIX, "a live-like mix of today's derived states"): of
+# 1,000 documents, 30 ready, 15 needs_review and 5 awaiting_answer - about one in twenty waits - 30 failed, 20 no_codes
+# and 900 reviewed; each document has its finished round.
+LIVE_STATE_MIX = (['ready'] * 30 + ['needs_review'] * 15 + ['awaiting_answer'] * 5 + ['failed'] * 30 + ['no_codes'] * 20
+                  + ['reviewed'] * 900)
+
+
+def live_like_practice(ws, by, count, *, seed):
+    """``count`` documents of ``ws`` shaped like live's and like section 8's bench: each with its revision and its
+    finished coding round, a state of LIVE_STATE_MIX, a quarter with a PDF first file, each its own created_at (the
+    first newest) - made in bulk, for the plans at a practice that is most of the table."""
+    chance = random.Random(seed)
+    now = timezone.now()
+    insurance = ('medicare', 'medicaid', 'commercial', 'unknown')
+    encounters = models.Encounter.objects.bulk_create(
+        [models.Encounter(workspace=ws, title=f'Synthetic GI note {n:05d} colonoscopy with biopsy', created_by=by,
+                          state=chance.choice(LIVE_STATE_MIX),
+                          user_values={'service_date': '2026-11-02', 'insurance': chance.choice(insurance)})
+         for n in range(count)], batch_size=2000)
+    revisions = Revision.objects.bulk_create(
+        [Revision(encounter=enc, number=1, kind=Revision.UPLOAD if n % 4 == 0 else Revision.PASTE,
+                  synthetic_attested_by=by, synthetic_attested_at=now, created_by=by)
+         for n, enc in enumerate(encounters)], batch_size=2000)
+    Round.objects.bulk_create([Round(encounter=enc, revision=rev, number=1, trigger=Round.UPLOAD, context={},
+                                     state=Round.DONE) for enc, rev in zip(encounters, revisions)], batch_size=2000)
+    SourceFile.objects.bulk_create([SourceFile(encounter=enc, original_name='synthetic.pdf', media_type=PDF, size=4448,
+                                               sha256='0' * 64, storage_name=f'{ws.pk}/live-{uuid.uuid4()}',
+                                               uploaded_by=by)
+                                    for n, enc in enumerate(encounters) if n % 4 == 0], batch_size=2000)
+    table, revision_table = models.Encounter._meta.db_table, Revision._meta.db_table
+    with connection.cursor() as cursor:  # its current revision, and its own created_at: one statement each
+        cursor.execute(f'UPDATE {table} e SET current_revision_id = r.id FROM {revision_table} r '
+                       'WHERE r.encounter_id = e.id AND e.workspace_id = %s', [ws.pk])
+        cursor.execute(f"UPDATE {table} e SET created_at = %s - n.k * interval '1 second' FROM (SELECT id, "
+                       f'row_number() OVER (ORDER BY title) AS k FROM {table} WHERE workspace_id = %s) n '
+                       'WHERE n.id = e.id', [now, ws.pk])
+
+
+class PlanAtEighteenThousandTests(TransactionTestCase):
+    """D-R2-37 (RELEASE-2-SPEC R2-19's tests, R2-23's acceptance, section 8's plans): at one practice of 18,000 documents
+    among 20,000 - most of the table - shaped like live's (live_like_practice) and committed, so VACUUM can run: after
+    ANALYZE alone (the state right after a seed) and again after VACUUM ANALYZE, every statement that reads a page - its
+    rows, round flags and first files, the documents' and the queue's, first and later - and the search reads by an index:
+    no Seq Scan on studio_encounter, studio_codinground or studio_sourcefile (nor the revisions, for the search). An
+    exact COUNT of a whole list - the two first pages' totals and session_json's two counts - cannot avoid reading the
+    practice when it is most of the table, so it is held to its time instead: at most 20 ms, the best of five (planning
+    and execution, as EXPLAIN ANALYZE reports them), and it reads no whole rounds or files table either."""
+
+    COUNT_MS = 20
+
+    def explain(self, sql):
+        """(the plan EXPLAIN ANALYZE reports for ``sql``, its planning and execution time in ms)."""
+        with connection.cursor() as cursor:
+            cursor.execute('EXPLAIN (ANALYZE, TIMING OFF) ' + sql)
+            lines = [row[0] for row in cursor.fetchall()]
+        took = [float(line.split(':')[1].split()[0]) for line in lines
+                if line.startswith(('Planning Time:', 'Execution Time:'))]
+        self.assertEqual(len(took), 2, lines[-3:])
+        return '\n'.join(lines), sum(took)
+
+    def test_at_one_practice_of_18000_pages_and_searches_read_an_index_and_each_count_is_held_to_its_time(self):
+        ws, others = f.workspace('Synthetic practice of 18,000'), f.workspace('Synthetic other practices')
+        user = f.member(ws)
+        live_like_practice(ws, user, 18000, seed=18000)
+        live_like_practice(others, f.member(others), 2000, seed=2000)
+        self.assertEqual(models.Encounter.objects.count(), 20000)
+        membership = membership_of(user)
+        waiting = models.Encounter.objects.filter(workspace=ws, state__in=customer.QUEUE_STATES).count()
+        self.assertTrue(700 < waiting < 1100, waiting)  # about one in twenty, each with its round
+        for state, command in (('after ANALYZE', 'ANALYZE'), ('after VACUUM ANALYZE', 'VACUUM ANALYZE')):
+            with connection.cursor() as cursor:
+                for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile', 'studio_sourcerevision'):
+                    cursor.execute(f'{command} {table}')
+            with CaptureQueriesContext(connection) as seen:
+                documents = customer.list_page(membership, 'documents')
+                customer.list_page(membership, 'documents', documents['next'])
+                queue = customer.list_page(membership, 'queue')
+                customer.list_page(membership, 'queue', queue['next'])
+                counts = customer.session_json(user, membership)['counts']
+                for words in ('zzz-no-such-words', 'note 01234 colonoscopy', '\u03c3'):
+                    customer.search_page(membership, words)
+            self.assertEqual((documents['total'], queue['total'], counts), (18000, waiting,
+                                                                             {'documents': 18000, 'queue': waiting}))
+            statements = [item['sql'] for item in seen.captured_queries]
+            self.assertEqual(sum(sql.startswith('SELECT COUNT(*)') for sql in statements), 4)
+            self.assertEqual(sum('strpos(' in sql for sql in statements), 3)
+            for sql in statements:
+                plan, took = self.explain(sql)
+                with self.subTest(state=state, statement=sql[:100]):
+                    if sql.startswith('SELECT COUNT(*)'):
+                        best = min([took] + [self.explain(sql)[1] for _ in range(4)])
+                        self.assertLessEqual(best, self.COUNT_MS, plan)
+                        tables = ('studio_codinground', 'studio_sourcefile')
+                    else:
+                        tables = ('studio_encounter', 'studio_codinground', 'studio_sourcefile') + (
+                            ('studio_sourcerevision',) if 'strpos(' in sql else ())
+                        if 'LIMIT 51' in sql:  # a page's or the search's rows: along the practice's own index
+                            self.assertTrue('studio_enc_ws_time' in plan or 'studio_enc_ws_queue' in plan, plan[:2000])
+                    for table in tables:
+                        self.assertNotIn(f'Seq Scan on {table}', plan, plan[:2000])
 
 
 class SearchOutdatedPageTests(SearchCase):

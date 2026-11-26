@@ -47,7 +47,7 @@ from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
 from django.db import connection
-from django.db.models import Exists, OuterRef
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from . import decisions, jobs, models, paging, state
@@ -186,12 +186,16 @@ def initials(user) -> str:
 def in_queue(queryset):
     """``queryset``'s documents that wait on a member - questions to answer, codes to review or to approve: a stored
     state of QUEUE_STATES and a coding round. The one rule the Review queue's pages, its total and the session's queue
-    count all read, so the three agree by construction (release 2, R2-19). The round is an EXISTS in the WHERE clause,
-    so PostgreSQL chooses how to test it: a page, which stops at 51 rows, probes the rounds per row; a count of every
-    waiting document may hash the rounds instead, when that is cheaper (measured at 18,250 documents among 30,000, after
-    VACUUM: 8.6 ms, against 30.7 ms for one probe per waiting document - a one-row subquery per document made the
-    session's read 35.9 ms and the queue's first page 40.1 ms, where this form gives 18.3 ms and 25.1 ms)."""
-    return queryset.filter(state__in=QUEUE_STATES).filter(Exists(Round.objects.filter(encounter_id=OuterRef('pk'))))
+    count all read, so the three agree by construction (release 2, R2-19). The round is tested per document, a one-row
+    subquery by the rounds' encounter index, so no statement reads a whole rounds table: a page stops at its 51st row, a
+    count probes once per waiting document. An EXISTS let PostgreSQL hash every practice's rounds for the count instead:
+    faster only where two in three documents hold a waiting state and one in three has a round (customer.session_json
+    18.3 ms against 35.9 ms, customer.list_page('queue') 25.1 ms against 40.1 ms, at 18,250 such documents among
+    30,000), slower on a practice shaped like live's, where each document has its round and about one in twenty waits
+    (the queue's COUNT 7.4 ms against 2.1 ms on section 8's bench data; refutation round 1, avail[1]). These are times
+    of the function or the statement alone; a request adds about 5-14 ms (the session, the membership, the record)."""
+    first_round = Subquery(Round.objects.filter(encounter_id=OuterRef('pk')).order_by().values('pk')[:1])
+    return queryset.filter(state__in=QUEUE_STATES).alias(queue_round=first_round).filter(queue_round__isnull=False)
 
 
 def live(queryset):
@@ -359,11 +363,11 @@ def list_page(membership, which, before=None) -> dict:
 # wildcard. The browser lower-cases some letters otherwise - a final sigma by its neighbours, a dotted capital I into two
 # letters, and 27 capitals of Unicode 16.0 that PostgreSQL 17's tables (Unicode 15.1) leave as they are (SEARCH_NEWER:
 # U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65) - so when the words hold any of these, in either
-# case, or the combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital to the
-# browser's small letter, the combining dot dropped), and the search never finds fewer documents than the page's rule,
-# more only there. The words are at most SEARCH_MAX_CHARS characters, not counting the combining dot above (U+0307): the
-# one letter whose lower case is longer (U+0130, to i and U+0307) adds only that dot, so the count is the same before and
-# after the page lower-cases the words (search_length).
+# case, or the combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital whose
+# letter the words hold to the browser's small letter, the combining dot dropped; search_fold), and the search never
+# finds fewer documents than the page's rule, more only there. The words are at most SEARCH_MAX_CHARS characters, not
+# counting the combining dot above (U+0307): the one letter whose lower case is longer (U+0130, to i and U+0307) adds
+# only that dot, so the count is the same before and after the page lower-cases the words (search_length).
 # One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
 # (list_rows_of). The text needs each row's revision kind and whether it has a round (and, for an earlier system's row,
 # a file): each is looked up per row, as a one-row subquery, so the walk stops at the 51st match - a join made
@@ -381,8 +385,6 @@ SEARCH_NEWER = {'\u1c89': '\u1c8a', '\ua7cb': '\u0264', '\ua7cc': '\ua7cd', '\ua
                 **{chr(cp): chr(cp + 0x20) for cp in range(0x10d50, 0x10d66)}}  # and Garay's 22 capitals
 SEARCH_FOLDED = ('\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
                  + ''.join(SEARCH_NEWER) + ''.join(SEARCH_NEWER.values()))  # and the newer letters, in either case
-SEARCH_FOLD_FROM = '\u03c2' + ''.join(SEARCH_NEWER) + '\u0307'  # the dot last, past the end of TO: dropped
-SEARCH_FOLD_TO = '\u03c3' + ''.join(SEARCH_NEWER.values())
 SEARCH_MAX_CHARS = 240  # not counting the combining dot above: a row's text is at most about 224 characters
 # app.js's own words for the row (KIND_LABELS, INSURANCE_SHOWN, MONTHS' first three letters); tests/test_lists.py holds the
 # rebuilt text to the shipped documentRow's (tests/frontend/row_text.cjs)
@@ -394,6 +396,16 @@ SEARCH_MONTHS = 'JanFebMarAprMayJunJulAugSepOctNovDec'
 def search_words(text) -> str:
     """The words a search looks for: ``text`` trimmed as the page trims what was typed (JavaScript's trim)."""
     return text.strip(JS_WHITE_SPACE)
+
+
+def search_fold(words) -> tuple:
+    """translate's (FROM, TO) for folding ``words`` and the rows: final sigma to sigma, each newer capital whose letter
+    the words hold (in either case) to the browser's small letter, and the combining dot last, past TO's end, so dropped.
+    A newer letter the words do not hold cannot take part in a match, so leaving it out changes nothing found - and
+    translate reads FROM for every character of every row: all 27, always, doubled a folding search's time at 18,000
+    documents (refutation round 1)."""
+    held = [capital for capital, small in SEARCH_NEWER.items() if capital in words or small in words]
+    return '\u03c2' + ''.join(held) + '\u0307', '\u03c3' + ''.join(SEARCH_NEWER[capital] for capital in held)
 
 
 def search_length(words) -> int:
@@ -468,8 +480,9 @@ def search_page(membership, words, before=None) -> dict:
     if not isinstance(words, str) or not words or search_length(words) > SEARCH_MAX_CHARS or '\x00' in words or (
             before is not None and position is None):
         raise ValueError('search_page is given words and a cursor the API has read.')
+    fold_from, fold_to = search_fold(words)
     params = {'workspace': membership.workspace_id, 'words': words, 'space': JS_WHITE_SPACE,
-              'fold_from': SEARCH_FOLD_FROM, 'fold_to': SEARCH_FOLD_TO, 'limit': LIST_PAGE_ROWS + 1}
+              'fold_from': fold_from, 'fold_to': fold_to, 'limit': LIST_PAGE_ROWS + 1}
     if position is not None:
         params['moment'], params['key'] = position
     with connection.cursor() as cursor:
