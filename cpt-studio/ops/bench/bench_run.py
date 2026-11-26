@@ -553,7 +553,7 @@ class Acts:
 # --- the data a round needs -------------------------------------------------------------------------------------------
 
 NEEDS = {
-    'cold': {'n100'}, 'pause': {'n100'}, 'server': {'n100', 'n1500', 'n18000'}, 'queries': {'n50', 'n5000', 'n100'},
+    'cold': {'n100'}, 'pause': {'n100'}, 'server': {'n100', 'n1500', 'n18000'}, 'queries': {'n51', 'n5000', 'n100'},
     'open': {'n100'}, 'lists': {'n100', 'n1500', 'n18000'}, 'office': {'n101', 'n5000'}, 'load': {'n100'},
     'records': {'n100', 'n1500'}, 'left-behind': {'n100', 'n1500'}, 'correct': {'n100', 'n1500'}, 'walk': set(),
     'bluegreen': {'n100'}, 'plans': set(), 'requests': set()}
@@ -962,7 +962,7 @@ class Bench(TransactionTestCase):
                 return r, [x['sql'] for x in q.captured_queries]
 
             api = {f'HTTP_{self.client[0].upper().replace("-", "_")}': self.client[1]}
-            for name in ('n50', 'n5000'):
+            for name in ('n51', 'n5000'):  # one page and more (R2-19: 50 a page), so a later page and a COUNT
                 c = client_for(name)
                 size = SIZES[name]
                 r, first = count(c, 'GET', '/api/encounters', **api)

@@ -402,7 +402,7 @@ def reconvert(enc, spec: dict):
 
 # --- the practices a round (or a rehearsal on a test instance) needs -----------------------------------------------
 
-SIZES = {'n50': 50, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
+SIZES = {'n51': 51, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
 RICH_IN = 'n100'  # the practice whose 100 documents include the RICH ones
 
 

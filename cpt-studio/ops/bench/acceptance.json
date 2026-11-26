@@ -1,19 +1,19 @@
 {
- "about": "RELEASE-2-SPEC section 8, \"The acceptance table\", as rows the bench judge (judge.py) reads. Written by lane M unchanged from the specification; a gate is moved only in the open, in the specification, with its reason, never at run time. floor_factor = 1 + 2 x the metric's A/A spread (C5), recorded from release 1 measured twice, interleaved, on this host, before any B was measured.",
+ "about": "RELEASE-2-SPEC section 8, \"The acceptance table\", as rows the bench judge (judge.py) reads. Written by lane M unchanged from the specification; a gate is moved only in the open, in the specification, with its reason, never at run time. The A-derived values - each row's a_recorded, a_spread and gain spread, each no-worse-than-A gate's floor_factor (C5: 1 + 2 x its A/A spread) - are written by judge.py floors from a valid A/A pair of release 1 measured on this host before any B (D-R2-44); until then \"derived\" is null and the judge answers INVALID wherever one is needed.",
  "spec": "RELEASE-2-SPEC.md, amended 2026-11-26 (C1-C10); section 8",
  "a_tree": "816045c7264481bc6956285e1ca89991b9fcec2f (release 1, live; cpt-studio tree bc0729bb9596, as 9ee0c85be)",
  "rules": {
   "invalid_load_average": 8,
   "a_tolerance": 0.2,
   "gain_over_spread": 2,
+  "a_column": "the session's A against a_recorded (judge.py floors), else section 8's a_section8, within the larger of 20%, 2 x a_spread and a_step / a_recorded (an Event Timing row's 8 ms step)",
   "profiles": {
    "P0": "unthrottled",
    "P1": "CDP CPU 4x, 40 ms RTT, 10/5 Mbps",
    "P2": "+200 ms per request only",
    "P3": "Chromium on two cores (taskset)"
   },
-  "order": "A B A B A B, three rounds each, one part group at a time (bench_run.py --order)",
-  "a_column": "a_recorded is release 1's pooled value from lane M's A/A (this bench, this host, the A/A protocol); where present the judge checks that the session's A is within max(20%, 2 x the metric's A/A spread) of it, else of section 8's figure (a_section8, kept as written). See laneM A-RESULTS.md."
+  "order": "A B A B A B, three rounds each, one part group at a time (bench_run.py --order)"
  },
  "controls": [
   "nomarker",
@@ -34,245 +34,7 @@
   "typing_at_ms": 4000,
   "note": "20 members at natural pace (an open every 15 s, back to the list after 10 s of reading), 5 typing 30 characters at 350 ms spacing, 20 sign-ins within 2 s, all from one non-exempt office address; hashed static files cached except the standby's two for 5 members"
  },
- "spread": {
-  "source": "laneM/aa4: release 1 (816045c72644) measured twice under lane M's A/A protocol, 2026-11-26 04:43Z-07:49Z, rounds 1 and 2 of every group (lists@P1 as rounds 401 and 102); judge.spread of the two rounds; laneM/spread.json sha256 5023b54c9af073c3",
-  "rule": "C5: floor_factor = 1 + 2 x the metric's A/A spread; spread = |m1 - m2| / mean(m1, m2) of the two A rounds' medians (stat as each row states)",
-  "metrics": {
-   "cold.closed_loop.errors": 0.0,
-   "cold.closed_loop.slowest_ms": 0.0844,
-   "cold.db_end.errors": 0.0,
-   "cold.first_request.lifetimes": 0.0,
-   "cold.first_request.ms": 0.0214,
-   "cold.four_at_once.ms": 0.0179,
-   "cold.gc.max_pause_ms": 0.4103,
-   "cold.memory.total_pss": 0.0073,
-   "cold.memory.worker_pss": 0.0072,
-   "cold.memory.worker_rss": 0.0011,
-   "lists.documents.long_task_max.100.P0": 0.0,
-   "lists.documents.long_task_max.100.P1": 0.2222,
-   "lists.documents.long_task_max.100.P2": 0.0,
-   "lists.documents.long_task_max.1500.P0": 0.2369,
-   "lists.documents.long_task_max.1500.P1": 0.2878,
-   "lists.documents.long_task_max.18000.P0": 0.0679,
-   "lists.documents.long_task_max.18000.P1": 0.3498,
-   "lists.documents.opaque.100.P0": 0.0006,
-   "lists.documents.opaque.100.P1": 0.0624,
-   "lists.documents.opaque.100.P2": 0.0003,
-   "lists.documents.opaque.1500.P0": 0.4215,
-   "lists.documents.opaque.1500.P1": 0.166,
-   "lists.documents.opaque.18000.P0": 0.095,
-   "lists.documents.opaque.18000.P1": 0.1766,
-   "lists.documents.usable.100.P0": 0.0006,
-   "lists.documents.usable.100.P1": 0.0624,
-   "lists.documents.usable.100.P2": 0.0003,
-   "lists.documents.usable.1500.P0": 0.1408,
-   "lists.documents.usable.1500.P1": 0.2346,
-   "lists.documents.usable.18000.P0": 0.0101,
-   "lists.documents.usable.18000.P1": 0.9734,
-   "lists.overview.usable.100.P0": 0.0052,
-   "lists.overview.usable.100.P1": 0.0109,
-   "lists.overview.usable.100.P2": 0.0009,
-   "lists.overview.usable.1500.P0": 0.0015,
-   "lists.overview.usable.1500.P1": 0.3654,
-   "lists.overview.usable.18000.P0": 0.0042,
-   "lists.overview.usable.18000.P1": 0.0706,
-   "lists.requests.documents.100.P0": 0.0,
-   "lists.requests.documents.100.P1": 0.0,
-   "lists.requests.documents.100.P2": 0.0,
-   "lists.requests.documents.1500.P0": 0.0,
-   "lists.requests.documents.1500.P1": 0.0,
-   "lists.requests.documents.18000.P0": 0.0,
-   "lists.requests.documents.18000.P1": 0.0,
-   "lists.requests.search_key.100.P0": 0.0,
-   "lists.requests.search_key.100.P1": 0.0,
-   "lists.requests.search_key.100.P2": 0.0,
-   "lists.requests.search_key.1500.P0": 0.0,
-   "lists.requests.search_key.1500.P1": 0.0,
-   "lists.requests.search_key.18000.P0": 0.0,
-   "lists.requests.search_key.18000.P1": 0.0,
-   "lists.search.after_last_key.100.P0": 0.1176,
-   "lists.search.after_last_key.100.P1": 0.4706,
-   "lists.search.after_last_key.100.P2": 0.2222,
-   "lists.search.after_last_key.1500.P0": 0.0845,
-   "lists.search.after_last_key.1500.P1": 0.6736,
-   "lists.search.after_last_key.18000.P0": 0.1038,
-   "lists.search.after_last_key.18000.P1": 0.3553,
-   "lists.search.first_key.100.P0": 0.0,
-   "lists.search.first_key.100.P1": 0.1818,
-   "lists.search.first_key.100.P2": 0.0,
-   "lists.search.first_key.1500.P0": 0.1935,
-   "lists.search.first_key.1500.P1": 0.1587,
-   "lists.search.first_key.18000.P0": 0.0957,
-   "lists.search.first_key.18000.P1": 0.2896,
-   "lists.search.key_event.100.P0": 0.0,
-   "lists.search.key_event.100.P1": 0.2,
-   "lists.search.key_event.100.P2": 0.0,
-   "lists.search.key_event.1500.P0": 0.16,
-   "lists.search.key_event.1500.P1": 0.1667,
-   "lists.search.key_event.18000.P0": 0.0058,
-   "lists.search.key_event.18000.P1": 0.3581,
-   "lists.tab.opaque.P0": 0.0022,
-   "lists.tab.opaque.P1": 0.0106,
-   "lists.tab.opaque.P2": 0.0004,
-   "load.detail10.p95": 0.0146,
-   "load.detail10.rps": 0.0438,
-   "load.detail20.p95": 0.0473,
-   "load.detail20.rps": 0.0114,
-   "load.session_behind.ms": 0.0325,
-   "load.session_behind.p95": 0.0005,
-   "office.documents.requests.101": 0.0,
-   "office.documents.requests.5000": 0.0,
-   "office.signin.requests_2s.101": 0.0,
-   "office.signin.requests_2s.5000": 0.0,
-   "office.typing.requests.101": 0.0,
-   "office.typing.requests.5000": 0.0,
-   "open.enter.first_view.P0": 0.0,
-   "open.enter.per_open.P0": 0.0,
-   "open.enter.per_open.P1": 0.0,
-   "open.enter.per_open.P2": 0.0,
-   "open.enter.per_open.P3": 0.0,
-   "open.enter.per_tab.P0": 0.0,
-   "open.enter.per_tab.P1": 0.0,
-   "open.enter.per_tab.P2": 0.0,
-   "open.enter.per_tab.P3": 0.0,
-   "open.first.first_page.P0": 0.1174,
-   "open.first.first_page.P1": 0.0279,
-   "open.first.first_page.P2": 0.0069,
-   "open.first.first_page.P3": 0.0341,
-   "open.first.opaque.P0": 0.0855,
-   "open.first.opaque.P1": 0.0184,
-   "open.first.opaque.P2": 0.0178,
-   "open.first.opaque.P3": 0.0937,
-   "open.inflight.max.P0": 0.0,
-   "open.inflight.max.P1": 0.0,
-   "open.inflight.max.P2": 0.0,
-   "open.inflight.max.P3": 0.0,
-   "open.later.first_page.P0": 0.0162,
-   "open.later.first_page.P1": 0.0309,
-   "open.later.first_page.P2": 0.0006,
-   "open.later.first_page.P3": 0.0074,
-   "open.later.long_tasks_max.P0": 0.0,
-   "open.later.long_tasks_max.P1": 0.1084,
-   "open.later.long_tasks_max.P2": 0.0,
-   "open.later.long_tasks_max.P3": 0.0,
-   "open.later.long_tasks_total.P0": 0.0,
-   "open.later.long_tasks_total.P1": 0.0141,
-   "open.later.long_tasks_total.P2": 0.0,
-   "open.later.long_tasks_total.P3": 0.0,
-   "open.later.opaque.P0": 0.0466,
-   "open.later.opaque.P1": 0.0504,
-   "open.later.opaque.P2": 0.0003,
-   "open.later.opaque.P3": 0.0349,
-   "open.memory.heap_list_mb.P0": 0.0,
-   "open.memory.renderer_private_list.P0": 0.0141,
-   "open.memory.renderer_private_signed_out.P0": 0.0235,
-   "open.memory.workers_list.P0": 0.0,
-   "open.memory.workers_signed_out.P0": 0.0,
-   "open.memory.workers_viewing.P0": 0.0,
-   "open.quick_leave.attempt_requests.P0": 0.0,
-   "open.quick_leave.first_text.P0": 0.0796,
-   "open.quick_leave.library_requests.P0": 0.0,
-   "open.quote_mark.P0": 0.0274,
-   "open.quote_mark.P1": 0.0236,
-   "open.quote_mark.P2": 0.1569,
-   "open.quote_mark.P3": 0.1053,
-   "open.reopen.first_page.P0": 0.0076,
-   "open.reopen.first_page.P1": 0.0065,
-   "open.reopen.first_page.P2": 0.0055,
-   "open.reopen.first_page.P3": 0.0614,
-   "open.reopen.view_304.P0": 0.0,
-   "open.reopen.view_304.P1": 0.0,
-   "open.reopen.view_304.P2": 0.0,
-   "open.reopen.view_304.P3": 0.0,
-   "open.reopen.view_body_bytes.P0": 0.0,
-   "open.reopen.view_body_bytes.P1": 0.0,
-   "open.reopen.view_body_bytes.P2": 0.0,
-   "open.reopen.view_body_bytes.P3": 0.0,
-   "open.reopen_scan20.first_page.P1": 0.0015,
-   "open.reopen_scan20.view_body_bytes.P1": 0.0,
-   "open.requests.first.P0": 0.0,
-   "open.requests.first.P1": 0.0,
-   "open.requests.first.P2": 0.0,
-   "open.requests.first.P3": 0.0,
-   "open.requests.later.P0": 0.0,
-   "open.requests.later.P1": 0.0,
-   "open.requests.later.P2": 0.0,
-   "open.requests.later.P3": 0.0,
-   "open.requests.reopen.P0": 0.0,
-   "open.requests.reopen.P1": 0.0,
-   "open.requests.reopen.P2": 0.0,
-   "open.requests.reopen.P3": 0.0,
-   "open.requests.tab.P0": 0.0,
-   "open.requests.tab.P1": 0.0,
-   "open.requests.tab.P2": 0.0,
-   "open.requests.tab.P3": 0.0,
-   "open.requests.text.P0": 0.0,
-   "open.requests.text.P1": 0.0,
-   "open.requests.text.P2": 0.0,
-   "open.requests.text.P3": 0.0,
-   "open.scan20.first_page.P0": 0.0461,
-   "open.scan20.first_page.P1": 0.0102,
-   "open.scan3.first_page.P0": 0.0573,
-   "open.scan3.first_page.P1": 0.072,
-   "open.scan3.first_page.P2": 0.0125,
-   "open.scan3.first_page.P3": 0.0407,
-   "open.signin.requests_2s.P0": 0.0,
-   "open.signin.requests_2s.P1": 0.0,
-   "open.signin.requests_2s.P2": 0.0,
-   "open.signin.requests_2s.P3": 0.0,
-   "open.standby.requests_before_open.P0": 0.0,
-   "open.standby.requests_before_open.P1": 0.0,
-   "open.standby.requests_before_open.P2": 0.0,
-   "open.standby.requests_before_open.P3": 0.0,
-   "open.tab.opaque.P0": 0.0,
-   "open.tab.opaque.P1": 0.0106,
-   "open.tab.opaque.P2": 0.0007,
-   "open.tab.opaque.P3": 0.0014,
-   "open.text.frame.P0": 0.0052,
-   "open.text.frame.P1": 0.0637,
-   "open.text.frame.P2": 0.0008,
-   "open.text.frame.P3": 0.001,
-   "open.word.first_page.P0": 0.0197,
-   "open.word.first_page.P1": 0.0363,
-   "open.word.first_page.P2": 0.0057,
-   "open.word.first_page.P3": 0.0934,
-   "pause.detail.ms": 0.012,
-   "queries.detail": 0.0,
-   "queries.detail.builder": 0.0,
-   "queries.detail_again": 0.0,
-   "queries.detail_again.builder": 0.0,
-   "queries.list_first.50": 0.0,
-   "queries.list_first.50.builder": 0.0,
-   "queries.list_first.5000": 0.0,
-   "queries.list_first.5000.builder": 0.0,
-   "queries.list_repeat.50": 0.0,
-   "queries.list_repeat.50.builder": 0.0,
-   "queries.list_repeat.5000": 0.0,
-   "queries.list_repeat.5000.builder": 0.0,
-   "queries.poll": 0.0,
-   "queries.poll.builder": 0.0,
-   "queries.session": 0.0,
-   "queries.session.builder": 0.0,
-   "queries.shell": 0.0,
-   "queries.shell.builder": 0.0,
-   "queries.view": 0.0,
-   "queries.view.builder": 0.0,
-   "server.detail.ms": 0.0576,
-   "server.index.ms": 0.0155,
-   "server.list.bytes.100": 0.0,
-   "server.list.bytes.1500": 0.0,
-   "server.list.bytes.18000": 0.0,
-   "server.list.ms.100": 0.0971,
-   "server.list.ms.1500": 0.0061,
-   "server.list.ms.18000": 0.0045,
-   "server.session.ms.100": 0.0748,
-   "server.session.ms.1500": 0.0893,
-   "server.session.ms.18000": 0.0377,
-   "server.worker.retained_after_18000": 0.218,
-   "static.app_js_gz": 0.0,
-   "static.styles_gz": 0.0
-  }
- },
+ "derived": null,
  "rows": [
   {
    "id": "later-open-P0",
@@ -289,10 +51,7 @@
      "rel_max": 0.65
     }
    ],
-   "gain": true,
-   "a_recorded": 301.5,
-   "spread": 0.0162,
-   "a_spread": 0.0162
+   "gain": true
   },
   {
    "id": "later-open-P1",
@@ -309,10 +68,7 @@
      "rel_max": 0.8
     }
    ],
-   "gain": true,
-   "a_recorded": 651.1,
-   "spread": 0.0309,
-   "a_spread": 0.0309
+   "gain": true
   },
   {
    "id": "later-open-P2",
@@ -329,10 +85,7 @@
      "rel_max": 0.7
     }
    ],
-   "gain": true,
-   "a_recorded": 638.55,
-   "spread": 0.0006,
-   "a_spread": 0.0006
+   "gain": true
   },
   {
    "id": "later-open-P3",
@@ -349,10 +102,7 @@
      "rel_max": 0.65
     }
    ],
-   "gain": true,
-   "a_recorded": 351.05,
-   "spread": 0.0074,
-   "a_spread": 0.0074
+   "gain": true
   },
   {
    "id": "first-open-P0",
@@ -365,9 +115,7 @@
     {
      "abs_max": 240
     }
-   ],
-   "a_recorded": 407.3,
-   "a_spread": 0.1174
+   ]
   },
   {
    "id": "first-open-P1",
@@ -380,9 +128,7 @@
     {
      "abs_max": 850
     }
-   ],
-   "a_recorded": 1074.0,
-   "a_spread": 0.0279
+   ]
   },
   {
    "id": "first-open-P2",
@@ -395,9 +141,7 @@
     {
      "abs_max": 600
     }
-   ],
-   "a_recorded": 928.25,
-   "a_spread": 0.0069
+   ]
   },
   {
    "id": "first-open-P3",
@@ -410,9 +154,7 @@
     {
      "abs_max": 260
     }
-   ],
-   "a_recorded": 507.05,
-   "a_spread": 0.0341
+   ]
   },
   {
    "id": "opaque-P0",
@@ -425,9 +167,7 @@
     {
      "abs_max": 120
     }
-   ],
-   "a_recorded": 412.3,
-   "a_spread": 0.0466
+   ]
   },
   {
    "id": "opaque-P1",
@@ -440,9 +180,7 @@
     {
      "abs_max": 200
     }
-   ],
-   "a_recorded": 608.55,
-   "a_spread": 0.0504
+   ]
   },
   {
    "id": "opaque-P2",
@@ -455,9 +193,7 @@
     {
      "abs_max": 270
     }
-   ],
-   "a_recorded": 561.25,
-   "a_spread": 0.0003
+   ]
   },
   {
    "id": "opaque-P3",
@@ -470,9 +206,7 @@
     {
      "abs_max": 120
     }
-   ],
-   "a_recorded": 423.55,
-   "a_spread": 0.0349
+   ]
   },
   {
    "id": "enter-per-open-P0",
@@ -486,9 +220,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-tab-P0",
@@ -502,9 +234,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-open-P1",
@@ -518,9 +248,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-tab-P1",
@@ -534,9 +262,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-open-P2",
@@ -550,9 +276,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-tab-P2",
@@ -566,9 +290,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-open-P3",
@@ -582,9 +304,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-per-tab-P3",
@@ -598,9 +318,7 @@
     {
      "eq": 0
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-first-view-max",
@@ -614,9 +332,7 @@
     {
      "eq": 1
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "enter-first-view-min",
@@ -630,9 +346,7 @@
     {
      "eq": 1
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "scan3-P0",
@@ -645,9 +359,7 @@
     {
      "abs_max": 270
     }
-   ],
-   "a_recorded": 335.55,
-   "a_spread": 0.0573
+   ]
   },
   {
    "id": "scan3-P1",
@@ -658,13 +370,9 @@
    "a_section8": 1992,
    "gate": [
     {
-     "rel_max": 1.02,
-     "spread": 0.072,
-     "floor_factor": 1.144
+     "rel_max": 1.02
     }
-   ],
-   "a_recorded": 1960.15,
-   "a_spread": 0.072
+   ]
   },
   {
    "id": "scan20-P0",
@@ -677,9 +385,7 @@
     {
      "abs_max": 400
     }
-   ],
-   "a_recorded": 435.55,
-   "a_spread": 0.0461
+   ]
   },
   {
    "id": "reopen-P0",
@@ -692,9 +398,7 @@
     {
      "abs_max": 160
     }
-   ],
-   "a_recorded": 300.0,
-   "a_spread": 0.0076
+   ]
   },
   {
    "id": "reopen-P1",
@@ -707,9 +411,7 @@
     {
      "abs_max": 430
     }
-   ],
-   "a_recorded": 612.7,
-   "a_spread": 0.0065
+   ]
   },
   {
    "id": "reopen-body-P0",
@@ -750,9 +452,7 @@
     {
      "abs_max": 1000
     }
-   ],
-   "a_recorded": 9377.65,
-   "a_spread": 0.0015
+   ]
   },
   {
    "id": "long-tasks-total-P1",
@@ -767,13 +467,9 @@
    "gate": [
     {
      "rel_max": 1.36,
-     "no_worse": true,
-     "spread": 0.0141,
-     "floor_factor": 1.0282
+     "no_worse": true
     }
-   ],
-   "a_recorded": 389.0,
-   "a_spread": 0.0141
+   ]
   },
   {
    "id": "long-tasks-max-P1",
@@ -786,9 +482,7 @@
     {
      "abs_max": 160
     }
-   ],
-   "a_recorded": 131.5,
-   "a_spread": 0.1084
+   ]
   },
   {
    "id": "quote-mark-P0",
@@ -803,13 +497,9 @@
    "gate": [
     {
      "rel_max": 1.1,
-     "rel_plus": 15,
-     "spread": 0.0274,
-     "floor_factor": 1.0548
+     "rel_plus": 15
     }
-   ],
-   "a_recorded": 18.0,
-   "a_spread": 0.0274
+   ]
   },
   {
    "id": "quote-mark-P1",
@@ -824,13 +514,9 @@
    "gate": [
     {
      "rel_max": 1.1,
-     "rel_plus": 15,
-     "spread": 0.0236,
-     "floor_factor": 1.0472
+     "rel_plus": 15
     }
-   ],
-   "a_recorded": 235.5,
-   "a_spread": 0.0236
+   ]
   },
   {
    "id": "text-open-P0",
@@ -842,9 +528,7 @@
    "gate": [
     {
      "rel_max": 1.0,
-     "rel_plus": 15,
-     "spread": 0.0052,
-     "floor_factor": 1.0104
+     "rel_plus": 15
     }
    ]
   },
@@ -858,9 +542,7 @@
    "gate": [
     {
      "rel_max": 1.0,
-     "rel_plus": 15,
-     "spread": 0.0637,
-     "floor_factor": 1.1274
+     "rel_plus": 15
     }
    ]
   },
@@ -904,9 +586,7 @@
     {
      "abs_max": 300
     }
-   ],
-   "a_recorded": 384.3,
-   "a_spread": 0.0796
+   ]
   },
   {
    "id": "quick-leave-attempt-P0",
@@ -933,9 +613,7 @@
     {
      "abs_max": 130
     }
-   ],
-   "a_recorded": 344.8,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "tab-opaque-P1",
@@ -948,9 +626,7 @@
     {
      "abs_max": 280
     }
-   ],
-   "a_recorded": 422.9,
-   "a_spread": 0.0106
+   ]
   },
   {
    "id": "tab-opaque-P2",
@@ -963,9 +639,115 @@
     {
      "abs_max": 280
     }
-   ],
-   "a_recorded": 359.0,
-   "a_spread": 0.0007
+   ]
+  },
+  {
+   "id": "tab-opaque-queue-P0",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Review queue tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.queue.P0",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 130
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-workspace-P0",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Overview tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.workspace.P0",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 130
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-documents-P0",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, Documents tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.documents.P0",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 130
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-queue-P1",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Review queue tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.queue.P1",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-workspace-P1",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Overview tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.workspace.P1",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-documents-P1",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, Documents tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.documents.P1",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-queue-P2",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Review queue tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.queue.P2",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-workspace-P2",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, the Overview tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.workspace.P2",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
+  },
+  {
+   "id": "tab-opaque-documents-P2",
+   "table": "lists",
+   "section8": "tab change (<= 100 rows) opaque, Documents tab on its own: <= 130 / 280 / 280 ms (bench[0]: each nav tab its own row, 3 a round, so a slow or missing tab is never pooled away)",
+   "metric": "open.tab.opaque.documents.P2",
+   "min_samples": 9,
+   "gate": [
+    {
+     "abs_max": 280
+    }
+   ]
   },
   {
    "id": "documents-usable-100-P0",
@@ -978,9 +760,7 @@
     {
      "abs_max": 160
     }
-   ],
-   "a_recorded": 344.2,
-   "a_spread": 0.0006
+   ]
   },
   {
    "id": "documents-usable-1500-P0",
@@ -993,9 +773,7 @@
     {
      "abs_max": 160
     }
-   ],
-   "a_recorded": 881.6,
-   "a_spread": 0.1408
+   ]
   },
   {
    "id": "documents-usable-18000-P0",
@@ -1011,9 +789,7 @@
     {
      "abs_max": 160
     }
-   ],
-   "a_recorded": 10547.5,
-   "a_spread": 0.0101
+   ]
   },
   {
    "id": "documents-usable-100-P1",
@@ -1027,10 +803,7 @@
      "rel_max": 0.6
     }
    ],
-   "gain": true,
-   "a_recorded": 351.4,
-   "spread": 0.0624,
-   "a_spread": 0.0624
+   "gain": true
   },
   {
    "id": "documents-usable-1500-P1",
@@ -1046,9 +819,7 @@
     {
      "abs_max": 380
     }
-   ],
-   "a_recorded": 3211.5,
-   "a_spread": 0.2346
+   ]
   },
   {
    "id": "documents-usable-18000-P1",
@@ -1129,9 +900,7 @@
     {
      "abs_max": 150
     }
-   ],
-   "a_recorded": 344.65,
-   "a_spread": 0.0052
+   ]
   },
   {
    "id": "overview-1500-P0",
@@ -1144,9 +913,7 @@
     {
      "abs_max": 150
     }
-   ],
-   "a_recorded": 344.2,
-   "a_spread": 0.0015
+   ]
   },
   {
    "id": "overview-18000-P0",
@@ -1159,9 +926,7 @@
     {
      "abs_max": 150
     }
-   ],
-   "a_recorded": 2202.5,
-   "a_spread": 0.0042
+   ]
   },
   {
    "id": "key-event-100-P0",
@@ -1171,13 +936,12 @@
    "stat": "max",
    "min_samples": 4,
    "a_section8": 40,
+   "a_step": 8,
    "gate": [
     {
      "abs_max": 64
     }
-   ],
-   "a_recorded": 32,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "key-event-100-P1",
@@ -1188,13 +952,12 @@
    "min_samples": 4,
    "a_section8": 80,
    "needs_a": true,
+   "a_step": 8,
    "gate": [
     {
      "abs_max": 120
     }
-   ],
-   "a_recorded": 72,
-   "a_spread": 0.25
+   ]
   },
   {
    "id": "key-event-1500-P0",
@@ -1204,13 +967,12 @@
    "stat": "max",
    "min_samples": 4,
    "a_section8": 168,
+   "a_step": 8,
    "gate": [
     {
      "abs_max": 64
     }
-   ],
-   "a_recorded": 160,
-   "a_spread": 0.0513
+   ]
   },
   {
    "id": "key-event-1500-P1",
@@ -1221,13 +983,12 @@
    "min_samples": 4,
    "a_section8": 848,
    "needs_a": true,
+   "a_step": 8,
    "gate": [
     {
      "abs_max": 120
     }
-   ],
-   "a_recorded": 648,
-   "a_spread": 0.1176
+   ]
   },
   {
    "id": "key-event-18000-P0",
@@ -1237,13 +998,12 @@
    "stat": "max",
    "min_samples": 4,
    "a_section8": 1416,
+   "a_step": 8,
    "gate": [
     {
      "abs_max": 64
     }
-   ],
-   "a_recorded": 1752,
-   "a_spread": 0.0957
+   ]
   },
   {
    "id": "key-event-18000-P1",
@@ -1270,15 +1030,12 @@
     0,
     40
    ],
+   "a_step": 8,
    "gate": [
     {
-     "rel_max": 1.0,
-     "spread": 0.1176,
-     "floor_factor": 1.2352
+     "rel_max": 1.0
     }
-   ],
-   "a_recorded": 17.0,
-   "a_spread": 0.1176
+   ]
   },
   {
    "id": "first-key-100-P0",
@@ -1290,16 +1047,13 @@
     0,
     40
    ],
+   "a_step": 8,
    "gate": [
     {
      "rel_max": 1.0,
-     "plus_metric": "lists.later_page.100.P0",
-     "spread": 0.0,
-     "floor_factor": 1.0
+     "plus_metric": "lists.later_page.100.P0"
     }
-   ],
-   "a_recorded": 32.0,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "results-last-key-100-P1",
@@ -1311,15 +1065,12 @@
     0,
     80
    ],
+   "a_step": 8,
    "gate": [
     {
-     "rel_max": 1.0,
-     "spread": 0.4706,
-     "floor_factor": 1.9412
+     "rel_max": 1.0
     }
-   ],
-   "a_recorded": 34.0,
-   "a_spread": 0.4706
+   ]
   },
   {
    "id": "first-key-100-P1",
@@ -1331,16 +1082,13 @@
     0,
     80
    ],
+   "a_step": 8,
    "gate": [
     {
      "rel_max": 1.0,
-     "plus_metric": "lists.later_page.100.P1",
-     "spread": 0.1818,
-     "floor_factor": 1.3636
+     "plus_metric": "lists.later_page.100.P1"
     }
-   ],
-   "a_recorded": 44.0,
-   "a_spread": 0.1818
+   ]
   },
   {
    "id": "results-last-key-1500-P0",
@@ -1393,9 +1141,7 @@
     {
      "abs_max": 30
     }
-   ],
-   "a_recorded": 25.8,
-   "a_spread": 0.0971
+   ]
   },
   {
    "id": "server-list-1500",
@@ -1408,9 +1154,7 @@
     {
      "abs_max": 30
     }
-   ],
-   "a_recorded": 147.25,
-   "a_spread": 0.0061
+   ]
   },
   {
    "id": "server-list-18000",
@@ -1423,57 +1167,49 @@
     {
      "abs_max": 30
     }
-   ],
-   "a_recorded": 2196.9,
-   "a_spread": 0.0045
+   ]
   },
   {
    "id": "server-list-body-100",
    "table": "lists",
-   "section8": "server list page: body <= 16 KB",
+   "section8": "server list page: body <= 16 KB (16,000 B: section 8 writes KB in decimal, as its styles.css <= 16,000 B; judge[11])",
    "metric": "server.list.bytes.100",
    "stat": "max",
    "min_samples": 1,
    "a_section8": 26652,
    "gate": [
     {
-     "abs_max": 16384
+     "abs_max": 16000
     }
-   ],
-   "a_recorded": 26652,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "server-list-body-1500",
    "table": "lists",
-   "section8": "server list page: body <= 16 KB",
+   "section8": "server list page: body <= 16 KB (16,000 B: section 8 writes KB in decimal, as its styles.css <= 16,000 B; judge[11])",
    "metric": "server.list.bytes.1500",
    "stat": "max",
    "min_samples": 1,
    "a_section8": 402067,
    "gate": [
     {
-     "abs_max": 16384
+     "abs_max": 16000
     }
-   ],
-   "a_recorded": 402067,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "server-list-body-18000",
    "table": "lists",
-   "section8": "server list page: body <= 16 KB",
+   "section8": "server list page: body <= 16 KB (16,000 B: section 8 writes KB in decimal, as its styles.css <= 16,000 B; judge[11])",
    "metric": "server.list.bytes.18000",
    "stat": "max",
    "min_samples": 1,
    "a_section8": 4824245,
    "gate": [
     {
-     "abs_max": 16384
+     "abs_max": 16000
     }
-   ],
-   "a_recorded": 4824245,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "server-list-ratio",
@@ -1485,10 +1221,10 @@
    "max": 1.5
   },
   {
-   "id": "statements-list_first-50",
+   "id": "statements-list_first-51",
    "table": "lists",
-   "section8": "statements per request: a list first <= 13 (C1)",
-   "metric": "queries.list_first.50",
+   "section8": "statements per request: a list first <= 13 (C1), at 51 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
+   "metric": "queries.list_first.51",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1499,10 +1235,10 @@
    ]
   },
   {
-   "id": "statements-list_first-50-builder",
+   "id": "statements-list_first-51-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
-   "metric": "queries.list_first.50.builder",
+   "section8": "the list builder's own statements <= 4 (C1), at 51 documents",
+   "metric": "queries.list_first.51.builder",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1515,7 +1251,7 @@
   {
    "id": "statements-list_first-5000",
    "table": "lists",
-   "section8": "statements per request: a list first <= 13 (C1)",
+   "section8": "statements per request: a list first <= 13 (C1), at 5,000 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
    "metric": "queries.list_first.5000",
    "stat": "max",
    "min_samples": 1,
@@ -1529,7 +1265,7 @@
   {
    "id": "statements-list_first-5000-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
+   "section8": "the list builder's own statements <= 4 (C1), at 5,000 documents",
    "metric": "queries.list_first.5000.builder",
    "stat": "max",
    "min_samples": 1,
@@ -1543,18 +1279,18 @@
   {
    "id": "statements-list_first-equal",
    "table": "lists",
-   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "section8": "statements per request: equal at 51 and 5,000 documents (C1; 51 is one page and more, as section 8's \"50\" is measured under R2-19; D-R2-44)",
    "kind": "equal",
    "metrics": [
-    "queries.list_first.50",
+    "queries.list_first.51",
     "queries.list_first.5000"
    ]
   },
   {
-   "id": "statements-list_later-50",
+   "id": "statements-list_later-51",
    "table": "lists",
-   "section8": "statements per request: a list later <= 13 (C1)",
-   "metric": "queries.list_later.50",
+   "section8": "statements per request: a list later <= 13 (C1), at 51 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
+   "metric": "queries.list_later.51",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1565,10 +1301,10 @@
    ]
   },
   {
-   "id": "statements-list_later-50-builder",
+   "id": "statements-list_later-51-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
-   "metric": "queries.list_later.50.builder",
+   "section8": "the list builder's own statements <= 4 (C1), at 51 documents",
+   "metric": "queries.list_later.51.builder",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1581,7 +1317,7 @@
   {
    "id": "statements-list_later-5000",
    "table": "lists",
-   "section8": "statements per request: a list later <= 13 (C1)",
+   "section8": "statements per request: a list later <= 13 (C1), at 5,000 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
    "metric": "queries.list_later.5000",
    "stat": "max",
    "min_samples": 1,
@@ -1595,7 +1331,7 @@
   {
    "id": "statements-list_later-5000-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
+   "section8": "the list builder's own statements <= 4 (C1), at 5,000 documents",
    "metric": "queries.list_later.5000.builder",
    "stat": "max",
    "min_samples": 1,
@@ -1609,18 +1345,18 @@
   {
    "id": "statements-list_later-equal",
    "table": "lists",
-   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "section8": "statements per request: equal at 51 and 5,000 documents (C1; 51 is one page and more, as section 8's \"50\" is measured under R2-19; D-R2-44)",
    "kind": "equal",
    "metrics": [
-    "queries.list_later.50",
+    "queries.list_later.51",
     "queries.list_later.5000"
    ]
   },
   {
-   "id": "statements-search-50",
+   "id": "statements-search-51",
    "table": "lists",
-   "section8": "statements per request: a search <= 14 (C1)",
-   "metric": "queries.search.50",
+   "section8": "statements per request: a search <= 14 (C1), at 51 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
+   "metric": "queries.search.51",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1631,10 +1367,10 @@
    ]
   },
   {
-   "id": "statements-search-50-builder",
+   "id": "statements-search-51-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
-   "metric": "queries.search.50.builder",
+   "section8": "the list builder's own statements <= 4 (C1), at 51 documents",
+   "metric": "queries.search.51.builder",
    "stat": "max",
    "min_samples": 1,
    "needs_a": false,
@@ -1647,7 +1383,7 @@
   {
    "id": "statements-search-5000",
    "table": "lists",
-   "section8": "statements per request: a search <= 14 (C1)",
+   "section8": "statements per request: a search <= 14 (C1), at 5,000 documents (51: one page and more - R2-19's page holds 50 - so a later page and the first page's COUNT exist; D-R2-44)",
    "metric": "queries.search.5000",
    "stat": "max",
    "min_samples": 1,
@@ -1661,7 +1397,7 @@
   {
    "id": "statements-search-5000-builder",
    "table": "lists",
-   "section8": "the list builder's own statements <= 4 (C1)",
+   "section8": "the list builder's own statements <= 4 (C1), at 5,000 documents",
    "metric": "queries.search.5000.builder",
    "stat": "max",
    "min_samples": 1,
@@ -1675,17 +1411,17 @@
   {
    "id": "statements-search-equal",
    "table": "lists",
-   "section8": "statements per request: equal at 50 and 5,000 documents (C1)",
+   "section8": "statements per request: equal at 51 and 5,000 documents (C1; 51 is one page and more, as section 8's \"50\" is measured under R2-19; D-R2-44)",
    "kind": "equal",
    "metrics": [
-    "queries.search.50",
+    "queries.search.51",
     "queries.search.5000"
    ]
   },
   {
    "id": "server-search",
    "table": "lists",
-   "section8": "server search: <= 25 ms typical, at 18,000 documents (used above 200; C2)",
+   "section8": "server search: <= 25 ms typical - a search whose first page fills (bench[2]: every bench title holds the typical word; fewer than 51 matches walk the practice, the no-match case), at 18,000 documents (used above 200; C2)",
    "metric": "server.search.ms.18000",
    "min_samples": 9,
    "needs_a": false,
@@ -1719,9 +1455,7 @@
     {
      "abs_max": 20
     }
-   ],
-   "a_recorded": 23.95,
-   "a_spread": 0.0377
+   ]
   },
   {
    "id": "cold-first-request",
@@ -1738,9 +1472,7 @@
     {
      "abs_max": 100
     }
-   ],
-   "a_recorded": 2003.1,
-   "a_spread": 0.0377
+   ]
   },
   {
    "id": "cold-four-at-once",
@@ -1757,9 +1489,7 @@
     {
      "abs_max": 150
     }
-   ],
-   "a_recorded": 1860.3,
-   "a_spread": 0.0235
+   ]
   },
   {
    "id": "cold-closed-loop",
@@ -1800,9 +1530,7 @@
     {
      "abs_max": 50
     }
-   ],
-   "a_recorded": 74.65,
-   "a_spread": 0.012
+   ]
   },
   {
    "id": "gc-pause",
@@ -1819,9 +1547,7 @@
     {
      "abs_max": 5
     }
-   ],
-   "a_recorded": 205.3,
-   "a_spread": 0.4103
+   ]
   },
   {
    "id": "db-end",
@@ -1852,9 +1578,7 @@
     {
      "abs_max": 80
     }
-   ],
-   "a_recorded": 111.6,
-   "a_spread": 0.0072
+   ]
   },
   {
    "id": "worker-rss",
@@ -1868,9 +1592,7 @@
     {
      "abs_max": 105
     }
-   ],
-   "a_recorded": 135.8,
-   "a_spread": 0.0015
+   ]
   },
   {
    "id": "worker-retained",
@@ -1898,9 +1620,7 @@
     {
      "abs_max": 614
     }
-   ],
-   "a_recorded": 234.9,
-   "a_spread": 0.0073
+   ]
   },
   {
    "id": "image-peak",
@@ -1912,32 +1632,28 @@
   {
    "id": "memory-list",
    "table": "cold",
-   "section8": "the page after 30 opens, on the list: renderer private <= A + 25 MB + the kept bytes (C3)",
+   "section8": "the page after 30 opens, on the list: renderer private <= A + 25 MB + the kept bytes (C3); in the metric's MiB: 25,000,000 B = 23.84 MiB plus the four cycled documents' kept 43,934 B = 0.04 MiB (judge[5])",
    "metric": "open.memory.renderer_private_list.P0",
    "min_samples": 3,
    "a_section8": 114,
    "gate": [
     {
      "rel_max": 1.0,
-     "rel_plus": 25.05,
-     "spread": 0.0141,
-     "floor_factor": 1.0282
+     "rel_plus": 23.88
     }
-   ],
-   "a_recorded": 113.8,
-   "a_spread": 0.0141
+   ]
   },
   {
    "id": "memory-heap",
    "table": "cold",
-   "section8": "the page after 30 opens: heap <= 24 MiB (kept) + 15 MB",
+   "section8": "the page after 30 opens: heap <= 24 MiB (kept) + 15 MB; in the metric's MiB: 24 x 1,048,576 + 15,000,000 B = 38.3 MiB (judge[5])",
    "metric": "open.memory.heap_list_mb.P0",
    "stat": "max",
    "min_samples": 3,
    "needs_a": false,
    "gate": [
     {
-     "abs_max": 40.2
+     "abs_max": 38.3
     }
    ]
   },
@@ -1964,9 +1680,7 @@
    "a_section8": null,
    "gate": [
     {
-     "rel_max": 1.0,
-     "spread": 0.0235,
-     "floor_factor": 1.047
+     "rel_max": 1.0
     }
    ]
   },
@@ -2000,10 +1714,7 @@
     }
    ],
    "gain": true,
-   "gain_direction": "up",
-   "a_recorded": 54.8,
-   "spread": 0.0438,
-   "a_spread": 0.0438
+   "gain_direction": "up"
   },
   {
    "id": "detail-10-p95",
@@ -2016,9 +1727,7 @@
     {
      "abs_max": 150
     }
-   ],
-   "a_recorded": 232.7,
-   "a_spread": 0.0146
+   ]
   },
   {
    "id": "detail-20-p95",
@@ -2031,9 +1740,7 @@
     {
      "abs_max": 300
     }
-   ],
-   "a_recorded": 376.6,
-   "a_spread": 0.0473
+   ]
   },
   {
    "id": "session-behind",
@@ -2061,9 +1768,7 @@
     {
      "abs_max": 19
     }
-   ],
-   "a_recorded": 21,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "statements-poll",
@@ -2077,9 +1782,7 @@
     {
      "abs_max": 17
     }
-   ],
-   "a_recorded": 18,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "statements-view",
@@ -2091,9 +1794,7 @@
    "a_section8": null,
    "gate": [
     {
-     "rel_max": 1.0,
-     "spread": 0.0,
-     "floor_factor": 1.0
+     "rel_max": 1.0
     }
    ]
   },
@@ -2107,9 +1808,7 @@
    "a_section8": null,
    "gate": [
     {
-     "rel_max": 1.0,
-     "spread": 0.0,
-     "floor_factor": 1.0
+     "rel_max": 1.0
     }
    ]
   },
@@ -2124,9 +1823,7 @@
    "gate": [
     {
      "rel_max": 1.0,
-     "rel_plus": 3,
-     "spread": 0.0,
-     "floor_factor": 1.0
+     "rel_plus": 3
     }
    ]
   },
@@ -2142,9 +1839,7 @@
     {
      "abs_max": 80000
     }
-   ],
-   "a_recorded": 71394,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "static-styles",
@@ -2158,9 +1853,7 @@
     {
      "abs_max": 16000
     }
-   ],
-   "a_recorded": 15569,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-later",
@@ -2174,9 +1867,7 @@
     {
      "eq": 2
     }
-   ],
-   "a_recorded": 3,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-reopen",
@@ -2190,9 +1881,7 @@
     {
      "eq": 2
     }
-   ],
-   "a_recorded": 3,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-reopen-304",
@@ -2220,16 +1909,21 @@
     {
      "abs_max": 5
     }
-   ],
-   "a_recorded": 5,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-first-median",
    "table": "front_door",
-   "section8": "first open in a page, the standby worker ready (P0, >= 2 s after load): reported (the spec says 2 once it is ready)",
-   "kind": "report",
-   "metric": "open.requests.first.P0"
+   "section8": "first open in a page: 2 once the standby worker is ready (the bench's first open, P0, >= 2 s after load; the median, as section 8 gates; bench[8])",
+   "metric": "open.requests.first.P0",
+   "stat": "median",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 2
+    }
+   ]
   },
   {
    "id": "requests-tab",
@@ -2243,9 +1937,7 @@
     {
      "eq": 1
     }
-   ],
-   "a_recorded": 1,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-text",
@@ -2259,9 +1951,7 @@
     {
      "eq": 2
     }
-   ],
-   "a_recorded": 3,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "requests-signin",
@@ -2275,9 +1965,7 @@
     {
      "abs_max": 7
     }
-   ],
-   "a_recorded": 6,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "standby-requests",
@@ -2290,6 +1978,20 @@
    "gate": [
     {
      "abs_max": 2
+    }
+   ]
+  },
+  {
+   "id": "standby-warm",
+   "table": "front_door",
+   "section8": "the standby worker's files: only on a cold browser cache (a page load on a warm cache asks for neither; bench[8])",
+   "metric": "open.standby.requests_warm.P0",
+   "stat": "max",
+   "min_samples": 3,
+   "needs_a": false,
+   "gate": [
+    {
+     "eq": 0
     }
    ]
   },
@@ -2319,9 +2021,7 @@
     {
      "abs_max": 3
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "inflight-P1",
@@ -2335,9 +2035,7 @@
     {
      "abs_max": 3
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "inflight-P2",
@@ -2351,9 +2049,7 @@
     {
      "abs_max": 3
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "inflight-P3",
@@ -2367,9 +2063,7 @@
     {
      "abs_max": 3
     }
-   ],
-   "a_recorded": 2,
-   "a_spread": 0.0
+   ]
   },
   {
    "id": "round-trips",

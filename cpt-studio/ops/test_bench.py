@@ -370,7 +370,7 @@ class BenchDataTests(unittest.TestCase):
         self.assertEqual(got['docs'], [{'id': 'x', 'label': 'text-2p'}])
         self.assertEqual(got['users'], {'n100': 'bench-n100', 'n1500': 'bench-n1500'})
         self.assertEqual(got['geometry'], BD.geometry())
-        self.assertEqual(set(BD.SIZES), {'n50', 'n100', 'n101', 'n1500', 'n5000', 'n18000'})
+        self.assertEqual(set(BD.SIZES), {'n51', 'n100', 'n101', 'n1500', 'n5000', 'n18000'})
 
     def test_the_control_document_carries_no_marker_and_no_barcode(self):
         spec = next(s for s in BD.RICH if s['label'] == 'control-nomarker')
@@ -1110,6 +1110,9 @@ class BenchTreeReadingTests(unittest.TestCase):
         self.assertTrue(all(c.isdigit() for c in cores))
 
 
+DERIVED_SHA256 = None  # the committed table's derived rows: set by the commit that derives a new A/A (D-R2-44)
+
+
 class AcceptanceTableTests(unittest.TestCase):
     """acceptance.json is section 8's table: every row whole, named once, and judged on something the bench measures."""
 
@@ -1149,24 +1152,112 @@ class AcceptanceTableTests(unittest.TestCase):
         self.assertGreaterEqual(len(produced), 30)  # a pattern that matched nothing would pass vacuously
         self.assertEqual(produced - judged, set())
 
-    def test_every_no_worse_than_a_gate_carries_the_floor_of_its_recorded_spread(self):
-        """C5: every "no worse than A" limit is at least A x (1 + 2 x its metric's A/A spread), written here from lane
-        M's recorded A/A before any B was measured and never moved: each floor is exactly its recorded spread's."""
-        spread = self.table.get('spread') or {}
-        recorded = spread.get('metrics') or {}
-        self.assertTrue(recorded and spread.get('source'), 'acceptance.json carries no recorded A/A spread')
-        floored = 0
+    def test_the_table_is_its_base_or_exactly_its_derivation(self):
+        """protocol[3]: a floor moved together with its spread copy, or a table built from an INVALID round, passed
+        every test. The committed table is either the base (no A-derived value anywhere: D-R2-44, until the new A/A) or
+        exactly its own derivation: each derived value recomputed from the per-row inputs judge.py floors recorded,
+        those inputs hashing to the sha256 the table names, and that sha256 the one pinned here, which only the
+        commit deriving a new A/A pair moves."""
+        derived = self.table.get('derived')
+        self.assertNotIn('spread', self.table)  # the old block of median spreads is gone
+        values = [(r['id'], k) for r in self.table['rows'] for k in JUDGE.DERIVED_ROW_KEYS if k in r]
+        values += [(r['id'], k) for r in self.table['rows'] for g in r.get('gate', []) for k in JUDGE.DERIVED_GATE_KEYS
+                   if k in g]
+        if derived is None:
+            self.assertEqual(values, [], 'a base table carries no A-derived value')
+            self.assertIsNone(DERIVED_SHA256)
+            return
+        self.assertEqual(derived['sha256'], JUDGE.derived_digest(derived['rows']))
+        self.assertEqual(derived['sha256'], DERIVED_SHA256, 'the derived rows moved without the pin that names them')
+        again = JUDGE.base_table(self.table)
+        for row in again['rows']:
+            if row['id'] in derived['rows']:
+                JUDGE.derive_row(row, *derived['rows'][row['id']])
+        again['derived'] = derived
+        self.assertEqual(again, self.table)
+        self.assertEqual(sorted(derived['rows']), sorted(r['id'] for r in self.table['rows'] if JUDGE.reads_a(r)))
+
+    def test_every_row_that_reads_a_gets_its_recorded_a_and_floors_when_derived(self):
+        """protocol[1]: eight rows whose limit is A carried no recorded A; derive writes one on every row that reads
+        A, its gain spread and every floor, from a pair that measured them, and no floor sits on a row that never reads
+        A."""
+        reads = [r for r in self.table['rows'] if JUDGE.reads_a(r)]
+        self.assertGreater(len(reads), 90)
+        pair = [{'metrics': {r['metric']: [10 + n] for r in reads}} for n in (0, 1)]
+        derived = JUDGE.derive(self.table, pair[0], pair[1], 'test')
+        for row in derived['rows']:
+            floors = [g for g in row.get('gate', []) if JUDGE.needs_floor(g)]
+            if floors:
+                self.assertTrue(JUDGE.reads_a(row), row['id'])
+            for gate in floors:
+                self.assertEqual(gate.get('floor_factor'), JUDGE.floor_factor(JUDGE.up_spread(10, 11)), row['id'])
+            if JUDGE.reads_a(row):
+                self.assertEqual(row.get('a_recorded'), JUDGE.stat([10, 11], row.get('stat', 'median')), row['id'])
+                self.assertEqual(row.get('spread'), JUDGE.up_spread(10, 11), row['id'])
+                self.assertIsNotNone(JUDGE.a_reference(row)[0], row['id'])
+
+    def test_the_memory_limits_are_in_the_metric_s_unit(self):
+        """judge[5]: the heap limit was 40.2, in MB, against a metric in MiB; both memory rows are in MiB now."""
+        source = (BENCH / 'bench.cjs').read_text()
+        self.assertIn("metric('open.memory.heap_list_mb.P0', Math.round(used / 104857.6) / 10)", source)
+        self.assertIn('privateMb: Math.round(priv / 102.4) / 10', source)  # the renderer's private kB / 1024: MiB
+        rows = {r['id']: r for r in self.table['rows']}
+        self.assertEqual(rows['memory-heap']['gate'], [{'abs_max': round((24 * 1048576 + 15_000_000) / 1048576, 1)}])
+        kept = sum(len(BD.rich_files(spec)['view'] or BD.rich_files(spec)['data']) for spec in BD.RICH
+                   if spec['label'] in ('text-2p', 'text-4p', 'text-10p', 'word-3p'))  # the memory flow's cycle
+        self.assertEqual(kept, 43934)
+        self.assertEqual(rows['memory-list']['gate'], [{'rel_max': 1.0,
+                                                        'rel_plus': round((25_000_000 + kept) / 1048576, 2)}])
+
+    def test_every_statement_row_names_a_practice_of_more_than_one_page(self):
+        """judge[7], bench[1]: at 50 documents (the page size) there is no later page and no COUNT, so three rows could
+        never pass; every statement row is at a practice the queries part seeds, above one page of 50."""
+        seeded = {BD.SIZES[name] for name in RUN.NEEDS['queries']}
+        found = 0
         for row in self.table['rows']:
-            for gate in row.get('gate', []):
-                if JUDGE.needs_floor(gate):
-                    self.assertIn(row['metric'], recorded, row['id'])
-                    self.assertEqual(gate.get('spread'), recorded[row['metric']], row['id'])
-                    self.assertEqual(gate.get('floor_factor'), JUDGE.floor_factor(recorded[row['metric']]), row['id'])
-                    floored += 1
-            if row.get('gain'):
-                self.assertIsNotNone(row.get('spread'), row['id'])
-                self.assertEqual(row['spread'], recorded.get(row['metric']), row['id'])
-        self.assertGreaterEqual(floored, 15)  # section 8's no-worse-than-A gates: none may lose its floor unseen
+            for metric in [row.get('metric')] + row.get('metrics', []):
+                m = re.fullmatch(r'queries\.(list_first|list_later|search)\.(\d+)(\.builder)?', metric or '')
+                if m:
+                    found += 1
+                    self.assertIn(int(m.group(2)), seeded, row['id'])
+                    self.assertGreater(int(m.group(2)), 50, row['id'])
+        self.assertGreaterEqual(found, 18)
+        self.assertGreater(BD.SIZES['n51'], 50)  # R2-19: a page holds 50 rows; a later page and a COUNT only above
+        self.assertIn("for name in ('n51', 'n5000'):", (BENCH / 'bench_run.py').read_text())
+
+    def test_each_nav_tab_is_judged_on_its_own(self):
+        """bench[0]: 89% of the pooled tab-change samples were returns to the list, so a Queue tab at 350 ms passed."""
+        rows = {r['id']: r for r in self.table['rows']}
+        for p, limit in zip(('P0', 'P1', 'P2'), (130, 280, 280)):
+            for nav in ('queue', 'workspace', 'documents'):
+                row = rows[f'tab-opaque-{nav}-{p}']
+                self.assertEqual((row['metric'], row['min_samples'], row['gate']),
+                                 (f'open.tab.opaque.{nav}.{p}', 9, [{'abs_max': limit}]))
+        queue = JUDGE.derive_row(dict(rows['tab-opaque-queue-P0']), 345, 346, 345.5)
+        a = {1: {'metrics': {queue['metric']: [345] * 9}}}
+        self.assertEqual(JUDGE.judge_row(queue, a, {1: {'metrics': {queue['metric']: [351] * 9}}})['verdict'], 'FAIL')
+        self.assertEqual(JUDGE.judge_row(queue, a, {1: {'metrics': {queue['metric']: [67] * 9}}})['verdict'], 'PASS')
+
+    def test_the_two_standby_clauses_are_gated(self):
+        """bench[8]: '2 once the standby worker is ready' and 'only on a cold browser cache' were never judged."""
+        rows = {r['id']: r for r in self.table['rows']}
+
+        def verdict_of(row, values):
+            return JUDGE.judge_row(row, {}, {1: {'metrics': {row['metric']: values}}})['verdict']
+        self.assertEqual(verdict_of(rows['requests-first-median'], [4] * 9), 'FAIL')
+        self.assertEqual(verdict_of(rows['requests-first-median'], [2] * 9), 'PASS')
+        self.assertEqual(verdict_of(rows['standby-warm'], [2] * 3), 'FAIL')
+        self.assertEqual(verdict_of(rows['standby-warm'], [0] * 3), 'PASS')
+
+    def test_section_eight_s_units_and_instrument_steps(self):
+        """judge[11]: 16 KB is 16,000 B as section 8 writes it; judge[9]: an Event Timing row carries its 8 ms step."""
+        rows = {r['id']: r for r in self.table['rows']}
+        for size in (100, 1500, 18000):
+            self.assertEqual(rows[f'server-list-body-{size}']['gate'], [{'abs_max': 16000}])
+        stepped = [r for r in self.table['rows'] if JUDGE.reads_a(r) and
+                   re.match(r'lists\.search\.(key_event|first_key|after_last_key)\.', r.get('metric') or '')]
+        self.assertEqual(len(stepped), 9)
+        self.assertTrue(all(r.get('a_step') == 8 for r in stepped), [r['id'] for r in stepped])
 
 
 class BenchNeverShipsTests(unittest.TestCase):
