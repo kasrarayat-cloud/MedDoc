@@ -1228,11 +1228,36 @@ test('the encounter JSON is held to customer-contract.json: every key it lists, 
     assert.ok(failed(walk.jsonChecks(enc, doc)).includes('json.contract'), said);
   }
   // the session and the list are held to theirs; a read is matched to its contract by its route
-  assert.deepEqual(walk.shapeProblems({ encounters: [] }, CONTRACT.list), []);
-  assert.deepEqual(walk.shapeProblems({ encounters: [{ id: 'x' }] }, CONTRACT.list).length, 7);
+  // release 2 (R2-19, R2-24): a page of a list carries its next cursor and the list's total, each row its opens_pdf
+  assert.deepEqual(walk.shapeProblems({ encounters: [], next: null, total: 0 }, CONTRACT.list), []);
+  assert.deepEqual(walk.shapeProblems({ encounters: [], next: '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', total: null }, CONTRACT.list), []);
+  assert.deepEqual(walk.shapeProblems({ encounters: [] }, CONTRACT.list), ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)']);
+  assert.deepEqual(walk.shapeProblems({ encounters: [{ id: 'x' }], next: null, total: 1 }, CONTRACT.list).length, 8);
   assert.deepEqual(['GET /api/session', 'GET /api/encounters (page)', 'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666',
     'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original', 'POST /api/encounters (page)'].map(walk.contractFor),
   ['session', 'list', 'encounter', null, null]);
+  // release 2 (R2-20, R2-24): a page of a search is held to the list's contract; nothing else that resembles it is
+  assert.deepEqual(['POST /api/encounters/search (page)', 'POST /api/encounters/search', 'GET /api/encounters/search',
+    'POST /api/encounters/searches (page)', 'POST /api/encounters/search/x (page)'].map(walk.contractFor),
+  ['list', 'list', null, null, null]);
+});
+
+test('an /api/ answer\'s ETag is absent or a quoted UUID, W/ allowed - never a hash; a static one is not read', () => {
+  // release 2 (R2-15, R2-24): the in-page view's validator; ops/scan_customer.py etag_hits reads it the same way
+  const tag = '"0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17"';
+  const where = 'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original (page)';
+  for (const value of [tag, `W/${tag}`, ` ${tag} `]) assert.deepEqual(walk.etagHits({ ETag: value }, where), [], value);
+  assert.deepEqual(walk.etagHits({}, where), []);
+  assert.deepEqual(walk.etagHits({ 'content-type': 'application/pdf' }, where), []);
+  const hash = `"${'ab'.repeat(32)}"`;
+  for (const value of [hash, `"${'ab'.repeat(8)}"`, tag.slice(1, -1), `"${'0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17'.toUpperCase()}"`,
+    `${tag}, ${tag}`, 'W/"x"', '*']) {
+    const hits = walk.etagHits({ etag: value }, where);
+    assert.deepEqual(hits.map(hit => [hit.id, hit.severity, hit.surface]), [['etag_shape', 'hard', 'header']], value);
+  }
+  assert.deepEqual(walk.etagHits({ etag: hash }, 'GET /static/studio/app.0123456789ab.js'), []);  // WhiteNoise's own
+  assert.deepEqual(walk.etagHits({ etag: hash }, 'POST /api/encounters/search (page)').length, 1);
+  assert.equal(walk.checkScan('scan.json', walk.etagHits({ ETag: hash }, where), 'the customer API bodies and headers')[0].status, 'fail');
 });
 
 test('units: a number is shown as that number and units not given as "not given"', () => {

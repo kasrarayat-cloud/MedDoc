@@ -25,7 +25,8 @@ from tests.support import rounds as r
 
 Round = models.CodingRound
 SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
-ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'}
+ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind', 'opens_pdf'}
+LIST_KEYS = {'encounters', 'next', 'total'}  # release 2 (R2-19, R2-24): one page, its next cursor, the list's total
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',
                   'activity'}
@@ -77,8 +78,11 @@ class ContractTests(ApiCase):
         self.assertEqual(session['counts'], {'documents': 2, 'queue': 1})
         listing = self.get_json('/api/encounters')
         self.assert_contract(listing, 'list')
+        self.assertEqual(set(listing), LIST_KEYS)
+        self.assertEqual((listing['next'], listing['total']), (None, 2))  # the whole list on its first page
         self.assertEqual([row['id'] for row in listing['encounters']], [str(queued.pk), str(done.pk)])
         self.assertEqual(set(listing['encounters'][0]), ROW_KEYS)
+        self.assertEqual([row['opens_pdf'] for row in listing['encounters']], [False, True])  # a paste; a small PDF
         self.assertEqual((listing['encounters'][0]['kind'], listing['encounters'][1]['kind']), ('paste', 'upload'))
         self.assertEqual(listing['encounters'][1]['insurance'], 'medicare')
         for enc in (done, queued):
@@ -690,3 +694,145 @@ class ImportGraphTests(TestCase):
                               text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stderr[-2000:])
         self.assertEqual(done.stdout.strip().splitlines()[-1], '[]')
+
+
+# --- release 2, R2-25: one read of the round and its decisions per detail ---------------------------------------------
+# Release 1's encounter_json (studio/customer.py at 9ee0c85be), verbatim but for its state reads, which are release 1's
+# own too (tests.test_state's oracle): the payload release 2 must equal, in every state a document reads.
+
+from datetime import timedelta  # noqa: E402 - this section's own imports
+
+from django.db import connection  # noqa: E402
+from django.test.utils import CaptureQueriesContext  # noqa: E402
+
+from tests.test_read_audit import member_client  # noqa: E402 - a signed-in session as the door writes it
+from tests.test_state import r2_25_release_1  # noqa: E402
+
+
+def r2_25_release_1_encounter_json(encounter, membership, *, now=None) -> dict:
+    """GET /api/encounters/<id> as release 1 built it: the round read, then its decisions, then compute (which reads
+    both again), then the exports' last decision (read a fourth time)."""
+    compute, current_decisions = r2_25_release_1()
+    c = customer
+    now = now or timezone.now()
+    can_review = bool(membership.can_review)
+    round_ = state.latest_round(encounter)
+    current = current_decisions(round_) if round_ is not None and round_.state == Round.DONE else {}
+    value = compute(encounter) if round_ is not None else c.EARLIER
+    return {
+        'id': str(encounter.pk), 'title': encounter.title, 'created_at': c.iso(encounter.created_at),
+        'updated_at': c.iso(encounter.updated_at), 'state': value, 'state_label': c.STATE_LABELS.get(value, value),
+        'permissions': {'can_review': can_review},
+        'document': c.document_json(encounter),
+        'context': {'service_date': c.service_date(encounter), 'insurance': c.insurance(encounter)},
+        'progress': c.progress_json(encounter, round_, can_review, now),
+        'round': ({'number': round_.number, 'trigger': round_.trigger, 'finished_at': c.iso(round_.finished_at)}
+                  if round_ is not None else None),
+        'codes': c.round_rows(round_, current, can_review),
+        'questions': c.questions_json(round_),
+        'answers': c.answers_json(encounter),
+        'notes': c.notes_json(round_),
+        'readiness': c.readiness(round_, current),
+        'reports': c.reports_json(encounter, round_),
+        'activity': c.activity_json(encounter),
+    }
+
+
+class R2DetailReadOnceTests(ApiCase):
+    """R2-25: the detail reads the latest round once and its decisions once; its payload equals release 1's in every
+    state, its statements drop, and a decision recorded after an export - a revoke included - still marks it earlier."""
+
+    def membership(self, user=None):
+        return models.Membership.objects.select_related('workspace', 'workspace__category').get(
+            user=user or self.reviewer, workspace=self.ws)
+
+    def documents(self):
+        """{state: an encounter reading it}: every state a document can read, with decisions and exports beside."""
+        coded = self.done(title='Synthetic answered note')  # first: done() codes the next queued round
+        out = {'processing': self.started(title='Synthetic queued note')}
+        stopped = self.encounter(title='Synthetic stopped note')
+        r.write_round(stopped, state_=Round.CANCELLED)
+        failed = self.encounter(title='Synthetic failed note')
+        r.write_round(failed, state_=Round.FAILED, failure_kind='busy', error=jobs.FAILURE_TEXT['busy'])
+        out.update(stopped=stopped, failed=failed, awaiting_answer=coded)
+        for name, codes in (('needs_review', [r.row('45378', 'needs_review'), r.row('45385', 'ready')]),
+                            ('ready', [r.row('45385', 'ready'), r.row('45380', 'not_supported')]),
+                            ('reviewed', [r.row('45385', 'ready'), r.row('45378', 'needs_review')]),
+                            ('no_codes', [r.row('45380', 'not_supported')])):
+            enc = self.encounter(title=f'Synthetic {name} note')
+            r.write_round(enc, codes=codes)
+            out[name] = enc
+        reviewed = out['reviewed']
+        self.assertEqual(self.decide(reviewed, 'L1', '45385', 'approve').status_code, 201)
+        self.assertEqual(self.decide(reviewed, 'L2', '45378', 'reject').status_code, 201)
+        export = self.post_json(f'/api/encounters/{reviewed.pk}/reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1})
+        self.assertEqual(export.status_code, 201, export.content)
+        self.assertEqual(self.decide(out['ready'], 'L1', '45385', 'approve').status_code, 201)
+        self.assertEqual(self.decide(out['ready'], 'L1', '45385', 'revoke').status_code, 201)  # ready again
+        out['earlier'] = f.encounter(self.ws, self.reviewer, title='Synthetic note of the earlier system')
+        for name, enc in out.items():
+            enc.refresh_from_db()
+            self.assertEqual(customer.encounter_json(enc, self.membership())['state'], name)  # each state reached
+        return out
+
+    def test_the_payload_equals_release_1s_in_every_state(self):
+        now = timezone.now()
+        docs = self.documents()
+        for user in (self.reviewer, self.viewer):  # a reviewer's allowed actions, and a viewer's none
+            membership = self.membership(user)
+            for name, enc in docs.items():
+                with self.subTest(state=name, user=user.username):
+                    self.assertEqual(customer.encounter_json(enc, membership, now=now),
+                                     r2_25_release_1_encounter_json(enc, membership, now=now))
+
+    def test_the_round_and_its_decisions_are_each_read_once(self):
+        docs = self.documents()
+        membership = self.membership()
+        decision_reads = lambda seen: [q['sql'] for q in seen.captured_queries if 'FROM "studio_codedecision"' in q['sql']]
+        latest_reads = lambda seen: [q['sql'] for q in seen.captured_queries
+                                     if 'FROM "studio_codinground"' in q['sql']
+                                     and 'ORDER BY "studio_codinground"."number" DESC' in q['sql']]
+        # (decisions read by release 1, statements release 2 saves) for each state: a done round past its questions
+        # read its decisions three times (the codes, compute, the exports), one with questions twice, any other round
+        # once (the exports), and no round never
+        expected = {'processing': (1, 1), 'stopped': (1, 1), 'failed': (1, 1), 'awaiting_answer': (2, 2),
+                    'needs_review': (3, 3), 'ready': (3, 3), 'reviewed': (3, 3), 'no_codes': (3, 3), 'earlier': (0, 0)}
+        for name, enc in docs.items():
+            with self.subTest(state=name):
+                with CaptureQueriesContext(connection) as old:
+                    r2_25_release_1_encounter_json(enc, membership)
+                with CaptureQueriesContext(connection) as new:
+                    customer.encounter_json(enc, membership)
+                self.assertEqual(len(decision_reads(old)), expected[name][0])
+                self.assertEqual(len(decision_reads(new)), 0 if name == 'earlier' else 1)
+                self.assertEqual(len(latest_reads(new)), 1)
+                self.assertEqual(len(old.captured_queries) - len(new.captured_queries), expected[name][1])
+
+    def test_a_detail_read_and_a_poll_stay_within_their_statement_gates(self):
+        enc = self.documents()['reviewed']
+        member = member_client(self.reviewer)
+        url = f'/api/encounters/{enc.pk}'
+        with CaptureQueriesContext(connection) as detail:
+            self.assertEqual(member.get(url).status_code, 200)
+        with CaptureQueriesContext(connection) as poll:
+            self.assertEqual(member.get(url, HTTP_X_CPT_POLL='1').status_code, 200)  # within the minute: no row
+        # RELEASE-2-SPEC section 8: detail <= 19 (release 1: 21), poll <= 17 (release 1: 18)
+        self.assertLessEqual(len(detail.captured_queries), 19, [q['sql'][:80] for q in detail.captured_queries])
+        self.assertLessEqual(len(poll.captured_queries), 17, [q['sql'][:80] for q in poll.captured_queries])
+        self.assertLess(len(poll.captured_queries), len(detail.captured_queries))
+
+    def test_a_decision_recorded_after_an_export_marks_it_earlier_a_revoke_included(self):
+        enc = self.done(title='Synthetic exported note')
+        self.assertEqual(self.decide(enc, 'L1', '45385', 'approve').status_code, 201)
+        made = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1}).json()
+        reports = lambda: {item['id']: item['current'] for item in self.get_json(f'/api/encounters/{enc.pk}')['reports']}
+        self.assertEqual(reports(), {made['id']: True})
+        later = timezone.now() + timedelta(seconds=1)  # the revoke is recorded after the export, to the microsecond
+        with mock.patch.object(timezone, 'now', return_value=later):
+            self.assertEqual(self.decide(enc, 'L1', '45385', 'revoke').status_code, 201)
+        # the round's current decisions are none now; its newest decision - the revoke - is after the export
+        self.assertEqual(state.current_decisions(state.latest_round(enc)), {})
+        self.assertEqual(reports(), {made['id']: False})
+        membership = self.membership()
+        self.assertEqual(customer.encounter_json(enc, membership)['reports'],
+                         r2_25_release_1_encounter_json(enc, membership)['reports'])

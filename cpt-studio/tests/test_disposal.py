@@ -69,6 +69,10 @@ class ClosedPracticeTests(rounds.CustomerCase, TestCase):
         self.assertEqual(client.get(f'/api/encounters/{enc.pk}').status_code, 200)
         self.assertEqual(client.get(f'/api/encounters/{enc.pk}/original').content, f.PDF_BYTES)
         self.assertIn(str(enc.pk), json.dumps(client.get('/api/encounters').json()))
+        # release 2 (R2-20): and found by the search
+        found = client.post('/api/encounters/search', data=json.dumps({'text': enc.title}),
+                            content_type='application/json')
+        self.assertEqual([row['id'] for row in found.json()['encounters']], [str(enc.pk)])
 
     def test_no_coding_starts_in_a_closed_practice(self):
         failed = self.encounter()

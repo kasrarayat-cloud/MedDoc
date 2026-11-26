@@ -452,9 +452,12 @@ class ListRepeatTests(ReadCase):
         (first,) = self.lists()
         repeat = models.AccessRecordRepeat.objects.get(record_id=first.pk)
         self.assertEqual((repeat.repeats, repeat.last_at, first.as_of), (4, start + timedelta(seconds=40), start))
-        # what an auditor reads: who, the practice, how many rows, from when to when, how many times
+        # what an auditor reads: who, the practice, how many rows, from when to when, how many times - and since release
+        # 2 (R2-21) which documents, in the order shown, and which list and part of it
         self.assertEqual((first.actor_id, first.workspace_id, first.count, first.outcome),
                          (self.reviewer.pk, self.ws.pk, self.ws.encounters.count(), read_audit.SERVED))
+        self.assertEqual((first.encounter_ids, first.filters),
+                         ([str(self.text.pk), str(self.enc.pk)], {'list': 'documents', 'before': None}))
         with self.at(start, 61):  # past the window: a record of its own
             self.member.get(LIST)
         self.assertEqual(len(self.lists()), 2)
@@ -472,6 +475,54 @@ class ListRepeatTests(ReadCase):
             self.member.get(LIST)  # the practice's list changed: another count
         self.assertEqual(len(self.lists()), 5)
         self.assertFalse(models.AccessRecordRepeat.objects.exists())
+
+    def test_the_same_number_of_other_documents_is_a_record_of_its_own(self):
+        # release 2 (R2-21): a list record names its documents, so a read showing as many documents - but others, or the
+        # same in another order - is its own record, where release 1's rule (count and filters) counted it a repeat
+        start = self.start()
+        with self.at(start, 0):
+            self.member.get(LIST)
+        swapped = f.encounter(self.ws, self.reviewer, title=f'{TITLE_MARKER} another synthetic note')
+        models.Encounter.objects.filter(pk=self.text.pk).update(destroyed_at=timezone.now(), title='')
+        with self.at(start, 1):
+            self.member.get(LIST)
+        models.Encounter.objects.filter(pk=swapped.pk).update(created_at=self.enc.created_at - timedelta(seconds=1))
+        with self.at(start, 2):
+            self.member.get(LIST)
+        records = self.lists()
+        self.assertEqual([row.count for row in records], [2, 2, 2])
+        self.assertEqual([row.encounter_ids for row in records],
+                         [[str(self.text.pk), str(self.enc.pk)], [str(swapped.pk), str(self.enc.pk)],
+                          [str(self.enc.pk), str(swapped.pk)]])
+        self.assertFalse(models.AccessRecordRepeat.objects.exists())
+
+    def test_a_later_page_again_within_the_window_is_counted_and_after_it_or_midnight_is_its_own(self):
+        for index in range(50):  # 52 documents: a later page of 2
+            f.encounter(self.ws, self.reviewer, title=f'{TITLE_MARKER} synthetic page note {index}')
+        start = self.start()
+        with self.at(start, 0):
+            later = f'{LIST}?before={self.member.get(LIST).json()["next"]}'
+        for second in (1, 30, 59):
+            with self.at(start, second):
+                self.assertEqual(len(self.member.get(later).json()['encounters']), 2)
+        pages = [row for row in self.lists() if row.filters['before']]
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(models.AccessRecordRepeat.objects.get(record_id=pages[0].pk).repeats, 2)
+        with self.at(start, 62):  # past the window of the page's record (made at 1 s): a record of its own
+            self.member.get(later)
+        self.assertEqual(len([row for row in self.lists() if row.filters['before']]), 2)
+        # over UTC midnight, in a session signed in a moment before it (a session's times are never in the future, and
+        # the next midnight may be past this session's cap)
+        midnight = (start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        with self.at(midnight - timedelta(seconds=5), 0):
+            evening = member_client(self.reviewer)
+        with self.at(midnight - timedelta(seconds=1), 0):
+            self.assertEqual(evening.get(later).status_code, 200)
+        with self.at(midnight, 0):  # 1 s later, a new UTC day: a record of its own, not a repeat
+            self.assertEqual(evening.get(later).status_code, 200)
+        pages = [row for row in self.lists() if row.filters['before']]
+        self.assertEqual(len(pages), 4)
+        self.assertFalse(models.AccessRecordRepeat.objects.filter(record_id__in=[row.pk for row in pages[2:]]).exists())
 
     def test_every_detail_view_and_download_read_still_writes_its_own_record(self):
         start = self.start()

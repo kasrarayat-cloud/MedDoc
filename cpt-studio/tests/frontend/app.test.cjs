@@ -512,7 +512,8 @@ test('the fixtures cover every state the page draws, and the list matches them, 
   for (const name of ['session.json', 'session-agent.json']) {
     assert.deepEqual(fixture(name).counts, { documents: rows.length, queue: rows.filter(app.inQueue).length }, name);
   }
-  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [] });
+  // R2-19: a list answer carries next and total
+  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [], next: null, total: 0 });
 });
 
 test('every quote in the fixtures is the synthetic document\'s own text, on the page it names', () => {

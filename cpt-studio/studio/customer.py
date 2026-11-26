@@ -2,7 +2,9 @@
 built from stored rows on each request.
 
 - session_json: GET /api/session.
-- list_rows: GET /api/encounters.
+- list_page: GET /api/encounters - one page of a list (release 2, R2-19: Documents and the Review queue 50 rows a page,
+  the Overview's recent 5), newest first, with the cursor of the next page and, on a first page, the list's total.
+- search_page: POST /api/encounters/search - one page of the practice's documents whose row holds the words (R2-20).
 - encounter_json: GET /api/encounters/<id> - the document and its in-page view, the practice's context, the progress of
   the latest coding round, its code lines (each with its line, the second check's verdict, its quotes, its current
   decision - with the id an undo names - and the decisions the member may record), its questions (each naming the
@@ -11,7 +13,8 @@ built from stored rows on each request.
   decision named by its line and its code).
 - view_content: what GET /api/encounters/<id>/original?view=1 serves - the original PDF or text, a pasted text, or for
   a Word document the PDF the coding review read (CodingRound.view_pdf_*: the converted file, so the pages the quotes
-  name are the pages shown).
+  name are the pages shown); since release 2 (R2-15) built from view_source (what is shown, read from the rows alone,
+  so a re-open the page holds can be answered 304 with no stored file read) and view_bytes (its bytes, checked).
 
 Only the latest round is shown: while it is queued or running, failed or stopped, it has no codes. Every code row is a
 line of its own (FIX-SPEC 1: L1.. the reader's, M1.. the second check's additions), and its decision, quotes and
@@ -43,10 +46,11 @@ from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
-from django.db.models import Exists, OuterRef
+from django.db import connection
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
-from . import decisions, jobs, models, state
+from . import decisions, jobs, models, paging, state
 from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_own_original
 
@@ -179,8 +183,19 @@ def initials(user) -> str:
     return (''.join(part[0] for part in parts[:2]) or name[:2]).upper()
 
 
-def _with_rounds(queryset):
-    return queryset.annotate(has_round=Exists(Round.objects.filter(encounter_id=OuterRef('pk'))))
+def in_queue(queryset):
+    """``queryset``'s documents that wait on a member - questions to answer, codes to review or to approve: a stored
+    state of QUEUE_STATES and a coding round. The one rule the Review queue's pages, its total and the session's queue
+    count all read, so the three agree by construction (release 2, R2-19). The round is tested per document, a one-row
+    subquery by the rounds' encounter index, so no statement reads a whole rounds table: a page stops at its 51st row, a
+    count probes once per waiting document. An EXISTS let PostgreSQL hash every practice's rounds for the count instead:
+    faster wherever about half or more of a large practice waits (customer.session_json
+    18.3 ms against 35.9 ms, customer.list_page('queue') 25.1 ms against 40.1 ms, at 18,250 such documents among
+    30,000), slower on a practice shaped like live's, where each document has its round and about one in twenty waits
+    (the queue's COUNT 7.4 ms against 2.1 ms on section 8's bench data; refutation round 1, avail[1]). These are times
+    of the function or the statement alone; a request adds about 5-14 ms (the session, the membership, the record)."""
+    first_round = Subquery(Round.objects.filter(encounter_id=OuterRef('pk')).order_by().values('pk')[:1])
+    return queryset.filter(state__in=QUEUE_STATES).alias(queue_round=first_round).filter(queue_round__isnull=False)
 
 
 def live(queryset):
@@ -194,7 +209,7 @@ def session_json(user, membership) -> dict:
     document, and those waiting on a member: questions to answer, codes to review or to approve)."""
     workspace = membership.workspace
     encounters = live(workspace.encounters.all())
-    queue = _with_rounds(encounters).filter(has_round=True, state__in=QUEUE_STATES).count()
+    queue = in_queue(encounters).count()
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'specialty': workspace.category.name},
@@ -259,24 +274,235 @@ def stored_state(encounter, has_round: bool) -> str:
     return state.compute(encounter) or EARLIER
 
 
-def document_kind(encounter) -> str:
+def document_kind(encounter, has_file=None) -> str:
+    """What the document is: its current revision's kind (upload or paste), or for an earlier system's revision (an
+    addendum, or none) an upload when it has a stored file and a paste otherwise. ``has_file``: whether it has one, when
+    the caller has read it (the list reads every row's first file in one statement); otherwise asked here."""
     revision = encounter.current_revision
     if revision is not None and revision.kind in (Revision.UPLOAD, Revision.PASTE):
         return revision.kind
-    return Revision.UPLOAD if encounter.files.exists() else Revision.PASTE
+    if has_file is None:
+        has_file = encounter.files.exists()
+    return Revision.UPLOAD if has_file else Revision.PASTE
 
 
-def list_rows(membership) -> list:
-    """GET /api/encounters: the workspace's encounters, newest first."""
-    rows = _with_rounds(live(membership.workspace.encounters.select_related('current_revision'))).order_by('-created_at')
+# --- the paged lists (release 2, R2-19 and R2-16) ---------------------------------------------------------------------
+# GET /api/encounters?list=documents|queue|recent[&before=<cursor>] answers {"encounters": [row...], "next", "total"}:
+# Documents and the Review queue 50 rows a page (51 read, to know whether more follow), the Overview's recent 5 with no
+# next page; newest first - created_at descending, then id (the console's keyset, studio.paging). total is the list's
+# exact number on a first page only: the rows' own number when the whole list is on it, else one COUNT; null for recent
+# and for a later page. A page is three statements, whatever the practice holds - its rows (one indexed read of
+# studio_enc_ws_time, or studio_enc_ws_queue for the queue), the ids among them with a coding round, and each one's first
+# stored file - plus that COUNT on a first page that has more. The flags are read apart, over the page's ids: an EXISTS
+# in the SELECT list made PostgreSQL hash every practice's rounds for a 51-row page. Each row goes through release 1's
+# own rules (stored_state, service_date, insurance, document_kind), so it is release 1's row but for opens_pdf: true when
+# the first stored file (original_file's order) is a PDF of at most OPENS_PDF_MAX_BYTES, so the page may ask for its view
+# at the click (R2-16; a Word document's converted view is not hinted: release 2 stores no size for it, C6, D-R2-31).
+
+LIST_DOCUMENTS, LIST_QUEUE, LIST_RECENT = 'documents', 'queue', 'recent'
+LIST_NAMES = (LIST_DOCUMENTS, LIST_QUEUE, LIST_RECENT)
+LIST_PAGE_ROWS, LIST_RECENT_ROWS = 50, 5
+OPENS_PDF_MAX_BYTES = 1024 * 1024  # 1 MiB: every live GI PDF qualifies (the largest is 891 KB)
+LIST_FIELDS = ('pk', 'title', 'state', 'user_values', 'created_at', 'current_revision__kind')
+
+
+def list_rows_of(found) -> list:
+    """The list rows of ``found`` - step 1's values (LIST_FIELDS) of a page, in order - by R2-19's steps 2 and 3: the
+    page's ids that have a coding round, then each one's first stored file (one DISTINCT ON read), each row then built
+    by release 1's rules, with opens_pdf."""
+    ids = [row['pk'] for row in found]
+    rounds = set(Round.objects.filter(encounter_id__in=ids).order_by().values_list('encounter_id', flat=True))
+    files = {item['encounter_id']: item for item in models.SourceFile.objects.filter(encounter_id__in=ids)
+             .order_by('encounter_id', 'uploaded_at', 'pk').distinct('encounter_id')
+             .values('encounter_id', 'media_type', 'size')}
     out = []
-    for encounter in rows:
-        value = stored_state(encounter, encounter.has_round)
-        out.append({'id': str(encounter.pk), 'title': encounter.title, 'state': value,
+    for row in found:
+        kind = row['current_revision__kind']
+        encounter = SimpleNamespace(pk=row['pk'], state=row['state'], user_values=row['user_values'],
+                                    current_revision=SimpleNamespace(kind=kind) if kind is not None else None)
+        first = files.get(row['pk'])
+        value = stored_state(encounter, row['pk'] in rounds)
+        out.append({'id': str(row['pk']), 'title': row['title'], 'state': value,
                     'state_label': STATE_LABELS.get(value, value), 'service_date': service_date(encounter),
-                    'insurance': insurance(encounter), 'created_at': iso(encounter.created_at),
-                    'kind': document_kind(encounter)})
+                    'insurance': insurance(encounter), 'created_at': iso(row['created_at']),
+                    'kind': document_kind(encounter, has_file=first is not None),
+                    'opens_pdf': (first is not None and first['media_type'] == PDF
+                                  and first['size'] <= OPENS_PDF_MAX_BYTES)})
     return out
+
+
+def list_page(membership, which, before=None) -> dict:
+    """One page of GET /api/encounters (see above) of ``membership``'s practice: ``which`` one of LIST_NAMES, ``before``
+    the cursor the page starts after (None: the first page; never for recent) - both read by the API before this, which
+    refuses anything else. {'encounters': rows, 'next': the next page's cursor or None, 'total': int or None}."""
+    if which not in LIST_NAMES or (before is not None and (which == LIST_RECENT or paging.parse(before) is None)):
+        raise ValueError('list_page is given a list and a cursor the API has read.')
+    listed = live(models.Encounter.objects.filter(workspace_id=membership.workspace_id))
+    if which == LIST_QUEUE:
+        listed = in_queue(listed)
+    page, _cursor = paging.older_than(listed, before)
+    size = LIST_RECENT_ROWS if which == LIST_RECENT else LIST_PAGE_ROWS
+    found = list(page.order_by('-created_at', '-pk').values(*LIST_FIELDS)[:size if which == LIST_RECENT else size + 1])
+    shown = found[:size]
+    more = len(found) > size
+    total = None
+    if which != LIST_RECENT and before is None:
+        total = listed.count() if more else len(shown)
+    return {'encounters': list_rows_of(shown),
+            'next': paging.cursor_of(shown[-1]['created_at'], shown[-1]['pk']) if more else None, 'total': total}
+
+
+# --- the search (release 2, R2-20) -------------------------------------------------------------------------------------
+# POST /api/encounters/search pages the practice's live documents whose row, as the page draws it, holds the words: the
+# page's own rule (app.js applySearch: the row's text, lower-cased, includes the words, trimmed), read in SQL. The row's
+# text is documentRow's, rebuilt from the stored row: the title trimmed of JavaScript's white space, or "Untitled
+# document"; the kind's label; " · " and the insurance's label when the insurance is shown; the state's label, or "Earlier
+# review" for a document with no coding round; the service date as "6 Nov 2026" when it is a calendar date the page reads
+# (app.js parseIsoDate: four-digit years from 0100), else "Not entered". Matching is strpos over both sides lower-cased in
+# PostgreSQL's builtin pg_c_utf8 collation (PostgreSQL 17 or newer), the words a bound parameter, so nothing in them is a
+# wildcard. The browser lower-cases some letters otherwise - a final sigma by its neighbours, a dotted capital I into two
+# letters, and capitals newer than PostgreSQL 17's tables (Unicode 15.1), which leave them as they are (SEARCH_NEWER: 27
+# of Unicode 16.0, U+1C89, U+A7CB, U+A7CC, U+A7DA, U+A7DC and Garay's U+10D50-U+10D65, and 28 of Unicode 17.0, U+A7CE,
+# U+A7D2, U+A7D4 and Beria Erfe's U+16EA0-U+16EB8) - so when the words hold any of these, in either case, or the
+# combining dot, both sides are also folded (translate: final sigma to sigma, each newer capital whose letter the words
+# hold to the browser's small letter, the combining dot dropped; search_fold), and the search never finds fewer
+# documents than the page's rule, more only there. That holds in a browser whose newer letters SEARCH_NEWER holds: one
+# on a later Unicode release can lower-case a letter the search does not fold, until the table is extended (D-R2-42;
+# API.md's known limits). The words are at most SEARCH_MAX_CHARS characters, not counting the combining dot above
+# (U+0307): the one letter whose lower case is longer (U+0130, to i and U+0307) adds only that dot, so the count is the
+# same before and after the page lower-cases the words (search_length).
+# One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
+# (list_rows_of). The text needs each row's revision kind and whether it has a round (and, for an earlier system's row,
+# a file): each is looked up per row, as a one-row subquery, so the walk stops at the 51st match - a join made
+# PostgreSQL hash every practice's revisions and sort the practice instead, and an EXISTS inside an expression may be
+# planned as a hash of every practice's rounds. A document whose stored state is none of today's would match by its
+# stored word, where the page draws it computed; none exists once the app phase has recomputed the states (R2-19's
+# recorded risk).
+
+JS_WHITE_SPACE = ('\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f'
+                  '\u205f\u3000\ufeff')  # what JavaScript's String.prototype.trim removes (measured on node 22)
+# The capitals a browser lower-cases and PostgreSQL 17's tables (Unicode 15.1) do not, each to the letter the browser
+# lowers it to, against PostgreSQL 17.11's pg_c_utf8: Unicode 16.0's (node 22.22.0 with ICU 77.1, and Chromium 147) and
+# Unicode 17.0's (Chromium 153 with ICU 78). tests/test_lists.py checks over every code point that each engine present
+# on its host, and a committed table of Chromium 153's, lower-cases no letter PostgreSQL leaves as it is that this table
+# does not map the same way; a browser on a later Unicode release needs its letters added here (API.md's known limits).
+SEARCH_NEWER = {'\u1c89': '\u1c8a', '\ua7cb': '\u0264', '\ua7cc': '\ua7cd', '\ua7da': '\ua7db', '\ua7dc': '\u019b',
+                **{chr(cp): chr(cp + 0x20) for cp in range(0x10d50, 0x10d66)},  # and Garay's 22 capitals
+                '\ua7ce': '\ua7cf', '\ua7d2': '\ua7d3', '\ua7d4': '\ua7d5',  # Unicode 17.0 (Chromium 153, ICU 78)
+                **{chr(cp): chr(cp + 0x1b) for cp in range(0x16ea0, 0x16eb9)}}  # and Beria Erfe's 25 capitals
+SEARCH_FOLDED = ('\u03a3\u03c3\u03c2\u0130\u0307'  # sigma (capital, small, final), dotted capital I, combining dot above
+                 + ''.join(SEARCH_NEWER) + ''.join(SEARCH_NEWER.values()))  # and the newer letters, in either case
+SEARCH_MAX_CHARS = 240  # not counting the combining dot above: a row's text is at most about 224 characters
+# app.js's own words for the row (KIND_LABELS, INSURANCE_SHOWN, MONTHS' first three letters); tests/test_lists.py holds the
+# rebuilt text to the shipped documentRow's (tests/frontend/row_text.cjs)
+SEARCH_KIND_TEXT = {Revision.UPLOAD: 'Uploaded file', Revision.PASTE: 'Pasted text'}
+SEARCH_INSURANCE_TEXT = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other'}
+SEARCH_MONTHS = 'JanFebMarAprMayJunJulAugSepOctNovDec'
+
+
+def search_words(text) -> str:
+    """The words a search looks for: ``text`` trimmed as the page trims what was typed (JavaScript's trim)."""
+    return text.strip(JS_WHITE_SPACE)
+
+
+def search_fold(words) -> tuple:
+    """translate's (FROM, TO) for folding ``words`` and the rows: final sigma to sigma, each newer capital whose letter
+    the words hold (in either case) to the browser's small letter, and the combining dot last, past TO's end, so dropped.
+    A newer letter the words do not hold cannot take part in a match, so leaving it out changes nothing found - and
+    translate reads FROM for every character of every row: all 27, always, doubled a folding search's time at 18,000
+    documents (refutation round 1)."""
+    held = [capital for capital, small in SEARCH_NEWER.items() if capital in words or small in words]
+    return '\u03c2' + ''.join(held) + '\u0307', '\u03c3' + ''.join(SEARCH_NEWER[capital] for capital in held)
+
+
+def search_length(words) -> int:
+    """How long ``words`` are against SEARCH_MAX_CHARS: their characters, not counting the combining dot above (U+0307),
+    so the same as typed and as the page lower-cases them (see above)."""
+    return len(words) - words.count('\u0307')
+
+
+def _sql_text(value) -> str:
+    """A constant of this module as an SQL string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def search_row_text_sql() -> str:
+    """The SQL expression of a row's text (documentRow's, as above) over studio_encounter e, its current revision's kind
+    d.kind and its service date d.sd (search_from_sql) - the one expression the search matches and tests/test_lists.py
+    compares with the page's."""
+    rounds, files = models.CodingRound._meta.db_table, models.SourceFile._meta.db_table
+    has_round = f'(SELECT 1 FROM {rounds} r WHERE r.encounter_id = e.id LIMIT 1) IS NOT NULL'
+    has_file = f'(SELECT 1 FROM {files} s WHERE s.encounter_id = e.id LIMIT 1) IS NOT NULL'
+    title = f"COALESCE(NULLIF(btrim(e.title, %(space)s), ''), {_sql_text('Untitled document')})"
+    upload, paste = (_sql_text(SEARCH_KIND_TEXT[kind]) for kind in (Revision.UPLOAD, Revision.PASTE))
+    kind = (f"(CASE d.kind WHEN {_sql_text(Revision.UPLOAD)} THEN {upload} WHEN {_sql_text(Revision.PASTE)} THEN "
+            f"{paste} ELSE (CASE WHEN {has_file} THEN {upload} ELSE {paste} END) END)")
+    shown = ' '.join(f'WHEN {_sql_text(key)} THEN {_sql_text(" · " + label)}'
+                     for key, label in SEARCH_INSURANCE_TEXT.items())
+    insurance = f"(CASE e.user_values ->> 'insurance' {shown} ELSE '' END)"
+    labels = ' '.join(f'WHEN {_sql_text(key)} THEN {_sql_text(label)}' for key, label in state.LABELS.items())
+    label = f'(CASE WHEN {has_round} THEN (CASE e.state {labels} ELSE e.state END) ELSE {_sql_text(STATE_LABELS[EARLIER])} END)'
+    day, month, year = 'substr(d.sd, 9, 2)', 'substr(d.sd, 6, 2)', 'substr(d.sd, 1, 4)'
+    leap = f'mod({year}::int, 4) = 0 AND (mod({year}::int, 100) <> 0 OR mod({year}::int, 400) = 0)'
+    calendar = (f"{day} <= '28' OR ({month} = '02' AND {day} = '29' AND {leap}) OR ({month} <> '02' AND ({day} <= '30' "
+                f"OR {month} IN ('01', '03', '05', '07', '08', '10', '12')))")
+    written = (f"ltrim({day}, '0') || ' ' || substr({_sql_text(SEARCH_MONTHS)}, {month}::int * 3 - 2, 3) || ' ' || "
+               f"ltrim({year}, '0')")
+    date = (f"(CASE WHEN d.sd ~ '^[0-9]{{4}}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' AND d.sd >= '0100' THEN "
+            f"(CASE WHEN {calendar} THEN {written} ELSE 'Not entered' END) ELSE 'Not entered' END)")
+    return f'({title} || {kind} || {insurance} || {label} || {date})'
+
+
+def search_from_sql() -> str:
+    """What the row text is read over: studio_encounter e, with d.kind - its current revision's kind, looked up per
+    document by its primary key (a join let PostgreSQL hash every practice's revisions instead of walking
+    studio_enc_ws_time) - and d.sd, the service date when it is a JSON string (service_date's rule), else NULL."""
+    encounters, revisions = models.Encounter._meta.db_table, Revision._meta.db_table
+    service_date = ("CASE WHEN jsonb_typeof(e.user_values -> 'service_date') = 'string' THEN "
+                    "e.user_values ->> 'service_date' END")
+    kind = f'(SELECT v.kind FROM {revisions} v WHERE v.id = e.current_revision_id)'
+    return f'{encounters} e CROSS JOIN LATERAL (SELECT {kind} AS kind, {service_date} AS sd) d'
+
+
+def _search_sql(fold, later) -> str:
+    """The search's one statement: the practice's live documents, newest first along studio_enc_ws_time, from the
+    cursor's position when ``later``, whose row text holds the words; folded both sides when ``fold``."""
+    hay = f'lower({search_row_text_sql()} COLLATE "pg_c_utf8")'
+    needle = 'lower(CAST(%(words)s AS text) COLLATE "pg_c_utf8")'
+    if fold:
+        hay, needle = (f'translate({side}, %(fold_from)s, %(fold_to)s)' for side in (hay, needle))
+    keyset = (' AND e.created_at <= %(moment)s AND (e.created_at < %(moment)s OR (e.created_at = %(moment)s AND '
+              'e.id < %(key)s))') if later else ''
+    return (f'SELECT e.id, e.title, e.state, e.user_values, e.created_at, d.kind FROM {search_from_sql()} '
+            f'WHERE e.workspace_id = %(workspace)s AND e.destroyed_at IS NULL{keyset} AND strpos({hay}, {needle}) > 0 '
+            f'ORDER BY e.created_at DESC, e.id DESC LIMIT %(limit)s')
+
+
+def search_page(membership, words, before=None) -> dict:
+    """One page of POST /api/encounters/search (see above) of ``membership``'s practice: the documents whose row holds
+    ``words`` (search_words', at most SEARCH_MAX_CHARS by search_length, storable - the API reads them first), 50 a page
+    from the cursor ``before`` (None: the first page). {'encounters': rows, 'next': the next page's cursor or None,
+    'total': None}."""
+    position = paging.parse(before) if before is not None else None
+    if not isinstance(words, str) or not words or search_length(words) > SEARCH_MAX_CHARS or '\x00' in words or (
+            before is not None and position is None):
+        raise ValueError('search_page is given words and a cursor the API has read.')
+    fold_from, fold_to = search_fold(words)
+    params = {'workspace': membership.workspace_id, 'words': words, 'space': JS_WHITE_SPACE,
+              'fold_from': fold_from, 'fold_to': fold_to, 'limit': LIST_PAGE_ROWS + 1}
+    if position is not None:
+        params['moment'], params['key'] = position
+    with connection.cursor() as cursor:
+        cursor.execute(_search_sql(any(ch in words for ch in SEARCH_FOLDED), position is not None), params)
+        found = [dict(zip(LIST_FIELDS, row)) for row in cursor.fetchall()]
+    values = models.Encounter._meta.get_field('user_values')
+    for row in found:  # jsonb comes back as its text, as for any JSONField read: decoded by the field itself
+        if isinstance(row['user_values'], str):
+            row['user_values'] = values.from_db_value(row['user_values'], None, connection)
+    shown = found[:LIST_PAGE_ROWS]
+    more = len(found) > LIST_PAGE_ROWS
+    return {'encounters': list_rows_of(shown),
+            'next': paging.cursor_of(shown[-1]['created_at'], shown[-1]['pk']) if more else None, 'total': None}
 
 
 # --- the document and its view ----------------------------------------------------------------------------------------------
@@ -315,26 +541,56 @@ def _converted_file(view):
     return SimpleNamespace(storage_name=view.view_pdf_storage_name, sha256=view.view_pdf_sha256)
 
 
-def view_content(encounter):
-    """(bytes, content type, file name) the in-page viewer shows, or None when there is nothing to show: the original
-    PDF or text file, the pasted text, or for a Word document the PDF the coding review read. A stored file that no
-    longer matches its sha256 raises storage.OriginalCorrupted."""
+class Shown(NamedTuple):
+    """What the in-page viewer shows (release 2, R2-15), read from the rows alone: the stored file it serves (a
+    SourceFile, or a Word document's converted view: anything with storage_name and sha256) - or None for a paste, whose
+    ``text`` it is - the content type it is served as and its file name."""
+    stored: object
+    text: Optional[str]
+    content_type: str
+    filename: str
+
+
+def view_source(encounter) -> Optional[Shown]:
+    """What GET /api/encounters/<id>/original?view=1 shows, by view_content's own branches, or None when there is
+    nothing to show - reading no stored file: the original PDF or text file, the pasted text, or for a Word document the
+    PDF the coding review read (converted_view)."""
     source = original_file(encounter)
     if source is None:
         revision = _root_revision(encounter)
         if revision is None or revision.kind != Revision.PASTE:
             return None
-        return (revision.pasted_text or '').encode('utf-8'), TEXT_SERVED, 'pasted-text.txt'
+        return Shown(None, revision.pasted_text or '', TEXT_SERVED, 'pasted-text.txt')
     if source.media_type == PDF:
-        return read_own_original(encounter.workspace_id, source), PDF, safe_name(source.original_name)
+        return Shown(source, None, PDF, safe_name(source.original_name))
     if source.media_type == TEXT:
-        return read_own_original(encounter.workspace_id, source), TEXT_SERVED, safe_name(source.original_name)
+        return Shown(source, None, TEXT_SERVED, safe_name(source.original_name))
     if source.media_type == DOCX:
         view = converted_view(encounter)
         if view is None:
             return None
-        return read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source)
+        return Shown(_converted_file(view), None, PDF, converted_name(source))
     return None
+
+
+def view_bytes(encounter, shown) -> bytes:
+    """The bytes of ``shown`` (view_source's): its stored file read and checked against its recorded sha256
+    (read_own_original: storage.OriginalCorrupted when it no longer matches, OSError when it cannot be read), or the
+    pasted text as UTF-8."""
+    if shown.stored is None:
+        return shown.text.encode('utf-8')
+    return read_own_original(encounter.workspace_id, shown.stored)
+
+
+def view_content(encounter):
+    """(bytes, content type, file name) the in-page viewer shows, or None when there is nothing to show: the original
+    PDF or text file, the pasted text, or for a Word document the PDF the coding review read. A stored file that no
+    longer matches its sha256 raises storage.OriginalCorrupted. Built from view_source and view_bytes (release 2,
+    R2-15); the record bundle reads it."""
+    shown = view_source(encounter)
+    if shown is None:
+        return None
+    return view_bytes(encounter, shown), shown.content_type, shown.filename
 
 
 # --- the document's download (release 1, C6) --------------------------------------------------------------------------
@@ -617,10 +873,17 @@ def report_json(export, latest_round_id, last_decision_at=None) -> dict:
             'current': current}
 
 
-def reports_json(encounter, round_) -> list:
+_NOT_READ = object()  # reports_json's ``decided`` when its caller has not read the round's decisions
+
+
+def reports_json(encounter, round_, decided=_NOT_READ) -> list:
+    """The document's exports, newest first, each marked current or earlier against ``round_`` (the latest round) and
+    ``decided`` - when the newest decision on it was recorded, revokes included (None: none was), as encounter_json reads
+    it from the round's decisions (release 2, R2-25); read here (last_decision_at) when not given."""
     exports = Export.objects.filter(encounter_id=encounter.pk).order_by('-created_at', '-pk').only(
         'pk', 'kind', 'fmt', 'filename', 'created_at', 'round_id')
-    decided = last_decision_at(round_.pk) if round_ is not None else None
+    if decided is _NOT_READ:
+        decided = last_decision_at(round_.pk) if round_ is not None else None
     return [report_json(export, round_.pk if round_ is not None else None, decided) for export in exports]
 
 
@@ -692,12 +955,18 @@ def activity_json(encounter) -> list:
 # --- the encounter ------------------------------------------------------------------------------------------------------------
 
 def encounter_json(encounter, membership, *, now=None) -> dict:
-    """GET /api/encounters/<id> (BUILD-SPEC 6)."""
+    """GET /api/encounters/<id> (BUILD-SPEC 6). Release 2 (R2-25): the latest round is read once, and its decisions once
+    (state.decisions_of), so the state, the codes' decisions and the exports' current marks are of one reading: the state
+    is state.derive's (compute's rules) over those decisions, and an export is earlier than the round's newest decision,
+    revokes included."""
     now = now or timezone.now()
     can_review = bool(membership.can_review)
     round_ = state.latest_round(encounter)
-    current = state.current_decisions(round_) if round_ is not None and round_.state == Round.DONE else {}
-    value = state.compute(encounter) if round_ is not None else EARLIER
+    decisions = state.decisions_of(round_) if round_ is not None else []
+    current_now = state.current_of(decisions)
+    current = current_now if round_ is not None and round_.state == Round.DONE else {}
+    value = state.derive(round_, current_now) if round_ is not None else EARLIER
+    decided = max((decision.created_at for decision in decisions), default=None)
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'created_at': iso(encounter.created_at),
         'updated_at': iso(encounter.updated_at), 'state': value, 'state_label': STATE_LABELS.get(value, value),
@@ -712,7 +981,7 @@ def encounter_json(encounter, membership, *, now=None) -> dict:
         'answers': answers_json(encounter),
         'notes': notes_json(round_),
         'readiness': readiness(round_, current),
-        'reports': reports_json(encounter, round_),
+        'reports': reports_json(encounter, round_, decided),
         'activity': activity_json(encounter),
     }
 

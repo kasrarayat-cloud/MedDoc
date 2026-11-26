@@ -16,6 +16,7 @@ URLCONFS = ('cptstudio.urls', 'cptstudio.urls_admin')
 # Each view that reads PHI, by its dotted name, and the kind its phi_read mark names.
 PHI_ROUTES = {
     'studio.api.encounters': read_audit.MEMBER_LIST,
+    'studio.api.search_encounters': read_audit.MEMBER_LIST,  # release 2 (R2-20): a page of a search
     'studio.api.encounter_detail': read_audit.MEMBER_DETAIL,
     'studio.api.original': read_audit.MEMBER_DOWNLOAD,  # and member.inline, for view=1
     'studio.api.download_report': read_audit.MEMBER_REPORT_DOWNLOAD,
@@ -35,8 +36,9 @@ OTHER_LANES = {
 ACT = 'an act: it changes something and answers a redirect, a status or the act\'s own result, never a document'
 NO_PHI_ROUTES = {
     # the doctors' host
-    'studio.views.index': 'the doctors\' app shell: the page and its scripts; every document it shows comes through '
-                          'the API\'s recorded reads',
+    'studio.views.index': 'the doctors\' app shell: the page and its scripts, and since release 2 (R2-17) the session\'s '
+                          'payload - who is signed in, the practice and counts, no document; every document it shows '
+                          'comes through the API\'s recorded reads',
     'studio.views.health': 'the service\'s health: no account and no data',
     'studio.views.login_view': 'the sign-in page',
     'studio.views.logout_view': 'signing out: it ends the session and redirects',
