@@ -2671,10 +2671,10 @@ test('list rows show the state, the kind, the insurance and the date; the queue 
   const queue = dom(app.listBody('queue', rows)).all('a.document-row').map(row => row.attr('href'));
   assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/fd000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001',
     '#doc/f5000000-0000-4000-8000-000000000001', '#doc/f9000000-0000-4000-8000-000000000001', '#doc/fc000000-0000-4000-8000-000000000001']);
-  assert.match(app.listDescription('queue', rows), /^6 documents wait on you: questions to answer, or codes to review or approve\.$/);
+  assert.match(app.listDescription('queue', app.listBody('queue', rows).match(/class="document-row"/g).length), /^6 documents wait on you: questions to answer, or codes to review or approve\.$/);
   const earlier = page.all('a.document-row').find(row => row.attr('href') === '#doc/fb000000-0000-4000-8000-000000000001');
   assert.match(earlier.text, /Synthetic colonoscopy report, earlier reviewUploaded fileEarlier review9 Nov 2026/);
-  assert.equal(app.listDescription('queue', []), 'No document waits on you for an answer or a decision.');
+  assert.equal(app.listDescription('queue', 0), 'No document waits on you for an answer or a decision.');
   assert.match(dom(app.listBody('queue', [])).text, /Nothing is waiting for you/);
   assert.equal(dom(app.listBody('workspace', rows)).all('a.document-row').length, 5);
   assert.match(dom(app.inviteMarkup(rows)).text, /Most recent · Processing · service date not entered/);
@@ -2718,7 +2718,7 @@ test('no customer page names a vendor, a model or the machinery, in text or attr
   for (const name of ENCOUNTERS) assert.deepEqual(leaks(markup(fixture(name))), [], name);
   const rows = fixture('encounters.json').encounters;
   const lists = [app.overviewView(), app.documentsView('documents'), app.documentsView('queue'), app.howItWorksView(), app.listBody('documents', rows),
-    app.listBody('queue', rows), `<p>${app.listDescription('queue', rows)}</p>`, app.inviteMarkup(rows), app.ackView({ id: rows[0].id, at: 0 }),
+    app.listBody('queue', rows), `<p>${app.listDescription('queue', 6)}</p>`, `<p>${app.listDescription('documents', 117)}</p>`, app.inviteMarkup(rows), app.ackView({ id: rows[0].id, at: 0 }),
     app.messageView('This document is not available.', 'It does not exist, or it is not in your workspace.', true)].join('\n');
   assert.deepEqual(leaks(lists), []);
   const planted = clone(fixture('encounter-ready.json'));
@@ -6336,4 +6336,550 @@ test('R2-15: the dev preview tags a PDF view as the server does - a quoted UUID 
   for (const [header, held] of [[tag, true], [`W/${tag}`, true], [`"other", ${tag}`, true], ['*', false], ['', false], [undefined, false], [tag.slice(1, -1), false]]) {
     assert.equal(preview.namesTag(header, tag), held, String(header));
   }
+});
+
+// --- R2-22: the lists a page at a time, and the search (the critics' C2 and C7) -----------------------------------------
+
+// `count` synthetic list rows, newest first: row n (from 1) is 'Synthetic polyp report n' where n is a multiple of 3, else
+// 'Synthetic document n'; odd rows wait for approval (the queue's), even ones are reviewed; with `opensPdf`, odd rows say
+// they open as a PDF.
+function listRowsOf(count, { opensPdf = false } = {}) {
+  return Array.from({ length: count }, (_, index) => {
+    const n = index + 1;
+    return { id: `f0000000-0000-4000-8000-${String(n).padStart(12, '0')}`, title: n % 3 === 0 ? `Synthetic polyp report ${n}` : `Synthetic document ${n}`,
+      state: n % 2 ? 'ready' : 'reviewed', state_label: n % 2 ? 'Ready for approval' : 'Reviewed', service_date: '2026-11-02', insurance: 'medicare',
+      created_at: new Date(Date.UTC(2026, 10, 20) - n * 60000).toISOString().replace('.000', ''), kind: 'upload', ...(opensPdf ? { opens_pdf: n % 2 === 1 } : {}) };
+  });
+}
+
+// A row's text as the page's search reads it (release 1's rule: the row's own text, lower-cased).
+const listText = row => dom(app.documentRow(row)).text.toLowerCase();
+
+// A server that pages `rows` as release 2's does (R2-19, R2-20): pages of 50 (the queue's waiting rows; the Overview's
+// recent 5); next is the last row's place ('c<index>' here: the page reads a cursor as a place only); total on a first
+// page of the documents or the queue; the search answers the rows whose text holds the words, 50 at a time, total null.
+// `release1`: the whole list, to any address. `refuse(method, url, body)` may answer instead.
+function pagedServer(rows, { release1 = false, refuse = null } = {}) {
+  const pageOf = (list, start, first) => ({ status: 200, body: { encounters: list.slice(start, start + 50), next: start + 50 < list.length ? `c${start + 50}` : null,
+    total: first ? list.length : null } });
+  return (method, url, body) => {
+    const refused = refuse?.(method, url, body);
+    if (refused) return refused;
+    const where = new URL(url, 'http://studio.test');
+    if (method === 'GET' && where.pathname === '/api/encounters') {
+      if (release1) return { status: 200, body: { encounters: rows } };
+      const which = where.searchParams.get('list') || 'documents';
+      const before = where.searchParams.get('before');
+      if (which === 'recent') return { status: 200, body: { encounters: rows.slice(0, 5), next: null, total: null } };
+      const list = which === 'queue' ? rows.filter(row => ['awaiting_answer', 'needs_review', 'ready'].includes(row.state)) : rows;
+      return pageOf(list, before ? Number(before.slice(1)) : 0, !before);
+    }
+    if (method === 'POST' && where.pathname === '/api/encounters/search') {
+      const answer = pageOf(rows.filter(row => listText(row).includes(body.text.toLowerCase())), body.before ? Number(body.before.slice(1)) : 0, false);
+      return answer;
+    }
+    return { status: 404, body: { error: 'Not found.' } };
+  };
+}
+
+// A server's answers, some held until the test lets them through (holdWhen(method, url, body) says which).
+function holding(answer) {
+  const waiting = [];
+  let hold = () => false;
+  return {
+    waiting,
+    holdWhen(fn) { hold = fn; },
+    answer: (method, url, body) => {
+      const reply = answer(method, url, body);
+      return hold(method, url, body) ? new Promise(resolve => waiting.push({ url, body, release: () => resolve(reply) })) : reply;
+    },
+  };
+}
+
+// A list view's page: #documentsTable holds the rows the page's markup draws (each {href, textContent, hidden}), takes the
+// rows a template brings, and #searchEmpty once the page has added it; #listMore and the search box; an
+// IntersectionObserver the test drives (near(): the list's end near the window, as the browser calls back); a fetch
+// answered by `answer(method, url, body)` and recorded; Web Storage that records any use. fn gets them all.
+async function withListPage(answer, fn, { observer = true } = {}) {
+  const saved = { IntersectionObserver: global.IntersectionObserver, localStorage: Object.getOwnPropertyDescriptor(global, 'localStorage'),
+    sessionStorage: Object.getOwnPropertyDescriptor(global, 'sessionStorage') };
+  const observers = [];
+  global.IntersectionObserver = observer ? class {
+    constructor(callback, options) { Object.assign(this, { callback, options, targets: new Set(), disconnected: false }); observers.push(this); }
+
+    observe(target) { this.targets.add(target); }
+
+    unobserve(target) { this.targets.delete(target); }
+
+    disconnect() { this.targets.clear(); this.disconnected = true; }
+  } : undefined;
+  const near = (on = true) => { for (const io of observers) if (!io.disconnected && io.targets.size) io.callback([...io.targets].map(target => ({ target, isIntersecting: on }))); };
+  const storage = [];
+  const recording = name => ({ getItem: key => { storage.push([name, 'get', key]); return null; }, setItem: key => storage.push([name, 'set', key]),
+    removeItem: key => storage.push([name, 'remove', key]), clear: () => storage.push([name, 'clear']), key: () => null, length: 0 });
+  Object.defineProperty(global, 'localStorage', { value: recording('localStorage'), configurable: true, writable: true });
+  Object.defineProperty(global, 'sessionStorage', { value: recording('sessionStorage'), configurable: true, writable: true });
+  try {
+    await withPage({}, async page => {
+      const calls = [];
+      const rowsOf = html => dom(html).all('a.document-row').map(row => ({ href: row.attr('href'), textContent: row.text, hidden: false }));
+      const empty = { id: '', className: '', textContent: '', attached: false, remove() { this.attached = false; } };
+      let html = '';
+      const table = {
+        rows: [],
+        get innerHTML() { return html; },
+        set innerHTML(value) { html = value; this.rows = rowsOf(value); empty.attached = false; },
+        append(content) { this.rows.push(...content.rows); },
+        appendChild(node) { if (node === empty) empty.attached = true; },
+      };
+      const more = fakeElement({ innerHTML: '', hidden: true });
+      const search = fakeElement({ id: 'documentSearch', value: '' });
+      const own = { documentsTable: table, listMore: more, documentSearch: search };
+      const element = page.element;
+      global.document.querySelector = selector => {
+        if (selector === '#searchEmpty') return empty.attached ? empty : null;
+        const id = selector.startsWith('#') ? selector.slice(1) : '';
+        return Object.hasOwn(own, id) ? own[id] : element(selector);
+      };
+      global.document.querySelectorAll = selector => (selector === '#documentsTable .document-row' ? table.rows : []);
+      global.document.createElement = tag => (tag === 'template' ? { set innerHTML(value) { this.content = { rows: rowsOf(value) }; } } : tag === 'p' ? empty : fakeElement());
+      global.fetch = async (url, init = {}) => {
+        const method = init.method || 'GET';
+        calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, headers: init.headers });
+        return response(await answer(method, url, typeof init.body === 'string' ? JSON.parse(init.body) : undefined));
+      };
+      const type = words => { search.value = words; app.onInput({ target: search }); };
+      const shown = () => table.rows.filter(row => !row.hidden);
+      await fn({ ...page, calls, table, more, search, empty, near, observers, type, shown, storage });
+    });
+  } finally {
+    app.closeList();
+    global.IntersectionObserver = saved.IntersectionObserver;
+    for (const name of ['localStorage', 'sessionStorage']) {
+      if (saved[name]) Object.defineProperty(global, name, saved[name]);
+      else delete global[name];
+    }
+  }
+}
+
+const hrefOf = row => `#doc/${encodeURIComponent(row.id)}`;
+
+test('R2-22: the list addresses; listPage reads either server\'s answer and refuses a bad one; the description counts the list', () => {
+  assert.deepEqual(app.LIST_ADDRESS, { workspace: '/api/encounters?list=recent', documents: '/api/encounters?list=documents', queue: '/api/encounters?list=queue' });
+  assert.deepEqual([app.SEARCH_URL, app.SEARCH_PAUSE_MS, app.AUTO_PAGES, app.LOCAL_SEARCH_MAX, app.MORE_TEXT], ['/api/encounters/search', 300, 3, 200, 'Show more documents']);
+  const rows = fixture('encounters.json').encounters;
+  assert.deepEqual(app.listPage({ encounters: rows }), { rows, next: null, total: null }, 'release 1\'s answer: one whole page');
+  assert.deepEqual(app.listPage(rows), { rows, next: null, total: null }, 'a bare list too');
+  assert.deepEqual(app.listPage({ encounters: rows.slice(0, 2), next: 'c2', total: 12 }), { rows: rows.slice(0, 2), next: 'c2', total: 12 });
+  assert.deepEqual(app.listPage({ encounters: [], next: null, total: 0 }), { rows: [], next: null, total: 0 });
+  assert.deepEqual(app.listPage({ encounters: [null, 7, 'x', rows[0]] }).rows, [rows[0]], 'a row that is no object is never drawn');
+  for (const bad of [null, 7, {}, { encounters: {} }, { encounters: [], next: 7 }, { encounters: [], next: {} }, { encounters: [], total: -1 },
+    { encounters: [], total: 1.5 }, { encounters: [], total: '12' }]) {
+    assert.throws(() => app.listPage(bad), { message: 'The server answered with a document list this page cannot read.' }, JSON.stringify(bad));
+  }
+  assert.equal(app.listDescription('queue', 6), '6 documents wait on you: questions to answer, or codes to review or approve.');
+  assert.equal(app.listDescription('queue', 1), 'One document waits on you: questions to answer, or codes to review or approve.');
+  assert.equal(app.listDescription('queue', 0), 'No document waits on you for an answer or a decision.');
+  assert.equal(app.listDescription('documents', 117), '117 synthetic documents in this workspace.');
+  assert.equal(app.listDescription('documents', 1), '1 synthetic document in this workspace.');
+  assert.match(app.documentsView('documents'), /<\/div><div class="list-more" id="listMore" hidden><\/div><p class="checks-disclaimer">/, 'the list\'s end follows the table');
+  const css = fs.readFileSync(STYLES, 'utf8').slice(32785);
+  assert.match(css, /\.list-more\{[^}]*min-height:1px/, 'kept in the layout while empty, so it can be seen nearing the window');
+});
+
+test('R2-22: each list asks for its own first page; release 1\'s whole answer is drawn as before; a total sets the description and the list\'s own sidebar number', async () => {
+  const rows = fixture('encounters.json').encounters;
+  for (const [name, address, drawn, description] of [['documents', '/api/encounters?list=documents', 12, '12 synthetic documents in this workspace.'],
+    ['queue', '/api/encounters?list=queue', 6, '6 documents wait on you: questions to answer, or codes to review or approve.'], ['workspace', '/api/encounters?list=recent', 5, null]]) {
+    await withListPage(pagedServer(rows, { release1: true }), async ({ calls, table, more, observers, element }) => {
+      app.state.routeSerial = 5;
+      await app.showList(name, 5);
+      assert.deepEqual(calls.map(call => call.url), [address], name);
+      assert.equal(table.rows.length, drawn, name);
+      if (description) assert.equal(element('#listDescription').textContent, description, name);
+      assert.equal(more.hidden, true, `${name}: nothing more follows`);
+      assert.equal(observers.length, 0, `${name}: nothing watched`);
+      assert.deepEqual([element('#documentsCount').textContent, element('#queueCount').textContent], ['', ''], `${name}: the session's numbers stand`);
+    });
+  }
+  const many = listRowsOf(117);
+  await withListPage(pagedServer(many), async ({ calls, table, more, observers, element }) => {
+    app.state.routeSerial = 6;
+    await app.showList('documents', 6);
+    assert.deepEqual(calls.map(call => call.url), ['/api/encounters?list=documents']);
+    assert.deepEqual(table.rows.map(row => row.href), many.slice(0, 50).map(hrefOf));
+    assert.equal(element('#listDescription').textContent, '117 synthetic documents in this workspace.');
+    assert.equal(element('#documentsCount').textContent, '117', 'the list\'s own sidebar number');
+    assert.equal(more.hidden, false, 'the end shows, empty, so it can be watched');
+    assert.equal(more.innerHTML, '', 'no button while automatic loads remain');
+    assert.equal(observers.length, 1);
+    assert.deepEqual([[...observers[0].targets], observers[0].options], [[more], { rootMargin: '600px 0px' }]);
+  });
+  await withListPage(pagedServer(many), async ({ calls, element }) => {
+    app.state.routeSerial = 7;
+    await app.showList('queue', 7);
+    assert.deepEqual(calls.map(call => call.url), ['/api/encounters?list=queue']);
+    const waiting = many.filter(row => row.state === 'ready').length;
+    assert.equal(element('#queueCount').textContent, String(waiting));
+    assert.equal(element('#listDescription').textContent, `${waiting} documents wait on you: questions to answer, or codes to review or approve.`);
+  });
+});
+
+test('R2-22, C7: up to three pages load as the list\'s end nears the window, the budget counted as each starts; then "Show more documents", while more rows follow', async () => {
+  const rows = listRowsOf(260);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, table, more, near }) => {
+    app.state.routeSerial = 8;
+    await app.showList('documents', 8);
+    const pages = () => calls.filter(call => call.url.includes('&before='));
+    server.holdWhen((method, url) => url.includes('&before='));
+    near(true);
+    assert.deepEqual(pages().map(call => call.url), ['/api/encounters?list=documents&before=c50'], 'the end near: the next page');
+    near(true);
+    near(true);
+    assert.equal(pages().length, 1, 'one at a time: the observer answering while a page loads starts nothing');
+    assert.equal(app.state.list.browse.auto, 1, 'and costs no automatic load');
+    server.waiting.shift().release();
+    await settle(() => table.rows.length === 100);
+    assert.deepEqual(table.rows.map(row => row.href), rows.slice(0, 100).map(hrefOf), 'appended in order');
+    assert.equal(more.innerHTML, '', 'still no button: automatic loads remain');
+    near(false);
+    await settle(() => false);
+    assert.equal(pages().length, 1, 'the end away from the window: nothing');
+    for (const [expected, auto] of [[150, 2], [200, 3]]) {
+      near(true);
+      server.waiting.shift().release();
+      await settle(() => table.rows.length === expected);
+      assert.equal(app.state.list.browse.auto, auto);
+      if (auto < 3) assert.equal(more.innerHTML, '', `${expected}: no button yet`);
+    }
+    assert.match(more.innerHTML, /<button type="button" class="button secondary" data-action="more-documents">Show more documents<\/button>/, 'the three used up and more follow: the button');
+    near(true);
+    await settle(() => false);
+    assert.equal(pages().length, 3, 'from then on only the button loads more');
+    server.holdWhen(() => false);
+    click('[data-action]', { action: 'more-documents' });
+    await settle(() => table.rows.length === 250);
+    assert.match(more.innerHTML, /Show more documents/, 'more follow: it stays');
+    click('[data-action]', { action: 'more-documents' });
+    await settle(() => table.rows.length === 260);
+    assert.deepEqual([more.innerHTML, more.hidden], ['', true], 'the end of the list: no button');
+    assert.deepEqual(table.rows.map(row => row.href), rows.map(hrefOf), 'every row once, in order');
+  });
+  // exactly 200 documents: the three automatic pages bring the whole list, and no button is ever added
+  await withListPage(pagedServer(listRowsOf(200)), async ({ table, more, near }) => {
+    app.state.routeSerial = 9;
+    await app.showList('documents', 9);
+    for (const expected of [100, 150, 200]) {
+      near(true);
+      await settle(() => table.rows.length === expected);
+    }
+    assert.deepEqual([more.innerHTML, more.hidden], ['', true]);
+  });
+});
+
+test('R2-22, C7: a failed automatic load says why under the list and adds the button; a failed button load leaves it; without IntersectionObserver, the button from 51 documents', async () => {
+  let refusal = { status: 503, body: { error: 'The service is not available right now.' } };
+  const server = pagedServer(listRowsOf(160), { refuse: (method, url) => (refusal && url.includes('&before=') ? refusal : null) });
+  await withListPage(server, async ({ calls, table, more, near }) => {
+    app.state.routeSerial = 10;
+    await app.showList('documents', 10);
+    near(true);
+    await settle(() => /Show more documents/.test(more.innerHTML));
+    assert.match(more.innerHTML, /<p class="empty-state" role="status">Documents could not be loaded\. The service is not available right now\.<\/p>/);
+    assert.match(more.innerHTML, /Show more documents/, 'a failed automatic load adds the button');
+    assert.equal(app.state.list.browse.auto, 1, 'though two automatic loads remained');
+    const asked = calls.length;
+    near(true);
+    await settle(() => false);
+    assert.equal(calls.length, asked, 'from then on only the button loads more');
+    refusal = { status: 429, body: { error: 'rate_limited', retry_after: 30 } };
+    click('[data-action]', { action: 'more-documents' });
+    await settle(() => calls.length === asked + 1 && !app.state.list.loading);
+    assert.match(more.innerHTML, /Documents could not be loaded\. Too many requests in a short time\. Wait a minute and try again\./, 'the limit in its own words');
+    assert.match(more.innerHTML, /Show more documents/, 'a failed button load leaves it');
+    refusal = null;
+    click('[data-action]', { action: 'more-documents' });
+    await settle(() => table.rows.length === 100);
+    assert.doesNotMatch(more.innerHTML, /could not be loaded/, 'loaded: the sentence goes');
+    assert.match(more.innerHTML, /Show more documents/, 'and the button stays while more follow');
+  });
+  await withListPage(pagedServer(listRowsOf(51)), async ({ table, more, observers }) => {
+    app.state.routeSerial = 11;
+    await app.showList('documents', 11);
+    assert.equal(observers.length, 0, 'nothing is watched');
+    assert.match(more.innerHTML, /Show more documents/, 'the button, from the first page');
+    click('[data-action]', { action: 'more-documents' });
+    await settle(() => table.rows.length === 51);
+    assert.equal(more.innerHTML, '');
+  }, { observer: false });
+});
+
+test('R2-22, C2: up to 200 documents the first input loads the rest of the list, one page at a time, each as a page; the search then runs in the page with release 1\'s rule, with no request per key', async () => {
+  const rows = listRowsOf(200);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, table, empty, type, shown, storage }) => {
+    app.state.routeSerial = 12;
+    await app.showList('documents', 12);
+    server.holdWhen((method, url) => url.includes('&before='));
+    type('polyp report 19');
+    const pages = () => calls.filter(call => call.url.includes('&before='));
+    assert.deepEqual(pages().map(call => call.url), ['/api/encounters?list=documents&before=c50'], 'the first input: the next page not yet loaded');
+    assert.equal(shown().length, 0, 'the rows on the page are filtered at once');
+    assert.deepEqual([empty.attached, empty.textContent], [true, 'Loading documents…'], 'and nothing is said not to match while more may');
+    for (const expected of [100, 150]) {
+      server.waiting.shift().release();
+      await settle(() => table.rows.length === expected && pages().length === expected / 50);
+      assert.equal(pages().length, expected / 50, 'one at a time');
+    }
+    server.waiting.shift().release();
+    await settle(() => table.rows.length === 200 && !app.state.list.loading);
+    assert.deepEqual(pages().map(call => call.url), ['c50', 'c100', 'c150'].map(cursor => `/api/encounters?list=documents&before=${cursor}`), 'each later page, in order');
+    assert.equal(calls.filter(call => call.url === app.SEARCH_URL).length, 0, 'no search request');
+    const expect = words => rows.filter(row => listText(row).includes(words)).map(hrefOf);
+    assert.deepEqual(shown().map(row => row.href), expect('polyp report 19'), 'the rows of a page that arrived later are filtered as they are added');
+    assert.equal(empty.attached, false);
+    const before = calls.length;
+    for (const words of ['polyp report 99', 'POLYP', ' synthetic document 7 ', 'reviewed']) {
+      type(words);
+      assert.deepEqual(shown().map(row => row.href), expect(words.toLowerCase().trim()), words);
+    }
+    assert.equal(calls.length, before, 'no request per key');
+    type('nothing like this');
+    assert.deepEqual([empty.attached, empty.textContent], [true, 'No documents match your search.'], 'said once nothing more can match');
+    type('');
+    assert.equal(shown().length, 200, 'cleared: every row again, from page memory');
+    assert.equal(empty.attached, false);
+    assert.deepEqual(storage, [], 'nothing in the browser\'s storage');
+  });
+  // a server before release 2: its whole list is searched in the page, with no request at all
+  await withListPage(pagedServer(listRowsOf(240), { release1: true }), async ({ calls, type, shown }) => {
+    app.state.routeSerial = 13;
+    await app.showList('documents', 13);
+    type('polyp');
+    await settle(() => false);
+    assert.equal(calls.length, 1, 'the whole list was read once');
+    assert.equal(shown().length, 80);
+  });
+});
+
+test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, one search at a time, the newest words winning; a narrowing of a complete answer asks nothing; clearing shows the list again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260);
+  const expect = words => rows.filter(row => listText(row).includes(words)).map(hrefOf);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, table, empty, type, shown, storage }) => {
+    app.state.routeSerial = 14;
+    await app.showList('documents', 14);
+    const searches = () => calls.filter(call => call.url === app.SEARCH_URL);
+    server.holdWhen(method => method === 'POST');
+    type('polyp');
+    assert.deepEqual(shown().map(row => row.href), rows.slice(0, 50).filter(row => listText(row).includes('polyp')).map(hrefOf), 'the rows on the page, filtered at once');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS - 1);
+    assert.equal(searches().length, 0, 'nothing before the pause');
+    t.mock.timers.tick(1);
+    assert.equal(searches().length, 1);
+    assert.deepEqual([searches()[0].method, searches()[0].body, searches()[0].headers['X-CSRFToken']], ['POST', { text: 'polyp', before: null }, 'token123'],
+      'the words in a POST body, with the CSRF header');
+    // words typed while it is asked: one search at a time, and its answer, theirs no more, is never drawn
+    type('polyp report 2');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    assert.equal(searches().length, 1, 'one search at a time');
+    server.waiting.shift().release();
+    await settle(() => searches().length === 2);
+    assert.deepEqual(searches()[1].body, { text: 'polyp report 2', before: null }, 'the newest words, asked at once: their pause has passed');
+    assert.equal(app.state.list.found, null, 'the older answer was not taken');
+    server.waiting.shift().release();
+    await settle(() => app.state.list.found?.query === 'polyp report 2');
+    assert.deepEqual(table.rows.map(row => row.href), expect('polyp report 2'), 'every match, from the server');
+    // narrower words, every match on the page: nothing is asked
+    type('polyp report 21');
+    t.mock.timers.tick(1000);
+    assert.equal(searches().length, 2, 'a narrowing of a complete answer asks nothing');
+    assert.deepEqual(shown().map(row => row.href), expect('polyp report 21'));
+    // other words: the list's own rows again at once, and the server asked after the pause
+    type('nothing like this');
+    assert.deepEqual(table.rows.map(row => row.href), rows.slice(0, 50).map(hrefOf), 'the list\'s rows again');
+    assert.deepEqual([empty.attached, empty.textContent], [true, 'Loading documents…'], 'no match is said while more may lie beyond');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    server.waiting.shift().release();
+    await settle(() => app.state.list.found?.query === 'nothing like this');
+    assert.deepEqual([empty.attached, empty.textContent], [true, 'No documents match your search.'], 'said once nothing more can match');
+    type('');
+    t.mock.timers.tick(1000);
+    assert.equal(shown().length, 50, 'cleared: the list\'s rows again, from page memory');
+    assert.equal(searches().length, 3);
+    assert.ok(calls.every(call => !/polyp|nothing/.test(call.url)), 'the words are never in an address');
+    assert.deepEqual(storage, [], 'nothing in the browser\'s storage');
+  });
+});
+
+test('R2-22, C2: above 200 documents, words in the box load no more of the list\'s pages, however near its end comes; a search\'s own pages and the list\'s, once cleared, do', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, table, near, type }) => {
+    app.state.routeSerial = 20;
+    await app.showList('documents', 20);
+    const pages = () => calls.filter(call => call.url.includes('&before=')).length;
+    server.holdWhen(method => method === 'POST');
+    type('polyp');  // the rows it hides bring the end near the window
+    near(true);
+    await settle(() => false);
+    assert.equal(pages(), 0, 'the list\'s rows hidden by the words: none loads by itself while the search is the server\'s');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    server.waiting.shift().release();
+    await settle(() => app.state.list.found?.query === 'polyp');
+    near(true);
+    await settle(() => calls.some(call => call.url === app.SEARCH_URL && call.body.before));
+    assert.deepEqual(calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body), [{ text: 'polyp', before: null }, { text: 'polyp', before: 'c50' }],
+      'the search\'s own next page loads as its end nears');
+    server.waiting.shift().release();
+    await settle(() => table.rows.length === 100);
+    type('');
+    near(true);
+    await settle(() => pages() === 1);
+    assert.equal(pages(), 1, 'cleared: the list\'s own pages load again');
+  });
+});
+
+test('R2-22, C2: at 200 documents the search stays in the page; at 201 it goes to the server', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const [count, local] of [[200, true], [201, false]]) {
+    await withListPage(pagedServer(listRowsOf(count)), async ({ calls, type }) => {
+      app.state.routeSerial = 15;
+      await app.showList('documents', 15);
+      type('polyp');
+      t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      await settle(() => (local ? calls.filter(call => call.url.includes('&before=')).length === 3 && !app.state.list.loading : calls.some(call => call.url === app.SEARCH_URL)));
+      assert.equal(app.state.list.local, local, String(count));
+      assert.equal(calls.some(call => call.url === app.SEARCH_URL), !local, `${count}: ${local ? 'in the page' : 'on the server'}`);
+      assert.equal(calls.filter(call => call.url.includes('&before=')).length, local ? 3 : 0, `${count}: the rest of the list loaded only for the page's own search`);
+    });
+  }
+});
+
+test('R2-22: a refused search (429) says why under the list, and never that nothing matches', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const server = pagedServer(listRowsOf(260), { refuse: method => (method === 'POST' ? { status: 429, body: { error: 'rate_limited', retry_after: 30 } } : null) });
+  await withListPage(server, async ({ more, empty, type }) => {
+    app.state.routeSerial = 16;
+    await app.showList('documents', 16);
+    type('nothing like this');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => /Too many requests/.test(more.innerHTML));
+    assert.match(more.innerHTML, /<p class="empty-state" role="status">Too many requests in a short time\. Wait a minute and try again\.<\/p>/, 'rateLimitText\'s words');
+    assert.ok(!(empty.attached && /No documents match/.test(empty.textContent)), 'a refusal never says no match');
+    type('nothing like this at all');
+    assert.doesNotMatch(more.innerHTML, /Too many requests/, 'the next words ask again');
+  });
+});
+
+test('R2-22: a late answer - a page, a search - after a route or the screen cleared is dropped; the list goes with the route and at clearScreen', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ table, near, observers }) => {
+    app.state.routeSerial = 17;
+    await app.showList('documents', 17);
+    server.holdWhen((method, url) => url.includes('&before='));
+    near(true);
+    global.location.hash = '#how-it-works';
+    app.route();
+    assert.equal(app.state.list, null, 'a route drops the list');
+    assert.equal(observers[0].disconnected, true, 'and stops watching its end');
+    table.innerHTML = '<p>another view</p>';
+    server.waiting.shift().release();
+    await settle(() => false);
+    assert.equal(table.rows.length, 0, 'the late page is dropped');
+  });
+  // a search asked, then the screen cleared (an end): its answer, for the very words still in the box, is dropped - drawn
+  // nowhere, and no hint comes back after the wipe
+  const hinted = holding(pagedServer(listRowsOf(260, { opensPdf: true })));
+  await withListPage(hinted.answer, async ({ table, type }) => {
+    app.state.routeSerial = 18;
+    await app.showList('documents', 18);
+    hinted.holdWhen(method => method === 'POST');
+    type('polyp');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    assert.equal(hinted.waiting.length, 1);
+    app.clearScreen();
+    assert.equal(app.state.list, null, 'the screen cleared drops the list');
+    assert.equal(app.state.viewHints.size, 0);
+    table.innerHTML = '<p>the sign-in page</p>';
+    hinted.waiting.shift().release();
+    await settle(() => false);
+    assert.equal(table.rows.length, 0, 'the late answer is drawn nowhere');
+    assert.equal(app.state.viewHints.size, 0, 'and brings no hint back');
+  });
+  // a search waiting for its pause when the screen is cleared is never asked
+  await withListPage(server.answer, async ({ calls, type }) => {
+    app.state.routeSerial = 19;
+    await app.showList('documents', 19);
+    type('polyp');
+    app.clearScreen();
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => false);
+    assert.equal(calls.filter(call => call.url === app.SEARCH_URL).length, 0, 'its pending search is never asked');
+  });
+});
+
+test('R2-22, R2-16: the list\'s rows that say they open as a PDF, first page, later pages and searches, are the hints a click may start the view at once for', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260, { opensPdf: true });
+  await withListPage(pagedServer(rows), async ({ table, near, type }) => {
+    app.state.viewHints = new Map([['stale', true]]);
+    app.state.routeSerial = 19;
+    await app.showList('documents', 19);
+    const odd = list => list.filter(row => row.opens_pdf).map(row => row.id);
+    assert.deepEqual([...app.state.viewHints.keys()], odd(rows.slice(0, 50)), 'the first page\'s, and no other list\'s');
+    near(true);
+    await settle(() => table.rows.length === 100);
+    assert.deepEqual([...app.state.viewHints.keys()], odd(rows.slice(0, 100)), 'a later page adds its own');
+    type('polyp report 25');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.found);
+    assert.ok(odd(rows.filter(row => listText(row).includes('polyp report 25'))).every(id => app.state.viewHints.get(id) === true), 'and so do a search\'s');
+    assert.equal(app.state.viewHints.get(rows[1].id), undefined, 'a row that does not say so is no hint');
+  });
+});
+
+test('R2-19, R2-20, R2-24: the dev preview pages its list and answers the search as the server does', () => {
+  const rows = listRowsOf(120).reverse();  // in any order: the preview orders them
+  const [status, first] = preview.listAnswer(rows, 'documents', null);
+  assert.equal(status, 200);
+  assert.deepEqual(first.encounters.map(row => row.id), listRowsOf(50).map(row => row.id), 'newest first, 50 a page');
+  const last = first.encounters[49];
+  assert.equal(first.next, `${Date.parse(last.created_at) * 1000}~${last.id}`, 'the cursor: a time in UTC microseconds and an id');
+  assert.equal(first.total, 120, 'the total, on a first page');
+  const [, second] = preview.listAnswer(rows, 'documents', first.next);
+  const [, third] = preview.listAnswer(rows, 'documents', second.next);
+  assert.deepEqual([second.encounters.length, second.total, third.encounters.length, third.next, third.total], [50, null, 20, null, null]);
+  assert.deepEqual([...first.encounters, ...second.encounters, ...third.encounters].map(row => row.id), listRowsOf(120).map(row => row.id), 'every row once');
+  // two documents of one time, across a page edge: each once, the larger id first
+  const tied = listRowsOf(52).map((row, index) => (index === 49 || index === 50 ? { ...row, created_at: '2026-11-19T00:00:00Z' } : row));
+  const [, edge] = preview.listAnswer(tied, 'documents', null);
+  const [, after] = preview.listAnswer(tied, 'documents', edge.next);
+  assert.deepEqual([...edge.encounters, ...after.encounters].map(row => row.id).sort(), tied.map(row => row.id).sort());
+  const [, recent] = preview.listAnswer(rows, 'recent', null);
+  assert.deepEqual([recent.encounters.length, recent.next, recent.total], [5, null, null]);
+  for (const bad of ['x', '12~not-an-id', `${Date.now()}`, `1~${UUID}~x`]) {
+    assert.deepEqual(preview.listAnswer(rows, 'documents', bad), [400, { error: 'That part of the list could not be read. Open the list again.' }], bad);
+  }
+  // the search: the rows whose text holds the words (the page's own rule), 50 at a time, total null
+  const many = listRowsOf(160);
+  const matching = many.filter(row => listText(row).includes('polyp')).map(row => row.id);
+  const [found, page] = preview.searchAnswer(many, { text: 'Polyp', before: null });
+  assert.deepEqual([found, page.total, page.encounters.length, matching.length], [200, null, 50, 53]);
+  assert.deepEqual(page.encounters.map(row => row.id), matching.slice(0, 50));
+  const [, rest] = preview.searchAnswer(many, { text: 'Polyp', before: page.next });
+  assert.deepEqual([rest.encounters.map(row => row.id), rest.next, rest.total], [matching.slice(50), null, null], 'the next page of matches, and the end');
+  assert.equal(preview.rowText(many[2]), dom(app.documentRow(many[2])).text, 'the row\'s text is the page\'s own');
+  for (const [body, answer] of [[{ text: '   ', before: null }, [400, { error: 'Type the words to search for.' }]], [{ text: 7 }, [400, { error: 'Type the words to search for.' }]],
+    [null, [400, { error: 'Type the words to search for.' }]], [{ text: 'x'.repeat(241), before: null }, [200, { encounters: [], next: null, total: null }]],
+    [{ text: 'polyp\u0000', before: null }, [200, { encounters: [], next: null, total: null }]], [{ text: 'polyp\ud800', before: null }, [200, { encounters: [], next: null, total: null }]],
+    [{ text: 'polyp', before: 'garbage' }, [400, { error: 'That part of the list could not be read. Open the list again.' }]]]) {
+    assert.deepEqual(preview.searchAnswer(many, body), answer, JSON.stringify(body));
+  }
+  assert.equal(preview.searchAnswer(many, { text: 'é'.repeat(240), before: null })[0], 200, '240 characters are words');
 });

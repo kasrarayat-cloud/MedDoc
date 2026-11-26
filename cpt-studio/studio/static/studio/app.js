@@ -133,6 +133,14 @@ const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text' };
 const TRIGGER_TEXT = { answers: 'after your answers', retry: 'after a retry' };
 const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review', team: 'Team' };
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
+// R2-22: the lists a page at a time (R2-19; release 1 answers the whole list to any), the search's POST (R2-20), the
+// automatic pages before "Show more documents" (C7), and the search in the page up to LOCAL_SEARCH_MAX documents (C2).
+const LIST_ADDRESS = { workspace: '/api/encounters?list=recent', documents: '/api/encounters?list=documents', queue: '/api/encounters?list=queue' };
+const SEARCH_URL = '/api/encounters/search';
+const SEARCH_PAUSE_MS = 300;
+const AUTO_PAGES = 3;
+const LOCAL_SEARCH_MAX = 200;
+const MORE_TEXT = 'Show more documents';
 
 // --- pure helpers ----------------------------------------------------------------
 
@@ -1250,13 +1258,12 @@ const state = {
   // release 1: what the confirmation dialog runs on Continue (askConfirm), and the object addresses the page made, which
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
-  // release 2: when the session was last read (R2-17); the worker made ready ahead (R2-10: warming on once the page has
-  // routed, its failures, the waiting worker and its timer), and whether the library and a worker have started in this
-  // page, so both are in the browser's cache (R2-12)
+  // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
   sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
-  // the PDFs kept in page memory for a re-open, by view address, the least recently viewed first (R2-15); the view asked
-  // for with the click (R2-16); and the documents the list said open as a PDF of at most 1 MiB (opens_pdf)
+  // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16)
   keptViews: new Map(), early: null, viewHints: new Map(),
+  // the list on the page (R2-22)
+  list: null,
 };
 
 function uiState(overrides = {}) {
@@ -1293,12 +1300,25 @@ function listBody(name, rows) {
   return LIST_HEADER + (shown.length ? shown.map(row => documentRow(row)).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
 }
 
-function listDescription(name, rows) {
+// R2-22: a page of a list - its rows, the next page's place (null on the last), the list's size (a first page's) - or
+// release 1's whole list; anything else is refused.
+function listPage(data) {
+  const whole = Array.isArray(data);
+  const rows = whole ? data : data?.encounters;
+  const next = whole ? null : data?.next ?? null;
+  const total = whole ? null : data?.total ?? null;
+  if (!Array.isArray(rows) || (next !== null && typeof next !== 'string') || (total !== null && !(Number.isInteger(total) && total >= 0))) {
+    throw new ApiError('The server answered with a document list this page cannot read.');
+  }
+  return { rows: objects(rows), next: next || null, total };
+}
+
+// The list's description for `count` documents.
+function listDescription(name, count) {
   if (name === 'queue') {
-    const count = listRows('queue', rows).length;
     return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: questions to answer, or codes to review or approve.` : 'No document waits on you for an answer or a decision.';
   }
-  return `${plural(rows.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
+  return `${plural(count, 'synthetic document', 'synthetic documents')} in this workspace.`;
 }
 
 function inviteMarkup(rows) {
@@ -1318,7 +1338,7 @@ function overviewView() {
 
 function documentsView(name) {
   const queue = name === 'queue';
-  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Questions to answer and codes to review or approve: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each decision is tied to the coding review it was made on.'}</p></section>`;
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Questions to answer and codes to review or approve: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><div class="list-more" id="listMore" hidden></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each decision is tied to the coding review it was made on.'}</p></section>`;
 }
 
 function howItWorksView() {
@@ -1619,7 +1639,7 @@ function reviewColumn(doc, ui = {}) {
 
 // The whole review page. The right column, the heading and the quoted passages are redrawn on their own after a read
 // that changes them (renderDocument), so the original document's viewer is never reloaded under the member. It never
-// fades in (R2-14): the entrance fade is a page load's first view's alone.
+// fades in (R2-14).
 function reviewView(doc, ui = {}) {
   return `<section class="review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
     + `<div id="reviewHead">${reviewHeading(doc)}</div>`
@@ -1928,8 +1948,7 @@ async function loadSession() {
   return state.session;
 }
 
-// R2-17: the session the page shell carries (data-session-json on <body>: exactly what GET /api/session answers), or
-// null where it carries none, or none this page can read; the page then reads it, as release 1 did.
+// R2-17: the session the shell carries (<body data-session-json>: GET /api/session's payload), or null.
 function shellSession() {
   try {
     const data = JSON.parse(text(document.body?.dataset?.sessionJson) || 'null');
@@ -1942,23 +1961,20 @@ function shellSession() {
 
 const SESSION_FRESH_MS = 60000;
 
-// A document's route reads the session again only where the page has none, or read it SESSION_FRESH_MS ago or more: the
-// review heading's specialty and the sidebar's numbers follow it within a minute (R2-17).
+// R2-17: a document's route reads the session again only when the page has none or read it a minute ago or more.
 function refreshSession() {
   if (!state.session || Math.abs(Date.now() - state.sessionReadAt) >= SESSION_FRESH_MS) {
     loadSession();  // the review heading's specialty follows the session (refutation N2-2-2), at most once a minute
   }
 }
 
-// R2-14: the entrance fade (styles.css: main[data-entrance]) is a page load's first view's alone; every later view shows
-// at once.
+// R2-14: the entrance fade (main[data-entrance]) is a page load's first view's alone.
 function endEntrance() {
   $('#main')?.removeAttribute('data-entrance');
 }
 
-// The page's first route (boot): from the session its shell carries, drawn at once with no request before it (R2-17);
-// where it carries none it can read, the session is read first, as in release 1. The worker made ready ahead is asked
-// for PDF_STANDBY.first after that route (R2-10).
+// Boot's first route: at once from the shell's session (R2-17), else after reading it, as release 1; the worker made
+// ready ahead is asked for after it (R2-10).
 function firstRoute() {
   const carried = shellSession();
   const begin = () => {
@@ -1999,6 +2015,7 @@ function route() {
   const before = state.route;
   if (before) endEntrance();
   dropEarly();
+  closeList();
   stopPolling();
   stopTicker();
   closeDocumentDialogs();
@@ -2092,56 +2109,256 @@ function askWordOriginal(address) {
     run: () => saveDownload(address, '').catch(error => toast(error.message)) });
 }
 
+// R2-22: a list view asks for its first page; rows and words are release 1's. The description and the list's own
+// sidebar number follow its total (else its rows: release 1's whole list). The list is page memory only.
 async function showList(name, serial) {
   $('#main').innerHTML = name === 'workspace' ? overviewView() : documentsView(name);
-  let rows;
+  const list = { name, loaded: false, total: null, local: true, browse: null, found: null, query: '', all: false, loading: false,
+    searching: false, again: false, timer: 0, observer: null, near: false, problem: '', refused: '' };
+  state.list = list;
+  let page;
   try {
-    const data = await api('/api/encounters');
-    rows = Array.isArray(data) ? data : data.encounters;
-    if (!Array.isArray(rows)) throw new ApiError('The server answered with a document list this page cannot read.');
-    rows = objects(rows);
+    page = listPage(await api(LIST_ADDRESS[name]));
   } catch (error) {
-    if (serial !== state.routeSerial) return;
+    if (serial !== state.routeSerial || list !== state.list) return;
     $('#documentsTable').innerHTML = `${LIST_HEADER}<p class="empty-state">${escapeHtml(`Documents could not be loaded. ${error.message}`)}</p>`;
     if ($('#listDescription')) $('#listDescription').textContent = 'Documents could not be loaded.';
     if ($('#recentInvite')) $('#recentInvite').innerHTML = '';
     return;
   }
-  if (serial !== state.routeSerial) return;
-  state.viewHints = new Map(rows.filter(row => row.opens_pdf === true).map(row => [row.id, true]));
-  $('#documentsTable').innerHTML = listBody(name, rows);
-  if ($('#listDescription')) $('#listDescription').textContent = listDescription(name, rows);
-  if ($('#recentInvite')) $('#recentInvite').innerHTML = inviteMarkup(rows);
+  if (serial !== state.routeSerial || list !== state.list) return;
+  const next = name === 'workspace' ? null : page.next;
+  Object.assign(list, { loaded: true, total: page.total,
+    browse: { rows: page.rows, next, auto: 0, failed: false, button: next !== null && typeof IntersectionObserver !== 'function' } });
+  // C2: the search runs in the page up to LOCAL_SEARCH_MAX documents, else on the server
+  list.local = next === null || (page.total !== null && page.total <= LOCAL_SEARCH_MAX);
+  state.viewHints = new Map();
+  hintRows(page.rows);
+  $('#documentsTable').innerHTML = listBody(name, page.rows);
+  if ($('#listDescription')) $('#listDescription').textContent = listDescription(name, page.total ?? listRows(name, page.rows).length);
+  if ($('#recentInvite')) $('#recentInvite').innerHTML = inviteMarkup(page.rows);
+  if (page.total !== null && name !== 'workspace') setCount(name === 'queue' ? '#queueCount' : '#documentsCount', page.total);
+  watchListEnd(list);
+  drawListMore();
   applySearch();
 }
 
-function applySearch() {
-  const input = $('#documentSearch');
-  if (!input) return;
-  const query = input.value.toLowerCase().trim();
+function closeList() {
+  const list = state.list;
+  state.list = null;
+  if (!list) return;
+  clearTimeout(list.timer);
+  list.observer?.disconnect();
+}
+
+// R2-16: the rows that open as a PDF of at most 1 MiB (opens_pdf).
+function hintRows(rows) {
+  for (const row of rows) if (row.opens_pdf === true) state.viewHints.set(row.id, true);
+}
+
+// The list's end (#listMore), watched 600 px ahead, loads the next page itself, AUTO_PAGES times (C7).
+function watchListEnd(list) {
+  const more = $('#listMore');
+  if (!more || !list.browse.next || typeof IntersectionObserver !== 'function') return;
+  list.observer = new IntersectionObserver(entries => {
+    if (list !== state.list) return;
+    list.near = entries[entries.length - 1]?.isIntersecting === true;
+    pumpList(list);
+  }, { rootMargin: '600px 0px' });
+  list.observer.observe(more);
+}
+
+// Rows drawn again or added: the end is observed afresh, for a new answer.
+function relook(list) {
+  const more = $('#listMore');
+  if (!list.observer || !more) return;
+  list.near = false;
+  list.observer.unobserve(more);
+  list.observer.observe(more);
+}
+
+// One load at a time: for the page's own search (C2) every page not yet loaded; else, the end near and an automatic
+// load left (the budget counted as the load starts), the next page.
+function pumpList(list) {
+  if (list !== state.list || list.loading) return;
+  const source = list.found || list.browse;
+  if (!source?.next || source.failed) return;
+  if (list.local && list.all) {
+    loadMore(list, 'search');
+    return;
+  }
+  // above LOCAL_SEARCH_MAX, words in the box are the server's to search: the list's rows they hide load nothing more
+  if (!list.near || source.button || source.auto >= AUTO_PAGES || (!list.local && list.query && !list.found)) return;
+  source.auto += 1;
+  loadMore(list, 'auto');
+}
+
+// One more page of the rows shown, appended in order; with the automatic loads used up or one failed, the button
+// alone loads more (C7).
+async function loadMore(list, why) {
+  const source = list.found || list.browse;
+  if (list.loading || !source?.next) return;
+  list.loading = true;
+  list.problem = '';
+  drawListMore();
+  let page = null;
+  let failure = '';
+  try {
+    page = listPage(source === list.browse ? await api(`${LIST_ADDRESS[list.name]}&before=${encodeURIComponent(source.next)}`)
+      : await api(SEARCH_URL, { method: 'POST', json: { text: source.query, before: source.next } }));
+  } catch (error) {
+    failure = error.message;
+  }
+  list.loading = false;
+  if (list !== state.list) return;
+  const shown = source === (list.found || list.browse);
+  if (page) {
+    // a page with no rows, or naming the same place again, is the end
+    source.next = page.rows.length && page.next !== source.next ? page.next : null;
+    source.rows.push(...page.rows);
+    hintRows(page.rows);
+    if (shown) appendRows(list, page.rows);
+    if (source.next && source.auto >= AUTO_PAGES) source.button = true;
+  } else {
+    if (shown) list.problem = `Documents could not be loaded. ${failure}`;
+    if (why !== 'button') Object.assign(source, { failed: true, button: true });
+  }
+  filterRows();
+  drawListMore();
+  relook(list);
+  pumpList(list);
+}
+
+function moreDocuments() {
+  const list = state.list;
+  if ((list?.found || list?.browse)?.button) loadMore(list, 'button');
+}
+
+// New rows go in through a template (insertAdjacentHTML is refused).
+function appendRows(list, rows) {
+  const table = $('#documentsTable');
+  if (!table) return;
+  $('#searchEmpty')?.remove();
+  const template = document.createElement('template');
+  template.innerHTML = listRows(list.name, rows).map(row => documentRow(row)).join('');
+  table.append(template.content);
+}
+
+// #listMore: empty while automatic loads remain; the button after them or a failed one (C7); a refusal's sentence.
+function drawListMore() {
+  const list = state.list;
+  const more = $('#listMore');
+  if (!more || !list?.loaded) return;
+  const source = list.found || list.browse;
+  const said = [list.problem, list.refused].filter(Boolean);
+  more.hidden = !source.next && !said.length;
+  more.innerHTML = said.map(words => `<p class="empty-state" role="status">${escapeHtml(words)}</p>`).join('')
+    + (source.next && source.button ? `<button type="button" class="button secondary" data-action="more-documents"${list.loading ? ' disabled aria-busy="true"' : ''}>${MORE_TEXT}</button>` : '');
+}
+
+// Whether nothing beyond the page can match: the whole list is on it, or every match of words the words typed hold.
+function nothingBeyond(list) {
+  return !list.browse.next || (Boolean(list.found) && !list.found.next && list.query.includes(list.found.query));
+}
+
+// Release 1's rule, inside the keystroke. "No documents match your search." only when nothing more can match; else
+// the loading line while a load or a search is under way.
+function filterRows() {
+  const list = state.list;
+  const table = $('#documentsTable');
+  if (!list?.loaded || !table) return;
+  const query = list.query;
   const rows = $$('#documentsTable .document-row');
   rows.forEach(row => { row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query); });
+  const none = Boolean(query) && (rows.length ? rows.every(row => row.hidden) : Boolean(list.found));
+  const waiting = list.loading || list.searching || Boolean(list.timer) || (list.local && list.all && !list.browse.failed);
+  const words = !none ? '' : nothingBeyond(list) ? 'No documents match your search.' : waiting ? 'Loading documents…' : '';
   let empty = $('#searchEmpty');
-  if (rows.length && rows.every(row => row.hidden)) {
+  if (words) {
     if (!empty) {
       empty = document.createElement('p');
       empty.id = 'searchEmpty';
       empty.className = 'empty-state';
-      empty.textContent = 'No documents match your search.';
-      $('#documentsTable').appendChild(empty);
+      table.appendChild(empty);
     }
+    empty.textContent = words;
   } else {
     empty?.remove();
   }
 }
 
-// How long the list a document was chosen in stays shown while the document is read; then the loading line (R2-14).
+// The search box (C2): up to LOCAL_SEARCH_MAX documents, the first input loads the pages not yet loaded and the search
+// runs in the page; above, the rows shown are filtered and the server asked after SEARCH_PAUSE_MS, while matches may
+// lie beyond the page. Clearing the box shows the list's rows again.
+function applySearch() {
+  const input = $('#documentSearch');
+  const list = state.list;
+  if (!input || !list?.loaded) return;
+  list.query = input.value.toLowerCase().trim();
+  clearTimeout(list.timer);
+  list.timer = 0;
+  if (list.local) {
+    if (list.query && list.browse.next) list.all = true;
+  } else {
+    list.refused = '';
+    if (list.found && !(list.query && list.query.includes(list.found.query))) {
+      list.found = null;
+      $('#documentsTable').innerHTML = listBody(list.name, list.browse.rows);
+      relook(list);
+    }
+    if (list.query && !nothingBeyond(list)) list.timer = setTimeout(() => searchDocuments(list), SEARCH_PAUSE_MS);
+  }
+  filterRows();
+  drawListMore();
+  pumpList(list);
+}
+
+// R2-20: one server search at a time, its words in a POST body; an answer to older words is dropped, a refusal said.
+async function searchDocuments(list) {
+  list.timer = 0;
+  if (list !== state.list || !list.query || nothingBeyond(list)) return;
+  if (list.searching) {
+    list.again = true;
+    return;
+  }
+  const query = list.query;
+  list.searching = true;
+  list.again = false;
+  let page = null;
+  let failure = '';
+  try {
+    page = listPage(await api(SEARCH_URL, { method: 'POST', json: { text: query, before: null } }));
+  } catch (error) {
+    failure = error.message;
+  }
+  list.searching = false;
+  if (list !== state.list) return;
+  const due = list.again;
+  list.again = false;
+  if (list.query !== query) {
+    if (due) searchDocuments(list);
+    else filterRows();
+    return;
+  }
+  if (page) {
+    list.refused = '';
+    list.found = { query, rows: page.rows, next: page.next, auto: 0, failed: false, button: page.next !== null && typeof IntersectionObserver !== 'function' };
+    hintRows(page.rows);
+    $('#documentsTable').innerHTML = LIST_HEADER + page.rows.map(row => documentRow(row)).join('');
+    relook(list);
+  } else {
+    list.refused = failure;
+  }
+  filterRows();
+  drawListMore();
+}
+
+// R2-14: how long a list stays shown while the document chosen in it is read.
 const LOADING_AFTER_MS = 150;
 const LIST_ROUTES = new Set(['workspace', 'documents', 'queue']);
 
-// R2-14: chosen in a list (`fromList`), the document is read with the list still in view and the window unscrolled, until
-// the review is drawn or LOADING_AFTER_MS has passed, when the loading line shows; from another document, a deep link or
-// an upload, the loading line (or the upload's acknowledgement) shows at once, as before.
+// R2-14: chosen in a list, the document is read with the list in view until the review is drawn or LOADING_AFTER_MS
+// has passed; from anywhere else the loading line (or an upload's acknowledgement) shows at once.
 function showDocument(id, serial, fromList = false) {
   if (!UUID.test(id)) {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -2189,7 +2406,7 @@ async function loadDocument(id, serial, silent, poll = false) {
       return;
     }
     dropEarly();
-    // a document the server refuses (another practice's, or access ended) ends what the page keeps for speed (R2-18)
+    // a document refused (another practice's, or access ended) is an end (R2-18)
     if (error.status === 404) forgetMemory();
     window.scrollTo({ top: 0, behavior: 'instant' });
     $('#main').innerHTML = error.status === 404
@@ -2470,12 +2687,10 @@ const ZOOM_FIT = 1;
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar']);
 // How the page loads the library's module (a test stands in for it).
 const PDF_IMPORT = { load: specifier => import(specifier) };
-// R2-10: one worker of the library made ready ahead of the next document, `first` ms after the page's first route and
-// `next` ms after a viewer closed or drew a page, once the browser is idle (within `idle` ms); after `fails` failures
-// none is made.
+// R2-10: the worker made ready ahead, `first` ms after the first route and `next` ms after a viewer closes or draws a
+// page, when idle (within `idle` ms); after `fails` failures, none.
 const PDF_STANDBY = { first: 500, next: 600, idle: 2000, fails: 2 };
-// R2-15: the PDFs kept in page memory for a re-open, at most so many and so many bytes in all; and a view's tag as the
-// server answers it, a quoted UUID (W/ allowed): any other is no tag, and its bytes are never kept.
+// R2-15: the bounds of the PDFs kept for a re-open; a view's tag, a quoted UUID (anything else is no tag).
 const KEPT_VIEWS = { documents: 6, bytes: 24 * 1024 * 1024 };
 const VIEW_TAG = new RegExp(`^(?:W/)?"(${UUID_PART})"$`, 'i');
 
@@ -2658,7 +2873,7 @@ function startWorker(viewer, address) {
     const ready = event => {
       const data = event?.data;
       if (data && typeof data === 'object' && data.sourceName === 'worker' && data.targetName === 'main' && data.action === 'ready') {
-        state.pdfStarted = true;  // R2-12: the library and a worker have started here, so both are in the browser's cache
+        state.pdfStarted = true;  // R2-12
         done(resolve, thread);
       }
     };
@@ -2676,9 +2891,8 @@ function startWorker(viewer, address) {
 // poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
 // member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
 // counted by the server either (studio.sessions.automatic).
-// R2-15: a view whose bytes the page keeps is asked for with their tag (If-None-Match); a 304 hands back a copy of them
-// (the library takes the array it is given), and any other answer, or none, drops them first. It answers {data, tag,
-// held}: tag, the quoted UUID a 200 named (else ''), held, whether the bytes are the kept ones.
+// R2-15: a kept view is asked for with its tag; a 304 hands back a copy of the kept bytes, and any other answer, or
+// none, drops them first. It answers {data, tag, held}.
 async function downloadDocument(view, signal, moved) {
   const held = state.keptViews.get(view) || null;
   const headers = { [POLL_HEADER]: '1' };
@@ -2690,7 +2904,7 @@ async function downloadDocument(view, signal, moved) {
     dropView(view, held);
     throw error;
   }
-  // a copy wiped or replaced while it was asked for (an end, a bound) is no longer the one asked about: never drawn
+  // a copy wiped or replaced meanwhile is never drawn
   if (held && response.status === 304 && state.keptViews.get(view) === held) {
     moved();
     keepView(view, held.tag, held.data);
@@ -2723,9 +2937,8 @@ async function downloadDocument(view, signal, moved) {
   return { data, tag, held: false };
 }
 
-// R2-15: the bytes of a PDF this page opened, kept in its memory under the tag the server gave them, for a re-open - an
-// array of the page's own: never a Blob (which the browser may write to disk), the Cache API, IndexedDB or Web Storage.
-// At most KEPT_VIEWS: the least recently viewed go first, and every copy that goes is overwritten.
+// R2-15: an opened PDF's bytes, kept in page memory under their tag - never a Blob, the Cache API, IndexedDB or Web
+// Storage - within KEPT_VIEWS, the least recently viewed going first; every copy that goes is overwritten.
 function keepView(view, tag, data) {
   const kept = state.keptViews;
   const old = kept.get(view);
@@ -2749,11 +2962,8 @@ function dropView(view, held) {
   held.data.fill(0);
 }
 
-// R2-16: the view of the document chosen, asked for with the click, beside its details: only once the library and a worker
-// have started in this page, on a page not outdated, leaving or signed out that can draw a PDF, and only where the page
-// keeps that view's bytes or the list said it opens as a PDF (opens_pdf) - never on a hover, a focus or a list. It is the
-// page's own read, recorded as the view's (member.inline). The viewer takes it over for that view only (takeEarly); a
-// route, a first read that fails and a document that is no PDF drop it.
+// R2-16: the view of the document chosen, asked for with the click, once a worker has started, on a page not outdated,
+// leaving or signed out that can draw a PDF, for a kept copy or an opens_pdf row only - never on a hover or a list.
 function startEarly(id) {
   dropEarly();
   const view = `/api/encounters/${id}/original?view=1`;
@@ -2830,7 +3040,7 @@ function loadPdfLibrary() {
       })
       : Promise.reject(new Error('The page names no PDF library.'));
     state.pdfLibrary = loading;
-    // a load that fails is forgotten at once (R2-11); one past its time limit, by the viewer that waits on it (openPdf)
+    // a failed load is forgotten at once (R2-11); one past its time limit, by its viewer (openPdf)
     loading.catch(() => forgetPdfLibrary(loading));
   }
   return state.pdfLibrary;
@@ -2842,7 +3052,7 @@ function forgetPdfLibrary(loading) {
   state.pdfStarted = false;  // tried again at fresh addresses, so fetched again (R2-12)
 }
 
-// R2-10: the worker made ready ahead, asked for `ms` from now, once the browser is idle (or at once where it cannot say).
+// R2-10: the worker made ready ahead, asked for in `ms`, when the browser is idle.
 function scheduleStandby(ms) {
   clearTimeout(state.standbyTimer);
   state.standbyTimer = 0;
@@ -2854,11 +3064,9 @@ function scheduleStandby(ms) {
   }, ms);
 }
 
-// Starts the one worker made ready ahead (and the library, where it is not loaded): only on a page that has routed, holds
-// none, is not leaving or signed out, does not save data and can draw a PDF. It holds no document: the next document
-// takes it as its own (takeWorker), so each document still has its own worker, ended with its viewer (DECISIONS D368,
-// A4). One that fails, or does not start within the library's time limit, is ended; after PDF_STANDBY.fails failures
-// none is made, and each document starts its own, as in release 1.
+// Starts the one worker made ready ahead (and the library) on a page that has routed, holds none, is not leaving or
+// signed out, saves no data and can draw a PDF. It holds no document: the next one takes it as its own (takeWorker;
+// D368, A4). A failed one is ended; after PDF_STANDBY.fails failures, none is made.
 function startStandby() {
   if (!state.standbyOn || state.pdfStandby || state.leaving || idle.gone || globalThis.navigator?.connection?.saveData === true || !pdfCapable()) return;
   const standby = { thread: null, address: '', ready: null, taken: false, failed: null, end: null };
@@ -2873,7 +3081,7 @@ function startStandby() {
     standby.thread?.terminate();
   };
   const loading = loadPdfLibrary();
-  // ended before it is ready (endStandby), its wait settles at once rather than at the time limit
+  // ended before it is ready, its wait settles at once
   const ended = new Promise((resolve, reject) => { standby.end = () => reject(new Error('The worker made ready ahead was ended.')); });
   standby.ready = withinLimit(Promise.race([ended, (async () => {
     const library = await loading;
@@ -2895,9 +3103,8 @@ function endStandby() {
   standby?.thread?.terminate();
 }
 
-// The viewer's own worker: the one made ready ahead, where there is one for this address - the viewer's at once
-// (viewer.thread, so closing the document ends it) - else one started now, as in release 1. One made ready for another
-// address (the library forgotten and loaded again at ?attempt=n) is ended.
+// The viewer's own worker: the one made ready ahead for this address, the viewer's at once, else a new one; one made
+// ready for another address (?attempt=n) is ended.
 function takeWorker(viewer, address) {
   const standby = state.pdfStandby;
   if (!standby || standby.address !== address || !standby.thread) {
@@ -2913,10 +3120,8 @@ function takeWorker(viewer, address) {
   });
 }
 
-// R2-18: what the page keeps in its memory for speed goes at every end - the sign-out, the idle end and the cap, a 401,
-// another tab's sign-out, a forced password change, a document the server refuses, and the page left (pagehide, the
-// back-forward cache included): the view asked for with the click, the kept copies (overwritten first), the list's
-// hints and the worker made ready ahead.
+// R2-18: at every end - sign-out, idle, cap, a 401, another tab, a forced password change, a refused document,
+// pagehide - the early view, the kept copies (overwritten), the hints and the worker made ready ahead go.
 function forgetMemory() {
   dropEarly();
   for (const { data } of state.keptViews.values()) data.fill(0);
@@ -2964,15 +3169,13 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'browser');
     return;
   }
-  // R2-12: once the library and a worker have started in this page, the document is asked for beside them; before that,
-  // after them, as in release 1, so that on a slow line the two never share it within the library's time limit
+  // R2-12: once a worker has started in this page, the document is asked for beside the library; else after it
   const early = takeEarly(viewer.view);
   if (!early) dropEarly();
   let downloading = early || state.pdfStarted ? downloadFor(viewer, early) : null;
-  // the library and the viewer's own worker (the one made ready ahead, or its own), within the time limit: where either
-  // does not start, marking did not work here, whatever the document, and the next document tries the library again at
-  // fresh addresses - unless the viewer was closed meanwhile: its worker was ended with it, so nothing is concluded
-  // about the library (R2-11)
+  // the library and the viewer's own worker, within the time limit: where either does not start, marking did not work
+  // here, and the next document tries the library again at fresh addresses; a viewer closed meanwhile concludes
+  // nothing (R2-11)
   const loading = loadPdfLibrary();
   try {
     await withinLimit((async () => {
@@ -3005,10 +3208,9 @@ async function openPdf(viewer) {
   const got = await downloading;
   if (!got || !opening()) return;
   const { data, tag, held } = got;
-  // R2-15: the library takes the array it is given, so the copy kept - of a tagged 200 only - is made first, and kept only
-  // once the document has opened
+  // R2-15: the copy kept (a tagged 200's, once opened) is made first: the library takes the array it is given
   const copy = tag && !held && data.byteLength <= KEPT_VIEWS.bytes ? data.slice(0) : null;
-  startStall(viewer);  // the library reads the document under the download's time limit, until it has opened
+  startStall(viewer);  // the library's parse, under the download's limit
   let pdf;
   try {
     const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
@@ -3055,9 +3257,8 @@ function stopStall(viewer) {
   viewer.stallTimer = 0;
 }
 
-// The viewer's download of its document, read by the viewer itself (R2-12): what it got, or null once it was said not to
-// have come or the viewer was closed or framed meanwhile. One that stops moving for PDF_VIEW.stallMs before the document
-// has opened is given up ('slow'); one that fails is said to have failed ('download'), at once.
+// R2-12: the viewer's download of its document: what it got, or null once said not to have come or the viewer left
+// loading; a stalled one is 'slow', a failed one 'download', at once.
 function downloadFor(viewer, early) {
   const opening = () => state.viewer === viewer && viewer.mode === 'loading';
   const moved = () => { if (opening()) startStall(viewer); };
@@ -3104,8 +3305,7 @@ function buildPages(viewer, proxies) {
   });
   viewer.resize.observe(viewer.element);
   watchRatio(viewer);
-  // R2-13: page 1 is asked for now, not at the observer's first answer a frame or two later (which finds it drawing); a
-  // quote chosen while the document opened is shown on its own page instead
+  // R2-13: page 1 at once, unless a quote waits to be shown on its own page
   if (!viewer.pending) {
     viewer.pages[0].near = true;
     drawPage(viewer, viewer.pages[0]);
@@ -3314,7 +3514,7 @@ async function renderPage(viewer, page) {
   try {
     page.render = page.proxy.render({ canvas, viewport, annotationMode: library.AnnotationMode.ENABLE,
       transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
-    // R2-13: the page's text is read beside its drawing; the two are still shown together, in one change of the page
+    // R2-13: the text is read beside the drawing; both are shown together
     const reading = watched(viewer, pageContent(viewer, page.number), page);
     reading.catch(() => {});
     await watched(viewer, page.render.promise, page);
@@ -4395,6 +4595,7 @@ function clearScreen() {
   stopTicker();
   closeViewer();
   forgetMemory();
+  closeList();
   releaseObjectUrls();
   closeDocumentDialogs();
   state.doc = null;
@@ -4724,6 +4925,7 @@ function onClick(event) {
     reload: () => location.reload(),
     'reload-view': route,
     confirm: confirmChosen,
+    'more-documents': () => moreDocuments(),
     'stay-signed-in': () => sendActivity(),
     'idle-close': () => closeCapWarning(),
   })[action.dataset.action]?.();
@@ -4843,10 +5045,10 @@ if (typeof module === 'object' && module.exports) {
     showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,
     idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, ACTIVITY_INPUTS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
     refreshIfWaiting, renderSession,
-    // release 2
     route, showDocument, shellSession, refreshSession, endEntrance, firstRoute, loadSession, SESSION_FRESH_MS, LOADING_AFTER_MS,
     scheduleStandby, startStandby, endStandby, takeWorker, forgetMemory, downloadFor, forgetPdfLibrary, PDF_STANDBY,
     keepView, startEarly, takeEarly, dropEarly, KEPT_VIEWS,
+    showList, closeList, listPage, applySearch, moreDocuments, LIST_ADDRESS, SEARCH_URL, SEARCH_PAUSE_MS, AUTO_PAGES, LOCAL_SEARCH_MAX, MORE_TEXT,
   };
 }
 if (typeof document !== 'undefined') boot();
