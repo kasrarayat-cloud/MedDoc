@@ -2217,6 +2217,32 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                     convert.assert_called_once_with(data)
                     self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)
 
+    def test_an_own_view_the_converter_accepted_is_not_decided_again_at_each_pass(self):
+        # refutation round 3, rounds[3]: while the check cannot decide, an own-view round requeued at its reader's slot
+        # asks the converter once - its acceptance is remembered for the round in this worker process - and not at
+        # every pass (each a full conversion thrown away): the view's conversion, then one decision, and no third
+        real_take, taken = jobs._take_slot, []
+
+        def busy_slots():
+            taken.append(1)
+            if len(taken) <= 4:
+                raise jobs.Requeue('every provider slot is in use')
+            return real_take()
+        enc, _, round_ = self.word(CLEAN_WORD)
+        self.use(self.answering())
+        with mock.patch.object(fable_document, 'convert_docx', side_effect=[RESUME_PDF_A, RESUME_PDF_B]) as convert, \
+                mock.patch.object(jobs, '_take_slot', side_effect=busy_slots), \
+                mock.patch.object(jobs, 'REQUEUE_SECONDS', 0), \
+                mock.patch.object(docx_package, 'check_in_child',
+                                  side_effect=docx_package.ConversionBusy('synthetic: out of time')):
+            self.run_next()
+            round_.refresh_from_db()
+            first = round_.view_pdf_storage_name
+            for _ in range(4):
+                self.run_next()
+        self.assertEqual(len(taken), 6)  # four requeues, then the reader's and the checker's slots
+        self.assert_one_pdf(enc, round_, RESUME_PDF_A, first, convert.call_count, conversions=2)
+
     def test_a_later_round_of_an_r2_30_revision_still_converts_afresh(self):
         enc, rev, _ = self.word(SHELLED_WORD)
         self.use(self.answering())

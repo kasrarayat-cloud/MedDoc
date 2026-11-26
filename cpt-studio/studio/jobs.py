@@ -486,6 +486,15 @@ def _code(job, round_):
             'codes': len(combined['codes'])}
 
 
+# The Word originals the converter accepted for a round's own view while the check could not decide, in this process:
+# (round id, the original's sha256). A requeued or resumed pass of that round reads its own view without asking the
+# converter again (refutation round 3, rounds[3]: one decision per round, not one full conversion per pass). Only an
+# acceptance is kept - a refusal or BUSY ends the round first -; bounded, and cleared when full.
+OWN_VIEW_ACCEPTED_LIMIT = 10_000
+_OWN_VIEW_ACCEPTED: set = set()
+_OWN_VIEW_LOCK = threading.Lock()
+
+
 def _stored_conversion(round_):
     """For a Word document: a converter answering with the PDF a round of this revision already read and stored (the
     newest), so a resumed round, and every later round of the revision, reads - and the customer's viewer shows - the
@@ -505,7 +514,8 @@ def _stored_conversion(round_):
     When the check could not decide, the converter decides first, its own view included: a file it refuses ends the
     round as a fresh conversion would, and a round's own view is read back only once the converter has accepted the
     file - the PDF made to decide is neither read nor stored (round 2, rounds[0]: a view release 1's worker recorded
-    unchecked was otherwise coded with an import or an object missing)."""
+    unchecked was otherwise coded with an import or an object missing); the acceptance is remembered for the round in
+    this worker process, so a requeued pass does not convert again (round 3, rounds[3])."""
     stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
               .exclude(view_pdf_storage_name='').order_by('-number').first())
     if stored is None:
@@ -518,7 +528,15 @@ def _stored_conversion(round_):
         if fresh and stored.pk != round_.pk:
             return fable_document.convert_docx(data)
         if fresh == fable_document.docx_package.CHECK_UNDECIDED:
-            fable_document.convert_docx(data)  # its own view: the converter decides; a refusal or BUSY ends the round
+            accepted = (round_.pk, hashlib.sha256(data).hexdigest())
+            with _OWN_VIEW_LOCK:
+                decided = accepted in _OWN_VIEW_ACCEPTED
+            if not decided:
+                fable_document.convert_docx(data)  # its own view: the converter decides; refused or BUSY ends it
+                with _OWN_VIEW_LOCK:
+                    if len(_OWN_VIEW_ACCEPTED) >= OWN_VIEW_ACCEPTED_LIMIT:
+                        _OWN_VIEW_ACCEPTED.clear()
+                    _OWN_VIEW_ACCEPTED.add(accepted)
         try:
             return read_own_original(workspace_id, SimpleNamespace(storage_name=stored.view_pdf_storage_name,
                                                                    sha256=stored.view_pdf_sha256))
