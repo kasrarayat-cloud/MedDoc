@@ -4895,7 +4895,10 @@ test('the PDF library is named on the page as same-origin static modules, and no
   }
   // the shell names the pinned copy; the page script names no address of its own
   const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
-  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}" data-idle-seconds="\{\{ idle_seconds \}\}" data-cap-seconds="\{\{ cap_seconds \}\}" data-warning-seconds="\{\{ warning_seconds \}\}" data-session="\{\{ session \}\}">/);
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}" data-idle-seconds="\{\{ idle_seconds \}\}" data-cap-seconds="\{\{ cap_seconds \}\}" data-warning-seconds="\{\{ warning_seconds \}\}" data-session="\{\{ session \}\}" data-session-json="\{\{ session_json \}\}">/);
+  // release 2's shell seams (lane F): the session the page shell carries (R2-17; empty until the view fills it) and the
+  // entrance a page load's first view plays (R2-14), on <main> until the page's first route after load
+  assert.match(template, /<main id="main" tabindex="-1" data-entrance>/);
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
   assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
   // the image decoders and standard fonts are the package's own folders, two up from the legacy worker
