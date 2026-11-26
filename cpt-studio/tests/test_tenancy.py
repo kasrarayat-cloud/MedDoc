@@ -187,6 +187,28 @@ class OtherWorkspaceTests(TenancyCase):
         self.assertEqual(operator.get('/ops/').status_code, 200)
         self.assertEqual(operator.get(f'/ops/encounters/{self.enc.pk}').status_code, 200)
 
+    def test_another_workspaces_member_never_lists_pages_or_finds_this_document(self):
+        # release 2 (R2-19, R2-20): every list, a later page from this practice's own cursor, and the search are scoped
+        # by the caller's own membership - a cursor is a position, never an authority
+        own = f.encounter(self.other_ws, self.outsider, title='Synthetic colonoscopy note of the other practice')
+        for index in range(55):  # made after the outsider's own: a cursor of this list names a later time
+            f.encounter(self.ws, self.reviewer, title=f'Synthetic colonoscopy note {index}')
+        mine = self.client_for(self.reviewer)
+        cursor = mine.get('/api/encounters').json()['next']
+        self.assertIsNotNone(cursor)
+        outsider = self.client_for(self.outsider)
+        for path in ('/api/encounters', '/api/encounters?list=queue', '/api/encounters?list=recent',
+                     f'/api/encounters?before={cursor}'):
+            with self.subTest(path=path):
+                answer = outsider.get(path)
+                self.assertEqual(answer.status_code, 200)
+                self.assertEqual([row['id'] for row in answer.json()['encounters']],
+                                 [str(own.pk)] if 'queue' not in path else [])
+        found = outsider.post('/api/encounters/search', data=json.dumps({'text': 'synthetic colonoscopy'}),
+                              content_type='application/json')
+        self.assertEqual([row['id'] for row in found.json()['encounters']], [str(own.pk)])
+        self.assertNotIn(str(self.enc.pk), json.dumps(found.json()))
+
     def test_line_identity_a_stale_round_or_unknown_line_of_another_workspace_reveals_nothing(self):
         # tenancy answers before the round or the line is read: the same 404 for the round shown, a stale round, an
         # unknown line and a code that differs - never the 409 a member of the workspace would read

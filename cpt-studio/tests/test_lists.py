@@ -115,6 +115,7 @@ SHAPES = (
     ('paste', [], 'needs_review', {'service_date': '', 'insurance': 'MEDICARE'}, False),
     ('upload', [(PDF, 1673)], 'ready', {'service_date': '2026-11-02'}, True),  # a tombstone
     ('paste', [], None, {'insurance': None, 'service_date': None}, True),  # another
+    ('upload', [(PDF, 1673)], 'no round: ready', {'insurance': 'medicare'}, False),  # a queue state, no round: earlier
 )
 
 
@@ -129,7 +130,9 @@ def mixed_practice(ws, by, count, *, title='Synthetic list note'):
                                               user_values=values)
         sources = [stored_file(enc, by, media_type, size) for media_type, size in files]
         rev = revision(enc, by, kind, sources[0] if sources and kind == 'upload' else None) if kind else None
-        if stored is not None:
+        if stored is not None and stored.startswith('no round: '):  # a stored state, and no coding round
+            models.Encounter.objects.filter(pk=enc.pk).update(state=stored.removeprefix('no round: '))
+        elif stored is not None:
             if rev is None:
                 rev = Revision.objects.create(encounter=enc, number=1, kind=Revision.ADDENDUM, synthetic_attested_by=by,
                                               synthetic_attested_at=timezone.now(), created_by=by)  # not current

@@ -6,6 +6,11 @@ decision shown, which an undo names, and the round an export names). Handlers:
 `ops/verification/customer-contract.json` lists the keys and `ops/verification/customer-denylist.json` what a customer
 response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed site to both.
 
+Release 2 (RELEASE-2-SPEC R2-15 to R2-21 and R2-24) pages the lists (`GET /api/encounters`), adds the search
+(`POST /api/encounters/search`), a validator for the in-page view of a PDF (`ETag`, answered `304` when the page holds
+it), `opens_pdf` on each list row, and the session carried by the page shell. A page of release 1 left open is told to
+reload by the client header (below) before any of these is read, so it never reads a page as the whole list.
+
 ## Conventions
 
 - **Session authentication** (`/login/`). A call without a session answers `401 {"error": "Sign in to continue."}`.
@@ -24,18 +29,25 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
   text is ever echoed.
 - **Responses** are `Cache-Control: no-store`. Timestamps are UTC ISO 8601 with `Z`, to the second.
 - **What a customer never sees**: a vendor or model name, tokens, costs, hashes, run or request ids, the word provider,
-  or anything under `/ops/` (the platform-operator console, which answers a customer 404).
-- **Every read of a document is recorded** (release 1, C1): the list, a document, its in-page view, its download and a
-  report's download each write an access record - who, which practice and documents, when, from which address, sign-in
-  and request - before the answer leaves. When that record cannot be written the answer is `503 {"error": "This could
-  not be recorded, so nothing was shown."}` and nothing else. A document or report of another practice answers the
-  same `404` as a missing one, and the attempt is recorded as refused. The page's poll of a document being coded
-  (`X-CPT-Poll: 1`) is recorded at most once a minute per sign-in. `HEAD` is answered `405` by these reads.
+  or anything under `/ops/` (the platform-operator console, which answers a customer 404). An `ETag` on an `/api/`
+  answer (release 2: only the in-page view of a PDF carries one) is a quoted UUID, never a hash; `ops/scan_customer.py`
+  and the walk refuse any other.
+- **Every read of a document is recorded** (release 1, C1): a page of a list or of a search, a document, its in-page
+  view, its download and a report's download each write an access record - who, which practice and documents, when, from
+  which address, sign-in and request - before the answer leaves. When that record cannot be written the answer is
+  `503 {"error": "This could not be recorded, so nothing was shown."}` and nothing else. A document or report of another
+  practice answers the same `404` as a missing one, and the attempt is recorded as refused. The page's poll of a
+  document being coded (`X-CPT-Poll: 1`) is recorded at most once a minute per sign-in. `HEAD` is answered `405` by
+  these reads. Release 2 (R2-21): a list's record names the documents of the page it served, in the order shown, with
+  its list and cursor (never search words); the same page read again within a minute by the same sign-in, showing the
+  same documents in the same order, is counted on that record. A re-open of the in-page view answered `304` is recorded
+  too, as shown from the page's memory (R2-15).
 - **Limits** (release 1, C5): 10 reports made per member in 10 minutes and 60 per practice in an hour, 30 uploads per
   member in 10 minutes. Only a report actually made counts. The stored copy answered again (200) counts toward no limit
   and is never refused by one, and neither is a refused request. Over a limit, any of these calls answers
   `429 {"error": "rate_limited", "retry_after": <seconds>}`, with the same number in `Retry-After`; the page words it
-  itself.
+  itself. Release 2 (R2-21): 120 later list pages and searches per member a minute (a first page and the Overview are
+  not counted); over it the same `429`, with nothing read or recorded.
 - **A destroyed document** (release 1, D1) is in no list or count, and its routes answer `404`.
 
 ## Vocabularies
@@ -68,13 +80,54 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
 `can_manage_team` is true for an owner with access (release 1, C4; owner decision D15): the page then offers the Team
 panel (`/api/members`).
 
-`counts.queue` is the documents waiting on a member (questions to answer, codes to review or approve). An agent's
-acknowledgement says it is an automated agent.
+`counts.queue` is the documents waiting on a member (questions to answer, codes to review or approve): the same rule
+as the Review queue's list, so the two agree. An agent's acknowledgement says it is an automated agent.
 
-### `GET /api/encounters`
+Release 2 (R2-17): the page shell (`GET /`) carries this same payload, from the same function, in
+`<body data-session-json="...">` (HTML-escaped JSON), so a page load needs no session request; the page asks for it
+again at most once a minute on document opens, and after its own acts.
 
-`{"encounters": [{id, title, state, state_label, service_date, insurance, created_at, kind: upload|paste}]}`, newest
-first.
+### `GET /api/encounters[?list=documents|queue|recent][&before=<cursor>]`
+
+One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
+
+```json
+{"encounters": [{"id": "...", "title": "...", "state": "ready", "state_label": "Ready for approval",
+                 "service_date": "2026-11-02", "insurance": "medicare", "created_at": "2026-11-20T08:00:00Z",
+                 "kind": "upload|paste", "opens_pdf": true}],
+ "next": "20261120T075959.123456Z~f5000000-0000-4000-8000-000000000001", "total": 117}
+```
+
+- `list`: `documents` (the default, with no `list`), `queue` (the documents waiting on a member: a state of
+  `awaiting_answer`, `needs_review` or `ready`, and a coding round) or `recent` (the Overview's five).
+- `documents` and `queue` hold 50 rows a page, `recent` 5. `next` is the cursor of the next page - a UTC time to the
+  microsecond and an id, `<YYYYMMDDTHHMMSS.ffffffZ>~<id>`, a position only - or `null` when nothing follows (always
+  for `recent`). Ask for the next page with `?before=<next>` (and the same `list`); there is no page size to choose.
+- `total` is the list's exact number on a first page: the rows themselves when the whole list is on the page, else
+  counted. It is `null` for `recent` and for a later page.
+- `opens_pdf` (R2-16) is true when the document's first stored file is a PDF of at most 1 MiB, so the page may ask for
+  its view at the click. A Word document's converted view is not hinted.
+- An unknown `list`, a parameter given twice, or a cursor this API did not write (or any cursor on `recent`) answers
+  `400 {"error": "That list is not available."}` or `400 {"error": "That part of the list could not be read. Open the
+  list again."}`, with nothing read or recorded. Another practice's cursor shows only the caller's own documents.
+- Each page is recorded before it leaves, naming its documents (above); a later page counts toward the member's limit.
+
+### `POST /api/encounters/search` (any member)
+
+`{"text": "<the words>", "before": "<cursor>"|null}` -> one page of the practice's documents whose row, as the page
+draws it, holds the words (release 2, R2-20): the list's answer above, with `total` `null`. The page uses it for a
+Documents list of more than 200 documents and searches a smaller list itself, with release 1's rule.
+
+- It is a POST, so the words never sit in an address, a query string or an access log; CSRF is required.
+- The row's text is the page's: the title (or "Untitled document"), the kind, the insurance when it is shown, the
+  state's label, and the service date as "6 Nov 2026" or "Not entered". The words match it as the page's own search
+  does (lower-cased, trimmed), and nothing in them is a wildcard. Where a browser and the database lower-case a letter
+  differently (a final sigma, a dotted capital I), the search finds those documents too: never fewer than the page.
+- Text that is not text, or blank, answers `400 {"error": "Type the words to search for."}`; a text longer than 240
+  characters, or holding a character the database cannot store, an empty page; an unreadable `before` the list's
+  `400`. A `GET` answers `405`.
+- Every search counts toward the member's limit, and each page is recorded naming the documents found, with the list
+  `search` and its cursor - never the words. It needs PostgreSQL 17 or newer.
 
 ### `POST /api/encounters` (multipart; owner or reviewer)
 
@@ -106,6 +159,11 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
 ```
 
 - Only the latest round is shown; while it is queued, running, failed or stopped it has no codes, questions or notes.
+- `progress.error.text` is a failed round's sentence. Release 2 (R2-31; lane D) adds two for a Word file refused before
+  coding, each with `can_retry` true: "This Word file has another document inserted in it, which cannot be read here.
+  Open it in Word, save it as a PDF and upload the PDF." and "This Word file has an embedded object that cannot be shown
+  here. Open it in Word, save it as a PDF and upload the PDF."; any other refusal of a Word file keeps "The Word file
+  could not be opened.".
 - `document`: `original_url` is an upload's download (null for a paste); `view_url` is the in-page view (`?view=1`);
   for a Word document the view is the PDF the coding review read (`converted: true`, once a round has converted it).
   `size` is the upload's exact number of bytes, or for a paste the bytes of its text in UTF-8, so for a text it is the
@@ -225,7 +283,12 @@ Word document with no converted PDF yet answers the plain download `409` with `d
 Word file only by that address. Each download is recorded with the format it served. With `view=1`: what the
 in-page viewer shows (the PDF or text, the pasted text, or a Word document's converted PDF), `Content-Disposition:
 inline`, `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. A stored file that no longer
-matches its sha256 answers `409`. The review page fetches a PDF view itself (same origin, the session's cookie) and
+matches its sha256 answers `409`. Release 2 (R2-15): a PDF view of a stored file carries `ETag: "<uuid>"`, derived with
+the site's key from the sign-in, the document and the stored file's recorded hash - never a hash itself; a text or a
+pasted view carries none. A request naming it in `If-None-Match` (the page sends it only for a copy it holds in its
+memory; the weak form `W/"..."` matches, `*` never does) is recorded first, as shown from the page's memory, and answered
+`304` with no body and no stored file read; another sign-in, another document, or a newer conversion of a Word document
+gets the `200` with the bytes. Both answers stay `no-store`. The review page fetches a PDF view itself (same origin, the session's cookie) and
 draws it with its pinned PDF library, marking a chosen quote's words on its page; where the browser cannot run that
 library, the library does not work or answer in time, it cannot draw the document, or the download fails or stalls, the
 page frames this address instead, a new frame at `#page=N` for a quote on another page, and says why. A text view is

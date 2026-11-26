@@ -17,7 +17,10 @@ links, retrieval logs and rule ids out of every customer screen, API response an
                                 fails the suite until that line changes too - and never scanned as CPT Studio's own
                                 wording (DECISIONS D368; the shared denylist's 'bundle' surface states the exception)
   GET /api/session              against the customer contract's session keys, scanned
-  GET /api/encounters           the list, against the contract's list keys, scanned
+  GET /api/encounters           the list's first page, against the contract's list keys, scanned; with --all also its
+                                later pages (?before=<the page's next>, release 2's paged list: R2-19, R2-24) until
+                                --limit documents are listed or none follows, each held to the contract and scanned -
+                                and the run fails when it listed fewer than GET /api/session counts (at most --limit)
   for each encounter named (--encounter, repeatable) or listed (--all, at most --limit, newest first):
     GET /api/encounters/<id>             against the contract (every key listed, nothing else), scanned
     GET <document.original_url>          its status and headers only: the document is the customer's own
@@ -38,7 +41,10 @@ links, retrieval logs and rule ids out of every customer screen, API response an
   POST /logout/ and GET /api/session     the session must then be refused (verify_login.py's sign-out proof)
 
 Every body and header is scanned with ops/verification/customer-denylist.json (the browser walk ops/walk.cjs reads the
-same list, and this module's tests run its vectors) and every payload is held to ops/verification/customer-contract.json
+same list, and this module's tests run its vectors) - and an /api/ answer's ETag must be absent or a quoted UUID (W/
+allowed; release 2's in-page view carries one, R2-15): anything else, a hash above all (API.md), is a hard header hit,
+as the walk reads it; a static file's own validators are WhiteNoise's and are not read - and every payload is held to
+ops/verification/customer-contract.json
 - the Fable coding build's customer contract (client contract customer-2026-11-26); the Django suite holds the server to
 the same file through this module's readers (tests/test_api_customer.py). A string that is one of the encounter's own
 quotations - the passages of its document its codes cite - is not scanned. --operator-json DIR adds an operator view's
@@ -69,7 +75,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location('cpt_scan_customer_login', HERE / 'verify_login.py')
@@ -94,6 +100,9 @@ DENY_SHAPE = re.compile(DENYLIST['deny_value_shape'])
 ISO_TIMESTAMP = re.compile(CONTRACT['iso_pattern'])
 DATE_ONLY = re.compile(CONTRACT['date_pattern'])
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+# An /api/ answer's ETag, when it has one (release 2, R2-15 and R2-24): a quoted UUID, W/ allowed - never a hash.
+API_ETAG = re.compile(r'(?:W/)?"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"')
+LIST_PATH = '/api/encounters'
 # Response headers that carry no customer-facing wording (as the walk's own list, ops/walk.cjs).
 UNSCANNED_HEADERS = frozenset({'set-cookie', 'date', 'etag', 'last-modified', 'content-length', 'content-security-policy',
                                'content-security-policy-report-only', 'strict-transport-security', 'permissions-policy',
@@ -524,6 +533,20 @@ def scan_headers(headers, ctx: ScanContext, where: str, hits: list | None = None
     return hits
 
 
+def etag_hits(headers, path: str, hits: list | None = None) -> list:
+    """The hit of an /api/ answer whose ETag is anything but a quoted UUID (W/ allowed; R2-24): an ETag must never be a
+    hash. A static answer's (any other path's) ETag is WhiteNoise's and is not read."""
+    hits = [] if hits is None else hits
+    if not path.startswith('/api/'):
+        return hits
+    items = headers.items() if isinstance(headers, dict) else headers
+    for name, value in items:
+        if name.lower() == 'etag' and not API_ETAG.fullmatch(str(value).strip()):
+            hits.append({'id': 'etag_shape', 'severity': 'hard', 'surface': 'header', 'where': f'GET {path} header {name}',
+                         'match': str(value)[:120]})
+    return hits
+
+
 def harvest(value, dotted: str) -> list:
     """The strings at a dotted path ('a.b[]' takes each element of a.b, a numeric part indexes a list)."""
     nodes = [value]
@@ -722,8 +745,34 @@ class Scanner:
         self.checks, self.hits = [], {'json': [], 'header': [], 'file': [], 'bundle': []}
 
     def get(self, where: str, accept: str = 'application/json', read_body: bool = True):
-        return self.transport.send('GET', where, headers=login._headers(self.origin, accept, login.cookie_header(self.jar)),
-                                   read_body=read_body)
+        answer = self.transport.send('GET', where, headers=login._headers(self.origin, accept, login.cookie_header(self.jar)),
+                                     read_body=read_body)
+        etag_hits(answer.headers, where, self.hits['header'])  # every /api/ answer's ETag, whatever else reads it
+        return answer
+
+    def every_page(self, first: dict, ctx: ScanContext, limit: int) -> list:
+        """The ids of the list's first page ``first`` and of its later pages, followed by their next cursors (GET only,
+        each page held to the contract and scanned) until ``limit`` ids are listed or no page follows."""
+        ids, page, seen = [], first, set()
+        while isinstance(page, dict):
+            ids += [row.get('id') for row in page.get('encounters') or [] if isinstance(row, dict)]
+            cursor = page.get('next')
+            if len(ids) >= limit or cursor is None:
+                break
+            if not isinstance(cursor, str) or cursor in seen:
+                self.checks.append(login.check('customer.list_pages', 'hard', False, f'a list page named the next page '
+                                               f'{json.dumps(cursor)}: not a cursor, or one already read'))
+                break
+            seen.add(cursor)
+            where = f'{LIST_PATH}?before={quote(cursor, safe="")}'
+            answer, page = self.json_get(where, ctx)
+            self.checks.append(check_contract(page, 'list', f'customer.list_contract.page{len(seen) + 1}')
+                               if answer.status == 200 else
+                               login.check(f'customer.list_contract.page{len(seen) + 1}', 'hard', False,
+                                           f'GET {LIST_PATH}?before=... answered HTTP {answer.status}'))
+            if answer.status != 200:
+                break
+        return list(dict.fromkeys(ids))
 
     def bundle(self, ctx: ScanContext) -> None:
         page = self.get('/', 'text/html')
@@ -875,8 +924,15 @@ def run(transport, origin: str, username: str, password: str, encounters: list, 
             scanner.checks.append(check_contract(rows, 'list', 'customer.list_contract') if listed.status == 200
                                   else login.check('customer.list_contract', 'hard', False, f'GET /api/encounters answered HTTP {listed.status}'))
             named = list(dict.fromkeys(encounters))
-            if every and isinstance(rows, dict):
-                named += [row.get('id') for row in rows.get('encounters') or [] if isinstance(row, dict) and row.get('id') not in named][:max(0, limit)]
+            if every and isinstance(rows, dict) and listed.status == 200:
+                listed_ids = scanner.every_page(rows, base, max(0, limit))
+                counted = ((data or {}).get('counts') or {}).get('documents') if isinstance(data, dict) else None
+                wanted = min(max(0, limit), counted) if isinstance(counted, int) and not isinstance(counted, bool) else None
+                scanner.checks.append(login.check(
+                    'customer.list_complete', 'hard', wanted is not None and len(listed_ids) >= wanted,
+                    f'the list read {len(listed_ids)} document(s) over its pages; GET {login.SESSION_PATH} counts '
+                    f'{counted!r} (at most --limit {limit} wanted)'))
+                named += [item for item in listed_ids if item not in named][:max(0, limit)]
             for encounter_id in named:
                 if not (isinstance(encounter_id, str) and UUID.match(encounter_id)):
                     scanner.checks.append(login.check('encounter.id', 'hard', False, f'not an encounter id: {json.dumps(encounter_id)}'))
