@@ -1196,7 +1196,7 @@ class Bench(TransactionTestCase):
 
     def part_records(self):
         from studio import models
-        judged = {}
+        judged, pages = {}, {}
         for size in ('n100', 'n1500'):
             since = models.AccessRecord.objects.count()
             repeats_before = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
@@ -1209,19 +1209,19 @@ class Bench(TransactionTestCase):
                 row['sign_in_ref'] = str(row['sign_in_ref'])
             repeats_after = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
             added = sum(n - repeats_before.get(k, 0) for k, n in repeats_after.items())
-            judged[size] = judge_records(entries, rows, added, data.get('actions', []), data.get('lists', []))
-            if size == 'n100':  # the flow opens four documents here: none recorded is a failure, never a vacuous pass
-                opens = judged[size]['openings']['opens']
-                judged[size]['openings']['ok'] = judged[size]['openings']['ok'] and len(opens) == 4
-                kinds = judged[size]['equation']['kinds']
-                judged[size]['equation']['ok'] = judged[size]['equation']['ok'] and all(
-                    kinds[k]['answers'] > 0 for k in ('member.list', 'member.detail', 'member.inline'))
+            judged[size] = judge_records(entries, rows, added, data.get('actions', []), data.get('lists', []),
+                                         docs=self.docs_by_label)
+            # records[2]: each flow's own hover result, ANDed below as the other checks are (browser() kept the last)
+            judged[size]['hover'] = data.get('checks', {}).get('records.hover') or {'ok': False, 'missing': True}
+            pages[size] = data.get('markerPage')  # records[4]: what the page itself held after the marker was typed
+            if size == 'n100':
+                records_n100_rule(judged[size])
         for check in ('records.equation', 'records.polls', 'records.openings', 'records.list_ids',
-                      'records.inline_before_pixels'):  # named whole, as acceptance.json names them
+                      'records.inline_before_pixels', 'records.hover'):  # named whole, as acceptance.json names them
             parts = {size: judged[size][check.split('.', 1)[1]] for size in judged}
             self.check(check, all(p['ok'] for p in parts.values()), sizes=parts)
         self.browser('fail-closed', 'P0', label='fail-closed', allowed=frozenset(SLOW_STATUS_OK | {503}), timing=False)
-        ok, detail = marker_audit(self.raw, MARKER_WORD)
+        ok, detail = marker_audit(self.raw, MARKER_WORD, pages)
         self.check('records.marker', ok, **detail)
         self.result['records'] = judged
 
@@ -1578,10 +1578,21 @@ def read_kind(method: str, url: str):
     return None
 
 
-def judge_records(entries: list, rows: list, repeats_added: int, actions: list, lists: list) -> dict:
+def records_n100_rule(judged: dict) -> dict:
+    """At the practice of 100 the records flow opens four documents and downloads three files (records[8]): a kind
+    with no answer is a failure, never a vacuous pass of the equation."""
+    judged['openings']['ok'] = judged['openings']['ok'] and len(judged['openings']['opens']) == 4
+    kinds = judged['equation']['kinds']
+    judged['equation']['ok'] = judged['equation']['ok'] and all(
+        kinds[k]['answers'] > 0 for k in ('member.list', 'member.detail', 'member.inline', 'member.download'))
+    return judged
+
+
+def judge_records(entries: list, rows: list, repeats_added: int, actions: list, lists: list, docs=None) -> dict:
     """The records part's exact gates over one flow: ``entries`` the proxy's log (each with its X-Request-ID),
     ``rows`` the access rows written meanwhile, ``repeats_added`` the counted repeats added meanwhile, ``actions`` and
-    ``lists`` what the page did and the list answers it received (each with the request id the proxy gave it)."""
+    ``lists`` what the page did and the list answers it received (each with the request id the proxy gave it), and
+    ``docs`` the rich documents by label (their ids and barcode numbers)."""
     rid = lambda e: (e.get('reqHeaders') or {}).get('x-request-id', '')
     served = [e for e in entries if e['status'] in (200, 304) and read_kind(e['method'], e['url'])]
     by_rid = {}
@@ -1605,12 +1616,17 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     orphans = [r['view'] for r in rows if r['request_id'] not in answered and r['outcome'] != 'refused']
     out['equation'] = {'ok': all(k['ok'] for k in kinds.values()) and not orphans, 'kinds': kinds, 'orphans': orphans,
                        'repeats_added': repeats_added}
-    groups = {}
-    for e in polls:
-        for r in by_rid.get(rid(e), []):
-            groups.setdefault((r['sign_in_ref'], tuple(r['encounter_ids'])), []).append(r['created_at'])
-    crowded = [k for k, times in groups.items() if any(b - a < 60000 for a, b in zip(sorted(times), sorted(times)[1:]))]
-    out['polls'] = {'ok': not crowded, 'poll_answers': len(polls), 'poll_rows': sum(len(v) for v in groups.values())}
+    # records[7]: release 1 (read_audit.detail_seen_recently) writes a poll's row only when this sign-in has no served
+    # member.detail row of the document - the open's own included - within 60 s before it on the same UTC day
+    poll_rids = {rid(e) for e in polls}
+    details = sorted((r for r in rows if r['view'] == 'member.detail' and r['outcome'] == 'served'),
+                     key=lambda r: r['created_at'])
+    same_day = lambda q, r: q['created_at'] // 86400000 == r['created_at'] // 86400000  # noqa: E731
+    crowded = [round(r['created_at'] - q['created_at']) for i, r in enumerate(details) if r['request_id'] in poll_rids
+               for q in details[:i] if (q['sign_in_ref'], q['encounter_ids']) == (r['sign_in_ref'], r['encounter_ids'])
+               and same_day(q, r) and r['created_at'] - q['created_at'] < 60000]
+    out['polls'] = {'ok': not crowded, 'poll_answers': len(polls),
+                    'poll_rows': sum(1 for r in rows if r['request_id'] in poll_rids), 'crowded_ms': crowded[:10]}
     opens, late = [], []
     for a in actions:
         if a.get('kind') != 'records-open':
@@ -1619,8 +1635,13 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
         detail = sum(1 for r in written if r['view'] == 'member.detail')
         inline = sum(1 for r in written if r['view'] == 'member.inline')
         library_failed = a.get('mode') == 'frame' and a.get('label') != 'text-note'
-        opens.append({'label': a.get('label'), 'detail': detail, 'inline': inline,
-                      'ok': detail == 1 and (inline == 1 or (library_failed and inline == 2))})
+        # records[5]: the opening's rows name the document opened, and what was drawn is that document (its barcode)
+        doc = (docs or {}).get(a.get('label')) or {}
+        mine = [r for r in written if r['view'] in ('member.detail', 'member.inline')]
+        named = bool(doc) and all(r['encounter_ids'] == [doc.get('id')] for r in mine)
+        drawn = a.get('firstPage') is None or (a.get('barcode') or {}).get('number') == doc.get('number')
+        opens.append({'label': a.get('label'), 'detail': detail, 'inline': inline, 'named': named, 'drawn': drawn,
+                      'ok': named and drawn and detail == 1 and (inline == 1 or (library_failed and inline == 2))})
         pixels = a.get('canvasEpoch')
         for r in written:
             if r['view'] == 'member.inline' and pixels and r['created_at'] > pixels:
@@ -1629,10 +1650,19 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     out['inline_before_pixels'] = {'ok': not late, 'late': late}
     mismatches = []
     seen_ids = [r['encounter_ids'] for r in rows if r['view'] == 'member.list']
+    sent = {rid(e): e['url'] for e in served}
+
+    def wanted(answer):  # records[6], R2-21: {list, before} of the request the proxy saw; a search's cursor its body's
+        path, _, query = (sent.get(answer.get('rid') or '') or '').partition('?')
+        if path == '/api/encounters/search':
+            return {'list': 'search', 'before': answer.get('before')}
+        q = urllib.parse.parse_qs(query)
+        return {'list': q.get('list', ['documents'])[0], 'before': q.get('before', [None])[0]}
     for answer in lists:
         written = [r for r in by_rid.get(answer.get('rid') or '', []) if r['view'] == 'member.list']
         if written:
-            if written[0]['encounter_ids'] != answer.get('ids') or written[0]['count'] != len(answer.get('ids') or []):
+            if written[0]['encounter_ids'] != answer.get('ids') or written[0]['count'] != len(answer.get('ids') or []) \
+                    or written[0].get('filters') != wanted(answer):
                 mismatches.append({'path': answer.get('path'), 'served': len(answer.get('ids') or []),
                                    'named': len(written[0]['encounter_ids'] or [])})
         elif not (repeats_added and answer.get('ids') in seen_ids):
@@ -1641,15 +1671,29 @@ def judge_records(entries: list, rows: list, repeats_added: int, actions: list, 
     return out
 
 
-def marker_audit(raw: Path, word: str):
-    """(ok, where): the marker typed into the search appears in no URL or header the proxy saw, no gunicorn line, and
-    no access row or security event (the round's server-side artifacts; the bench's own inputs are not scanned)."""
-    from studio import models
+def marker_in_files(raw: Path, word: str) -> dict:
+    """{file: True} for each of the round's server-side logs that holds the marker: every URL and header the proxy saw
+    (every cookie but the server's own, records[4]), every gunicorn line."""
+    return {path.name: True for pattern in ('proxy-*.jsonl', 'access-*.log', 'gunicorn-*.err')
+            for path in raw.glob(pattern) if word in path.read_text(errors='replace')}
+
+
+def marker_in_pages(pages: dict | None) -> dict:
+    """{page-<size>: where} for each records flow whose page held the marker (its URLs, history, window name, Web
+    Storage, cookies, Cache API or IndexedDB names: bench.cjs pageMarkerHits), and 'never read' for a flow that did not
+    read its page, so it fails instead of passing vacuously (records[4])."""
     found = {}
-    for pattern in ('proxy-*.jsonl', 'access-*.log', 'gunicorn-*.err'):
-        for path in raw.glob(pattern):
-            if word in path.read_text(errors='replace'):
-                found[path.name] = True
+    for size, hits in (pages or {}).items():
+        if hits is None or hits:
+            found[f'page-{size}'] = 'never read' if hits is None else hits[:10]
+    return found
+
+
+def marker_audit(raw: Path, word: str, pages: dict | None = None):
+    """(ok, where): the marker typed into the search appears in no URL or header the proxy saw, no gunicorn line, no
+    access row or security event, and nowhere the page itself kept it (the bench's own inputs are not scanned)."""
+    from studio import models
+    found = {**marker_in_files(raw, word), **marker_in_pages(pages)}
     rows = models.AccessRecord.objects.filter(filters__icontains=word).count() + \
         models.AccessRecord.objects.filter(reason__icontains=word).count()
     events = sum(1 for data in models.SecurityEvent.objects.values_list('data', flat=True)

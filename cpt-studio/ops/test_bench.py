@@ -429,6 +429,131 @@ class BenchBrowserFilesTests(unittest.TestCase):
         self.assertIn('the base must be loopback', refused.stderr)
 
 
+PLAYWRIGHT = Path('/opt/meddoc-pro/node_modules/playwright')
+
+
+def _free_ports(n):
+    pool = RUN.PortPool(range(9300, 9350))
+    return [pool.take() for _ in range(n)]
+
+
+@unittest.skipUnless(NODE, 'node is not installed')
+class BenchProxyCookieTests(unittest.TestCase):
+    def test_the_proxy_logs_every_cookie_but_the_server_s_own(self):
+        """records[4]: the proxy logged the whole Cookie header as the session's digest, so a search word a page put in
+        a cookie never reached the marker scan."""
+        import http.server
+        import socketserver
+        import threading
+        import urllib.request
+        listen, upstream, control = _free_ports(3)
+
+        class Answer(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Length', '2')
+                self.end_headers()
+                self.wfile.write(b'ok')
+
+            def log_message(self, *args):
+                pass
+        server = socketserver.TCPServer(('127.0.0.1', upstream), Answer)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        proxy = subprocess.Popen([NODE, str(BENCH / 'proxy.cjs'), '--listen', str(listen), '--upstream', str(upstream),
+                                  '--control', str(control)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(proxy.wait, 10)
+        self.addCleanup(proxy.terminate)
+        self.assertIn('proxy up', proxy.stdout.readline())
+        cookie = 'cptstudio_session=sess123; cptstudio_csrf=csrf456; cptstudio_device=dev789; cpt-last-search=zqxword'
+        asked = urllib.request.Request(f'http://127.0.0.1:{listen}/x', headers={'Cookie': cookie})
+        self.assertEqual(urllib.request.urlopen(asked, timeout=10).read(), b'ok')
+        log = json.loads(urllib.request.urlopen(f'http://127.0.0.1:{control}/log?since=0', timeout=10).read())
+        logged = log['entries'][0]['reqHeaders']['cookie']
+        self.assertIn('cpt-last-search=zqxword', logged)
+        self.assertRegex(logged, r'cptstudio_session=session:[0-9a-f]{12}')
+        for secret in ('sess123', 'csrf456', 'dev789'):
+            self.assertNotIn(secret, logged)
+
+
+NOTHING_DRAWN_DRIVER = r"""
+const http = require('http');
+const [bench, playwright, port, geometryJson] = process.argv.slice(2);
+const B = require(bench); const G = JSON.parse(geometryJson); const BASE = `http://127.0.0.1:${port}`;
+const ID = '0f0e0d0c-0b0a-5909-8807-060504030201'; const OTHER = 'a1a2a3a4-b1b2-5c1c-8d1d-e1e2e3e4e5e6';
+const PAGE = `
+const V = new URLSearchParams(location.search).get('v');
+const ID = ${JSON.stringify(ID)}; const OTHER = ${JSON.stringify(OTHER)}; const G = ${JSON.stringify(G)};
+const main = () => document.getElementById('main');
+function list() {
+  const ids = V.startsWith('norow') ? [OTHER] : [ID, OTHER];
+  const rows = ids.map(i => '<a class="document-row" href="#doc/' + i + '">r</a>').join('');
+  main().innerHTML = '<section><div id="documentsTable">' + rows + '</div></section>';
+}
+function draw() {
+  main().innerHTML = '<section><div id="reviewColumn">r</div>'
+    + '<div class="pdf-page" data-page="1"><canvas width="1224" height="1584"></canvas></div></section>';
+  const cv = document.querySelector('canvas'); const g = cv.getContext('2d');
+  g.fillStyle = 'white'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = 'black'; g.fillRect(G.marker[0] * cv.width - 40, G.marker[1] * cv.height - 40, 80, 80);
+}
+function route() {
+  if (location.hash !== '#doc/' + ID) return list();
+  if (V === 'leave-clean') return location.assign('/login/');
+  if (V === 'norow-clean') { main().innerHTML = '<section><p>Not available.</p></section>'; return; }
+  draw();
+  if (V === 'leave') setTimeout(() => location.assign('/login/'), 300);
+}
+window.addEventListener('hashchange', route); route();`;
+const APP = '<!doctype html><html><body><main id="main"></main><script>' + PAGE + '</script></body></html>';
+const LOGIN = '<!doctype html><input name="password" type="password">';
+const server = http.createServer((req, res) => {
+  const path = new URL(req.url, BASE).pathname;
+  const body = path === '/login/' ? LOGIN : path === '/' ? APP : null;
+  res.writeHead(body === null ? 404 : 200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+  res.end(body || '');
+});
+(async () => {
+  await new Promise(resolve => server.listen(Number(port), '127.0.0.1', resolve));
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: { 'text-2p': { label: 'text-2p', id: ID, number: 102, kind: 'pdf' } }, browser,
+    INIT: B.INIT_FOR(G), result: { consoleErrors: [], pageErrors: [], blocked: [] }, FLOW: 'correct', PROFILE: 'P0',
+    BASE });
+  const out = {};
+  try {
+    for (const v of ['stay', 'leave', 'norow', 'leave-clean', 'norow-clean']) {
+      const s = await B.TESTING.newContext();
+      try {
+        await s.page.goto(`${BASE}/?v=${v}`); await s.page.waitForSelector('#documentsTable .document-row');
+        out[v] = (await B.TESTING.openNoWait(s, 'text-2p')).canvasDark;
+      } finally { await s.context.close(); }
+    }
+  } finally { await browser.close(); server.close(); }
+  console.log(JSON.stringify(out));
+})().catch(e => { console.error(String(e && e.stack || e)); server.close(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchNothingDrawnTests(unittest.TestCase):
+    def test_a_document_drawn_and_then_left_or_routed_with_no_row_is_seen(self):
+        """records[3]: 'nothing drawn' read the probe of whatever document was current 4 s later, so a page that drew
+        and then went to the sign-in page (as a 401 does), or drew from the hash with no row, passed as nothing."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'driver.cjs')
+            driver.write_text(NOTHING_DRAWN_DRIVER)
+            port = _free_ports(1)[0]
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(PLAYWRIGHT), str(port),
+                                   json.dumps(BD.geometry())], capture_output=True, text=True, timeout=180,
+                                  env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]),
+                         {'stay': True, 'leave': True, 'norow': True, 'leave-clean': False, 'norow-clean': False})
+
+
 def _node_bits(number):
     script = f'console.log(JSON.stringify(require({json.dumps(str(BENCH / "bench.cjs"))}).encodeForTest({number})))'
     return json.loads(subprocess.run([NODE, '-e', script], capture_output=True, text=True, timeout=60).stdout)
@@ -1007,9 +1132,14 @@ def _entry(rid, method, url, status=200, poll=False):
     return {'method': method, 'url': url, 'status': status, 'reqHeaders': headers}
 
 
-def _row(rid, view, ids=(), at=1000.0, sign_in='s1', outcome='served'):
+def _row(rid, view, ids=(), at=1000.0, sign_in='s1', outcome='served', filters=None):
+    if filters is None:  # R2-21: a list row names its list and cursor
+        filters = {'list': 'documents', 'before': None} if view == 'member.list' else {}
     return {'request_id': rid, 'view': view, 'encounter_ids': list(ids), 'count': len(ids), 'created_at': at,
-            'sign_in_ref': sign_in, 'outcome': outcome, 'filters': {}}
+            'sign_in_ref': sign_in, 'outcome': outcome, 'filters': filters}
+
+
+DOCS = {'text-2p': {'id': DOC_A, 'number': 101}}
 
 
 class RecordsJudgementTests(unittest.TestCase):
@@ -1023,7 +1153,8 @@ class RecordsJudgementTests(unittest.TestCase):
                    _entry('s1', 'GET', '/static/studio/app.js'), _entry('x1', 'POST', '/session/activity')]
         rows = [_row('l1', 'member.list', [DOC_A, DOC_B]), _row('d1', 'member.detail', [DOC_A], at=2000),
                 _row('v1', 'member.inline', [DOC_A], at=2100)]
-        actions = [{'kind': 'records-open', 'label': 'text-2p', 'mode': 'pdf', 'canvasEpoch': 2300,
+        actions = [{'kind': 'records-open', 'label': 'text-2p', 'number': 101, 'mode': 'pdf', 'canvasEpoch': 2300,
+                    'firstPage': 300, 'barcode': {'number': 101},
                     'rids': [['GET', '/api/encounters/<id>', 200, 'd1', 1],
                              ['GET', '/api/encounters/<id>/original?view=1', 200, 'v1', 5]]}]
         lists = [{'rid': 'l1', 'path': '/api/encounters', 'ids': [DOC_A, DOC_B]},
@@ -1032,7 +1163,7 @@ class RecordsJudgementTests(unittest.TestCase):
 
     def test_every_served_read_is_one_row_or_a_counted_repeat(self):
         entries, rows, actions, lists = self.flow()
-        got = RUN.judge_records(entries, rows, 1, actions, lists)
+        got = RUN.judge_records(entries, rows, 1, actions, lists, docs=DOCS)
         for name in ('equation', 'polls', 'openings', 'inline_before_pixels', 'list_ids'):
             self.assertTrue(got[name]['ok'], (name, got[name]))
 
@@ -1063,9 +1194,71 @@ class RecordsJudgementTests(unittest.TestCase):
         crowded = entries + [_entry('p2', 'GET', f'/api/encounters/{DOC_A}', poll=True)]
         polled = rows + [_row('p1', 'member.detail', [DOC_A], at=5000), _row('p2', 'member.detail', [DOC_A], at=9000)]
         self.assertFalse(RUN.judge_records(crowded, polled, 1, actions, lists)['polls']['ok'])
-        spaced = rows + [_row('p1', 'member.detail', [DOC_A], at=5000), _row('p2', 'member.detail', [DOC_A],
-                                                                          at=70000)]
+        spaced = rows + [_row('p1', 'member.detail', [DOC_A], at=62000), _row('p2', 'member.detail', [DOC_A],
+                                                                           at=125000)]
         self.assertTrue(RUN.judge_records(crowded, spaced, 1, actions, lists)['polls']['ok'])
+
+    def test_a_poll_row_within_a_minute_of_the_open_s_own_row_fails(self):
+        """records[7]: polls were grouped among themselves only, so a poll writing a row 3 s after the open passed."""
+        entries, rows, actions, lists = self.flow()
+        crowded = entries + [_entry('p2', 'GET', f'/api/encounters/{DOC_A}', poll=True)]
+        after_open = rows + [_row('p1', 'member.detail', [DOC_A], at=5000)]
+        got = RUN.judge_records(crowded, after_open, 1, actions, lists, docs=DOCS)
+        self.assertFalse(got['polls']['ok'], got['polls'])
+        day = 86400000
+        midnight = [dict(r, created_at=r['created_at'] + day - 7000) for r in rows]  # the open at 23:59:55 (UTC)
+        new_day = midnight + [_row('p1', 'member.detail', [DOC_A], at=2 * day + 6210)]  # its poll at 00:00:06.21
+        self.assertTrue(RUN.judge_records(crowded, new_day, 1, actions, lists, docs=DOCS)['polls']['ok'])  # by design
+        refused = rows + [_row('p1', 'member.detail', [DOC_A], at=5000, outcome='refused')]
+        self.assertTrue(RUN.judge_records(crowded, refused, 1, actions, lists, docs=DOCS)['polls']['ok'])
+
+    def test_an_opening_names_and_draws_the_document_opened(self):
+        """records[5]: openings counted rows by request id only, so rows naming another document passed."""
+        entries, rows, actions, lists = self.flow()
+        self.assertTrue(RUN.judge_records(entries, rows, 1, actions, lists, docs=DOCS)['openings']['ok'])
+        for change in ([DOC_B], []):
+            wrong = [dict(r, encounter_ids=change) if r['request_id'] == 'v1' else r for r in rows]
+            got = RUN.judge_records(entries, wrong, 1, actions, lists, docs=DOCS)
+            self.assertFalse(got['openings']['ok'], change)
+            self.assertTrue(got['equation']['ok'], change)
+        drawn = [dict(actions[0], barcode={'number': 102})]
+        got = RUN.judge_records(entries, rows, 1, drawn, lists, docs=DOCS)
+        self.assertFalse(got['openings']['ok'])
+        self.assertFalse(got['openings']['opens'][0]['drawn'])
+        self.assertFalse(RUN.judge_records(entries, rows, 1, actions, lists)['openings']['ok'])  # no documents named
+
+    def test_a_list_row_names_its_list_and_cursor(self):
+        """records[6]: list_ids compared ids and count only, so rows naming another list or cursor passed."""
+        entries, rows, actions, lists = self.flow()
+        alone = [e for e in entries if e['reqHeaders']['x-request-id'] != 'l2']
+        good = RUN.judge_records(alone, rows, 0, actions, lists[:1], docs=DOCS)
+        self.assertTrue(good['list_ids']['ok'], good['list_ids'])
+        for filters in ({}, {'list': 'queue', 'before': None}, {'list': 'documents', 'before': 'x'}):
+            wrong = [dict(r, filters=filters) if r['view'] == 'member.list' else r for r in rows]
+            got = RUN.judge_records(alone, wrong, 0, actions, lists[:1], docs=DOCS)
+            self.assertTrue(got['equation']['ok'], filters)
+            self.assertFalse(got['list_ids']['ok'], filters)
+        later = [_entry('l3', 'GET', '/api/encounters?list=documents&before=2026-11-02T10:00:00Z~x')]
+        row = [_row('l3', 'member.list', [DOC_A], filters={'list': 'documents', 'before': '2026-11-02T10:00:00Z~x'})]
+        answer = [{'rid': 'l3', 'path': '/api/encounters?list=documents&before=<cursor>', 'ids': [DOC_A]}]
+        self.assertTrue(RUN.judge_records(later, row, 0, [], answer, docs=DOCS)['list_ids']['ok'])
+        search = [_entry('s9', 'POST', '/api/encounters/search')]
+        found = [_row('s9', 'member.list', [DOC_A], filters={'list': 'search', 'before': None})]
+        asked = [{'rid': 's9', 'path': '/api/encounters/search', 'ids': [DOC_A], 'before': None}]
+        self.assertTrue(RUN.judge_records(search, found, 0, [], asked, docs=DOCS)['list_ids']['ok'])
+
+    def test_the_download_kind_is_exercised_at_the_practice_of_100(self):
+        """records[8]: no records flow downloaded, so a download served with no record passed the equation."""
+        entries, rows, actions, lists = self.flow()
+        opens = actions * 4
+        judged = RUN.judge_records(entries, rows, 1, opens, lists, docs=DOCS)
+        judged['openings'] = {'ok': True, 'opens': [{}] * 4}
+        self.assertFalse(RUN.records_n100_rule(json.loads(json.dumps(judged)))['equation']['ok'])
+        downloaded = entries + [_entry('w1', 'GET', f'/api/encounters/{DOC_A}/original')]
+        with_rows = rows + [_row('w1', 'member.download', [DOC_A], at=2500)]
+        judged = RUN.judge_records(downloaded, with_rows, 1, opens, lists, docs=DOCS)
+        judged['openings'] = {'ok': True, 'opens': [{}] * 4}
+        self.assertTrue(RUN.records_n100_rule(judged)['equation']['ok'])
 
     def test_a_failed_library_may_write_a_second_inline_row(self):
         entries, rows, actions, lists = self.flow()
@@ -1073,7 +1266,7 @@ class RecordsJudgementTests(unittest.TestCase):
         entries.append(_entry('v2', 'GET', f'/api/encounters/{DOC_A}/original?view=1'))
         actions[0]['rids'].append(['GET', '/api/encounters/<id>/original?view=1', 200, 'v2', 5])
         rows.append(_row('v2', 'member.inline', [DOC_A], at=2200))
-        self.assertTrue(RUN.judge_records(entries, rows, 1, actions, lists)['openings']['ok'])
+        self.assertTrue(RUN.judge_records(entries, rows, 1, actions, lists, docs=DOCS)['openings']['ok'])
 
     def test_requests_map_to_the_views_they_record(self):
         self.assertEqual(RUN.read_kind('GET', '/api/encounters?list=documents&before=x'), 'member.list')
@@ -1160,6 +1353,62 @@ class BenchGateFlowStatusTests(unittest.TestCase):
         got = self.statuses(500)
         self.assertEqual(got, {'left-behind:500': 1, 'correct:500': 1})
         self.assertNotIn(403, RUN.GATE_STATUS_OK)  # release 1 answers another practice's document as missing (404)
+
+
+class _NoRows(list):
+    def count(self):
+        return len(self)
+
+    def order_by(self, *a):
+        return self
+
+    def values(self, *a):
+        return self
+
+    def values_list(self, *a, **kw):
+        return _NoRows()
+
+    def filter(self, **kw):
+        return _NoRows()
+
+
+class BenchRecordsPartTests(unittest.TestCase):
+    def records_round(self, hover_fails_at=(), marker_page=None):
+        flows = {}
+        for size in ('n100', 'n1500'):
+            flows[f'records-{size}'] = {'checks': {'records.hover': {'ok': size not in hover_fails_at}},
+                                        'markerPage': [] if marker_page is None else marker_page}
+        flows['fail-closed'] = {'checks': {'records.fail_closed': {'ok': True}}}
+        _FakeProxy.entries_for = {}
+        manager = type('Manager', (), {'objects': _NoRows()})
+        models = type(sys)('studio.models')
+        models.AccessRecord = models.AccessRecordRepeat = models.SecurityEvent = manager
+        studio = type(sys)('studio')
+        studio.models = models
+        with tempfile.TemporaryDirectory() as d:
+            bench, patches = _flows_bench(Path(d), flows)
+            with contextlib.ExitStack() as stack:
+                for patch in patches + [unittest.mock.patch.dict(sys.modules, {'studio': studio,
+                                                                                'studio.models': models})]:
+                    stack.enter_context(patch)
+                bench.part_records()
+        return bench.result['checks']
+
+    def test_a_hover_read_in_either_practice_fails_the_round(self):
+        """records[2]: browser() kept the n1500 flow's records.hover over the n100 one, so a hover read at 100
+        passed."""
+        self.assertTrue(self.records_round()['records.hover']['ok'])
+        for size in ('n100', 'n1500'):
+            self.assertFalse(self.records_round(hover_fails_at=(size,))['records.hover']['ok'], size)
+
+    def test_the_marker_scan_reads_the_page(self):
+        """records[4]: the marker scan read only the server's artifacts, so search words in the page's URL, storage or a
+        cookie passed; a flow that never read its page fails too."""
+        self.assertTrue(self.records_round()['records.marker']['ok'])
+        got = self.records_round(marker_page=['location', 'sessionStorage:cpt-last-search'])['records.marker']
+        self.assertFalse(got['ok'])
+        self.assertEqual(got['found']['page-n100'], ['location', 'sessionStorage:cpt-last-search'])
+        self.assertEqual(RUN.marker_in_pages({'n100': None, 'n1500': []}), {'page-n100': 'never read'})
 
 
 class BenchServerPartTests(unittest.TestCase):

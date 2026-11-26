@@ -8,7 +8,8 @@
 //   as X-Bench-Request-Id, so the browser side can join what the page received to that record too.
 // - Every request is logged when its answer ends: sequence, start and end (ms since the epoch, fractional), method, the
 //   path with its query, status, the answer's body bytes, the request body's bytes, the request headers (the Cookie
-//   value replaced by a short digest of the session cookie, which names the member and nothing else) and the answer's
+//   server's own cookies replaced: the session's by a short digest that names the member and nothing else, the CSRF
+//   and device cookies by <redacted>; any other cookie logged as sent, for the marker scan) and the answer's
 //   headers. The log is the bench's server-side truth for counts, in-flight requests, cache headers and the marker scan.
 // - Rules, set on the control port: `delay` holds a matching request `ms` before it is sent upstream (the planted-delay
 //   control); `hold` holds a matching request `ms` before it is sent (a hung document). Each applies `times` times.
@@ -33,6 +34,14 @@ const now = () => performance.timeOrigin + performance.now();
 const entries = []; let seq = 0; let inFlight = 0; let rules = [];
 const logStream = LOG ? fs.createWriteStream(LOG, { flags: 'a', mode: 0o600 }) : null;
 
+// records[4]: the server's own cookies are not logged (the session's value as its member's digest); every other cookie
+// is logged as the page sent it, so a search word a page put into a cookie reaches the marker scan
+function cookieLog(value, memberId) {
+  return String(value).split(/;\s*/).map(pair => { const name = pair.split('=', 1)[0];
+    if (/^(?:__Host-)?cptstudio_session$/.test(name)) return `${name}=session:${memberId}`;
+    return /^(?:__Host-)?cptstudio_(?:csrf|device)$/.test(name) ? `${name}=<redacted>` : pair; }).join('; ');
+}
+
 function member(cookie) {
   const match = /(?:^|;\s*)((?:__Host-)?cptstudio_session)=([^;]+)/.exec(cookie || '');
   return match ? crypto.createHash('sha256').update(match[2]).digest('hex').slice(0, 12) : '';
@@ -54,7 +63,7 @@ const server = http.createServer((req, res) => {
     headers.host = HOST_HEADER;
     for (const name of ['origin', 'referer']) if (headers[name]) headers[name] = headers[name].replace(own, target);
   }
-  for (const [k, v] of Object.entries(headers)) entry.reqHeaders[k] = k === 'cookie' ? `session:${entry.member}` : v;
+  for (const [k, v] of Object.entries(headers)) entry.reqHeaders[k] = k === 'cookie' ? cookieLog(v, entry.member) : v;
   const rule = ruleFor(req.url);
   if (rule) entry.rule = `${rule.kind}:${rule.ms}`;
   inFlight += 1;

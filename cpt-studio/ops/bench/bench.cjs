@@ -138,7 +138,8 @@ const INIT_FOR = geometry => `(() => {
     const v = document.getElementById('documentViewer');
     if (v && v.dataset.mode && !c.mode) { c.mode = v.dataset.mode; c.modeAt = now; }
     if (v && v.dataset.fallback && !c.fallback) { c.fallback = v.dataset.fallback; c.fallbackAt = now; }
-    if (!c.canvas) { const cv = document.querySelector('.pdf-page[data-page="1"] canvas'); if (cv && cv.width > 0) { if (!c.attached) c.attached = now; if (dark(cv)) { c.canvas = now; c.canvasEpoch = performance.timeOrigin + now; c.barcode = barcode(cv); } } }
+    if (!c.canvas) { const cv = document.querySelector('.pdf-page[data-page="1"] canvas'); if (cv && cv.width > 0) { if (!c.attached) c.attached = now; if (dark(cv)) { c.canvas = now; c.canvasEpoch = performance.timeOrigin + now; c.barcode = barcode(cv);
+      try { if (window.__benchDrawn) window.__benchDrawn(c.kind); } catch (e) {} } } }
     if (!c.text && document.querySelector('.pdf-text span')) c.text = now;
     if (!c.frame && v && v.tagName === 'IFRAME') { try { const d = v.contentDocument; if (d && d.readyState === 'complete' && d.body && d.body.textContent.length > 20) c.frame = now; } catch (e) {} }
     if (sec && c.opaque === undefined) { const ready = c.kind === 'doc' ? Boolean(document.getElementById('reviewColumn')) : c.kind === 'list' ? rows.length > 0 : true;
@@ -166,13 +167,17 @@ let browser;
 async function newContext(options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, ignoreHTTPSErrors: REHEARSAL, ...options });
   await context.addInitScript(INIT);
+  // records[3]: in the gate flows a drawn page 1 is told to node at once (the probe's own record does not survive a
+  // navigation); the timing flows, measured against the recorded A, get no binding
+  const drawn = [];
+  if (FLOW in EXTRA) await context.exposeBinding('__benchDrawn', ({ page: p }, kind) => { drawn.push({ p, kind }); });
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') result.consoleErrors.push(`${FLOW}/${PROFILE}: ${m.text().slice(0, 200)}`); });
   page.on('pageerror', e => result.pageErrors.push(`${FLOW}/${PROFILE}: ${String(e).slice(0, 200)}`));
   page.on('requestfailed', r => { const url = r.url(); if (!url.startsWith(BASE) && !url.startsWith('data:') && !url.startsWith('blob:')) result.blocked.push(url.slice(0, 120)); });
   const cdp = await context.newCDPSession(page);
   if (REHEARSAL) await logFromCdp(cdp);
-  return { context, page, cdp };
+  return { context, page, cdp, drawn };
 }
 
 async function throttle(cdp, on) {
@@ -679,6 +684,7 @@ function watchLists(page, into) {
     const path = url.slice(BASE.length);
     if (!(/^\/api\/encounters(\?|$)/.test(path) || path === '/api/encounters/search') || r.status() !== 200) return;
     try { const body = await r.json(); into.push({ rid: r.headers()['x-bench-request-id'], method: r.request().method(), path: shape(path),
+      ...(r.request().method() === 'POST' ? { before: (r.request().postDataJSON() || {}).before ?? null } : {}),
       ids: (body.encounters || []).map(e => e.id), next: body.next === undefined ? 'absent' : body.next, total: body.total === undefined ? 'absent' : body.total }); }
     catch (e) { into.push({ rid: r.headers()['x-bench-request-id'], path: shape(path), error: String(e).slice(0, 80) }); }
   });
@@ -691,24 +697,63 @@ async function nothingDrawn(page, ms = 4000) {
       login: Boolean(document.querySelector('input[name=password]')) }; });
 }
 
-async function openNoWait(s, label) {  // a re-open whose drawing must NOT happen: click, then look for 4 s
+async function openNoWait(s, label) {  // a re-open whose drawing must NOT happen: click (or route), then look for 4 s
   const doc = DOC[label];
+  const since = s.drawn ? s.drawn.length : 0;
   await arm(s.page, 'doc');
   const row = s.page.locator(`a.document-row[href="#doc/${doc.id}"]`);
-  if (await row.count()) await row.first().click(); else await s.page.evaluate(id => { location.hash = `#doc/${id}`; }, doc.id);
-  return nothingDrawn(s.page);
+  const clicked = (await row.count()) > 0;
+  if (clicked) await row.first().click();
+  else await s.page.evaluate(id => { window.__bench.cur.t0 = performance.now(); location.hash = `#doc/${id}`; }, doc.id);
+  const seen = await nothingDrawn(s.page);
+  const told = (s.drawn || []).slice(since).some(d => d.p === s.page && d.kind === 'doc');
+  return { ...seen, canvasDark: seen.canvasDark || told, clicked };
+}
+
+// records[4]: every place a page could keep what was typed in its search: its URLs (pushState and replaceState
+// included), history.state, window.name, Web Storage, its cookies (HttpOnly too) and the Cache API's and IndexedDB's names
+async function pageMarkerHits(s, urls, word) {
+  const has = v => { try { return decodeURIComponent(String(v)).includes(word); } catch (e) { return String(v).includes(word); } };
+  const inPage = await s.page.evaluate(async w => {
+    const hits = []; const has = v => typeof v === 'string' && (v.includes(w) || (() => { try { return decodeURIComponent(v).includes(w); } catch (e) { return false; } })());
+    if (has(location.href)) hits.push('location');
+    try { if (has(JSON.stringify(history.state))) hits.push('history.state'); } catch (e) {}
+    if (has(window.name)) hits.push('window.name');
+    for (const [name, store] of [['localStorage', localStorage], ['sessionStorage', sessionStorage]]) {
+      try { for (let i = 0; i < store.length; i += 1) { const k = store.key(i); if (has(k) || has(store.getItem(k))) hits.push(`${name}:${k}`); } } catch (e) {}
+    }
+    if (has(document.cookie)) hits.push('document.cookie');
+    try { for (const k of await caches.keys()) if (has(k)) hits.push(`caches:${k}`); } catch (e) {}
+    try { for (const d of await indexedDB.databases()) if (has(d.name)) hits.push(`indexedDB:${d.name}`); } catch (e) {}
+    return hits; }, word);
+  const cookies = (await s.context.cookies()).filter(c => has(c.name) || has(c.value)).map(c => `cookie:${c.name}`);
+  return [...inPage, ...cookies, ...(urls.some(has) ? ['url'] : [])];
 }
 
 async function flowRecords() {
   const size = DATA.rows[SIZE];
   const s = await newContext();
   const lists = []; watchLists(s.page, lists);
+  const urls = []; s.page.on('framenavigated', f => { if (f === s.page.mainFrame()) urls.push(f.url()); });
   try {
     await signIn(s, DATA.users[SIZE]); await sleep(1500);
     const d = await tab(s, 'documents', 'records-documents');
     for (let i = 0; i < 3 && d; i += 1) { if ((await laterPage(s)) === null) break; }
     if (SIZE === 'n100') {
-      for (const label of ['text-2p', 'text-4p', 'text-2p', 'text-note']) { await openDoc(s, label, 'records-open'); await back(s); }
+      // records[10]: a kept re-open's view is held 300 ms at the proxy, so a page that draws its kept copy before the
+      // answer paints before its record exists, and inline_before_pixels sees it
+      const kept = new Set();
+      for (const label of ['text-2p', 'text-4p', 'text-2p', 'text-note']) {
+        if (kept.has(label)) await proxyRule({ kind: 'delay', match: `^/api/encounters/${DOC[label].id}/original\\?view=1`, ms: 300, times: 1 });
+        kept.add(label);
+        await openDoc(s, label, 'records-open'); await back(s);
+      }
+      // records[8]: the downloads the page's own link makes (a PDF's original, a Word document's PDF and its Word file)
+      for (const [label, query] of [['text-2p', ''], ['word-3p', ''], ['word-3p', '?format=original']]) {
+        const status = await s.page.evaluate(([id, q]) => fetch(`/api/encounters/${id}/original${q}`, { credentials: 'same-origin', cache: 'no-store' })
+          .then(async r => { await r.arrayBuffer(); return r.status; }), [DOC[label].id, query]);
+        result.actions.push({ kind: 'records-download', label, query, status });
+      }
     }
     for (const nav of ['queue', 'workspace', 'documents']) await tab(s, nav, 'records-tab');
     // hover writes nothing and asks for nothing
@@ -728,7 +773,9 @@ async function flowRecords() {
     await s.page.locator('#documentSearch').click();
     for (const ch of DATA.marker) { await s.page.keyboard.press(ch); await sleep(350); }
     await sleep(2500);
+    const typed = await pageMarkerHits(s, urls, DATA.marker);
     await s.page.locator('#documentSearch').fill(''); await sleep(800);
+    result.markerPage = [...new Set([...typed, ...(await pageMarkerHits(s, urls, DATA.marker))])];
   } catch (e) { result.errors.push(`records ${size}: ${String(e && e.stack || e).slice(0, 600)}`); }
   finally { result.lists = lists; await s.context.close(); }
 }
@@ -741,23 +788,31 @@ async function flowFailClosed() {
   try {
     await signIn(s, DATA.users[SIZE]); await sleep(1500);
     await openDoc(s, 'text-2p', 'fail-warm'); await back(s);
+    // records[9]: held for the member.detail arm (the inline arm's 503 drops text-2p's own kept copy, R2-15)
+    await openDoc(s, 'control-held', 'fail-warm'); await back(s);
     await act('refuse', { view: 'member.inline' });
+    // records[10]: the kept re-open's view held 300 ms, so a page drawing its kept copy before the 503 is seen
+    await proxyRule({ kind: 'hold', match: `^/api/encounters/${DOC['text-2p'].id}/original\\?view=1`, ms: 300, times: 1 });
     seen.inline_kept = await openNoWait(s, 'text-2p');
     await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
     seen.inline_fresh = await openNoWait(s, 'text-4p');
     await act('refuse', { view: 'member.detail' });
     await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
+    seen.detail_kept = await openNoWait(s, 'control-held');
+    await s.page.evaluate(() => { location.hash = 'documents'; }); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
     seen.detail = await openNoWait(s, 'text-10p');
     await act('refuse', { view: 'member.list' });
+    // records[9]: the probe armed, so a row painted and then cleared (kept rows before the list's 503) is counted
+    await arm(s.page, 'list'); await s.page.evaluate(() => { window.__bench.cur.t0 = performance.now(); });
     await s.page.evaluate(() => { location.hash = 'workspace'; }); await sleep(1500);
     await s.page.evaluate(() => { location.hash = 'documents'; }); await sleep(4000);
-    seen.list_rows = await s.page.evaluate(() => document.querySelectorAll('#documentsTable .document-row').length);
+    seen.list_rows = await s.page.evaluate(() => Math.max(window.__bench.cur.rowCount || 0, document.querySelectorAll('#documentsTable .document-row').length));
     await act('refuse', { view: '' });
     await s.page.evaluate(() => { location.hash = 'workspace'; }); await sleep(800);
     await tab(s, 'documents', 'fail-restored');
     const again = await openDoc(s, 'text-10p', 'fail-restored');
     seen.restored = again.firstPage !== null;
-    const drawn = ['inline_kept', 'inline_fresh', 'detail'].filter(k => seen[k].canvasDark);
+    const drawn = ['inline_kept', 'inline_fresh', 'detail_kept', 'detail'].filter(k => seen[k].canvasDark);
     result.checks['records.fail_closed'] = { ok: drawn.length === 0 && seen.list_rows === 0 && seen.restored, seen };
   } catch (e) { result.errors.push(`fail closed: ${String(e && e.stack || e).slice(0, 600)}`); result.checks['records.fail_closed'] = { ok: false, seen }; }
   finally { try { await act('refuse', { view: '' }); } catch (e) { /* already dropped */ } await s.context.close(); }
@@ -920,5 +975,9 @@ async function flowBlueGreen() {
 
 const EXTRA = { records: flowRecords, 'fail-closed': flowFailClosed, 'left-behind': flowLeftBehind, correct: flowCorrect,
   bluegreen: flowBlueGreen };
-module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY, baseAllowed };
+// For ops/test_bench.py's browser pins: the module's own context, probe and 'nothing drawn' check, with the globals a
+// flow sets (never used by a flow itself).
+const TESTING = { arm, openNoWait, nothingDrawn, newContext, pageMarkerHits,
+  set: o => { DOC = o.DOC; browser = o.browser; INIT = o.INIT; result = o.result; FLOW = o.FLOW; PROFILE = o.PROFILE; BASE = o.BASE; } };
+module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY, baseAllowed, TESTING };
 if (require.main === module) main().catch(e => { console.error(String(e && e.stack || e).slice(0, 3000)); process.exit(1); });
