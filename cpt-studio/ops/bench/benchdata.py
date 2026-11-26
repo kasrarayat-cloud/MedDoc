@@ -187,6 +187,15 @@ def scan_pdf(pages: int, number: int, seed: int, *, dpi: int = 150, quality: int
     return out.getvalue()
 
 
+WALK_SCAN_OCR = ('Date of service: 2026-11-02.', 'The colonoscopy to the cecum was complete.',
+                 'Quoted passage {page}: ' + QUOTE)
+
+
+def walk_scan() -> bytes:
+    """The walk's 2-page scan: an OCR text layer over ink, so walk.cjs can find its quotes and see them drawn."""
+    return scan_pdf(2, 203, 13, dpi=100, ocr=WALK_SCAN_OCR)
+
+
 def word_docx(number: int, seed: int) -> bytes:
     """A small, valid Word file (the original a Word document's converted PDF stands for). Fixed member order, times and
     compression, so its bytes repeat."""

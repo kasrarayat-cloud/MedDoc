@@ -1200,9 +1200,7 @@ class Bench(TransactionTestCase):
         (docs / 'b-note.txt').write_text('SYNTHETIC NOTE - NOT A REAL PATIENT\nDate of service: 2026-11-02\n'
                                          'The colonoscopy to the cecum was complete.\n'
                                          'The polyp was removed by cold snare and retrieved.\n')
-        ocr = ('Date of service: 2026-11-02.', 'The colonoscopy to the cecum was complete.',
-               f'Quoted passage {{page}}: {bd.QUOTE}')
-        (docs / 'c-scan-2p.pdf').write_bytes(bd.scan_pdf(2, 203, 13, dpi=100, ocr=ocr))
+        (docs / 'c-scan-2p.pdf').write_bytes(bd.walk_scan())
         (docs / 'd-quotes-3p.pdf').write_bytes(bd.text_pdf(3, 204, 14, head=head, span=True))
         creds = self.raw / 'walk-credentials.json'
         creds.write_text(json.dumps({'username': user.username, 'password': self.password}))

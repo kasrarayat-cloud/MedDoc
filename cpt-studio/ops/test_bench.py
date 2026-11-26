@@ -230,6 +230,30 @@ class BenchDataTests(unittest.TestCase):
         mx, my = g['marker']
         self.assertLess(image.getpixel((round(w * mx), round(h * my))), 100)
 
+    def test_the_walk_s_scan_has_ink_under_every_word_of_its_text_layer(self):
+        """walk.cjs counts a mark as drawn only over ink (5% of its pixels): every word of the walk's invisible text
+        layer lies on ink in the page image, at the place the layer gives it, and the layer reads back."""
+        from pypdf import PdfReader
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        reader = PdfReader(io.BytesIO(BD.walk_scan()))
+        self.assertEqual(len(reader.pages), 2)
+        sx, sy = lambda v, w: round(w * v / BD.PAGE_W), lambda v, h: round(h * (BD.PAGE_H - v) / BD.PAGE_H)
+        for number, page in enumerate(reader.pages, start=1):
+            self.assertIn(f'Quoted passage {number}:', page.extract_text())
+            image = next(iter(page.images)).image.convert('L')
+            w, h = image.size
+            words = 0
+            for i, line in enumerate(BD.WALK_SCAN_OCR):
+                y, x = 700 - 12 * i, 56.0
+                for word in line.replace('{page}', str(number)).split(' '):
+                    end = x + stringWidth(word, 'Helvetica', 10)
+                    box = image.crop((sx(x, w), sy(y + 6, h), sx(end, w), sy(y - 1, h)))
+                    dark = sum(box.histogram()[:120]) / max(1, box.width * box.height)
+                    self.assertGreater(dark, 0.5, (number, word))
+                    x += stringWidth(word + ' ', 'Helvetica', 10)
+                    words += 1
+            self.assertGreater(words, 20)
+
     def test_docs_json_names_what_bench_cjs_reads(self):
         seeded = {'n100': {'username': 'bench-n100', 'rows': 100, 'docs': [{'id': 'x', 'label': 'text-2p'}]},
                   'n1500': {'username': 'bench-n1500', 'rows': 1500, 'docs': []}}
