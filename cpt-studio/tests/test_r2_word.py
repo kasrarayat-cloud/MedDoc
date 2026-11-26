@@ -1010,6 +1010,11 @@ class FieldShellTests(ReleaseOneCase):
             'a note\'s reference in a removed field\'s instruction': package(BEFORE + p(
                 fc('begin'), instr(' LI'), NOTE_REFERENCE, instr('NK Excel.Sheet.12 "c:\\\\SECRET.xlsx" '),
                 fc('separate'), t('LINKED'), fc('end')) + AFTER),
+            'INCLUDE, a note\'s reference and PICTURE - INCLUDEPICTURE, a picture alone - in an IF result': package(
+                BEFORE + p(fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), fc('begin'), instr(' INCLUDE'),
+                           NOTE_REFERENCE, instr('PICTURE "file:///synthetic/SECRET.png" '), fc('separate'),
+                           '<w:r><w:pict>' + SHAPETYPE + vshape() + '</w:pict></w:r>', fc('end'), fc('end')) + AFTER,
+                (rel('rIdPrev', 'image', 'media/image1.emf'),), (('word/media/image1.emf', EMF),)),
         }
         for label, data in cases.items():
             with self.subTest(label):
@@ -1145,6 +1150,10 @@ def fallback_shapes():
         ('outer TOC, plain result', nested_in_instruction(' TOC \\o "', '" ', t('Heading one')), 0),
         ('outer QUOTE, plain result', nested_in_instruction(' QUOTE "', '" ', t('QUOTED')), 0),
         ('outer STYLEREF, plain result', nested_in_instruction(' STYLEREF "', '" ', t('STYLE RESULT')), 0),
+        # refutation round 2 (loss[4]): a mark in an instruction is read past, so the type it splits stays one word -
+        # 'HYPER', a footnote reference, 'LINK' is HYPERLINK, exempt, as LibreOffice reads it
+        ('outer HYPERLINK whose type a footnote reference splits, plain result', nested_in_instruction(
+            ' HYPER', '" ', t('LINK TEXT'), nested=NOTE_REFERENCE + instr('LINK "') + field(INC, 'INCLUDED TEXT')), 0),
         # coded: no stored result, or one with nothing in it a reader sees
         ('outer IF, no separate', package(BEFORE + p(fc('begin'), instr(if_before), field(INC, 'INCLUDED'),
                                                      instr(if_after), fc('end')) + AFTER), 0),

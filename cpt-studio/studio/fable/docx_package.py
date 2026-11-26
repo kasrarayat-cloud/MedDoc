@@ -611,8 +611,8 @@ _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
 # refutation round 2, PDF, which LibreOffice 7.4 draws as Mac Word writes it (D-R2-40, R1-L0e): a part that is not empty
 # but holds no picture - one byte, words, the embedded document itself - leaves nothing in the object's place
 # (refutation round 1, loss[0]). Words cannot begin so (round 2, loss[5]: 'BM' or 'GIF8' alone counted words), but for
-# '%PDF-'; that, and a picture header over a body LibreOffice cannot draw (an 88-byte EMF header), are known limits.
-# PICT, SVG, EMZ and WMZ are no picture here: no 7.4 run has measured them (D-R2-40).
+# a GIF's six letters and '%PDF-'; those, and a picture header over a body LibreOffice cannot draw (an 88-byte EMF
+# header), are known limits. PICT, SVG, EMZ and WMZ are no picture here: no 7.4 run has measured them (D-R2-40).
 _PICTURE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00', b'\x89PNG',
                        b'\xff\xd8\xff', b'GIF87a', b'GIF89a', b'II*\x00', b'MM\x00*', b'%PDF-')
 # the DIB header sizes of a BMP, the four bytes at its offset 14 (each holds NUL bytes, so no words match)
