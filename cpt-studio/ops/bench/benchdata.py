@@ -370,3 +370,46 @@ def reconvert(enc, spec: dict):
         encounter=enc, revision=last.revision, number=last.number + 1, trigger='retry', context={}, state='done',
         codes=last.codes, questions=[], problems=last.problems, citations=last.citations, started_at=now,
         finished_at=now, view_pdf_storage_name=vname, view_pdf_sha256=vdigest)
+
+
+# --- the practices a round (or a rehearsal on a test instance) needs --------------------------------------------------------
+
+SIZES = {'n50': 50, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
+RICH_IN = 'n100'  # the practice whose 100 documents include the RICH ones
+
+
+def seed(names, password) -> dict:
+    """The practices ``names`` (SIZES' keys), each with one reviewer; the practice of 100 holds the RICH documents among
+    its 100. Ids are uuid5 of fixed names, so a test instance seeded with this function holds the same ids as a round."""
+    out = {}
+    for name in sorted(names, key=lambda n: SIZES[n]):
+        rich = len(RICH) if name == RICH_IN else 0
+        ws, user = practice(name, SIZES[name] - rich, password, seed=SIZES[name])
+        out[name] = {'ws': ws, 'user': user, 'username': user.username, 'rows': SIZES[name], 'docs': []}
+        if rich:
+            for order, spec in enumerate(RICH):
+                enc = add_rich(ws, user, spec, order=order)
+                files = rich_files(spec)
+                out[name]['docs'].append({'id': str(enc.pk), 'label': spec['label'], 'kind': spec['kind'],
+                                          'number': spec['number'], 'renumber': spec.get('renumber'),
+                                          'pages': spec['pages'], 'bytes': len(files['view'] or files['data']),
+                                          'original_bytes': len(files['data']), 'marker': spec.get('marker', True)})
+    if out:
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute('ANALYZE')
+    return out
+
+
+def docs_json(seeded: dict, client, marker: str) -> dict:
+    """What bench.cjs reads (--docs): the barcode geometry, the RICH documents, the users and sizes, the client header
+    the measured tree's page sends, and the search marker."""
+    return {'geometry': geometry(), 'docs': seeded.get(RICH_IN, {}).get('docs', []), 'client': list(client),
+            'marker': marker, 'users': {name: d['username'] for name, d in seeded.items()},
+            'rows': {name: d['rows'] for name, d in seeded.items()}}
+
+
+def rehearsal_seed(password: str, client, marker: str = 'zqxbenchmarkerword') -> dict:
+    """The rehearsal (section 9.1): seed a test instance's own database (run inside its Django, synthetic data only)
+    with the practices the open, list and office parts use, and return the docs.json those parts read."""
+    return docs_json(seed(('n100', 'n101', 'n1500', 'n5000', 'n18000'), password), client, marker)

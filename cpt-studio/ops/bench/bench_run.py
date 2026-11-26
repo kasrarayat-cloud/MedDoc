@@ -501,30 +501,7 @@ NEEDS = {
     'open': {'n100'}, 'lists': {'n100', 'n1500', 'n18000'}, 'office': {'n101', 'n5000'}, 'load': {'n100'},
     'records': {'n100', 'n1500'}, 'left-behind': {'n100', 'n1500'}, 'correct': {'n100', 'n1500'}, 'walk': set(),
     'bluegreen': {'n100'}, 'plans': set(), 'requests': set()}
-SIZES = {'n50': 50, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
-RICH_IN = 'n100'
-
-
-def seed(names, password) -> dict:
-    """The practices ``names`` need; the practice of 100 holds the RICH documents among its 100."""
-    out = {}
-    for name in sorted(names, key=lambda n: SIZES[n]):
-        rich = len(bd.RICH) if name == RICH_IN else 0
-        ws, user = bd.practice(name, SIZES[name] - rich, password, seed=SIZES[name])
-        out[name] = {'ws': ws, 'user': user, 'username': user.username, 'rows': SIZES[name], 'docs': []}
-        if rich:
-            for order, spec in enumerate(bd.RICH):
-                enc = bd.add_rich(ws, user, spec, order=order)
-                files = bd.rich_files(spec)
-                out[name]['docs'].append({'id': str(enc.pk), 'label': spec['label'], 'kind': spec['kind'],
-                                          'number': spec['number'], 'renumber': spec.get('renumber'),
-                                          'pages': spec['pages'], 'bytes': len(files['view'] or files['data']),
-                                          'original_bytes': len(files['data']), 'marker': spec.get('marker', True)})
-    if out:
-        from django.db import connection
-        with connection.cursor() as cur:
-            cur.execute('ANALYZE')
-    return out
+SIZES, RICH_IN, seed = bd.SIZES, bd.RICH_IN, bd.seed
 
 
 # --- one round --------------------------------------------------------------------------------------------------------
@@ -606,10 +583,7 @@ class Bench(TransactionTestCase):
                 self.metric('static.app_js_gz', result['static']['studio/app.js']['gz_bytes'])
                 self.metric('static.styles_gz', result['static']['studio/styles.css']['gz_bytes'])
                 self.docs_file = self.raw / 'docs.json'
-                self.docs_file.write_text(json.dumps({
-                    'geometry': bd.geometry(), 'docs': self.docs, 'client': list(self.client), 'marker': MARKER_WORD,
-                    'users': {name: d['username'] for name, d in self.data.items()},
-                    'rows': {name: d['rows'] for name, d in self.data.items()}}))
+                self.docs_file.write_text(json.dumps(bd.docs_json(self.data, self.client, MARKER_WORD)))
                 acts_port = self.ports.take()
                 self.acts = Acts(acts_port, self)
                 self.acts_port = acts_port

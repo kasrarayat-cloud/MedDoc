@@ -222,6 +222,16 @@ class BenchDataTests(unittest.TestCase):
         mx, my = g['marker']
         self.assertLess(image.getpixel((round(w * mx), round(h * my))), 100)
 
+    def test_docs_json_names_what_bench_cjs_reads(self):
+        seeded = {'n100': {'username': 'bench-n100', 'rows': 100, 'docs': [{'id': 'x', 'label': 'text-2p'}]},
+                  'n1500': {'username': 'bench-n1500', 'rows': 1500, 'docs': []}}
+        got = BD.docs_json(seeded, ('X-CPT-Studio-Client', 'v'), 'zqx')
+        self.assertEqual(set(got), {'geometry', 'docs', 'client', 'marker', 'users', 'rows'})
+        self.assertEqual(got['docs'], [{'id': 'x', 'label': 'text-2p'}])
+        self.assertEqual(got['users'], {'n100': 'bench-n100', 'n1500': 'bench-n1500'})
+        self.assertEqual(got['geometry'], BD.geometry())
+        self.assertEqual(set(BD.SIZES), {'n50', 'n100', 'n101', 'n1500', 'n5000', 'n18000'})
+
     def test_the_control_document_carries_no_marker_and_no_barcode(self):
         spec = next(s for s in BD.RICH if s['label'] == 'control-nomarker')
         marked = next(s for s in BD.RICH if s['label'] == 'text-2p')
@@ -258,6 +268,24 @@ class BenchBrowserFilesTests(unittest.TestCase):
         self.assertEqual(out[4096:], [None, None])
         for number in (1, 101, 4095):
             self.assertEqual(BD.barcode_bits(number), _node_bits(number))
+
+
+    def test_the_base_is_loopback_or_in_a_rehearsal_a_private_address_over_tls(self):
+        cases = [('http://127.0.0.1:9301', False, True), ('https://172.17.0.2:8443', False, False),
+                 ('https://172.17.0.2:8443', True, True), ('https://10.1.2.3', True, True),
+                 ('https://192.168.4.5:443', True, True), ('https://cpt.quillmd.com', True, False),
+                 ('https://admin.quillmd.com', True, False), ('https://147.189.172.8', True, False),
+                 ('http://172.17.0.2', True, False), ('https://172.32.0.1', True, False),
+                 ('http://localhost:9301', False, False)]
+        script = (f'const b = require({json.dumps(str(BENCH / "bench.cjs"))});'
+                  f'console.log(JSON.stringify({json.dumps(cases)}.map(([u, r]) => b.baseAllowed(u, r))));')
+        done = subprocess.run([NODE, '-e', script], capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), [expected for _, _, expected in cases])
+        refused = subprocess.run([NODE, str(BENCH / 'bench.cjs'), '--flow', 'open', '--base', 'https://cpt.quillmd.com',
+                                  '--rehearsal', '--out', os.devnull], capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('the base must be loopback', refused.stderr)
 
 
 def _node_bits(number):
@@ -540,7 +568,8 @@ class RecordsJudgementTests(unittest.TestCase):
         self.assertFalse(RUN.judge_records(entries, late, 1, actions, lists)['inline_before_pixels']['ok'])
         unnamed = [dict(r, encounter_ids=[], count=2) if r['view'] == 'member.list' else r for r in rows]
         self.assertFalse(RUN.judge_records(entries, unnamed, 1, actions, lists)['list_ids']['ok'])
-        # one answer, its own row naming other ids, nothing counted as a repeat: only the row-to-answer comparison sees it
+        # one answer, its own row naming other ids, nothing counted as a repeat: only the row-to-answer comparison
+        # sees it
         wrong = [dict(r, encounter_ids=[DOC_B, DOC_A]) if r['view'] == 'member.list' else r for r in rows]
         alone = [e for e in entries if e['reqHeaders']['x-request-id'] != 'l2']
         got = RUN.judge_records(alone, wrong, 0, actions, lists[:1])

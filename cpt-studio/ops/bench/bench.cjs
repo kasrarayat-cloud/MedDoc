@@ -5,6 +5,12 @@
 //       --control <proxy control port> --act <act port> --docs <docs.json> --password-file <file> --out <file>
 //       [--playwright <path>] [--contexts 3] [--size n100]
 //
+// --rehearsal (section 9.1, the test instance through nginx over TLS): the base may be https:// on a PRIVATE IPv4
+// address (10/8, 172.16/12, 192.168/16) - never a host name, so never a live site - the test certificate is accepted,
+// counts come from CDP (cache-served answers excluded, the closest a browser gets to the server's log), and the
+// controls that need the proxy or the bench's database (the planted delay, the planted detail read, the records) are
+// recorded as not run. Only the open, lists and office flows run there.
+//
 // What it times, each from the click's (or the key's) own event timeStamp:
 // - "first page": page 1's canvas is attached AND its marker pixel is dark (a PDF without the marker never counts);
 //   the 12-bit barcode on page 1 is then read at fit width, at each square's centre, with its parity;
@@ -22,11 +28,18 @@ const crypto = require('crypto');
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
 // Set by setup() when run as a program; a test that requires this file reads only the pure helpers it exports.
 let FLOW, PROFILE, BASE, CONTROL, ACT, OUT, CONTEXTS, SIZE, DATA, PASSWORD, DOC, chromium, INIT, result;
+let REHEARSAL = false; const cdpLog = []; let cdpSeq = 0; let cdpInFlight = 0;
+const PRIVATE_TLS = /^https:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d{2,5})?$/;
+function baseAllowed(base, rehearsal) {
+  return /^http:\/\/127\.0\.0\.1:\d+$/.test(base || '') || (rehearsal && PRIVATE_TLS.test(base || ''));
+}
 function setup() {
   FLOW = arg('flow', 'open'); PROFILE = arg('profile', 'P0'); BASE = arg('base');
   CONTROL = Number(arg('control')); ACT = Number(arg('act')); OUT = arg('out');
   CONTEXTS = Number(arg('contexts', '3')); SIZE = arg('size', 'n100');
-  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(BASE || '')) throw new Error('bench.cjs: the base must be loopback');
+  REHEARSAL = process.argv.includes('--rehearsal');
+  if (!baseAllowed(BASE, REHEARSAL)) throw new Error('bench.cjs: the base must be loopback (or, with --rehearsal, https on a private address)');
+  if (REHEARSAL && !['open', 'lists', 'office'].includes(FLOW)) throw new Error('bench.cjs: a rehearsal runs the open, lists and office flows only');
   DATA = JSON.parse(fs.readFileSync(arg('docs'), 'utf8'));
   PASSWORD = fs.readFileSync(arg('password-file'), 'utf8').trim();
   DOC = Object.fromEntries(DATA.docs.map(d => [d.label, d]));
@@ -52,10 +65,26 @@ function call(port, method, path, body) {
     if (data) req.write(data); req.end();
   });
 }
-const proxyLog = async since => (await call(CONTROL, 'GET', `/log?since=${since}`)).entries;
-const proxySeq = async () => (await call(CONTROL, 'GET', '/state')).seq;
-const proxyRule = rule => call(CONTROL, 'POST', '/rule', rule);
-const act = async (name, args = {}) => { const answer = await call(ACT, 'POST', '/act', { name, ...args }); if (!answer.ok) throw new Error(`act ${name}: ${answer.error}`); return answer; };
+const proxyLog = async since => (REHEARSAL ? cdpLog.filter(e => e.seq > since) : (await call(CONTROL, 'GET', `/log?since=${since}`)).entries);
+const proxySeq = async () => (REHEARSAL ? cdpSeq : (await call(CONTROL, 'GET', '/state')).seq);
+const inFlightNow = async () => (REHEARSAL ? cdpInFlight : (await call(CONTROL, 'GET', '/state')).inFlight);
+const proxyRule = rule => { if (REHEARSAL) throw new Error('not in a rehearsal'); return call(CONTROL, 'POST', '/rule', rule); };
+const act = async (name, args = {}) => { if (REHEARSAL) throw new Error('not in a rehearsal'); const answer = await call(ACT, 'POST', '/act', { name, ...args }); if (!answer.ok) throw new Error(`act ${name}: ${answer.error}`); return answer; };
+
+// In a rehearsal the server's log is not ours to read: each context's CDP session logs what reached the network.
+async function logFromCdp(cdp) {
+  const live = new Map(); const member = crypto.randomBytes(6).toString('hex');
+  await cdp.send('Network.enable');
+  cdp.on('Network.requestWillBeSent', e => { if (!e.request.url.startsWith(BASE)) return; cdpInFlight += 1;
+    live.set(e.requestId, { seq: 0, t0: e.wallTime * 1000, ts: e.timestamp, tEnd: null, method: e.request.method, url: e.request.url.slice(BASE.length),
+      status: 0, bytes: 0, member, reqHeaders: e.request.headers, resHeaders: {}, cached: false }); });
+  cdp.on('Network.requestServedFromCache', e => { const r = live.get(e.requestId); if (r) r.cached = true; });
+  cdp.on('Network.responseReceived', e => { const r = live.get(e.requestId); if (!r) return; r.status = e.response.status; r.resHeaders = e.response.headers;
+    if (e.response.fromDiskCache || e.response.fromServiceWorker || e.response.fromPrefetchCache) r.cached = true; });
+  const end = (e, failed) => { const r = live.get(e.requestId); if (!r) return; live.delete(e.requestId); cdpInFlight -= 1;
+    r.tEnd = r.t0 + (e.timestamp - r.ts) * 1000; r.bytes = failed ? 0 : (e.encodedDataLength || 0); if (!r.cached) { r.seq = ++cdpSeq; cdpLog.push(r); } };
+  cdp.on('Network.loadingFinished', e => end(e, false)); cdp.on('Network.loadingFailed', e => end(e, true));
+}
 const isStatic = url => url.startsWith('/static/');
 const LIBRARY = /pdf(\.worker)?\.min\.([0-9a-f]{12}\.)?mjs/;  // the library's two files, hashed or not
 const shape = url => url.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>').replace(/\.[0-9a-f]{12}\./, '.').replace(/before=[^&]+/, 'before=<cursor>');
@@ -135,13 +164,14 @@ const READ = () => { const P = window.__bench; const c = P.cur; c.stop = true; c
 // --- contexts, sign-in, settling -------------------------------------------------------------------------------------------
 let browser;
 async function newContext(options = {}) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, ...options });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, ignoreHTTPSErrors: REHEARSAL, ...options });
   await context.addInitScript(INIT);
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') result.consoleErrors.push(`${FLOW}/${PROFILE}: ${m.text().slice(0, 200)}`); });
   page.on('pageerror', e => result.pageErrors.push(`${FLOW}/${PROFILE}: ${String(e).slice(0, 200)}`));
   page.on('requestfailed', r => { const url = r.url(); if (!url.startsWith(BASE) && !url.startsWith('data:') && !url.startsWith('blob:')) result.blocked.push(url.slice(0, 120)); });
   const cdp = await context.newCDPSession(page);
+  if (REHEARSAL) await logFromCdp(cdp);
   return { context, page, cdp };
 }
 
@@ -373,7 +403,8 @@ async function flowOpen() {
     } catch (e) { result.errors.push(`open ${PROFILE} context ${k}: ${String(e && e.stack || e).slice(0, 600)}`); }
     finally { await s.context.close(); }
   }
-  if (PROFILE === 'P0') { await flowControls(); await flowQuickLeave(); await flowMemory(); await flowFirstView(); }
+  if (PROFILE === 'P0' && REHEARSAL) { result.controls = { rehearsal: { ok: false, note: 'not run: no proxy and no bench database here' } }; await flowFirstView(); }
+  else if (PROFILE === 'P0') { await flowControls(); await flowQuickLeave(); await flowMemory(); await flowFirstView(); }
 }
 
 // The approved fade on a page load's first view: animations started from the sign-in click to the first rows, then none.
@@ -583,7 +614,7 @@ async function waitSettledRows(page, cap) {
   const started = Date.now(); let last = null; let stableSince = Date.now();
   while (Date.now() - started < cap) {
     const sig = await page.evaluate(() => window.__bench.visible());
-    const busy = (await call(CONTROL, 'GET', '/state')).inFlight;
+    const busy = await inFlightNow();
     if (sig !== last || busy) { last = sig; stableSince = Date.now(); }
     if (Date.now() - stableSince >= 900) return Date.now() - started;
     await sleep(60);
@@ -624,7 +655,8 @@ const FLOWS = { open: flowOpen, lists: flowLists, office: flowOffice };
 
 async function main() {
   setup();
-  browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  const keep = REHEARSAL ? new URL(BASE).hostname : '127.0.0.1';  // every other host is unresolvable
+  browser = await chromium.launch({ headless: true, args: [`--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE ${keep}`] });
   result.chromium = browser.version();
   try {
     const flow = FLOWS[FLOW] || (FLOW in EXTRA ? EXTRA[FLOW] : null);
@@ -884,5 +916,5 @@ async function flowBlueGreen() {
 
 const EXTRA = { records: flowRecords, 'fail-closed': flowFailClosed, 'left-behind': flowLeftBehind, correct: flowCorrect,
   bluegreen: flowBlueGreen };
-module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY };
+module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY, baseAllowed };
 if (require.main === module) main().catch(e => { console.error(String(e && e.stack || e).slice(0, 3000)); process.exit(1); });
