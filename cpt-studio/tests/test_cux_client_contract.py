@@ -17,15 +17,19 @@ told to reload on every list call, and release 1's build is named nowhere in thi
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import uuid
 from pathlib import Path
 
+from django.db import connection
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 
-from studio import client_contract
+from studio import client_contract, jobs, models
 from tests.support import coding as f
+from tests.support import rounds as r
 
 ROOT = Path(__file__).resolve().parents[1]
 # release 2 (RELEASE-2-SPEC R2-24, D-R2-3): the build every copy names
@@ -107,6 +111,52 @@ class ContractTests(TestCase):
     def test_the_operator_console_is_outside_the_contract(self):
         # a member who is no operator is answered the operator gate's 404, never the contract's 409
         self.assertEqual(without_contract(self.signed_in()).get('/ops/').status_code, 404)
+
+
+class ARefusedPageWritesNothingTests(r.CustomerCase, TestCase):
+    """Refutation round 1, item B: every call a release-1 page makes - the session, every list, a later page, a
+    document, a paste, an answer, a retry, an export - is answered 409 client_outdated before its view runs, so it
+    reads and writes nothing: no INSERT, UPDATE or DELETE, and the rows that record or change anything stay as they
+    were. Each call that would record or change anything is one its view would act on (a document with questions, a
+    failed round to retry, a whole paste, another coded document to export), so a guard moved after the view shows."""
+    WATCHED = (models.AccessRecord, models.AccessRecordRepeat, models.Encounter, models.SourceRevision,
+               models.CodingRound, models.Job, models.RateWindow, models.AuditEvent, models.SecurityEvent)
+    WRITES = ('INSERT', 'UPDATE', 'DELETE')
+
+    def test_every_call_of_a_release_1_page_is_refused_and_writes_nothing(self):
+        coded = self.done()
+        exported = self.done(title='Synthetic note to export')
+        failed = self.encounter(title='Synthetic note that could not be coded')
+        r.write_round(failed, state_=models.CodingRound.FAILED, failure_kind='busy', error=jobs.FAILURE_TEXT['busy'])
+        question = self.client_for(self.reviewer).get(f'/api/encounters/{coded.pk}').json()['questions'][0]['id']
+        page = self.client_for(self.reviewer, **{client_contract.WSGI_KEY: RELEASE_1_BUILD})
+        answer = {'answers': [{'question_id': question, 'text': 'Yes, from the rectum.'}]}
+        calls = {
+            'session': lambda: page.get('/api/session'),
+            'list': lambda: page.get('/api/encounters'),
+            'documents': lambda: page.get('/api/encounters?list=documents'),
+            'queue': lambda: page.get('/api/encounters?list=queue'),
+            'recent': lambda: page.get('/api/encounters?list=recent'),
+            'a later page': lambda: page.get(f'/api/encounters?list=documents&before={LATER_PAGE_CURSOR}'),
+            'a document': lambda: page.get(f'/api/encounters/{coded.pk}'),
+            'a paste': lambda: page.post('/api/encounters', {'text': f.NOTE, 'synthetic_attestation': 'yes',
+                                                             'insurance': 'medicare', 'client_key': str(uuid.uuid4())}),
+            'an answer': lambda: page.post(f'/api/encounters/{coded.pk}/answers', data=json.dumps(answer),
+                                           content_type='application/json'),
+            'a retry': lambda: page.post(f'/api/encounters/{failed.pk}/retry', data='{}',
+                                         content_type='application/json'),
+            'an export': lambda: page.post(f'/api/encounters/{exported.pk}/reports', data=json.dumps(
+                {'kind': 'draft', 'fmt': 'pdf', 'round': 1}), content_type='application/json'),
+        }
+        for name, call in calls.items():
+            with self.subTest(call=name):
+                before = {model.__name__: model.objects.count() for model in self.WATCHED}
+                with CaptureQueriesContext(connection) as ran:
+                    response = call()
+                self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
+                self.assertEqual([query['sql'] for query in ran.captured_queries
+                                  if query['sql'].lstrip().upper().startswith(self.WRITES)], [])
+                self.assertEqual({model.__name__: model.objects.count() for model in self.WATCHED}, before)
 
 
 class OneValueTests(SimpleTestCase):
