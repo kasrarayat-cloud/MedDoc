@@ -2527,8 +2527,8 @@ function renderKey(doc) {
   return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
 }
 
-// What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original - unless a
-// later round serves another conversion of a Word file (view_round, I1-12: the copy is asked with its tag).
+// What the viewer shows (another round's Word conversion included, I1-12): the page redraws it only when this
+// changes, so a poll never reloads the original.
 function viewerKey(doc) {
   const part = record(doc?.document);
   return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${Number.isInteger(part.view_round) ? part.view_round : ''} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
@@ -3184,6 +3184,9 @@ function mountViewer(doc) {
   const view = safeViewUrl(element?.dataset?.viewUrl);
   if (!element || !view || viewerKind(doc?.document) !== 'pdf') {
     dropEarly();
+    // I1-16: no PDF view, no copy kept, whichever answer came first
+    const own = `/api/encounters/${doc?.id}/original?view=1`;
+    if (viewerKind(doc?.document) !== 'pdf') dropView(own, state.keptViews.get(own));
     return;
   }
   // thread: the viewer's own worker; worker: the library's handle on it; download: the download's abort; watchdog: the

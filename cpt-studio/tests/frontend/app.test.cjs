@@ -6602,32 +6602,70 @@ test('R2 V4: the view is asked for with the click only once the library has star
     ? new Promise(resolve => { release = resolve; }) : new Promise(() => {})));
 });
 
-test('I1-1: a Word document a later round refused draws no copy the page keeps - its detail names no view: no viewer, no converted note, no "Download PDF"; the click\'s view, asked with the kept tag and answered 404, drops the copy, overwritten, and nothing is drawn', async () => {
+test('I1-1, I1-16: a Word document a later round refused draws no copy the page keeps - its detail names no view: no viewer, no converted note, no "Download PDF"; the copy is dropped, overwritten, whichever answer comes first - the click\'s view answered 404, or the detail drawn first and the view aborted - and when the open page\'s poll brings the refusal; nothing is drawn', async () => {
   const word = fixture('encounter-word.json');
   const view = `/api/encounters/${word.id}/original?view=1`;
   const refused = clone(word);  // the server's detail once a later round refused the file (customer.shown_view)
-  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false });
+  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false, view_round: null });
   const panel = dom(app.viewerPanel(refused)).one('section.viewer-panel');
   assert.deepEqual([panel.one('#documentViewer'), panel.one('.viewer-note'), panel.one('#downloadOriginal')], [null, null, null],
     'no viewer, no converted note, no "Download PDF"');
   assert.equal(panel.one('#downloadWord').attr('data-word-original'), `${refused.document.original_url}?format=original`, 'the Word file by name');
+  const tag = 'abcdef00-0000-4000-8000-000000000000';
+  // the page's fetch as a browser's: a request whose signal aborts is rejected with an AbortError (refutation viewer-2:
+  // a stand-in that ignores the signal hid the detail-first order)
+  const browserFetch = answer => (url, init = {}) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    answer(url).then(resolve, reject);
+  });
+  // I1-16 (viewer-2): both orders of the click's two answers
+  for (const order of ['the view\'s 404 first', 'the detail first']) {
+    const library = fakeLibrary();
+    const answered = [];
+    let viewDone = null;
+    const viewSettled = new Promise(resolve => { viewDone = resolve; });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ fetches }) => {
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
+      const data = Uint8Array.from([37, 80, 68, 70]);
+      app.keepView(view, tag, data);  // kept from an open before the refusal
+      global.location.hash = `#doc/${word.id}`;
+      app.route();
+      assert.deepEqual(fetches.filter(item => item.url === view).map(item => item.init.headers['If-None-Match']),
+        [`"${tag}"`], `${order}: the click asks once, with the tag it holds`);
+      await settle(() => app.state.doc?.id === word.id && !app.state.keptViews.has(view));
+      assert.equal(app.state.doc?.document?.view_url, null, order);
+      assert.deepEqual(answered, order === 'the detail first' ? ['detail'] : ['view', 'detail'], `${order}: the answers' order`);
+      assert.equal(fetches.find(item => item.url === view).init.signal.aborted, true, `${order}: the click's view let go of`);
+      assert.deepEqual([app.state.viewer, app.state.early], [null, null], `${order}: no viewer mounted, no view left asked for`);
+      assert.deepEqual([app.state.keptViews.has(view), [...data]], [false, [0, 0, 0, 0]], `${order}: the copy dropped and overwritten`);
+      assert.equal(library.made.tasks.length, 0, `${order}: nothing drawn`);
+      app.forgetMemory();
+    }, browserFetch(url => {
+      if (url === view) {
+        if (order === 'the detail first') return new Promise(() => {});  // answered only after the detail: aborted first
+        return taggedView(404, [], '').then(answer => { answered.push('view'); viewDone(); return answer; });
+      }
+      if (url === `/api/encounters/${word.id}`) {
+        const detail = () => { answered.push('detail'); return response({ status: 200, body: refused }); };
+        return order === 'the detail first' ? Promise.resolve().then(detail) : viewSettled.then(detail);
+      }
+      return new Promise(() => {});
+    }));
+  }
+  // ... and the open document's poll that brings the refusal (another viewer key: the page is redrawn whole), which asks
+  // for no view at all
   const library = fakeLibrary();
   await withPdfPage(() => Promise.resolve(library.library), async ({ fetches }) => {
-    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
     const data = Uint8Array.from([37, 80, 68, 70]);
-    app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);  // kept from an open before the refusal
-    global.location.hash = `#doc/${word.id}`;
-    app.route();
-    assert.deepEqual(fetches.filter(item => item.url === view).map(item => item.init.headers['If-None-Match']),
-      ['"abcdef00-0000-4000-8000-000000000000"'], 'the click asks once, with the tag it holds');
-    await settle(() => app.state.doc?.id === word.id && !app.state.keptViews.has(view));
-    assert.equal(app.state.doc?.document?.view_url, null);
-    assert.deepEqual([app.state.viewer, app.state.early], [null, null], 'no viewer mounted, no view left asked for');
-    assert.deepEqual([app.state.keptViews.has(view), [...data]], [false, [0, 0, 0, 0]], 'the copy dropped and overwritten');
-    assert.equal(library.made.tasks.length, 0, 'nothing drawn');
+    app.keepView(view, tag, data);  // drawn and kept while round 1's view stood
+    Object.assign(app.state, { doc: word, route: { name: 'doc', id: word.id }, docKey: 'drawn', viewerKey: app.viewerKey(word) });
+    app.renderDocument(refused, false);
+    assert.deepEqual(fetches.filter(item => item.url === view), [], 'the poll: no view asked');
+    assert.deepEqual([app.state.viewer, app.state.keptViews.has(view), [...data]], [null, false, [0, 0, 0, 0]],
+      'the poll: no viewer, the copy dropped and overwritten');
+    assert.equal(library.made.tasks.length, 0, 'the poll: nothing drawn');
     app.forgetMemory();
-  }, url => (url === view ? taggedView(404, [], '') : url === `/api/encounters/${word.id}`
-    ? Promise.resolve(response({ status: 200, body: refused })) : new Promise(() => {})));
+  });
 });
 
 test('R2-18: a document the server refuses (404: another practice\'s, or access ended) wipes page memory - the copies, the hints and the worker made ready ahead', async () => {

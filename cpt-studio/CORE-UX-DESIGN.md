@@ -473,6 +473,9 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   never a Blob, the Cache API, IndexedDB or Web Storage. A re-open sends the tag (`If-None-Match`) and draws the kept
   bytes only when the server answers 304, which it records as it records any view; any other answer, or a failed
   request, drops the copy and overwrites it, and the page's own abort (a route away, a second click) leaves it kept.
+  A document whose detail names no PDF view (a Word file a later round refused, integrated refutation round 1: I1-1)
+  keeps no copy, whichever of its answers comes first: the view's 404, or the detail, which lets the click's view go
+  (I1-16, viewer-2); and when the open page's poll brings the refusal, no view is asked and the copy goes too.
 - **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
   the page meets it (the view's own download, a download the page saves, and the load of either viewer's frame, the
   text's or the browser's own PDF viewer's: the site's refusals forbid framing, so the browser does not let the page read
