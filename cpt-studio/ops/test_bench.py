@@ -636,6 +636,35 @@ class BenchTreeReadingTests(unittest.TestCase):
         self.assertTrue(all(c.isdigit() for c in cores))
 
 
+class AcceptanceTableTests(unittest.TestCase):
+    """acceptance.json is section 8's table: every row whole, named once, and judged on something the bench measures."""
+
+    def setUp(self):
+        self.table = json.loads((BENCH / 'acceptance.json').read_text())
+
+    def test_every_row_is_whole_and_named_once(self):
+        ids = [row['id'] for row in self.table['rows']]
+        self.assertEqual(len(ids), len(set(ids)))
+        for row in self.table['rows']:
+            self.assertTrue(row.get('table') and row.get('section8'), row['id'])
+            kind = row.get('kind', 'metric')
+            self.assertIn(kind, {'metric', 'report', 'check', 'external', 'office', 'max_ratio', 'equal', 'ratio',
+                                 'round_trips', 'same_as_a'}, row['id'])
+            if kind == 'metric':
+                self.assertTrue(row.get('metric') and row.get('gate'), row['id'])
+
+    def test_every_check_and_metric_family_is_one_the_bench_produces(self):
+        sources = ''.join((BENCH / name).read_text() for name in ('bench.cjs', 'bench_run.py'))
+        for row in self.table['rows']:
+            if row.get('kind') == 'check':
+                self.assertIn(row['check'], sources, row['id'])
+        families = {row['metric'].split('.')[0] for row in self.table['rows'] if row.get('metric')}
+        self.assertEqual(families - {'open', 'lists', 'server', 'queries', 'cold', 'pause', 'load', 'office', 'static'},
+                         set())
+        self.assertEqual(self.table['controls'], ['nomarker', 'planted_delay', 'planted_fetch', 'planted_detail',
+                                                  'reduced_motion', 'heap_probe'])
+
+
 class BenchNeverShipsTests(unittest.TestCase):
     def test_the_image_build_leaves_ops_out(self):
         ignored = [line.strip() for line in (APP / 'deploy' / '.dockerignore').read_text().splitlines()

@@ -1170,9 +1170,10 @@ class Bench(TransactionTestCase):
                 kinds = judged[size]['equation']['kinds']
                 judged[size]['equation']['ok'] = judged[size]['equation']['ok'] and all(
                     kinds[k]['answers'] > 0 for k in ('member.list', 'member.detail', 'member.inline'))
-        for name in ('equation', 'polls', 'openings', 'list_ids', 'inline_before_pixels'):
-            parts = {size: judged[size][name] for size in judged}
-            self.check(f'records.{name}', all(p['ok'] for p in parts.values()), sizes=parts)
+        for check in ('records.equation', 'records.polls', 'records.openings', 'records.list_ids',
+                      'records.inline_before_pixels'):  # named whole, as acceptance.json names them
+            parts = {size: judged[size][check.split('.', 1)[1]] for size in judged}
+            self.check(check, all(p['ok'] for p in parts.values()), sizes=parts)
         self.browser('fail-closed', 'P0', label='fail-closed', allowed=frozenset(SLOW_STATUS_OK | {503}), timing=False)
         ok, detail = marker_audit(self.raw, MARKER_WORD)
         self.check('records.marker', ok, **detail)

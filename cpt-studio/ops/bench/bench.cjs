@@ -891,7 +891,8 @@ async function flowCorrect() {
 // a blank list, a console error other than the 409, or a wrong document; a reload gives the new web's page, signed in.
 async function flowBlueGreen() {
   const mine = Number(arg('web-mine')); const other = Number(arg('web-other'));
-  for (const [name, start, flip] of [['x1', other, mine], ['x2', mine, other]]) {
+  for (const [check, start, flip] of [['bluegreen.x1', other, mine], ['bluegreen.x2', mine, other]]) {
+    const name = check.slice('bluegreen.'.length);  // checks named whole, as acceptance.json names them
     await call(CONTROL, 'POST', '/upstream', { port: start });
     const s = await newContext();
     const errorsBefore = result.consoleErrors.length + result.pageErrors.length;
@@ -910,9 +911,9 @@ async function flowBlueGreen() {
         rows: document.querySelectorAll('#documentsTable .document-row').length,
         app: [...document.scripts].map(x => x.src).find(src => /\/app\./.test(src)) || '' }));
       const blank = !seen.notice && seen.rows === 0;
-      result.checks[`bluegreen.${name}`] = { ok: seen.notice && !blank && !seen.review && !seen.canvas && errors.length === 0 && !after.login && after.rows > 0
+      result.checks[check] = { ok: seen.notice && !blank && !seen.review && !seen.canvas && errors.length === 0 && !after.login && after.rows > 0
         && after.app !== appBefore, seen, errors, after: { ...after, appChanged: after.app !== appBefore } };
-    } catch (e) { result.errors.push(`bluegreen ${name}: ${String(e && e.stack || e).slice(0, 600)}`); result.checks[`bluegreen.${name}`] = { ok: false }; }
+    } catch (e) { result.errors.push(`bluegreen ${name}: ${String(e && e.stack || e).slice(0, 600)}`); result.checks[check] = { ok: false }; }
     finally { await s.context.close(); }
   }
 }
