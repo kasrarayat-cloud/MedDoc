@@ -75,14 +75,22 @@ const act = async (name, args = {}) => { if (REHEARSAL) throw new Error('not in 
 async function logFromCdp(cdp) {
   const live = new Map(); const member = crypto.randomBytes(6).toString('hex');
   await cdp.send('Network.enable');
-  cdp.on('Network.requestWillBeSent', e => { if (!e.request.url.startsWith(BASE)) return; cdpInFlight += 1;
+  cdp.on('Network.requestWillBeSent', e => {
+    // bench[4]: a redirect keeps its requestId - the hop before it (POST /login/'s 302) ends here, with its own status
+    if (e.redirectResponse && live.has(e.requestId)) { const hop = live.get(e.requestId); hop.status = e.redirectResponse.status;
+      hop.resHeaders = e.redirectResponse.headers;
+      if (e.redirectResponse.fromDiskCache || e.redirectResponse.fromServiceWorker || e.redirectResponse.fromPrefetchCache) hop.cached = true;
+      end({ requestId: e.requestId, timestamp: e.timestamp }, false); }
+    if (!e.request.url.startsWith(BASE)) return; cdpInFlight += 1;
     live.set(e.requestId, { seq: 0, t0: e.wallTime * 1000, ts: e.timestamp, tEnd: null, method: e.request.method, url: e.request.url.slice(BASE.length),
       status: 0, bytes: 0, member, reqHeaders: e.request.headers, resHeaders: {}, cached: false }); });
   cdp.on('Network.requestServedFromCache', e => { const r = live.get(e.requestId); if (r) r.cached = true; });
+  // bench[5]: an answer's body bytes as proxy.cjs counts them (loadingFinished's encodedDataLength includes the headers)
+  cdp.on('Network.dataReceived', e => { const r = live.get(e.requestId); if (r) r.body = (r.body || 0) + e.dataLength; });
   cdp.on('Network.responseReceived', e => { const r = live.get(e.requestId); if (!r) return; r.status = e.response.status; r.resHeaders = e.response.headers;
     if (e.response.fromDiskCache || e.response.fromServiceWorker || e.response.fromPrefetchCache) r.cached = true; });
   const end = (e, failed) => { const r = live.get(e.requestId); if (!r) return; live.delete(e.requestId); cdpInFlight -= 1;
-    r.tEnd = r.t0 + (e.timestamp - r.ts) * 1000; r.bytes = failed ? 0 : (e.encodedDataLength || 0); if (!r.cached) { r.seq = ++cdpSeq; cdpLog.push(r); } };
+    r.tEnd = r.t0 + (e.timestamp - r.ts) * 1000; r.bytes = failed ? 0 : (r.body || 0); if (!r.cached) { r.seq = ++cdpSeq; cdpLog.push(r); } };
   cdp.on('Network.loadingFinished', e => end(e, false)); cdp.on('Network.loadingFailed', e => end(e, true));
 }
 const isStatic = url => url.startsWith('/static/');
@@ -397,14 +405,21 @@ async function flowOpen() {
       await back(s);
       for (const [nav, label] of [['queue', 'tab-queue'], ['workspace', 'tab-overview'], ['documents', 'tab-documents']]) {
         const t = await tab(s, nav, label);
-        if (!t) continue;
+        if (!t) { result.errors.push(`open ${PROFILE} context ${k}: the ${nav} tab never became opaque`); continue; }
         metric(`open.tab.opaque.${PROFILE}`, t.opaque);
+        metric(`open.tab.opaque.${nav}.${PROFILE}`, t.opaque);  // bench[0]: each nav tab its own row
         metric(`open.requests.tab.${PROFILE}`, t.requests.length);
         metric(`open.enter.per_tab.${PROFILE}`, t.enter);
       }
       const all = await proxyLog(seq0);
       const member = (all.find(e => e.member) || {}).member;
       metric(`open.inflight.max.${PROFILE}`, inflightMax(all, member));
+      if (PROFILE === 'P0') {  // bench[8]: the standby's two files only on a cold browser cache - a warm load asks for neither
+        const warm = await proxySeq();
+        await s.page.reload(); await s.page.waitForSelector('#documentsTable .document-row', { timeout: 60000 });
+        await sleep(3000); await settle(s.page, 600);
+        metric(`open.standby.requests_warm.${PROFILE}`, (await proxyLog(warm)).filter(e => LIBRARY.test(e.url)).length);
+      }
     } catch (e) { result.errors.push(`open ${PROFILE} context ${k}: ${String(e && e.stack || e).slice(0, 600)}`); }
     finally { await s.context.close(); }
   }
@@ -555,9 +570,10 @@ async function flowLists() {
         if (grown !== null) metric(`lists.later_page.${size}.${PROFILE}`, grown);
       }
       const q = await tab(s, 'queue', 'queue', { limit: cap });
+      if (!q) result.errors.push(`lists ${size} ${PROFILE}: the queue tab never became opaque`);  // bench[0]
       if (q && size <= 100) metric(`lists.tab.opaque.${PROFILE}`, q.opaque);
       const o = await tab(s, 'workspace', 'overview', { limit: cap });
-      if (!o) break;
+      if (!o) { result.errors.push(`lists ${size} ${PROFILE}: the overview tab never became opaque`); break; }
       metric(`lists.overview.usable.${size}.${PROFILE}`, o.usable);
       if (size <= 100) metric(`lists.tab.opaque.${PROFILE}`, o.opaque);
       if (PROFILE === 'P1' && size >= 18000 && i === 0) break;  // one visit is enough where release 1 takes minutes
@@ -818,6 +834,14 @@ async function flowFailClosed() {
   finally { try { await act('refuse', { view: '' }); } catch (e) { /* already dropped */ } await s.context.close(); }
 }
 
+// bench[6]: every answer the HTTP cache served (a fetch's disk-cache hit raises no requestServedFromCache), by request id
+function watchHttpCache(cdp, cached, urls) {
+  const httpCached = r => Boolean(r && (r.fromDiskCache || r.fromPrefetchCache || r.fromServiceWorker));
+  cdp.on('Network.requestServedFromCache', e => cached.push(e.requestId));
+  cdp.on('Network.responseReceived', e => { if (httpCached(e.response)) cached.push(e.requestId); });
+  cdp.on('Network.requestWillBeSent', e => { urls.set(e.requestId, e.request.url); if (httpCached(e.redirectResponse)) cached.push(e.requestId); });
+}
+
 // Nothing left behind after an end: heap (buffers of an opened document's size, marker strings), storage, workers, and
 // Back after sign-out. Wipe ends (sign-out, idle, a 401) leave none at all; access off and a route to another document
 // leave at most the declared kept set (6 documents, 24 MiB).
@@ -829,8 +853,7 @@ async function flowLeftBehind() {
     const s = await newContext();
     try {
       await s.cdp.send('Network.enable');
-      s.cdp.on('Network.requestServedFromCache', e => cached.push(e.requestId));
-      const urls = new Map(); s.cdp.on('Network.requestWillBeSent', e => urls.set(e.requestId, e.request.url));
+      const urls = new Map(); watchHttpCache(s.cdp, cached, urls);
       if (end === 'idle') await s.page.clock.install();
       await signIn(s, DATA.users[SIZE]); await sleep(1200);
       for (const label of opened) { await openDoc(s, label, `left-${end}`); await back(s); }
@@ -977,7 +1000,8 @@ const EXTRA = { records: flowRecords, 'fail-closed': flowFailClosed, 'left-behin
   bluegreen: flowBlueGreen };
 // For ops/test_bench.py's browser pins: the module's own context, probe and 'nothing drawn' check, with the globals a
 // flow sets (never used by a flow itself).
-const TESTING = { arm, openNoWait, nothingDrawn, newContext, pageMarkerHits,
+const TESTING = { arm, openNoWait, nothingDrawn, newContext, pageMarkerHits, logFromCdp, watchHttpCache,
+  cdpState: () => ({ log: cdpLog, inFlight: cdpInFlight }),
   set: o => { DOC = o.DOC; browser = o.browser; INIT = o.INIT; result = o.result; FLOW = o.FLOW; PROFILE = o.PROFILE; BASE = o.BASE; } };
 module.exports = { EXTRA, INIT_FOR, decodeSquares, encodeForTest, shape, inflightMax, LIBRARY, baseAllowed, TESTING };
 if (require.main === module) main().catch(e => { console.error(String(e && e.stack || e).slice(0, 3000)); process.exit(1); });

@@ -554,6 +554,120 @@ class BenchNothingDrawnTests(unittest.TestCase):
                          {'stay': True, 'leave': True, 'norow': True, 'leave-clean': False, 'norow-clean': False})
 
 
+CDP_LOG_DRIVER = r"""
+const { EventEmitter } = require('events');
+const B = require(process.argv[2]); const BASE = 'http://127.0.0.1:9';
+B.TESTING.set({ DOC: {}, browser: null, INIT: '', result: {}, FLOW: 'open', PROFILE: 'P0', BASE });
+(async () => {
+  const cdp = new EventEmitter(); cdp.send = async () => ({});
+  await B.TESTING.logFromCdp(cdp);
+  const ask = (id, method, path, t, extra = {}) => cdp.emit('Network.requestWillBeSent',
+    { requestId: id, wallTime: 1000 + t, timestamp: t, request: { url: BASE + path, method, headers: {} }, ...extra });
+  ask('1', 'POST', '/login/', 1);
+  ask('1', 'GET', '/', 1.1, { redirectResponse: { status: 302, headers: { location: '/' }, encodedDataLength: 120 } });
+  cdp.emit('Network.responseReceived', { requestId: '1', response: { status: 200, headers: {} } });
+  cdp.emit('Network.dataReceived', { requestId: '1', dataLength: 5244 });
+  cdp.emit('Network.loadingFinished', { requestId: '1', timestamp: 1.2, encodedDataLength: 5490 });
+  ask('2', 'GET', '/api/encounters/x/original?view=1', 2);
+  cdp.emit('Network.responseReceived', { requestId: '2', response: { status: 304, headers: {} } });
+  cdp.emit('Network.loadingFinished', { requestId: '2', timestamp: 2.1, encodedDataLength: 184 });
+  const state = B.TESTING.cdpState();
+  const log = state.log.map(e => `${e.method} ${e.url} ${e.status} ${e.bytes}`);
+  console.log(JSON.stringify({ log, inFlight: state.inFlight }));
+})().catch(e => { console.error(String(e && e.stack || e)); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE, 'node is not installed')
+class BenchRehearsalLogTests(unittest.TestCase):
+    def test_the_rehearsal_log_keeps_a_redirect_s_hop_and_counts_body_bytes_only(self):
+        """bench[4]: a redirect's hop (POST /login/ 302) was dropped and the in-flight count never returned to 0;
+        bench[5]: a 304's header bytes were counted as body bytes, failing the '0 view body bytes' gate."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'cdp.cjs')
+            driver.write_text(CDP_LOG_DRIVER)
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs')], capture_output=True, text=True,
+                                  timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual(got, {'log': ['POST /login/ 302 0', 'GET / 200 5244',
+                                       'GET /api/encounters/x/original?view=1 304 0'], 'inFlight': 0})
+
+
+HTTP_CACHE_DRIVER = r"""
+const http = require('http');
+const [bench, playwright, port] = process.argv.slice(2);
+const B = require(bench); const BASE = `http://127.0.0.1:${port}`;
+let served = 0;
+const server = http.createServer((req, res) => {
+  const path = new URL(req.url, BASE).pathname;
+  if (path === '/') {
+    res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }); res.end('<p>x</p>'); return;
+  }
+  served += 1;
+  res.writeHead(200, { 'content-type': 'application/pdf',
+    'cache-control': path === '/cached' ? 'private, max-age=600' : 'no-store' }); res.end('%PDF-1.4 x');
+});
+(async () => {
+  await new Promise(resolve => server.listen(Number(port), '127.0.0.1', resolve));
+  const { chromium } = require(playwright);
+  const browser = await chromium.launch({ headless: true,
+    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
+  B.TESTING.set({ DOC: {}, browser, INIT: '', result: { consoleErrors: [], pageErrors: [], blocked: [] },
+    FLOW: 'left-behind', PROFILE: 'P0', BASE });
+  const out = {};
+  try {
+    for (const path of ['/cached', '/fresh']) {
+      const s = await B.TESTING.newContext(); const cached = []; const urls = new Map();
+      try {
+        await s.cdp.send('Network.enable'); B.TESTING.watchHttpCache(s.cdp, cached, urls);
+        await s.page.goto(`${BASE}/`);
+        for (let i = 0; i < 3; i += 1) await s.page.evaluate(p => fetch(p).then(r => r.arrayBuffer()), path);
+        await new Promise(r => setTimeout(r, 300));
+        out[path] = [...new Set(cached.map(id => new URL(urls.get(id)).pathname))];
+      } finally { await s.context.close(); }
+    }
+  } finally { await browser.close(); server.close(); }
+  console.log(JSON.stringify({ ...out, served }));
+})().catch(e => { console.error(String(e && e.stack || e)); server.close(); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(NODE and (PLAYWRIGHT / 'package.json').exists(), 'node or Playwright is not installed')
+class BenchHttpCacheTests(unittest.TestCase):
+    def test_an_answer_the_http_cache_served_is_seen(self):
+        """bench[6]: left.not_from_http_cache listened only for requestServedFromCache, which a fetch's disk-cache hit
+        never raises, so re-opens served from the HTTP cache passed."""
+        with tempfile.TemporaryDirectory() as d:
+            driver = Path(d, 'cache.cjs')
+            driver.write_text(HTTP_CACHE_DRIVER)
+            port = _free_ports(1)[0]
+            done = subprocess.run([NODE, str(driver), str(BENCH / 'bench.cjs'), str(PLAYWRIGHT), str(port)],
+                                  capture_output=True, text=True, timeout=180, env={**os.environ, 'TMPDIR': d})
+        self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+        got = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual(got['/cached'], ['/cached'])  # asked 3 times, served once: twice from the cache, seen
+        self.assertEqual(got['/fresh'], [])
+        self.assertEqual(got['served'], 4)  # 1 for /cached, 3 for /fresh
+
+
+class BenchBrowserFlowPinsTests(unittest.TestCase):
+    def test_each_nav_tab_is_recorded_and_a_tab_that_never_opens_is_an_error(self):
+        """bench[0]: a tab that timed out was skipped silently, and the tabs were pooled with the list returns."""
+        source = (BENCH / 'bench.cjs').read_text()
+        self.assertIn('metric(`open.tab.opaque.${nav}.${PROFILE}`, t.opaque);', source)
+        self.assertIn('if (!t) { result.errors.push(`open ${PROFILE} context ${k}: the ${nav} tab never became '
+                      'opaque`);', source)
+        self.assertIn('the queue tab never became opaque', source)
+        self.assertIn('the overview tab never became opaque', source)
+
+    def test_a_warm_page_load_s_standby_requests_are_counted(self):
+        """bench[8]: 'only on a cold browser cache' was never measured."""
+        source = (BENCH / 'bench.cjs').read_text()
+        self.assertIn("metric(`open.standby.requests_warm.${PROFILE}`, (await proxyLog(warm)).filter(e => "
+                      "LIBRARY.test(e.url)).length);", source)
+
+
 def _node_bits(number):
     script = f'console.log(JSON.stringify(require({json.dumps(str(BENCH / "bench.cjs"))}).encodeForTest({number})))'
     return json.loads(subprocess.run([NODE, '-e', script], capture_output=True, text=True, timeout=60).stdout)
