@@ -19,6 +19,7 @@
   R2-30's QUOTE applies to converts afresh, with one.
 
 Synthetic bytes only, every package built here; no LibreOffice, no network, no provider."""
+import gzip
 import hashlib
 import io
 import random
@@ -116,6 +117,28 @@ EMF = b'\x01\x00\x00\x00 synthetic EMF preview picture'
 WMF = b'\xd7\xcd\xc6\x9a synthetic WMF preview picture'
 PNG_BYTES = b'\x89PNG\r\n\x1a\n synthetic PNG preview picture'
 XLSX = b'PK\x03\x04 synthetic workbook bytes SECRETBOOK'
+
+
+def preview_pdf(text):
+    """A one-page PDF that draws ``text`` (Helvetica): a preview as Mac Word writes one (D-R2-40, the 7.4 corpus's
+    R1-L0e)."""
+    stream = f'BT /F1 18 Tf 10 20 Td ({text}) Tj ET'.encode('latin-1')
+    objects = [b'<</Type/Catalog/Pages 2 0 R>>', b'<</Type/Pages/Kids[3 0 R]/Count 1>>',
+               b'<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 60]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+               b'<</Length %d>>stream\n' % len(stream) + stream + b'\nendstream',
+               b'<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>']
+    out, offsets = bytearray(b'%PDF-1.4\n'), []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b'%d 0 obj\n' % number + body + b'\nendobj\n'
+    xref = len(out)
+    out += b'xref\n0 %d\n0000000000 65535 f \n' % (len(objects) + 1)
+    out += b''.join(b'%010d 00000 n \n' % offset for offset in offsets)
+    out += b'trailer\n<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n' % (len(objects) + 1, xref)
+    return bytes(out)
+
+
+SYNTHETIC_PDF_PREVIEW = preview_pdf('PDFPREVIEW note')
 
 
 def t(text):
@@ -492,10 +515,11 @@ class ObjectAndControlTests(ReleaseOneCase):
         self.assert_outcomes(packages)
 
     def test_a_preview_is_a_part_that_is_sent(self):
-        def preview_object(target, *, mode=None, part_name='word/media/image1.emf', content=EMF, inner=None):
+        def preview_object(target, *, mode=None, part_name='word/media/image1.emf', content=EMF, inner=None, rows=None,
+                           extra=()):
             parts = (DOCX_PARTS[1],) if part_name is None else ((part_name, content), DOCX_PARTS[1])
             return package(in_object(SHAPETYPE, vshape(inner=inner), ole('Word.Document.12')),
-                           (rel('rIdPrev', 'image', target, mode), DOCX_RELS[1]), parts)
+                           (*(rows or (rel('rIdPrev', 'image', target, mode),)), DOCX_RELS[1]), parts + tuple(extra))
         drawn = in_object(drawing(), '<w:objectEmbed r:id="rIdOle" w:progId="Word.Document.12"/>', attributes='')
         refused = {
             'its relationship missing': package(in_object(SHAPETYPE, vshape('rIdGone'), ole('Word.Document.12')),
@@ -522,7 +546,45 @@ class ObjectAndControlTests(ReleaseOneCase):
             'a drawing whose a:blip embeds a percent-encoded name that is present': package(
                 drawn, (rel('rIdPic', 'image', 'media/image%201.emf'), DOCX_RELS[1]),
                 (('word/media/image 1.emf', EMF), DOCX_PARTS[1])),
+            # refutation round 2, loss[0] and refuse[0]: LibreOffice opens a picture's target as a string - no '.'
+            # segment, fragment or '..' under a root resolved - so these name no part it opens, and it draws nothing
+            'a drawing whose a:blip embeds ./media/image1.emf': package(
+                drawn, (rel('rIdPic', 'image', './media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
+            # loss[5]: words that begin as a signature's first bytes are no picture; nor is a BMP LibreOffice does not
+            # detect (a 108-byte header with its reserved bytes set: not drawn on 24.2.7)
+            'words that begin BM': preview_object('media/image1.emf', content=b'BMI 31.4 kg/m2, words, no picture'),
+            'words that begin GIF8': preview_object('media/image1.emf', content=b'GIF8 lesions noted, words'),
+            'a BMP whose 108-byte header has its reserved bytes set': preview_object(
+                'media/image1.emf', content=b'BM' + bytes(4) + b'AB\x00\x00' + bytes(4) + b'l\x00\x00\x00'
+                + bytes(104)),
+            # D-R2-40: PICT, SVG, EMZ and WMZ stay refused - no 7.4 measurement of them exists (24.2.7 draws them)
+            'a PICT preview': preview_object('media/image1.pct', part_name='word/media/image1.pct',
+                                             content=bytes(2) + bytes(8) + b'\x00\x11\x02\xff\x0c\x00 synthetic PICT'),
+            'an SVG preview': preview_object('media/image1.svg', part_name='word/media/image1.svg',
+                                             content=b'<svg xmlns="http://www.w3.org/2000/svg"><text>SVG</text></svg>'),
+            'an EMZ preview': preview_object('media/image1.emz', part_name='word/media/image1.emz',
+                                             content=gzip.compress(EMF, mtime=0)),
+            'a WMZ preview': preview_object('media/image1.wmz', part_name='word/media/image1.wmz',
+                                            content=gzip.compress(WMF, mtime=0)),
+            # loss[1]: LibreOffice reads an id's first row that has an Id, a Type and a Target; a later row with a
+            # picture is never opened
+            'an id written twice, its first row naming a missing part': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/missing.emf'), rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row naming a part that is no picture': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/words.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
+                extra=(('word/media/words.emf', b'plain words, no picture'),)),
+            'an id written twice, its first row naming an empty part': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/empty.emf'), rel('rIdPrev', 'image', 'media/image1.emf')),
+                extra=(('word/media/empty.emf', b''),)),
+            'a relationship with no Type': preview_object('', rows=(
+                '<Relationship Id="rIdPrev" Target="media/image1.emf"/>',)),
         }
+        for target in ('./media/image1.emf', 'media/./image1.emf', '/./word/media/image1.emf',
+                       '/word/./media/image1.emf', '/word/../word/media/image1.emf', 'media/image1.emf#frag',
+                       'media/image1.emf#'):
+            refused[f'a target written {target!r}'] = preview_object(target)
+        refused['a target written \'media//../image1.emf\', the part word/image1.emf'] = preview_object(
+            'media//../image1.emf', part_name='word/image1.emf')
         for label, data in refused.items():
             with self.subTest(f'refused: {label}'):
                 with self.assertRaises(docx_package.ContentNotShown) as caught:
@@ -533,18 +595,70 @@ class ObjectAndControlTests(ReleaseOneCase):
             'o:relid': preview_object('media/image1.emf', inner='<v:imagedata o:relid="rIdPrev"/>'),
             'a drawing whose a:blip embeds a name present as written': package(
                 drawn, (rel('rIdPic', 'image', 'media/image1.emf'), DOCX_RELS[1]), DOCX_PARTS),
+            # refutation round 2, loss[1]: the first row LibreOffice reads names the picture (an External row is
+            # dropped from the package; a row with no Type or no Target is one LibreOffice does not read)
+            'an id written twice, the picture first': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'media/image1.emf'), rel('rIdPrev', 'image', 'media/missing.emf'))),
+            'an id written twice, an External row first': preview_object('', rows=(
+                rel('rIdPrev', 'image', 'file:///synthetic/x.emf', 'External'),
+                rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row with no Type': preview_object('', rows=(
+                '<Relationship Id="rIdPrev" Target="media/missing.emf"/>',
+                rel('rIdPrev', 'image', 'media/image1.emf'))),
+            'an id written twice, its first row with an empty Target': preview_object('', rows=(
+                rel('rIdPrev', 'image', ''), rel('rIdPrev', 'image', 'media/image1.emf'))),
+            # D-R2-40 (the lead's 7.4 run on 3ad91321e, R1-L0e): a PDF preview, as Mac Word writes it, is drawn
+            'a PDF preview (R1-L0e)': preview_object('media/image1.pdf', part_name='word/media/image1.pdf',
+                                                     content=SYNTHETIC_PDF_PREVIEW),
         }
+        # loss[0] and refuse[0]: the names LibreOffice does open - rooted, a '..' to the root, an empty segment
+        for target in ('/word/media/image1.emf', '../word/media/image1.emf', '../../word/media/image1.emf',
+                       'media//image1.emf', '//word/media/image1.emf'):
+            kept[f'a target written {target!r}'] = preview_object(target)
         # each picture format a preview is (loss[0]): EMF, placeable WMF, standard WMF in memory and on disk, PNG, JPEG,
-        # GIF, BMP, TIFF in both byte orders
+        # GIF, BMP (a 40-byte header; refutation round 2, loss[5]), TIFF in both byte orders, and PDF (D-R2-40)
         for signature in (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00',
-                          b'\x89PNG\r\n\x1a\n', b'\xff\xd8\xff\xe0', b'GIF89a', b'BM', b'II*\x00', b'MM\x00*'):
+                          b'\x89PNG\r\n\x1a\n', b'\xff\xd8\xff\xe0', b'GIF87a', b'GIF89a',
+                          b'BM' + bytes(12) + b'(\x00\x00\x00', b'II*\x00', b'MM\x00*', b'%PDF-1.4'):
             kept[f'a picture that begins {signature!r}'] = preview_object(
                 'media/image1.emf', content=signature + b' synthetic picture bytes')
+        # loss[5]: BMPs LibreOffice draws on 24.2.7 - a 108-byte header with its reserved bytes zero, a 40-byte one with
+        # them set
+        kept['a BMP whose 108-byte header has its reserved bytes zero'] = preview_object(
+            'media/image1.emf', content=b'BM' + bytes(12) + b'l\x00\x00\x00' + bytes(104))
+        kept['a BMP whose 40-byte header has its reserved bytes set'] = preview_object(
+            'media/image1.emf', content=b'BM' + bytes(4) + b'AB\x00\x00' + bytes(4) + b'(\x00\x00\x00' + bytes(36))
         for label, data in kept.items():
             with self.subTest(f'kept: {label}'):
                 package_bytes, removed = docx_package._safe_package(data)
                 self.assertEqual(removed['objects'], 1)
                 self.assert_release_1_package(data)
+
+    def test_a_control_whose_preview_target_holds_a_dot_segment_is_refused_and_so_is_its_stored_conversion(self):
+        # refutation round 2, refuse[0]: a check box control (C08's) whose WMF preview is named './media/image1.wmf' -
+        # LibreOffice draws nothing, and the base shows the control's value - is refused, fresh and before a stored
+        # conversion is read again (C8); named 'media/image1.wmf' (the control) it is coded with release 1's package
+        def check_box(target):
+            ctl = '<w:control r:id="rIdCtl" w:name="CheckBox1" w:shapeid="_x0000_i1026"/>'
+            bag = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<ax:ocx '
+                   f'xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" xmlns:r="{R}" '
+                   'ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}" ax:persistence="persistPropertyBag">'
+                   '<ax:ocxPr ax:name="Caption" ax:value="CTLVALUE consent"/></ax:ocx>')
+            return package(in_object(SHAPETYPE, vshape(sid='_x0000_i1026'), ctl),
+                           (rel('rIdCtl', 'control', 'activeX/activeX1.xml'), rel('rIdPrev', 'image', target)),
+                           (('word/activeX/activeX1.xml', bag), ('word/media/image1.wmf', WMF)),
+                           (override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml'),))
+        refused = check_box('./media/image1.wmf')
+        with self.assertRaises(docx_package.ContentNotShown) as caught:
+            docx_package._safe_package(refused)
+        self.assertEqual((caught.exception.code, caught.exception.counts),
+                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 0, 'controls': 1, 'fields': 0}))
+        with self.assertRaises(docx_package.ConversionRefused) as checked:
+            docx_package.check_in_child(refused)
+        self.assertEqual(checked.exception.code, docx_package.INSERTED_OBJECT)
+        self.release_1()._safe_package(refused)  # the bad shape: release 1 coded it
+        self.assertEqual(docx_package._safe_package(check_box('media/image1.wmf'))[1]['controls'], 1)
+        self.assert_release_1_package(check_box('media/image1.wmf'))
 
 
 class ImportHoldingNothingTests(ReleaseOneCase):

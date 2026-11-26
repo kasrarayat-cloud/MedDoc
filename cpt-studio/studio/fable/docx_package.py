@@ -582,11 +582,27 @@ _PICTURE_KEYS = {f'{VML_NAMESPACE} imagedata': tuple(f'{namespace} id' for names
 _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
                                                  for relationships in RELATIONSHIP_ID_NAMESPACES)
                       for namespace in DRAWINGML_NAMESPACES})
-# A preview is a picture only when its part's bytes begin as one - EMF, placeable WMF, standard WMF (memory or disk),
-# PNG, JPEG, GIF, BMP, TIFF in either byte order (refutation round 1, loss[0]): a part that is not empty but holds no
-# picture - one byte, words, the embedded document itself - leaves nothing in the object's place
+# A preview is a picture only when its part's bytes begin as one LibreOffice decodes - EMF, placeable WMF, standard WMF
+# (memory or disk), PNG, JPEG, GIF (its whole signature), TIFF in either byte order, BMP (_is_picture) and, from
+# refutation round 2, PDF, which LibreOffice 7.4 draws as Mac Word writes it (D-R2-40, R1-L0e): a part that is not empty
+# but holds no picture - one byte, words, the embedded document itself - leaves nothing in the object's place
+# (refutation round 1, loss[0]). Words cannot begin so (round 2, loss[5]: 'BM' or 'GIF8' alone counted words), but for
+# '%PDF-'; that, and a picture header over a body LibreOffice cannot draw (an 88-byte EMF header), are known limits.
+# PICT, SVG, EMZ and WMZ are no picture here: no 7.4 run has measured them (D-R2-40).
 _PICTURE_SIGNATURES = (b'\x01\x00\x00\x00', b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00', b'\x02\x00\x09\x00', b'\x89PNG',
-                       b'\xff\xd8\xff', b'GIF8', b'BM', b'II*\x00', b'MM\x00*')
+                       b'\xff\xd8\xff', b'GIF87a', b'GIF89a', b'II*\x00', b'MM\x00*', b'%PDF-')
+# the DIB header sizes of a BMP, the four bytes at its offset 14 (each holds NUL bytes, so no words match)
+_BMP_HEADER_SIZES = frozenset((12, 16, 40, 52, 56, 64, 108, 124))
+
+
+def _is_picture(data: bytes) -> bool:
+    """Whether a preview part's bytes begin as a picture LibreOffice decodes (_PICTURE_SIGNATURES). A BMP ('BM') needs a
+    DIB header size it reads and, as LibreOffice's own detection asks, its reserved bytes zero or that size 12 or 40
+    (refutation round 2, loss[5]; a 108-byte header with its reserved bytes set is not drawn on 24.2.7)."""
+    if data[:2] == b'BM':
+        return len(data) >= 18 and int.from_bytes(data[14:18], 'little') in _BMP_HEADER_SIZES \
+            and (data[6:10] == bytes(4) or data[14] in (12, 40))
+    return data.startswith(_PICTURE_SIGNATURES)
 # R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object.
 _SHOWN = _names('drawing', 'pict', 'object')
 # outer types whose stored result 7.4 keeps with release 1's edit (R2-30): HYPERLINK and TOC, and QUOTE and STYLEREF
@@ -1494,27 +1510,53 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
 
 def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
     """(pictures, inserted) of the part ``name``'s relationships, by id (refutation round 1 split them):
-    - pictures, what a preview must name (R2-29 step 1): a kept relationship whose target names a part by its exact zip
-      name - the one name LibreOffice opens (loss[5]) - whose bytes begin as a picture (_PICTURE_SIGNATURES, loss[0]);
+    - pictures, what a preview must name (R2-29 step 1): an id whose relationship LibreOffice reads - the first kept row
+      of that id with an Id, a Type and a Target, as its relations reader keeps the first (refutation round 2, loss[1])
+      - names, by the zip name LibreOffice opens for it (_opened_name: no '.' segment, fragment or escape resolved;
+      round 2, loss[0] and refuse[0]), a part whose bytes begin as a picture (_is_picture: refutation round 1, loss[0]);
     - inserted, what makes a w:altChunk an inserted document (R2-28 step 2): a relationship that reaches outside
-      (TargetMode other than Internal: dropped), and a kept one whose target names a part that is not empty by any name
-      a reader resolves - as written or percent-decoded, and without case, as Word does (loss[5]); and by its URI path
-      alone, whatever scheme, authority, query or fragment it carries, as LibreOffice opens an Internal target
-      (loss[4])."""
+      (TargetMode other than Internal: dropped), and a kept one - any row of its id - whose target names a part that is
+      not empty by any name a reader resolves - as written or percent-decoded, and without case, as Word does (loss[5]);
+      and by its URI path alone, whatever scheme, authority, query or fragment it carries, as LibreOffice opens an
+      Internal target (loss[4])."""
     folder, _, leaf = name.rpartition('/')
     rels = by_folded.get((f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels').casefold())
-    pictures, inserted = set(), {row.get('Id') for row in dropped_rows.get(rels, ())}
+    pictures, inserted, read = set(), {row.get('Id') for row in dropped_rows.get(rels, ())}, set()
     for row in kept_rows.get(rels, ()):
-        written, source = row.get('Target', ''), _source_folder(rels)
+        written, source, rid = row.get('Target', ''), _source_folder(rels), row.get('Id')
         target = _part_name(source, written)
-        if target is not None and parts.get(target, b'').startswith(_PICTURE_SIGNATURES):
-            pictures.add(row.get('Id'))
+        if rid and row.get('Type') and written and rid not in read:  # the row LibreOffice reads for this id
+            read.add(rid)
+            if _is_picture(parts.get(_opened_name(folder, written), b'')):
+                pictures.add(rid)
         for named in (target, _uri_path_name(source, written)):
             for form in {named, unquote(named)} if named is not None else ():
                 part = by_folded.get(form.casefold())
                 if part is not None and parts[part]:
                     inserted.add(row.get('Id'))
     return frozenset(pictures), frozenset(inserted)
+
+
+def _opened_name(folder, target):
+    """The zip entry LibreOffice opens for an Internal target of a part in ``folder`` when it reads a picture (oox's
+    Relations::getFragmentPathFromRelation, then its storage), or None (refutation round 2, loss[0] and refuse[0]): a
+    target that begins with '/' is the rest as written; any other is appended to the folder segment by segment, a '..'
+    taking off what follows the last '/' (nothing past the root); the storage passes over empty segments. Nothing else
+    is resolved: a '.' or '..' left, a fragment, a query or a percent escape stays as written and names no part (None
+    for a '.' or '..' left, or no name at all)."""
+    if not target:
+        return None
+    if target.startswith('/'):
+        path = target[1:]
+    else:
+        path = folder
+        for segment in target.split('/'):
+            if segment == '..':
+                path = path[:max(path.rfind('/'), 0)]
+            else:
+                path = f'{path}/{segment}' if path else segment
+    segments = [segment for segment in path.split('/') if segment]
+    return None if not segments or '.' in segments or '..' in segments else '/'.join(segments)
 
 
 def _uri_path_name(folder, target):
