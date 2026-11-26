@@ -28,7 +28,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROUND_RE = re.compile(r'^(?P<tag>[A-Za-z][A-Za-z0-9_]{0,15})-r(?P<round>\d+)-(?P<parts>[a-z+-]+)\.json$')
+ROUND_RE = re.compile(r'^(?P<tag>[A-Za-z][A-Za-z0-9_]{0,15})-r(?P<round>\d+)-'
+                      r'(?P<parts>[a-z+-]+(?:@[A-Z0-9+]+)?)\.json$')
 MAX_LOAD = 8.0
 A_TOLERANCE = 0.20
 

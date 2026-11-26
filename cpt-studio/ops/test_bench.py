@@ -148,6 +148,12 @@ class BenchProtocolTests(unittest.TestCase):
         for bad in ('', '1A', 'A-1', 'A/B', 'x' * 17):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 RUN.out_name(bad, 1, ['open'])
+        self.assertEqual(RUN.out_name('A', 101, ['open'], ['P0']), 'A-r101-open@P0.json')
+        self.assertEqual(RUN.out_name('A', 1, ['lists'], ['P1', 'P2']), 'A-r1-lists@P1+P2.json')
+        with self.assertRaises(ValueError):
+            RUN.out_name('A', 1, ['open'], ['P9'])
+        for name in ('A-r101-open@P0.json', 'A-r1-lists@P1+P2.json', 'B-r3-cold+server.json'):
+            self.assertIsNotNone(JUDGE.ROUND_RE.match(name), name)
 
     def test_the_lock_stops_a_second_bench(self):
         with tempfile.TemporaryDirectory() as out:

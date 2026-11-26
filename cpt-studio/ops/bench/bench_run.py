@@ -117,15 +117,19 @@ class PortPool:
         raise RuntimeError(f'no free port left in {self.ports.start}-{self.ports.stop - 1}')
 
 
-def out_name(tag: str, round_no: int, parts) -> str:
+def out_name(tag: str, round_no: int, parts, profiles=None) -> str:
+    """The round's file name: tag, round, parts, and the profiles when a part group named its own (open@P0)."""
     if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,15}', tag or ''):
         raise ValueError('BENCH_TAG must be a short name such as A or B2')
-    return f'{tag}-r{int(round_no)}-{"+".join(parts)}.json'
+    if profiles is not None and not all(p in PROFILES for p in profiles):
+        raise ValueError(f'profiles must be some of {PROFILES}')
+    suffix = f'@{"+".join(profiles)}' if profiles else ''
+    return f'{tag}-r{int(round_no)}-{"+".join(parts)}{suffix}.json'
 
 
-def claim_output(out: Path, tag: str, round_no: int, parts) -> Path:
+def claim_output(out: Path, tag: str, round_no: int, parts, profiles=None) -> Path:
     """The round's output file, which must not exist yet: a round is never overwritten."""
-    target = Path(out) / out_name(tag, round_no, parts)
+    target = Path(out) / out_name(tag, round_no, parts, profiles)
     if target.exists():
         raise FileExistsError(f'{target.name} exists; a round is never overwritten')
     return target
@@ -535,15 +539,16 @@ class Bench(TransactionTestCase):
         self.lock = take_lock(out / 'bench.lock')
         if self.lock is None:
             self.fail('another bench holds the lock')
+        self.profiles = [p for p in os.environ.get('BENCH_PROFILES', ','.join(PROFILES)).split(',') if p]
+        named = self.profiles if os.environ.get('BENCH_GROUP_PROFILES') == '1' else None
         try:
-            target = claim_output(out, tag, round_no, parts)
+            target = claim_output(out, tag, round_no, parts, named)
         except (FileExistsError, ValueError) as exc:
             self.fail(str(exc))
         self.raw = out / 'raw' / target.stem
         self.raw.mkdir(parents=True)
         self.raw.chmod(0o700)
         self.ports = PortPool(parse_ports(os.environ.get('BENCH_PORTS', '')))
-        self.profiles = [p for p in os.environ.get('BENCH_PROFILES', ','.join(PROFILES)).split(',') if p]
         self.contexts = int(os.environ.get('BENCH_CONTEXTS', '3'))
         from studio import client_contract
         self.client = (client_contract.HEADER, client_contract.VERSION)  # the measured tree's own, read at run time
@@ -1763,7 +1768,9 @@ def driver(argv=None) -> int:
     parser = argparse.ArgumentParser(description=driver.__doc__)
     parser.add_argument('--tree', action='append', required=True, help='TAG=<folder that holds cpt-studio/>')
     parser.add_argument('--order', required=True, help='TAG:ROUND,TAG:ROUND,... e.g. A:1,B:1,A:2,B:2,A:3,B:3')
-    parser.add_argument('--group', action='append', required=True, help='a comma list of parts run together')
+    parser.add_argument('--group', action='append', required=True,
+                        help='a comma list of parts run together, optionally with its own profiles: open@P0, '
+                             'lists@P1+P2')
     parser.add_argument('--out', required=True)
     parser.add_argument('--ports', required=True)
     parser.add_argument('--python', default=sys.executable)
@@ -1789,7 +1796,9 @@ def driver(argv=None) -> int:
         return 2
     log = open(out / 'protocol.log', 'a')
     status = 0
-    for group in args.group:
+    for spec in args.group:
+        group, _, own = spec.partition('@')
+        profiles = own.split('+') if own else None
         for tag, first_round in order:
             tree = Path(trees[tag]).resolve() / 'cpt-studio'
             for attempt in range(args.retries + 1):
@@ -1800,23 +1809,25 @@ def driver(argv=None) -> int:
                     time.sleep(30)
                     waited += 30
                 env = {**os.environ, 'BENCH_TAG': tag, 'BENCH_ROUND': str(round_no), 'BENCH_PARTS': group,
-                       'BENCH_OUT': str(out), 'BENCH_PORTS': args.ports, 'BENCH_PROFILES': args.profiles}
-                line = f'{utc()} {tag}:{round_no} {group} load={os.getloadavg()[0]:.2f} waited={waited}s'
+                       'BENCH_OUT': str(out), 'BENCH_PORTS': args.ports,
+                       'BENCH_PROFILES': ','.join(profiles) if profiles else args.profiles,
+                       'BENCH_GROUP_PROFILES': '1' if profiles else '0'}
+                line = f'{utc()} {tag}:{round_no} {spec} load={os.getloadavg()[0]:.2f} waited={waited}s'
                 print(line, flush=True)
                 log.write(line + '\n')
                 log.flush()
-                run_log = out / f'run-{tag}-r{round_no}-{group.replace(",", "+")}.log'
+                run_log = out / f'run-{tag}-r{round_no}-{spec.replace(",", "+")}.log'
                 with open(run_log, 'w') as handle:
                     done = subprocess.run([args.python, '-B', 'manage.py', 'test', str(HERE), '--pattern',
                                            'bench_run.py', '--noinput'], cwd=tree, env=env, stdout=handle,
                                           stderr=subprocess.STDOUT, timeout=4 * 3600)
-                written = out / out_name(tag, round_no, group.split(','))
+                written = out / out_name(tag, round_no, group.split(','), profiles)
                 peak = json.loads(written.read_text()).get('load_max', 99) if written.exists() else 99
-                log.write(f'{utc()} {tag}:{round_no} {group} exit {done.returncode} load_max={peak}\n')
+                log.write(f'{utc()} {tag}:{round_no} {spec} exit {done.returncode} load_max={peak}\n')
                 log.flush()
                 if done.returncode == 0 and peak <= 8:
                     break
-                log.write(f'{utc()} {tag}:{round_no} {group} INVALID (exit {done.returncode}, load {peak}); '
+                log.write(f'{utc()} {tag}:{round_no} {spec} INVALID (exit {done.returncode}, load {peak}); '
                           f'{"run again" if attempt < args.retries else "no retries left"}\n')
                 log.flush()
             status = status or done.returncode
