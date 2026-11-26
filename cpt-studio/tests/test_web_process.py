@@ -747,8 +747,8 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                         encoding='utf-8')
         return path
 
-    def killed_aborted_and_recycled(self) -> str:
-        server = ReleaseGunicorn(self, '--max-requests', '6', '--max-requests-jitter', '0').start()
+    def killed_aborted_and_recycled(self) -> tuple:
+        server = ReleaseGunicorn(self, '--max-requests', '6', '--max-requests-jitter', '0', separate=True).start()
         # every worker has opened its connection, so each has its signal handlers, and none is being recycled: no
         # request has been made yet
         self.assertEqual(len(server.until_sessions(4)), 4)
@@ -760,12 +760,12 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         answers = server.many(4, 8)  # then the workers are recycled
         self.assertEqual((len(answers), set(answers)), (32, {200}))
         self.assertEqual(server.stop(), 0)
-        return server.text()
+        return server.streams()
 
-    def timed_out(self) -> str:
+    def timed_out(self) -> tuple:
         # a timeout well above the idle heartbeat (half of it), so a loaded host never times out a worker this test has
         # not stopped
-        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '6').start(booted=1)
+        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '6', separate=True).start(booted=1)
         hung, = server.workers()
         # it has answered, so its heartbeat runs (gunicorn 23 times a worker out only after its first heartbeat)
         self.assertEqual(server.get(), 200)
@@ -773,39 +773,49 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         server.until_text(f'Worker (pid:{hung}) was sent SIGKILL!')
         self.assertIn(f'WORKER TIMEOUT (pid:{hung})', server.text())
         self.assertEqual(server.stop(), 0)
-        return server.text()
+        return server.streams()
 
-    def failed_to_boot(self) -> str:
+    def failed_to_boot(self) -> tuple:
         server = ReleaseGunicorn(self, config=self.wrapped_settings(
-            'workers = 1\n\n\ndef post_worker_init(worker):\n    raise RuntimeError("a worker that cannot start")\n'))
+            'workers = 1\n\n\ndef post_worker_init(worker):\n    raise RuntimeError("a worker that cannot start")\n'),
+            separate=True)
         self.assertEqual(server.run_to_exit(), 3)
-        return server.text()
+        return server.streams()
 
-    def failed_to_load(self) -> str:
+    def failed_to_load(self) -> tuple:
         server = ReleaseGunicorn(self, config=self.wrapped_settings('workers = 1\npreload_app = False\n'),
-                                 app='cptstudio.wsgi:lane_w_no_such_application')
+                                 app='cptstudio.wsgi:lane_w_no_such_application', separate=True)
         self.assertEqual(server.run_to_exit(), 4)
-        return server.text()
+        return server.streams()
 
     def test_every_life_cycle_line_of_real_runs_is_kept_and_no_line_of_another_shape(self):
         install = lane_w_installer()
         if install is None:
             self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
-        texts = [self.killed_aborted_and_recycled(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
-        bodies, expected = [], []
-        for text in texts:
-            for line in text.splitlines():
-                # the container binds 0.0.0.0:8000 (the settings file's own bind), which the kept pattern names; these
-                # runs bind a loopback port
-                body = re.sub(r'Listening at: http://127\.0\.0\.1:\d+ \(', 'Listening at: http://0.0.0.0:8000 (', line)
-                bodies.append(body)
-                message = GUNICORN_LINE.fullmatch(body)
-                if (message and message['message'] != CRASH_REPORT) or ACCESS_LINE.match(body):
-                    expected.append(body)
-        stamped = [f'2026-11-26T10:00:00.{index:09d}Z {body}' for index, body in enumerate(bodies)]
-        kept, dropped = install.ids_only_lines('web', '\n'.join(stamped).encode())
-        self.assertEqual([line.split(' ', 1)[1] for line in kept], expected)
+        runs = [self.killed_aborted_and_recycled(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
+        # each run's stdout and stderr as Docker keeps them, apart, each line with a time of its own (the run, then the
+        # stream, then the line): every line of a kept shape, whichever stream the run wrote it to, must be kept - so a
+        # life-cycle line written to stdout, where it is never kept (installer-0), fails this test
+        streams, bodies, expected = ([], []), [], []
+        for run, pair in enumerate(runs):
+            for stream, text in enumerate(pair):
+                lines = text.split('\n')
+                if lines and lines[-1] == '':
+                    lines.pop()
+                for number, line in enumerate(lines):
+                    # the container binds 0.0.0.0:8000 (the settings file's own bind), which the kept pattern names;
+                    # these runs bind a loopback port
+                    body = re.sub(r'Listening at: http://127\.0\.0\.1:\d+ \(', 'Listening at: http://0.0.0.0:8000 (', line)
+                    stamp = f'2026-11-26T10:{run:02d}:{stream:02d}.{number:09d}Z'
+                    streams[stream].append(f'{stamp} {body}')
+                    bodies.append(body)
+                    message = GUNICORN_LINE.fullmatch(body)
+                    if (message and message['message'] != CRASH_REPORT) or ACCESS_LINE.match(body):
+                        expected.append((stamp, body))
+        kept, dropped = install.ids_only_lines('web', *('\n'.join(lines).encode() for lines in streams))
+        self.assertEqual([line.split(' ', 1)[1] for line in kept], [body for _, body in sorted(expected)])
         self.assertEqual(dropped, len(bodies) - len(expected))
+        expected = [body for _, body in sorted(expected)]
         messages = [GUNICORN_LINE.fullmatch(body)['message'] for body in expected if GUNICORN_LINE.fullmatch(body)]
         for shape in LIFE_CYCLE_SHAPES:
             with self.subTest(shape=shape):
@@ -855,25 +865,53 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                 self.assertEqual(dropped, sum(len(stream.decode().splitlines()) for stream in streams) - 1)
                 self.assertGreater(dropped, 0)
 
-    def test_a_request_cannot_write_the_fixed_line_into_a_serving_webs_kept_log(self):
+    def test_a_request_cannot_write_a_kept_line_into_a_serving_webs_kept_log(self):
         # gunicorn's access log, on stdout, writes a request's path decoded and unescaped: a line feed (%0A) starts a
-        # line of the request's own after Docker's own time, and a file separator (%1C) - a line break to the reader -
-        # one after a time the request chose. The fixed line is kept from stderr alone (refutation round 2)
+        # line of the request's own after Docker's own time, and a carriage return, a file separator or a line
+        # separator (%0D, %1C, %E2%80%A8) - a line break to str.splitlines, none to Docker - one after a time the request
+        # chose. The fixed line (refutation round 2) and, since integrated refutation round 1 (installer-0), every line
+        # of the web but its access lines are kept from stderr alone, and a kept line is one Docker entry: so neither
+        # the fixed line nor a life-cycle line (a memory kill, a worker boot, a boot failure, free text after a signal)
+        # nor a django.request line a request writes is kept, and every real line still is.
         install = lane_w_installer()
         if install is None:
             self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
+        forged = [WEB_LOAD_FAILED,
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Worker (pid:21) was sent SIGKILL! Perhaps out of memory?',
+                  '[2026-11-26 10:00:01 +0000] [1] [INFO] Booting worker with pid: 4242',
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Reason: Worker failed to boot.',
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Worker (pid:21) exited with code 3',
+                  '[2026-11-26 10:00:01 +0000] [1] [INFO] Handling signal: janedoe19570412',
+                  'Not Found: /login']
+        chosen = '2026-11-26T09:00:00.000000000Z '  # before the web started
         server = ReleaseGunicorn(self, separate=True).start()
-        line = urllib.parse.quote(WEB_LOAD_FAILED, safe='')
-        stamp = urllib.parse.quote('2026-11-26T10:00:00.000000000Z ', safe='')
-        for path in (f'/x%0A{line}%0Ay', f'/x%1C{stamp}{line}%1Cy'):
-            with self.subTest(path=path):
-                self.assertTrue(400 <= server.get(path) < 500)
+        for line in forged:
+            quoted, stamped = urllib.parse.quote(line, safe=''), urllib.parse.quote(chosen + line, safe='')
+            for path in (f'/x%0A{quoted}%0Ay', *(f'/x{cut}{stamped}{cut}y' for cut in ('%0D', '%1C', '%E2%80%A8'))):
+                with self.subTest(path=path):
+                    self.assertTrue(400 <= server.get(path) < 500)
         self.assertEqual(server.stop(), 0)
         out, err = server.streams()
         stdout, stderr = docker_stamped(out), docker_stamped(err, 10 ** 6)
 
         def kept(*streams):
             return [line.split(' ', 1)[1] for line in install.ids_only_lines('web', *streams)[0]]
-        # the control: the requests did write the line, alone on a line, into stdout - read as stderr it is kept, twice
-        self.assertEqual(kept(b'', stdout).count(WEB_LOAD_FAILED), 2)
-        self.assertNotIn(WEB_LOAD_FAILED, kept(stdout, stderr))
+        # the control: the %0A requests did write each line, alone in a Docker entry of its own, into stdout - read as
+        # stderr, each is kept once
+        control = kept(b'', stdout)
+        self.assertEqual([control.count(line) for line in forged], [1] * len(forged))
+        shown = install.ids_only_lines('web', stdout, stderr)[0]
+        for line in forged:
+            with self.subTest(forged=line):
+                self.assertNotIn(line, [kept_line.split(' ', 1)[1] for kept_line in shown])
+        self.assertFalse([line for line in shown if line.startswith(chosen.strip())])  # no time the requests chose
+        # and every real line is: the four workers' boot, from stderr, and the server's own life cycle
+        bodies = [line.split(' ', 1)[1] for line in shown]
+        self.assertEqual(sum('Booting worker with pid: ' in body for body in bodies), 4)
+        self.assertEqual(sum(bool(re.search(r'\] Starting gunicorn [\d.]+$', body)) for body in bodies), 1)
+        self.assertEqual(sum(bool(re.search(r'\] Shutting down: Master$', body)) for body in bodies), 1)
+        # the real boot lines as gunicorn wrote them to stderr (Django's escaped 'Not Found:' lines of the forging
+        # requests carry the words too, as text inside one line, never as a line of their own)
+        booted = [line for line in err.split('\n') if (message := GUNICORN_LINE.fullmatch(line))
+                  and message['message'].startswith('Booting worker with pid: ')]
+        self.assertEqual(len(booted), 4)

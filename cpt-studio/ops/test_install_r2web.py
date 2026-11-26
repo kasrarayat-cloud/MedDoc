@@ -165,7 +165,9 @@ class NoContainerIsMarkedTheWebTests(unittest.TestCase):
 class KeptLifeCycleLinesTests(unittest.TestCase):
     """R2-9: the web's kept log (KEPT_LOG_FORMATS['web'], read by ids_only_lines) keeps how a worker ended - killed with
     gunicorn 23's hint, exited with a code, a worker that failed to boot, an application that failed to load - beside
-    the life cycle release 1 kept; each line is numbers and fixed words, and a name or a trailing word is dropped."""
+    the life cycle release 1 kept; each line is numbers and fixed words, and a name or a trailing word is dropped. Each
+    is read from stderr, where gunicorn's error log writes it: since integrated refutation round 1 (installer-0) the
+    web's lines are kept from their own stream alone (KEPT_STREAM_FORMATS), and a line is one Docker entry."""
 
     # each as gunicorn 23 writes it (its arbiter's format strings); the shapes release 2 adds first
     KEPT = (('ERROR', 'Worker (pid:21) was sent SIGKILL! Perhaps out of memory?'),
@@ -192,12 +194,39 @@ class KeptLifeCycleLinesTests(unittest.TestCase):
         for level, message in self.KEPT:
             line = gunicorn_line(level, message)
             with self.subTest(message=message):
-                self.assertEqual(install.ids_only_lines('web', line.encode()), ([line], 0))
+                self.assertEqual(install.ids_only_lines('web', b'', line.encode()), ([line], 0))
 
     def test_a_name_or_a_trailing_word_is_still_dropped(self):
         for level, message in self.DROPPED:
             with self.subTest(message=message):
-                self.assertEqual(install.ids_only_lines('web', gunicorn_line(level, message).encode()), ([], 1))
+                self.assertEqual(install.ids_only_lines('web', b'', gunicorn_line(level, message).encode()), ([], 1))
+
+    def test_each_stream_keeps_its_own_lines_and_a_line_is_one_docker_entry(self):
+        # installer-0: gunicorn's access log (stdout) writes a request's decoded path unescaped. A line feed (%0A) in
+        # the path makes a Docker entry of the request's own, which is a life-cycle or a django.request line only on
+        # stdout: kept from stderr alone, never from stdout. A carriage return, a file separator, NEL or a line separator
+        # (%0D, %1C, %C2%85, %E2%80%A8) breaks no Docker entry: what follows it, after a time the request chose, is never
+        # a line of its own. And an access line is kept from stdout alone.
+        access = ('2026-11-26T10:00:02.000000000Z [26/Nov/2026:10:00:02 +0000] 203.0.113.9 "GET /health/ HTTP/1.1" 200 '
+                  '2 1ms - -')
+        self.assertEqual(install.ids_only_lines('web', access.encode(), b''), ([access], 0))
+        self.assertEqual(install.ids_only_lines('web', b'', access.encode()), ([], 1))
+        for level, message in self.KEPT + (('WARNING', 'Not Found: /login'),):
+            line = gunicorn_line(level, message) if not message.startswith('Not Found') else \
+                f'2026-11-26T10:00:01.000000000Z {message}'
+            with self.subTest(message=message):
+                self.assertEqual(install.ids_only_lines('web', b'', line.encode()), ([line], 0))  # stderr: kept
+                self.assertEqual(install.ids_only_lines('web', line.encode(), b''), ([], 1))  # stdout: dropped
+        forged = '[2026-11-26 09:00:00 +0000] [1] [ERROR] Worker (pid:21) was sent SIGKILL! Perhaps out of memory?'
+        for separator in ('\r', '\x1c', '\x0b', '\x0c', '\x1d', '\x1e', '\x85', '\u2028', '\u2029'):
+            entry = (f'2026-11-26T10:00:03.000000000Z [26/Nov/2026:10:00:03 +0000] 203.0.113.9 "GET /x{separator}'
+                     f'2026-11-26T09:00:00.000000000Z {forged}{separator}y HTTP/1.1" 404 9 1ms - -')
+            with self.subTest(separator=repr(separator)):
+                for streams in ((entry.encode(), b''), (b'', entry.encode())):
+                    self.assertEqual(install.ids_only_lines('web', *streams), ([], 1))  # one entry, dropped whole
+        # a stream's final line feed ends its last entry; nothing is made of it
+        self.assertEqual(install.ids_only_lines('web', (access + '\n').encode(), b''), ([access], 0))
+        self.assertEqual(install.ids_only_lines('web', b'', b''), ([], 0))
 
     def test_a_release_2_web_that_cannot_load_its_application_keeps_one_fixed_line(self):
         # cptstudio/wsgi.py writes it to stderr, unprefixed, before gunicorn writes anything (preload_app; refutation
@@ -222,7 +251,7 @@ class KeptLifeCycleLinesTests(unittest.TestCase):
     def test_the_kept_worker_class_is_the_settings_files_own_and_no_other(self):
         # a change of worker class in deploy/gunicorn.conf.py must change the kept 'Using worker: sync' with it
         def kept(word):
-            return bool(install.ids_only_lines('web', gunicorn_line('INFO', f'Using worker: {word}').encode())[0])
+            return bool(install.ids_only_lines('web', b'', gunicorn_line('INFO', f'Using worker: {word}').encode())[0])
         found = gunicorn_conf()['worker_class']
         self.assertEqual(found, 'sync')
         self.assertTrue(kept(found))
