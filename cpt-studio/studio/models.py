@@ -141,7 +141,15 @@ class Encounter(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [UniqueIndex(fields=['created_by', 'client_key'], condition=Q(client_key__isnull=False),
-                               name='studio_enc_upload_key_uniq')]
+                               name='studio_enc_upload_key_uniq'),
+                   # release 2 (R2-19, R2-23; migration 0019): a practice's live documents newest first, all of them and
+                   # those waiting on a member (studio.customer.QUEUE_STATES, which tests/test_models.py pins this to)
+                   models.Index(fields=['workspace', 'created_at', 'id'], condition=Q(destroyed_at__isnull=True),
+                                name='studio_enc_ws_time'),
+                   models.Index(fields=['workspace', 'created_at', 'id'],
+                                condition=Q(destroyed_at__isnull=True,
+                                            state__in=['awaiting_answer', 'needs_review', 'ready']),
+                                name='studio_enc_ws_queue')]
 
 
 class SourceFile(ImmutableModel):
@@ -310,7 +318,14 @@ class ProviderRun(models.Model):
 
     class Meta:
         ordering = ['created_at']
-        indexes = [models.Index(fields=['provider', 'adapter_version', 'request_sha256'])]
+        indexes = [models.Index(fields=['provider', 'adapter_version', 'request_sha256']),
+                   # release 2 (R2-23; migration 0020): a coding round's runs (scope -> 'round', the purposes of
+                   # studio.jobs.PURPOSES), and the runs the sweep settles (SENDING, RESERVED); tests/test_models.py pins
+                   # both literals to those names
+                   models.Index(F('scope__round'), condition=Q(purpose__in=['coding_reader', 'coding_checker']),
+                                name='studio_run_round'),
+                   models.Index(fields=['created_at'], condition=Q(state__in=['sending', 'reserved']),
+                                name='studio_run_in_flight')]
 
 
 # legacy records; read by nothing in the coding path
@@ -1090,6 +1105,10 @@ class CodingRound(models.Model):
     class Meta:
         ordering = ['number']
         constraints = [models.UniqueConstraint(fields=['encounter', 'number'], name='one_coding_round_number')]
+        # release 2 (R2-23; migration 0021): the open rounds the sweep settles (QUEUED, RUNNING; pinned in
+        # tests/test_models.py)
+        indexes = [models.Index(fields=['created_at'], condition=Q(state__in=['queued', 'running']),
+                                name='studio_round_open')]
 
 
 class CodingAnswer(ImmutableModel):
