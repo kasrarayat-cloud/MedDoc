@@ -1439,6 +1439,20 @@ class CanonicalPackageTests(ReleaseOneCase):
             '</Types>', override('word/activeX/activeX1.xml', 'application/vnd.ms-office.activeX+xml') + '</Types>'))
         self.assert_release_1_package(stale)
 
+    def test_an_override_naming_a_part_through_a_dot_dot_segment_is_refused(self):
+        # lane D, on the gate's G11 (round 3): an Override that names no part is passed over by every reader only when
+        # its PartName is in the one form - one whose '..' stands after its first segment reaches the main part for a
+        # reader that resolves it, with another type, so it is refused as the gate's rule says ('..' only leads a
+        # relative target); G11's mutant coded each of these (LibreOffice 24.2.7 showed the text: laneD_g11_lo24.out)
+        plain = package(BEFORE + AFTER)
+        with zipfile.ZipFile(io.BytesIO(plain)) as archive:
+            types = archive.read('[Content_Types].xml').decode('utf-8')
+        for part in ('word/../word/document.xml', 'a/../word/document.xml', 'word/media/../../word/document.xml'):
+            with self.subTest(part):
+                written = types.replace('</Types>', override(part, 'text/plain') + '</Types>')
+                self.assert_not_canonical(with_entry(plain, '[Content_Types].xml', written), 'content type')
+        self.assert_release_1_package(plain)  # the control
+
     def test_a_preview_naming_more_than_one_relationship_id_is_refused(self):
         strict = 'xmlns:rs="http://purl.oclc.org/ooxml/officeDocument/relationships"'
         refused = {
