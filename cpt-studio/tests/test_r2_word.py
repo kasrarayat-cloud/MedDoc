@@ -1249,6 +1249,35 @@ class CanonicalPackageTests(ReleaseOneCase):
                 self.assert_release_1_package(data)
                 self.assertIs(docx_package.check_in_child(data), False)
 
+    def test_release_1s_own_refusals_run_first_with_their_reasons(self):
+        # D-R2-46 (refute-d4, diff[0]): a package release 1 refuses keeps release 1's reason, and the general sentence,
+        # when its zip is not in the one form either - a Word file zipped again inside its folder holds no inserted
+        # document
+        plain = package(BEFORE + p(t('SYNTHETIC')) + AFTER)
+
+        def rebuilt(rename=lambda name: name, comment=b'', extra=()):
+            out = io.BytesIO()
+            with zipfile.ZipFile(io.BytesIO(plain)) as source, zipfile.ZipFile(out, 'w') as zipped:
+                for info in source.infolist():
+                    zipped.writestr(zipfile.ZipInfo(rename(info.filename), date_time=info.date_time), source.read(info))
+                for name, data in extra:
+                    zipped.writestr(zipfile.ZipInfo(name), data)
+                zipped.comment = comment
+            return out.getvalue()
+        cases = [(rebuilt(lambda name: f'Visit note/{name}'),
+                  'it is not a Word package (no content types or package relationships)'),
+                 (rebuilt(extra=(('word/media/a b.png', PNG_BYTES), ('word/media/A B.png', PNG_BYTES))),
+                  'a part is named twice'),
+                 (rebuilt(comment=b'synthetic', extra=(('mimetype', b'application/vnd.oasis.opendocument.text'),)),
+                  'it is an OpenDocument package, not a Word file')]
+        for data, reason in cases:
+            with self.subTest(reason):
+                with self.assertRaises(docx_package.PackageRefused) as caught:
+                    docx_package._safe_package(data)
+                self.assertNotIsInstance(caught.exception, docx_package.ContentNotShown)
+                self.assertEqual(str(caught.exception), reason)
+                self.assertEqual(docx_package.check_in_child(data), docx_package.CHECK_UNDECIDED)
+
     def test_a_zip_archive_not_in_the_one_form_is_refused(self):
         plain = package(BEFORE + p('<w:r>' + drawing('rIdPic') + '</w:r>') + AFTER,
                         (rel('rIdPic', 'image', 'media/aXX.png'),), (('word/media/aXX.png', PNG_BYTES),))
@@ -2092,19 +2121,15 @@ class StoredCheckTests(SimpleTestCase):
         self.assertIs(docx_package.check_in_child(NOT_A_PACKAGE), False)  # no Word package: no conversion came of it
         # refused for another reason once it opened as a zip: the check cannot decide, and the converter decides, as for
         # any file (refutation round 2, rounds[0]: told apart from R2-30's edit)
-        self.assertEqual(docx_package.check_in_child(UNREADABLE_PART_WORD), docx_package.CHECK_UNDECIDED)
+        for data in (UNREADABLE_PART_WORD, COLLIDING_NAMES_WORD):
+            self.assertEqual(docx_package.check_in_child(data), docx_package.CHECK_UNDECIDED)
         self.assertEqual(release_1_package()._safe_package(COLLIDING_NAMES_WORD)[1]['chunks'], 1)  # release 1 coded it
-        for data, code, counts, reason in (
-                (IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS, docx_package.CONTENT_NOT_SHOWN),
-                (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS, docx_package.CONTENT_NOT_SHOWN),
-                # round 2's undecided case, decided since the canonical package gate (D-R2-46): names outside the one
-                # form's alphabet are refused before the parts are read, so no two readings of them can collide
-                (COLLIDING_NAMES_WORD, docx_package.INSERTED_DOCUMENT, GATE_COUNTS,
-                 'its package is not in the one form a Word package takes: a zip entry is not named in the one form')):
-            with self.subTest(code=code, reason=reason), self.assertRaises(docx_package.ConversionRefused) as caught:
+        for data, code, counts in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS),
+                                   (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT, OBJECT_COUNTS)):
+            with self.subTest(code=code), self.assertRaises(docx_package.ConversionRefused) as caught:
                 docx_package.check_in_child(data)
             self.assertEqual((str(caught.exception), caught.exception.code, caught.exception.counts),
-                             (reason, code, counts))
+                             (docx_package.CONTENT_NOT_SHOWN, code, counts))
 
     def test_it_runs_in_the_bounded_child_under_a_conversions_limits_and_converts_nothing(self):
         with mock.patch.object(docx_package.bounded, 'run_bounded', wraps=docx_package.bounded.run_bounded) as child, \
@@ -2632,9 +2657,9 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
     def test_an_own_view_whose_check_cannot_decide_is_read_again_only_once_the_converter_accepts_the_file(self):
         # refutation round 2, rounds[0]: a round begun on release 1's worker recorded release 1's conversion - which
         # left the import or the object out - as its own view, and stopped: requeued with nothing sent, or after its
-        # reader. On release 2's worker its check cannot decide (out of time; a failed child): the converter decides,
-        # refuses the file, and the round ends with the converter's sentence, nothing more sent and its own view never
-        # read again
+        # reader. On release 2's worker its check cannot decide (out of time; a failed child; a refusal that is not
+        # ContentNotShown - two pictures whose names differ only in case): the converter decides, refuses the file, and
+        # the round ends with the converter's sentence, nothing more sent and its own view never read again
         real = fable_document.convert_docx
         cases = [(data, code, paid, failure)
                  for data, code in ((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT),
@@ -2642,11 +2667,7 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                  for paid in ('nothing', 'the reader')
                  for failure in (docx_package.ConversionBusy('synthetic: out of time'),
                                  docx_package.ConversionFailed('synthetic: the child failed'))]
-        # round 2 also met a real check that could not decide (two pictures whose names differ only in case once read
-        # as UTF-8, COLLIDING_NAMES_WORD); since the canonical package gate (D-R2-46) refuses such names before the
-        # parts are read, the check decides that file itself: the round ends at the check, the converter never asked
-        cases += [(COLLIDING_NAMES_WORD, docx_package.INSERTED_DOCUMENT, paid, None)
-                  for paid in ('nothing', 'the reader')]
+        cases += [(COLLIDING_NAMES_WORD, None, paid, None) for paid in ('nothing', 'the reader')]
         for data, code, paid, failure in cases:
             with self.subTest(code=code, paid=paid, check=type(failure).__name__ if failure else 'the real check'):
                 enc, _, round_, _, _, runs = self.begun_on_release_1(data, paid)
@@ -2659,10 +2680,7 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                 text = fable_document.REFUSED_PACKAGE_TEXT[code] if code else fable_document.CONVERT_TEXT
                 self.assertEqual((round_.state, round_.failure_kind, round_.error), (Round.FAILED, CONVERT, text))
                 checked.assert_called_once_with(data)
-                if failure is None:  # decided by the check (the gate): no converter call
-                    convert.assert_not_called()
-                else:
-                    convert.assert_called_once_with(data)  # the converter decided
+                convert.assert_called_once_with(data)  # the converter decided
                 self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)  # nothing more sent
 
     def test_an_own_view_whose_check_cannot_decide_is_never_read_again_while_the_converter_is_busy(self):
@@ -2674,8 +2692,6 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                  for paid in ('nothing', 'the reader')
                  for failure in (docx_package.ConversionBusy('synthetic: out of time'),
                                  docx_package.ConversionFailed('synthetic: the child failed'))]
-        # since the canonical package gate (D-R2-46) the real check decides COLLIDING_NAMES_WORD itself - its names are
-        # outside the one form -: the round ends at the check, with the gate's sentence, and no converter is asked
         cases += [(COLLIDING_NAMES_WORD, paid, None) for paid in ('nothing', 'the reader')]
         for data, paid, failure in cases:
             for converter in ('the service, unreachable', 'required, no socket'):
@@ -2692,14 +2708,9 @@ class ResumedWordRoundTests(r.CustomerCase, TestCase):
                                               wraps=fable_document.convert_docx) as convert:
                         self.run_next()
                     round_.refresh_from_db()
-                    if failure is None:  # decided by the check (the gate): the busy converter is never asked
-                        self.assertEqual((round_.state, round_.failure_kind, round_.error), (
-                            Round.FAILED, CONVERT, fable_document.REFUSED_PACKAGE_TEXT[docx_package.INSERTED_DOCUMENT]))
-                        convert.assert_not_called()
-                    else:
-                        self.assertEqual((round_.state, round_.failure_kind, round_.error),
-                                         (Round.FAILED, BUSY, fable_document.BUSY_TEXT))
-                        convert.assert_called_once_with(data)
+                    self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                     (Round.FAILED, BUSY, fable_document.BUSY_TEXT))
+                    convert.assert_called_once_with(data)
                     self.assertEqual(Run.objects.filter(scope__round=str(round_.pk)).count(), runs)
 
     def test_an_own_view_the_converter_accepted_is_not_decided_again_at_each_pass(self):

@@ -35,11 +35,12 @@ before it waits on it, so the parent's finally kills that group as well as the c
   part is edited by byte ranges of its own bytes, never written out again, and a part with nothing to remove passes
   through byte for byte: a Word file with none of these features gives exactly the package it gave before release 1. A
   formula ('=' first) is never removed. What was removed is reported as counts only.
-- Release 2, the canonical package gate (refutation round 3, D-R2-46): once release 1's own checks pass, the package's
-  structure - its zip archive and entry names, every relationships part and its targets, the content types, and the id a
-  preview names - must be in the one form a Word package takes, where lane D, LibreOffice and the doctor's Word read
-  every structural reference alike; any other form is refused (PackageNotCanonical, told as an inserted document) before
-  E2 reads a part, whatever the file holds. Word and the real tools measured write only that form.
+- Release 2, the canonical package gate (refutation round 3, D-R2-46): once release 1's own checks pass - its refusals
+  run first, with their reasons -, the package's structure - its zip archive and entry names, every relationships part
+  and its targets, the content types, and the id a preview names - must be in the one form a Word package takes, where
+  lane D, LibreOffice and the doctor's Word read every structural reference alike; any other form is refused
+  (PackageNotCanonical, told as an inserted document) before E2 reads a part, whatever the file holds. Word and the real
+  tools measured write only that form.
 - Release 2 (Group F's rule: E2 never takes content out of a Word file while leaving nothing of it in the PDF). Where it
   would, the file is refused, ContentNotShown, with counts and a code for the member's sentence, and nothing of it is
   rebuilt or converted: a w:altChunk whose r:id names a relationship to a part present and not empty - by any name a
@@ -392,7 +393,6 @@ def _package(data: bytes, report: dict):
         renamed_by_field = _renamed_by_unicode_path(data, infos)
         if renamed_by_field:  # loss[6] (b), the lead's decision: one part checked here, another opened by LibreOffice
             raise ContentNotShown({'documents': renamed_by_field})
-        _require_canonical_zip(data, infos)  # the canonical package gate, its zip half (D-R2-46)
         if len(infos) > MAX_PACKAGE_PARTS:
             raise PackageRefused(f'it has more than {MAX_PACKAGE_PARTS:,} parts')
         if any(info.flag_bits & 0x1 for info in infos):
@@ -436,6 +436,7 @@ def _package(data: bytes, report: dict):
         own = f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels'
         orphans = orphans | ({by_folded[own.casefold()]} if own.casefold() in by_folded else set())
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
+    _require_canonical_zip(data, infos)  # the canonical package gate's zip half (D-R2-46): release 1's refusals first
     _require_canonical_structure(parts)  # the canonical package gate, its parts' half (D-R2-46): before E2 reads a part
     report['read'] = True
     removed, held, unshown, shells, parsed = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows,
@@ -656,14 +657,18 @@ def _canonical_part(folder, target):
 
 
 def _require_canonical_zip(data: bytes, infos):
-    """The gate's zip half, before any part is read: one archive from its first byte - a local header - to its last -
-    its end record, with no comment -, so no reader finds another archive in it; every entry named in the one form
-    (_canonical_name) as stored, so zipfile, LibreOffice and Word read one name (ASCII: the UTF-8 flag and cp437 agree;
-    no name a Unicode Path field, a NUL or a separator renames); a folder's entry holding nothing; every part stored or
-    deflated, the two methods Word reads; and every entry's local header agreeing with its directory record
-    (_local_header_agrees), so a reader that streams the archive reads the bytes zipfile reads. Two names one reader
-    folds alike are release 1's refusal ('named twice'), and a Unicode Path field naming an entry otherwise is
-    D-R2-43's (both before this)."""
+    """The gate's zip half, once release 1's own checks have passed, before E2 reads a part: one archive from its first
+    byte - a local header - to its last - its end record, with no comment -, so no reader finds another archive in it;
+    every entry named in the one form (_canonical_name) as stored, so zipfile, LibreOffice and Word read one name
+    (ASCII: the UTF-8 flag and cp437 agree; no name a Unicode Path field, a NUL or a separator renames); a folder's
+    entry holding nothing; every part stored or deflated, the two methods Word reads; and every entry's local header
+    agreeing with its directory record (_local_header_agrees), so a reader that streams the archive reads the bytes
+    zipfile reads. Release 1's own refusals run before this, with their reasons - more than 10,000 parts, a part
+    encrypted, two names one reader folds alike ('named twice'), a part too large, an OpenDocument package, no content
+    types or package relationships, a part that cannot be read, a main part that is not a Word document, a relationships
+    part that is not one - and so does D-R2-43's, a Unicode Path field naming an entry otherwise (refute-d4, diff[0]:
+    before, a file release 1 refuses with its own reason was told and recorded as an inserted document when its zip was
+    not in the one form either)."""
     if not data.startswith(b'PK\x03\x04') or (infos and min(info.header_offset for info in infos) != 0) \
             or data[-22:-18] != b'PK\x05\x06' or data[-2:] != b'\x00\x00':
         raise PackageNotCanonical('its zip archive does not run from its first byte to its last')
