@@ -971,7 +971,7 @@ class FieldInstructionTests(SimpleTestCase):
         with self.assertRaises(docx_package.ContentNotShown) as caught:
             docx_package.safe_package(plain)
         self.assertEqual((caught.exception.code, caught.exception.counts),
-                         (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 0, 'controls': 0, 'fields': 1}))
+                         (docx_package.INSERTED_DOCUMENT, {'documents': 0, 'objects': 0, 'controls': 0, 'fields': 1}))
         xml = document_xml(docx_package.safe_package(data))
         inner_marks = ('<w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">'
                        f'{escape(DANGEROUS["INCLUDETEXT"])}</w:instrText></w:r>'

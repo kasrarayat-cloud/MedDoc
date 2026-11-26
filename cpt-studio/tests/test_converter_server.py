@@ -36,6 +36,7 @@ from tests.support import coding as f
 from tests.test_fable_document import (CONVERTED, DANGEROUS, DOCX, PLAIN_PACKAGE, TEXT, _echo_package, _follower,
                                        complex_field, failing_runner, fake_runner, full_package, no_pdf_runner,
                                        paragraph, private_tempdir, simple_field, word_package)
+from tests.test_r2_word import RELEASE_1_CONVERTER_BLOB, release_1_package, release_1_source
 
 CPT_STUDIO = Path(__file__).resolve().parent.parent
 MIB = 1024 * 1024
@@ -467,9 +468,6 @@ R2_BARE_OBJECT = full_package(paragraph('<w:r><w:object><o:OLEObject Type="Embed
     'Target="embeddings/object.bin"/>',), parts=[('word/embeddings/object.bin', b'\xd0\xcf synthetic object')])
 R2_REFUSALS = ((R2_IMPORTING, 'inserted_document', {'documents': 1, 'objects': 0, 'controls': 0, 'fields': 0}),
                (R2_BARE_OBJECT, 'inserted_object', {'documents': 0, 'objects': 1, 'controls': 0, 'fields': 0}))
-# release 1's studio/converter_server.py (9ee0c85be), as git stores it: the worker and converter of the other half of
-# the blue/green switch
-R2_RELEASE_1_CONVERTER_BLOB = '9a6195defa312b30c4d54d5ee7e6f15356d4b28f'
 
 
 class R2Answering:
@@ -513,18 +511,15 @@ class R2Answering:
 
 
 def r2_release_1_converter_module():
-    """Release 1's converter module, loaded from the repository by its blob id (its imports resolve in this tree), or
-    None where there is no git checkout (the image has no .git)."""
-    try:
-        done = subprocess.run(['git', '-C', str(CPT_STUDIO), 'cat-file', 'blob', R2_RELEASE_1_CONVERTER_BLOB],
-                              capture_output=True, timeout=60)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if done.returncode or not done.stdout:
-        return None
+    """Release 1's converter module - the worker and converter of the other half of the blue/green switch - from its
+    pinned fixture (tests/fixtures/release-1/, checked against its git blob id: never skipped), bound to release 1's own
+    docx_package, so its conversions run release 1's package checks as the real release 1 converter does (refutation
+    round 1, protocol[0]: bound to this tree's package, it ran release 2's checks)."""
     module = types.ModuleType('laned_release_1_converter_server')
     module.__package__ = 'studio'
-    exec(compile(done.stdout.decode('utf-8'), 'release-1 converter_server.py', 'exec'), module.__dict__)
+    exec(compile(release_1_source('converter_server.py', RELEASE_1_CONVERTER_BLOB), 'release-1 converter_server.py',
+                 'exec'), module.__dict__)
+    module.docx_package = release_1_package()
     return module
 
 
@@ -601,6 +596,8 @@ class RefusalReasonTests(SimpleTestCase):
             'a document code with no document': {**refused, 'reason': 'inserted_document',
                                                  'counts': {**good, 'documents': 0, 'objects': 1}},
             'an object code with a document': {**refused, 'reason': 'inserted_object', 'counts': good},
+            'an object code with a field (R2-30\'s fallback is told as a document)': {
+                **refused, 'reason': 'inserted_object', 'counts': {**good, 'documents': 0, 'fields': 1}},
             'a reason on a failure': {'status': 'error', 'kind': 'failed', 'size': 0, 'reason': 'inserted_document',
                                       'counts': good},
         }
@@ -616,12 +613,18 @@ class RefusalReasonTests(SimpleTestCase):
                 self.assertRaises(document.DocumentError) as caught:
             document.convert_docx(PLAIN_PACKAGE)
         self.assertEqual((caught.exception.code, caught.exception.counts), ('inserted_document', good))
+        fields = {**good, 'documents': 0, 'fields': 1}  # and a field R2-30's fallback counts, told as a document
+        with R2Answering({**refused, 'reason': 'inserted_document', 'counts': fields}) as answering, \
+                override_settings(CONVERTER_SOCKET=answering.path), \
+                self.assertRaises(document.DocumentError) as caught:
+            document.convert_docx(PLAIN_PACKAGE)
+        self.assertEqual((caught.exception.code, caught.exception.counts, caught.exception.text),
+                         ('inserted_document', fields, document.REFUSED_PACKAGE_TEXT['inserted_document']))
         self.assertEqual(converter_server.MAX_COUNT, 1_000_000)
 
     def test_release_1s_worker_and_converter_meet_release_2s_across_the_switch(self):
         release_1 = r2_release_1_converter_module()
-        if release_1 is None:
-            self.skipTest('no git checkout here (the image has no .git): release 1\'s converter is read from git')
+        self.assertFalse(hasattr(release_1.docx_package, 'ContentNotShown'))  # the control: release 1's own package
         # release 1's worker reads release 2's converter by the kind alone: a failed conversion, its general sentence
         with Running(fake_runner) as running, self.assertLogs('studio', 'INFO'):
             for data, code, _ in R2_REFUSALS:
@@ -629,20 +632,27 @@ class RefusalReasonTests(SimpleTestCase):
                         self.assertRaises(release_1.ConverterFailed) as caught:
                     release_1.request(running.path, data, total_seconds=60)
                 self.assertEqual(str(caught.exception), 'the converter refused the Word package')
-        # release 1's converter gives no reason: release 2's worker reads the general refusal
+        # release 1's converter gives no reason: for a file release 1 itself refuses, release 2's worker reads the
+        # general refusal
         folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         server = release_1.ConverterServer(str(folder / 'release-1.sock'), runner=fake_runner, idle_seconds=0.05)
         thread = threading.Thread(target=server.serve_until_stopped, daemon=True)
         thread.start()
         try:
-            with self.assertLogs(release_1.log.name, 'INFO'):  # its own logger: the module loaded from git
+            with self.assertLogs(release_1.log.name, 'INFO'):  # its own logger: the module loaded from the fixture
+                with override_settings(CONVERTER_SOCKET=server.path), \
+                        self.assertRaises(document.DocumentError) as caught:
+                    document.convert_docx(b'PK\x03\x04 synthetic, not a zip')
+                self.assert_general(caught.exception)
+                # and a file only release 2 refuses, release 1's converter converts - the import or the object left out,
+                # as release 1 does today. That direction is outside the install plan: the converter switches at phase
+                # 3, before release 2's worker (S4), and stays on switch-back; a converter rolled back to release 1
+                # after S4 would code such files without the import or the object.
                 for data, code, _ in R2_REFUSALS:
                     with self.subTest(converter='release 1', code=code), \
-                            override_settings(CONVERTER_SOCKET=server.path), \
-                            self.assertRaises(document.DocumentError) as caught:
-                        document.convert_docx(data)
-                    self.assert_general(caught.exception)
+                            override_settings(CONVERTER_SOCKET=server.path):
+                        self.assertTrue(document.convert_docx(data).startswith(b'%PDF-'))
         finally:
             server.draining = True
             thread.join(30)

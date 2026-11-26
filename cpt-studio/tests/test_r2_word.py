@@ -3,12 +3,13 @@
 - R2-29: an object or a control keeps a picture in its place, or the file is refused (ContentNotShown): the Word area's
   shape tables B01-B27, C01-C09, E01-E16 and E22, rebuilt here; a preview is a part that is sent.
 - R2-30: a removed field in another field's result stays a field whose instruction is QUOTE, byte for byte; its
-  fallback refuses a field kept, not HYPERLINK or TOC, whose stored result holds something a reader sees outside the
-  fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and nothing else; a seeded
-  fuzz.
+  fallback refuses a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader
+  sees outside the fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and
+  nothing else; a seeded fuzz.
+- The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
 - Everything that needs neither a refusal nor a QUOTE gives exactly release 1's package: the reference is release 1's
-  own docx_package.py, read from the repository by its git blob id (RELEASE_1_PACKAGE_BLOB, immutable); where there is
-  no git (the image has no .git) those comparisons say so and are skipped, and every other check still runs.
+  own docx_package.py, vendored as a test fixture checked against its git blob id (RELEASE_1_PACKAGE_BLOB, immutable),
+  so the comparisons run wherever the tests run - CI's shallow clone and the image included - and are never skipped.
 - R2-31: a refused Word upload through the shipped job path - its sentence, its three audit rows with the code and
   counts, nothing counted or sent, retry offered and refused the same way; the two sentences against the customer
   denylist.
@@ -22,7 +23,7 @@ import hashlib
 import io
 import random
 import re
-import subprocess
+import tempfile
 import types
 import zipfile
 from pathlib import Path
@@ -36,6 +37,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import jobs, models, storage
 from studio.fable import CONVERT, docx_package
+from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from tests.support import coding as f
 from tests.support import rounds as r
@@ -44,38 +46,42 @@ from tests.test_request_identity import git_blob_id
 
 Round, Run, AuditEvent = models.CodingRound, models.ProviderRun, models.AuditEvent
 ROOT = Path(settings.BASE_DIR)
-# release 1's studio/fable/docx_package.py (9ee0c85be, the live release 816045c72644), as git stores it
+# release 1's studio/fable/docx_package.py and converter_server.py (9ee0c85be, the live release 816045c72644), as git
+# stores them: vendored as test fixtures (tests/fixtures/release-1/), so every comparison with release 1 runs wherever
+# the tests run - CI's clone is shallow and the image has no .git (refutation round 1, refuse[0]) - and each fixture is
+# checked against its git blob id, so it cannot drift from release 1 unnoticed
 RELEASE_1_PACKAGE_BLOB = 'c4aa942edbff920de2126f848ec27045b8ba0a5a'
+RELEASE_1_CONVERTER_BLOB = '9a6195defa312b30c4d54d5ee7e6f15356d4b28f'
+RELEASE_1_FIXTURES = ROOT / 'tests' / 'fixtures' / 'release-1'
 _RELEASE_1 = {}
 
 
+def release_1_source(name, blob) -> str:
+    """Release 1's module ``name`` (tests/fixtures/release-1/<name>.txt), which must be git's blob ``blob``: a fixture
+    that is not fails the test that reads it - it is never skipped."""
+    data = (RELEASE_1_FIXTURES / f'{name}.txt').read_bytes()
+    if git_blob_id(data) != blob:
+        raise AssertionError(f'tests/fixtures/release-1/{name}.txt is not release 1\'s blob {blob}')
+    return data.decode('utf-8')
+
+
 def release_1_package():
-    """Release 1's docx_package module, loaded from the repository's object store by its blob id (imports resolve in
-    this tree's studio package, which has the same bounded runner), or None where there is no git checkout."""
+    """Release 1's docx_package module, from its pinned fixture (imports resolve in this tree's studio package, which
+    has the same bounded runner)."""
     if 'module' not in _RELEASE_1:
-        try:
-            done = subprocess.run(['git', '-C', str(ROOT), 'cat-file', 'blob', RELEASE_1_PACKAGE_BLOB],
-                                  capture_output=True, timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            done = None
-        if done is None or done.returncode or git_blob_id(done.stdout) != RELEASE_1_PACKAGE_BLOB:
-            _RELEASE_1['module'] = None
-        else:
-            module = types.ModuleType('laned_release_1_docx_package')
-            module.__package__ = 'studio.fable'
-            exec(compile(done.stdout.decode('utf-8'), 'release-1 docx_package.py', 'exec'), module.__dict__)
-            _RELEASE_1['module'] = module
+        module = types.ModuleType('laned_release_1_docx_package')
+        module.__package__ = 'studio.fable'
+        exec(compile(release_1_source('docx_package.py', RELEASE_1_PACKAGE_BLOB), 'release-1 docx_package.py',
+                     'exec'), module.__dict__)
+        _RELEASE_1['module'] = module
     return _RELEASE_1['module']
 
 
 class ReleaseOneCase(SimpleTestCase):
-    """A test that compares with release 1's package: skipped, with its reason, where there is no git checkout."""
+    """A test that compares with release 1's package (release_1_package: never skipped)."""
 
     def release_1(self):
-        module = release_1_package()
-        if module is None:
-            self.skipTest('no git checkout here (the image has no .git): release 1\'s package is read from git')
-        return module
+        return release_1_package()
 
     def assert_release_1_package(self, data):
         """``data`` gives release 2's package byte for byte as release 1's, and the same removal counts."""
@@ -460,17 +466,15 @@ class ObjectAndControlTests(ReleaseOneCase):
             with self.subTest(label):
                 if expected is None:  # coded, edited exactly as release 1 edits it
                     docx_package._safe_package(data)
-                    if release_1_package() is not None:
-                        self.assert_release_1_package(data)
-                        compared += 1
+                    self.assert_release_1_package(data)
+                    compared += 1
                     continue
                 with self.assertRaises(docx_package.ContentNotShown) as caught:
                     docx_package._safe_package(data)
                 counts = {'documents': 0, 'objects': 0, 'controls': 0, 'fields': 0, expected: 1}
                 self.assertEqual((caught.exception.code, caught.exception.counts),
                                  (docx_package.INSERTED_OBJECT, counts))
-                if release_1_package() is not None:  # the positive control: release 1 coded it
-                    self.release_1()._safe_package(data)
+                self.release_1()._safe_package(data)  # the positive control: release 1 coded it
         return compared
 
     def test_an_object_keeps_its_preview_or_the_file_is_refused(self):
@@ -523,8 +527,7 @@ class ObjectAndControlTests(ReleaseOneCase):
             with self.subTest(f'kept: {label}'):
                 package_bytes, removed = docx_package._safe_package(data)
                 self.assertEqual(removed['objects'], 1)
-                if release_1_package() is not None:
-                    self.assert_release_1_package(data)
+                self.assert_release_1_package(data)
 
 
 class ImportHoldingNothingTests(ReleaseOneCase):
@@ -592,8 +595,8 @@ class FieldShellTests(ReleaseOneCase):
         self.assertNotIn('SECRET', document_part(out))
         ElementTree.fromstring(document_part(out).encode('utf-8'))
         self.assertEqual(docx_package._safe_package(out)[0], out)  # a shell is a kept field: a second pass keeps it
-        if release_1_package() is not None:  # the positive control: release 1 unwrapped it
-            self.assertNotEqual(self.release_1()._safe_package(data)[0], out)
+        # the positive control: release 1 unwrapped it
+        self.assertNotEqual(self.release_1()._safe_package(data)[0], out)
         return removed
 
     def test_a_removed_field_inside_another_fields_result_stays_a_field(self):
@@ -728,7 +731,7 @@ def fallback_shapes():
         ('outer DATE, plain result', nested_in_instruction(' DATE \\@ "', '" ', t('DATE RESULT')), 1),
         ('outer ASK, plain result', nested_in_instruction(' ASK Bm "', '" ', t('ASK RESULT')), 1),
         ('outer PAGE, plain result', nested_in_instruction(' PAGE ', ' \\* MERGEFORMAT ', t('7')), 1),
-        ('outer QUOTE, plain result', nested_in_instruction(' QUOTE "', '" ', t('QUOTED')), 1),
+        ('outer unknown type, plain result', nested_in_instruction(' SOMETHINGNEW "', '" ', t('UNKNOWN RESULT')), 1),
         ('outer IF, a picture as its plain result', nested_in_instruction(
             if_before, if_after, '<w:r><w:pict>' + SHAPETYPE + vshape() + '</w:pict></w:r>'), 1),
         ('outer IF, a removed simple field in its instruction', nested_in_instruction(
@@ -741,7 +744,7 @@ def fallback_shapes():
         ('two outer fields, one in the other\'s instruction, each a plain result', package(BEFORE + p(
             fc('begin'), instr(' IF 1 = 1 "'), fc('begin'), instr(' QUOTE "'), field(INC, 'INCLUDED'), instr('" '),
             fc('separate'), t('QUOTED'), fc('end'), instr('" "" '), fc('separate'), t('IF RESULT'), fc('end'))
-            + AFTER), 2),
+            + AFTER), 1),  # the IF; the QUOTE is exempt
         # coded: the stored result is fields alone, which LibreOffice shows (the QUOTE keeps a removed one)
         ('H02 IF "{INCLUDETEXT}", result nested field', nested_in_instruction(if_before, if_after,
                                                                                field(INC, 'INCLUDED TEXT')), 0),
@@ -757,9 +760,12 @@ def fallback_shapes():
                        field(INC, 'BRANCH TEXT'), instr('" "" '), fc('separate'), field(INC, 'SHOWN IN WORD'),
                        fc('end')) + AFTER), 0),
         ('outer IF, its result a kept field', nested_in_instruction(if_before, if_after, field(' QUOTE "x" ', 'Q')), 0),
-        # coded: HYPERLINK and TOC keep their stored result
+        # coded: HYPERLINK, TOC, QUOTE and STYLEREF keep their stored result (QUOTE and STYLEREF: the lead's 7.4 run on
+        # lane D's corpus inputs H7f and H7g, refutation round 1)
         ('outer HYPERLINK, plain result', nested_in_instruction(' HYPERLINK "', '" ', t('LINK TEXT')), 0),
         ('outer TOC, plain result', nested_in_instruction(' TOC \\o "', '" ', t('Heading one')), 0),
+        ('outer QUOTE, plain result', nested_in_instruction(' QUOTE "', '" ', t('QUOTED')), 0),
+        ('outer STYLEREF, plain result', nested_in_instruction(' STYLEREF "', '" ', t('STYLE RESULT')), 0),
         # coded: no stored result, or one with nothing in it a reader sees
         ('outer IF, no separate', package(BEFORE + p(fc('begin'), instr(if_before), field(INC, 'INCLUDED'),
                                                      instr(if_after), fc('end')) + AFTER), 0),
@@ -778,9 +784,10 @@ def fallback_shapes():
 
 
 class FieldFallbackTests(ReleaseOneCase):
-    """R2-30's fallback (D-R2-36): a field kept, not HYPERLINK or TOC, with a removed field (not INCLUDEPICTURE) in its
-    instruction and a stored result that holds something a reader sees outside the fields in it, is refused like
-    R2-29, under its own count ('fields', the sentence of an embedded object); every other file is coded as before."""
+    """R2-30's fallback (D-R2-36): a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, with a removed field (not
+    INCLUDEPICTURE) in its instruction and a stored result that holds something a reader sees outside the fields in it,
+    is refused like R2-29, under its own count ('fields', told as an inserted document: the lead's decision, refutation
+    round 1); every other file is coded as before."""
 
     def test_a_removed_field_in_an_instruction_with_a_plain_stored_result_is_refused(self):
         shapes = fallback_shapes()
@@ -791,14 +798,13 @@ class FieldFallbackTests(ReleaseOneCase):
                     with self.assertRaises(docx_package.ContentNotShown) as caught:
                         docx_package._safe_package(data)
                     self.assertEqual((caught.exception.code, caught.exception.counts),
-                                     (docx_package.INSERTED_OBJECT, {'documents': 0, 'objects': 0, 'controls': 0,
+                                     (docx_package.INSERTED_DOCUMENT, {'documents': 0, 'objects': 0, 'controls': 0,
                                                                      'fields': fields}))
-                    if release_1_package() is not None:  # the positive control: release 1 coded it
-                        self.release_1()._safe_package(data)
+                    self.release_1()._safe_package(data)  # the positive control: release 1 coded it
                     continue
                 out, removed = docx_package._safe_package(data)
                 self.assertNotIn('SECRET', document_part(out))
-                if release_1_package() is not None and not shells_in(out):
+                if not shells_in(out):
                     self.assert_release_1_package(data)
 
     def test_the_fallback_is_decided_once_every_type_is_final(self):
@@ -919,12 +925,10 @@ class FieldFuzzTests(ReleaseOneCase):
                 tally['skipped'] += 1
                 continue
             data = package(p(xml) + p(t('END')), fuzz_rels, fuzz_parts)
-            theirs = None
-            if release_1 is not None:
-                try:
-                    theirs = release_1._safe_package(data)[0]
-                except release_1.PackageRefused:
-                    theirs = None
+            try:
+                theirs = release_1._safe_package(data)[0]
+            except release_1.PackageRefused:
+                theirs = None
             try:
                 out, _ = docx_package._safe_package(data)
             except docx_package.ContentNotShown:
@@ -932,7 +936,7 @@ class FieldFuzzTests(ReleaseOneCase):
                 continue
             except docx_package.PackageRefused:
                 # refused for another reason only where release 1 refused it too
-                self.assertTrue(release_1 is None or theirs is None, seed)
+                self.assertIsNone(theirs, seed)
                 continue
             tally['accepted'] += 1
             part = document_part(out)
@@ -940,7 +944,7 @@ class FieldFuzzTests(ReleaseOneCase):
             root = ElementTree.fromstring(part.encode('utf-8'))
             made_shells = shells_in(out)
             tally['shells'] += made_shells
-            if made_shells == 0 and release_1 is not None:
+            if made_shells == 0:
                 self.assertEqual(out, theirs, seed)
                 tally['identical'] += 1
             want = set(made.visible)
@@ -956,8 +960,7 @@ class FieldFuzzTests(ReleaseOneCase):
         self.assertGreater(tally['shells'], 100)
         self.assertGreater(tally['refused'], 10)
         self.assertLess(tally['skipped'], 100)
-        if release_1 is not None:
-            self.assertGreater(tally['identical'], 300)
+        self.assertGreater(tally['identical'], 300)
 
 
 # --- R2-28 step 7 (C8): the check a stored conversion is read again after --------------------------------------------
@@ -1206,3 +1209,261 @@ class StoredConversionTests(r.CustomerCase, TestCase):
         round_, convert, check = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
         convert.assert_called_once_with(UNREADABLE_PART_WORD)
         self.assertEqual(round_.view_pdf_sha256, hashlib.sha256(FRESH_PDF).hexdigest())
+
+
+# --- refutation round 1, refuse[0]: what the coder is sent for a clean Word file, pinned to release 1 ----------------
+# tests/test_request_identity.py pins it for text, paste and PDF (R2-3); this is the Word case. The shapes are stored
+# zip entries (no zlib in any byte), coded through the shipped job path with a coder that records every request and the
+# in-process conversion, whose runner (laned_pin_pdf, the LibreOffice stand-in) answers a PDF naming the sha256 of the
+# package safe_package made - so a changed package changes the request.
+PIN_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+PIN_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+PIN_PKG = 'http://schemas.openxmlformats.org/package/2006/relationships'
+PIN_CT = 'http://schemas.openxmlformats.org/package/2006/content-types'
+PIN_NS = (f'xmlns:w="{PIN_W}" xmlns:r="{PIN_R}" xmlns:v="urn:schemas-microsoft-com:vml" '
+          'xmlns:o="urn:schemas-microsoft-com:office:office"')
+PIN_EMF = b'\x01\x00\x00\x00 synthetic EMF preview picture'
+PIN_XLSX = b'PK\x03\x04 synthetic workbook bytes'
+
+
+def laned_pin_pdf(package, work):
+    """The LibreOffice stand-in of the request pin: a PDF naming the sha256 of the package it was given (module level:
+    it runs in the bounded child)."""
+    return b'%PDF-1.4\n% package ' + hashlib.sha256(package).hexdigest().encode() + b'\n%%EOF\n'
+
+
+def pin_word(body, rels=(), parts=()):
+    rows = ''.join(f'<Relationship Id="{rid}" Type="{PIN_R}/{kind}" Target="{target}"/>' for rid, kind, target in rels)
+    entries = [
+        ('[Content_Types].xml', f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="{PIN_CT}">'
+                                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.'
+                                'relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+                                '<Default Extension="emf" ContentType="image/x-emf"/><Default Extension="xlsx" '
+                                'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>'
+                                '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-'
+                                'officedocument.wordprocessingml.document.main+xml"/></Types>'),
+        ('_rels/.rels', f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="{PIN_PKG}">'
+                        f'<Relationship Id="rId1" Type="{PIN_R}/officeDocument" Target="word/document.xml"/>'
+                        '</Relationships>'),
+        ('word/document.xml', f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document {PIN_NS}>'
+                              f'<w:body>{body}</w:body></w:document>'),
+        ('word/_rels/document.xml.rels', f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                                         f'<Relationships xmlns="{PIN_PKG}">{rows}</Relationships>'),
+        *parts]
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, 'w') as archive:
+        for name, content in entries:
+            info = zipfile.ZipInfo(name, date_time=(2026, 11, 26, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED  # no zlib in the bytes: the same wherever the suite runs
+            info.create_system = 3
+            archive.writestr(info, content)
+    return out.getvalue()
+
+
+def pin_t(text):
+    return f'<w:r><w:t xml:space="preserve">{text}</w:t></w:r>'
+
+
+def pin_fc(kind):
+    return f'<w:r><w:fldChar w:fldCharType="{kind}"/></w:r>'
+
+
+def pin_instr(text):
+    return f'<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>'
+
+
+def pin_field(instruction, result_xml):
+    return pin_fc('begin') + pin_instr(instruction) + pin_fc('separate') + result_xml + pin_fc('end')
+
+
+PIN_TEXT = '<w:p>' + pin_t('SYNTHETIC PROCEDURE NOTE. Colonoscopy to the cecum; one 6 mm sigmoid polyp, cold snare.') \
+    + '</w:p>'
+PIN_SHAPETYPE = ('<v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" path="m@4@5l@4@11@9@11@9@5xe">'
+                 '<v:stroke joinstyle="miter"/></v:shapetype>')
+PIN_SHAPE = ('<v:shape id="_x0000_i1025" type="#_x0000_t75" style="width:72pt;height:36pt" o:ole="">'
+             '<v:imagedata r:id="rIdPrev" o:title=""/></v:shape>')
+PIN_OLE = ('<o:OLEObject Type="Embed" ProgID="Excel.Sheet.12" ShapeID="_x0000_i1025" DrawAspect="Content" '
+           'r:id="rIdOle"/>')
+PIN_PREVIEW_REL, PIN_PREVIEW_PART = ('rIdPrev', 'image', 'media/image1.emf'), ('word/media/image1.emf', PIN_EMF)
+PIN_OBJECT_RELS = (PIN_PREVIEW_REL, ('rIdOle', 'package', 'embeddings/x.xlsx'))
+PIN_OBJECT_PARTS = (PIN_PREVIEW_PART, ('word/embeddings/x.xlsx', PIN_XLSX))
+PIN_INC = ' INCLUDETEXT "c:\\\\x\\\\y.docx" '
+PIN_SHAPES = {
+    'plain, a PAGE field': pin_word(PIN_TEXT + '<w:p>' + pin_field(' PAGE ', pin_t('1')) + '</w:p>'),
+    'an object with its preview': pin_word(
+        PIN_TEXT + '<w:p><w:r><w:object w:dxaOrig="1440" w:dyaOrig="720">' + PIN_SHAPETYPE + PIN_SHAPE + PIN_OLE
+        + '</w:object></w:r></w:p>', PIN_OBJECT_RELS, PIN_OBJECT_PARTS),
+    'a removed field with its result': pin_word(PIN_TEXT + '<w:p>' + pin_field(PIN_INC, pin_t('INCLUDED RESULT'))
+                                                + '</w:p>'),
+    'an empty w:object': pin_word(PIN_TEXT + '<w:p><w:r><w:object w:dxaOrig="1440" w:dyaOrig="900"/></w:r></w:p>'),
+    'an empty removed w:fldSimple in an IF result': pin_word(
+        PIN_TEXT + '<w:p>' + pin_field(' IF 1 = 1 "a" "b" ', "<w:fldSimple w:instr=' INCLUDETEXT x '/>") + '</w:p>'),
+    'an object with its preview and a w:movie': pin_word(
+        PIN_TEXT + '<w:p><w:r><w:object w:dxaOrig="1440" w:dyaOrig="720">' + PIN_SHAPETYPE + PIN_SHAPE
+        + '<w:movie r:id="rIdOle"/></w:object></w:r></w:p>', PIN_OBJECT_RELS, PIN_OBJECT_PARTS),
+    'an altChunk that holds nothing': pin_word(PIN_TEXT + '<w:altChunk r:id="rIdGone"/>'),
+    'a picture INCLUDEPICTURE in an IF result': pin_word(
+        PIN_TEXT + '<w:p>' + pin_field(' IF 1 = 1 "a" "b" ', pin_field(
+            ' INCLUDEPICTURE "x.png" ', '<w:r><w:pict>' + PIN_SHAPETYPE + PIN_SHAPE.replace(' o:ole=""', '')
+            + '</w:pict></w:r>')) + '</w:p>', (PIN_PREVIEW_REL,), (PIN_PREVIEW_PART,)),
+    'a removed field in a HYPERLINK instruction, plain result': pin_word(
+        PIN_TEXT + '<w:p>' + pin_fc('begin') + pin_instr(' HYPERLINK "') + pin_field(PIN_INC, pin_t('INC'))
+        + pin_instr('" ') + pin_fc('separate') + pin_t('LINK TEXT') + pin_fc('end') + '</w:p>'),
+    'a removed field in a QUOTE instruction, plain result': pin_word(
+        PIN_TEXT + '<w:p>' + pin_fc('begin') + pin_instr(' QUOTE "') + pin_field(PIN_INC, pin_t('INC'))
+        + pin_instr('" ') + pin_fc('separate') + pin_t('QUOTED TEXT') + pin_fc('end') + '</w:p>'),
+}
+
+
+def pin_requests(ws, user, data):
+    """One upload of ``data`` coded through the shipped job path: (the package's sha256 as the converter saw it, the
+    round's state, every request as (role, request.sha256, sha256 of the exact parameters, attempts))."""
+    real = fable_document.convert_docx
+    enc = f.encounter(ws, user, service_date='2026-11-02', insurance='medicare', title='Word request case')
+    revision = f.upload(enc, user, data=data, filename='n.docx',
+                        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    jobs.start_round(enc, revision, models.CodingRound.UPLOAD, user)
+    fake = f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
+                       checker=f.succeeded(r.checker_message(r.CHECKER)))
+    with mock.patch.object(fable_client, 'coder', return_value=fake), \
+            mock.patch.object(fable_document, 'convert_docx',
+                              side_effect=lambda d, **kw: real(d, runner=laned_pin_pdf, **kw)):
+        jobs.run_job(jobs.claim_next())
+    round_ = models.CodingRound.objects.get(encounter=enc)
+    view = storage.stored_path(round_.view_pdf_storage_name).read_bytes() if round_.view_pdf_storage_name else b''
+    package = view.split(b'% package ')[1][:64].decode() if b'% package ' in view else None
+    return package, round_.state, tuple(
+        (role, request.sha256, hashlib.sha256(fable_client.canonical(request.params)).hexdigest(), request.attempts)
+        for role, request in fake.calls)
+
+# Measured on release 1's tree - an export of 9ee0c85be (docx_package.py blob c4aa942e) - with exactly these builders,
+# CONVERTER_SOCKET='' and laned_pin_pdf: per shape, the upload's sha256, the package's sha256 as the converter saw it,
+# and each request (role, request.sha256, sha256 of the exact parameters, attempts). A failure here is the alarm, never
+# a value to re-pin: what the coder is sent for a clean Word file may change only through the coding-path gate (D358).
+RELEASE_1_WORD_REQUESTS = {
+    'plain, a PAGE field': (
+        'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
+        'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
+        (
+            ('reader', 'f709a11872af1092c3d2bdd05d1812f668704a13a6ee1122fbbf908686974073',
+             '68c703d43e7a01ac70ad99d4e7c3891ec9dfada9886572f6c440cb360c5a44a4', 2),
+            ('checker', '7984eb2c9f1346ae50469c590f219d941814a2cef0d0fc12cf8658ffde00226b',
+             '28166ac5c600bf9a554dba95b0baf4247e7e0916cdb47c6f8059384219a7fe82', 2),
+        )),
+    'an object with its preview': (
+        'd0c7171d5eae0ef9364030f85829773e45067a5e069e317283e4d8f86f03c4a7',
+        '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
+        (
+            ('reader', 'd9cabd6201c9bb8f620658a00d45d856ae3c8b8da35a1030cf9feedcaa600479',
+             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
+            ('checker', '0b2f18d2a4242fdb45897101a6f2439e504bd7fb76128dd0710c6ea57003c4ec',
+             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+        )),
+    'a removed field with its result': (
+        '25137a7f789df0ea6af37ad33cf9ad683c7ddb2d0ba877a7877af70db96bbf43',
+        '613e01ffb636b81b7f1edebdcac6c60e453a097cc04dce75e064bf8c6a70c02f',
+        (
+            ('reader', '01a7ca13a7979444e54998b1d877f37f3053d3b65b21c3b0f3630ca42114e8fc',
+             'e109717c963e7109ea5b6e3391b73086cd1ca65b005c2c8bf56e6c05e6ed5aee', 2),
+            ('checker', '4253486b77447dbdc28aee03c989ff4593c312690c8b5d952cb341b3e8e8fc49',
+             'c3d8c454ab6e2dca8ed087c8e84c106af89094d36f3e53bacf7d54acdb069a71', 2),
+        )),
+    'an empty w:object': (
+        '27c59b326f1103b050508b562fb006702079a2e84034999aed9066dec7dbfccf',
+        '32f07c4f214665ec879f1599d33b017f0f5d04d5e5b36b4b818e58194ac0ccf4',
+        (
+            ('reader', '01dc7df561b2ff2b7b000d61b2ca6597a2bd51ae27a486020106815abd381929',
+             'd3e960badb04ed07e3bf21fe5d32778433db789a47360b9f53c35242147a8543', 2),
+            ('checker', '9881a03fa672d5edd661739b254454caff698866072a3ef6161da9880b54e493',
+             '9cca02dd8a243dc8e366e4eb62b6e25c5f3a97a9df4e1602593b06e36f381229', 2),
+        )),
+    'an empty removed w:fldSimple in an IF result': (
+        '368e6cc9070892c286fed7ada17add47b9fab127dd6f70274a9e3763946e63d6',
+        '68220ffe7297ccf93d6c9ba824378283a724739585361e0c87eeb049dfadc708',
+        (
+            ('reader', 'e9b37c3c1d90b981899903698a2da031389689bbe7c0f970ee415f6dee044c47',
+             '32d3060fa79f0d2150e6bf852085a51f91dc2305f074ad61ec89dfcfd2c0e84d', 2),
+            ('checker', '674ab65d12ab01a11799ee5f481e050652d65b1b01979ba1f20e07cc20a43dbb',
+             '7efcc22bc6ac127d3d17b0a977935cca6011731c6f34f973bfa42c78f5d82265', 2),
+        )),
+    'an object with its preview and a w:movie': (
+        'c5d359bd2527e317f13c58ea5708178fa1663108d99539c882fa56281f09b652',
+        '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
+        (
+            ('reader', '08937266afd8a758c016bda66236375b308cf1533e8d1b3b67a460c7498b1cb0',
+             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
+            ('checker', 'ab540ec6cd2b3ab7caefe0a9d4585b152278e8056835ecfa103c68ce19a8d387',
+             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+        )),
+    'an altChunk that holds nothing': (
+        'c7d8cb0ca87e9c1da7eabb414aecfa3c6eb7d6cae5ddd308add238223fdf8fcf',
+        '1a7ca20d8f460e0ee40bf098c84ff0cd3d2ff05c240795a829ebc57b11ec4793',
+        (
+            ('reader', '0761e4bd54a7dbe0fb97ed821a89fead977537a28a3d69f9657e1d91892ff207',
+             'c165680749a6f130302dab82d0e6e6e3fed7f8bd8e2c9d9ee7c7bdfcf374929d', 2),
+            ('checker', '3679ae9d6361cf6f1b5139a75da91a09e28fd2ade3553fc0b4dd46109792ebec',
+             '7c8c38865ffd06dc1f2fc4ce41cd2330c3f84c73fd938bb0279fd9692bcf5c1a', 2),
+        )),
+    'a picture INCLUDEPICTURE in an IF result': (
+        '59beff8ba0f3272b659e9688770c88d8c337172f06190eaf44336066b66c4828',
+        'aa4c439652576e60b6c37dd38af74dbbc0948309a297d9e7b01b9ef0a4d53ab9',
+        (
+            ('reader', '0886fe679f3f8cc5902af5ced4514dda6063e46b5e8f147c29b887a7c25f78ed',
+             'b9882167d1e57c2ee227660f35c779b9e46659b2d5671d2e50d564c9d8df73e0', 2),
+            ('checker', '1a6d4a08379419c85e679f3fa4faeaaf1d2c718f8ccbd978b6936fae64319773',
+             'a8dc9902c92aa69a205bbe6a4647a2188d8daff206d06d0fd546f4d1f48d57cf', 2),
+        )),
+    'a removed field in a HYPERLINK instruction, plain result': (
+        'd80e298b0d73c8fae0a16ef126d550dcdf14f6a3357d9d03e31ed1e20694a2a4',
+        '45e0d8196c736dd3578f47a6af006a48187422b233df4581753337ba9f7f9b15',
+        (
+            ('reader', 'e3e69de51ff0379f2e93d8d0c2e8364a0488292cd4e4af2c6ec0ee8f3fcce005',
+             '8754b7f48f07ab0f31eedfa404bbf469f79aeb89aa194529bcb4e962cae342d9', 2),
+            ('checker', '93c2679d01ae5ef8301516c095e950fd85fc28603bc385ee32342de19304fa64',
+             'e19e673bc57c94c89af657c7983985a4f3a2d867c3865804995ace17f695aae7', 2),
+        )),
+    'a removed field in a QUOTE instruction, plain result': (
+        'a5189f553064ec1ce8cc24d07f4f3d4a0748fc690d6bc87a1b3f25d41510d97c',
+        '2f271ef6ad028d35fbdbea5360f75823a26269610f2e9ed7b35cd474429663a9',
+        (
+            ('reader', '0399dda60d6e4edc624f239e0c078feea9ee71acbce4200d52d8d3a345b6662f',
+             '94111e17890d7e49c57772a43e2cd3aa31122e5f83ed0e59a4bacfa3630721b8', 2),
+            ('checker', 'dead2940e10127cee732bc249eaa398036b74bb8e5177b8f1e186c57a6924524',
+             '4039eae8168d430c0e4fb8fae517fc1621aa601dc1e65d72d0840e1bbaf75c0d', 2),
+        )),
+}
+
+
+class CleanWordRequestTests(TestCase):
+    """Refutation round 1, refuse[0] (the Word case of R2-3, D358): a Word file that needs no refusal and no QUOTE is
+    sent to the coder exactly as release 1 sent it - the package, every request and its parameters - over clean shapes
+    that include what release 2 reads and leaves alone: an object with its preview, an empty w:object, an import that
+    holds nothing, a picture INCLUDEPICTURE in a field's result, and a removed field in an exempt outer field's
+    instruction (HYPERLINK, QUOTE)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._originals = tempfile.TemporaryDirectory()
+        cls._override = override_settings(ORIGINALS_DIR=Path(cls._originals.name), CONVERTER_SOCKET='',
+                                          CONVERTER_REQUIRED=False)
+        cls._override.enable()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._override.disable()
+        cls._originals.cleanup()
+        super().tearDownClass()
+
+    def test_each_clean_word_file_is_sent_as_release_1_sent_it(self):
+        self.assertEqual(sorted(PIN_SHAPES), sorted(RELEASE_1_WORD_REQUESTS))
+        ws = f.workspace('Word requests')
+        user = f.member(ws)
+        for label, data in PIN_SHAPES.items():
+            with self.subTest(label):
+                docx_sha256, package_sha256, requests = RELEASE_1_WORD_REQUESTS[label]
+                self.assertEqual(hashlib.sha256(data).hexdigest(), docx_sha256)  # the upload measured on release 1
+                package, state, sent = pin_requests(ws, user, data)
+                self.assertEqual(state, Round.DONE)
+                self.assertEqual([role for role, *_ in sent], ['reader', 'checker'])
+                self.assertEqual((package, sent), (package_sha256, requests))

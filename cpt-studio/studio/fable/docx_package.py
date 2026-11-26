@@ -149,7 +149,8 @@ INSERTED_DOCUMENT, INSERTED_OBJECT = 'inserted_document', 'inserted_object'  # C
 REFUSAL_CODES = (INSERTED_DOCUMENT, INSERTED_OBJECT)
 # What ContentNotShown counts: inserted documents (a w:altChunk that holds content or reaches outside, a w:subDoc:
 # R2-28), objects and controls that would leave no picture (R2-29), and fields whose stored result LibreOffice 7.4
-# loses once a field in their instruction is removed (R2-30's fallback, its own count).
+# loses once a field in their instruction is removed (R2-30's fallback, its own count; told as an inserted document,
+# the lead's decision in refutation round 1: every removed field type pulls content from outside the file).
 LOST_KINDS = ('documents', 'objects', 'controls', 'fields')
 CONTENT_NOT_SHOWN = 'it holds inserted content that could not be shown in the PDF'  # names no part and no text
 
@@ -157,12 +158,12 @@ CONTENT_NOT_SHOWN = 'it holds inserted content that could not be shown in the PD
 class ContentNotShown(PackageRefused):
     """E2 would take content out of the Word file and leave nothing of it in the PDF (release 2, Group F's rule): the
     file is refused, and nothing of it is converted. ``counts``: how many of each of LOST_KINDS; ``code``:
-    INSERTED_DOCUMENT when it holds an inserted document, else INSERTED_OBJECT - which of the two sentences a member
-    reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
+    INSERTED_DOCUMENT when it holds an inserted document or a field R2-30's fallback counts, else INSERTED_OBJECT -
+    which of the two sentences a member reads (studio.fable.document.REFUSED_PACKAGE_TEXT)."""
 
     def __init__(self, counts):
         self.counts = {kind: counts.get(kind, 0) for kind in LOST_KINDS}
-        self.code = INSERTED_DOCUMENT if self.counts['documents'] else INSERTED_OBJECT
+        self.code = INSERTED_DOCUMENT if self.counts['documents'] or self.counts['fields'] else INSERTED_OBJECT
         super().__init__(CONTENT_NOT_SHOWN)
 
 
@@ -563,7 +564,10 @@ _PICTURE_KEYS.update({f'{namespace} blip': tuple(f'{relationships} embed'
                       for namespace in DRAWINGML_NAMESPACES})
 # R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object.
 _SHOWN = _names('drawing', 'pict', 'object')
-_EXEMPT_OUTER_TYPES = ('HYPERLINK', 'TOC')  # outer types whose stored result 7.4 keeps (R2-30)
+# outer types whose stored result 7.4 keeps with release 1's edit (R2-30): HYPERLINK and TOC, and QUOTE and STYLEREF
+# (the lead's 7.4 run on lane D's corpus inputs H7f and H7g, refutation round 1); any other type, an unknown name
+# included, stays refused - LibreOffice evaluates many real types
+_EXEMPT_OUTER_TYPES = ('HYPERLINK', 'TOC', 'QUOTE', 'STYLEREF')
 _PICTURE_TYPE = 'INCLUDEPICTURE'  # a removed type whose result is a picture LibreOffice draws wherever it stands
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
@@ -733,9 +737,10 @@ class _Field:
 
     def loses_its_result(self) -> bool:
         """R2-30's fallback, read at a kept field's end once a removed field stood in its instruction: a type every
-        reading names other than HYPERLINK or TOC, and a stored result that holds, outside the fields in it, something a
-        reader sees - 7.4's 'H01' shape, whose plain result LibreOffice 7.4 drops, with or without R2-30's QUOTE. A
-        result that is fields alone keeps every word on 7.4 (H02-H04, I01, I02: the QUOTE keeps a removed one)."""
+        reading names other than HYPERLINK, TOC, QUOTE or STYLEREF, and a stored result that holds, outside the fields
+        in it, something a reader sees - 7.4's 'H01' shape, whose plain result LibreOffice 7.4 drops, with or without
+        R2-30's QUOTE. A result that is fields alone keeps every word on 7.4 (H02-H04, I01, I02: the QUOTE keeps a
+        removed one)."""
         types = self._types()
         exempt = len(types) == 1 and next(iter(types)) in _EXEMPT_OUTER_TYPES
         return bool(self.separates) and self.result_shown and not exempt

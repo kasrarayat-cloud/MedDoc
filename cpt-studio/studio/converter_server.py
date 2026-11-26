@@ -15,7 +15,10 @@ bytes, then a body of the header's ``size`` bytes.
   both ways: a refused answer gains "reason" (a ContentNotShown's code, docx_package.REFUSAL_CODES) and "counts" (an
   int of 0 to MAX_COUNT for each of docx_package.LOST_KINDS) only when the file was refused for what E2 would leave
   out of its PDF; release 1's worker reads the kind alone, and this worker believes a reason only in exactly that form
-  (_refusal) - from release 1's converter, which gives none, it reads the general refusal.
+  (_refusal) - from release 1's converter, which gives none, it reads the general refusal of a file release 1 refuses.
+  A file only release 2 refuses, release 1's converter converts as release 1 does, so this worker would code it: the
+  install plan keeps that pair apart (the converter switches before release 2's worker starts, and stays on a
+  switch-back).
 - Every connection is taken at once and read in a thread of its own (at most MAX_CONNECTIONS at a time; one more is
   closed unread), so a ping is answered at once, even while a conversion runs. Conversions run one at a time, in the
   order they came, in a thread of their own; up to BACKLOG wait their turn, and one more is answered busy at once. A
@@ -169,14 +172,16 @@ def _error(kind, code='', counts=None) -> dict:
 def _refusal(answer) -> tuple:
     """(code, counts) of a refused answer that names them in exactly the form a release-2 converter writes - a code of
     docx_package.REFUSAL_CODES, consistent with counts that hold exactly docx_package.LOST_KINDS, each an int (not a
-    bool) of 0 to MAX_COUNT, not all 0 - else ('', {}): an older converter gives none, and nothing else is believed."""
+    bool) of 0 to MAX_COUNT, not all 0 (INSERTED_DOCUMENT exactly when an inserted document or a field is counted) -
+    else ('', {}): an older converter gives none, and nothing else is believed."""
     code, counts = answer.get('reason'), answer.get('counts')
     if code not in docx_package.REFUSAL_CODES or type(counts) is not dict \
             or set(counts) != set(docx_package.LOST_KINDS):
         return '', {}
     if any(type(value) is not int or not 0 <= value <= MAX_COUNT for value in counts.values()):
         return '', {}
-    if not any(counts.values()) or (code == docx_package.INSERTED_DOCUMENT) != (counts['documents'] > 0):
+    if not any(counts.values()) or \
+            (code == docx_package.INSERTED_DOCUMENT) != (counts['documents'] > 0 or counts['fields'] > 0):
         return '', {}
     return code, {kind: counts[kind] for kind in docx_package.LOST_KINDS}
 
