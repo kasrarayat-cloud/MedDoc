@@ -496,8 +496,12 @@ def _stored_conversion(round_):
     Release 2, R2-28 step 7 (C8): before the stored PDF is read again, release 2's package check runs on the stored
     original's bytes (fable_document.needs_fresh_conversion, in this worker, with no converter call), so a conversion
     stored before a refusal existed is never reused for it: a file the check refuses ends the round as a fresh
-    conversion of it would - the same sentence and record, nothing counted or sent, nothing converted -, and one R2-30's
-    QUOTE applies to converts afresh, so the edit applies."""
+    conversion of it would - the same sentence and record, nothing counted or sent, nothing converted -, a resumed round
+    included. A file R2-30's QUOTE applies to, or that the check could not decide, converts afresh, so the edit
+    applies - at a later round only: a round that recorded this conversion as its own view (resumed, or requeued, its
+    reads paid or not; one begun on release 1's worker too) reads it back as release 1 does, so its reads, its view and
+    its quote pages stay on one PDF (refutation round 1, view[0] and loss[3]); R2-30's edit reaches its revision at the
+    next round."""
     stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
               .exclude(view_pdf_storage_name='').order_by('-number').first())
     if stored is None:
@@ -505,7 +509,8 @@ def _stored_conversion(round_):
     workspace_id = round_.encounter.workspace_id
 
     def reuse(data):
-        if fable_document.needs_fresh_conversion(data):
+        # the check runs first: a file it refuses ends the round, resumed or not
+        if fable_document.needs_fresh_conversion(data) and stored.pk != round_.pk:
             return fable_document.convert_docx(data)
         try:
             return read_own_original(workspace_id, SimpleNamespace(storage_name=stored.view_pdf_storage_name,
@@ -521,8 +526,10 @@ def _keep_view(round_, document, encounter):
     """Record on ``round_`` the PDF a Word document was converted to, as it is sent (CodingRound.view_pdf_*): the file
     an earlier round of the revision stored when the bytes are the same - only one of the practice's own stored files
     (storage.in_practice_folder), so a crafted row's name is never copied onto a new round - else stored now
-    (storage.store_original). A failure to store is logged and coding goes on: the viewer then shows no page of a Word
-    document."""
+    (storage.store_original). A failure to store is logged. With no earlier round's view in the encounter, coding goes
+    on and the viewer shows no page of a Word document; with one, the viewer would show that other conversion beside
+    this round's codes, so the round fails 'storage' before anything is sent, and a retry codes it again (refutation
+    round 1, view[2]: C8 converts afresh where an earlier round stored a view)."""
     if document.kind != 'docx' or round_.view_pdf_sha256 == document.sha256:
         return
     earlier = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
@@ -537,6 +544,11 @@ def _keep_view(round_, document, encounter):
             name, _digest, _size = store_original(encounter.workspace_id, document.data, 'converted.pdf')
         except Exception:  # noqa: BLE001 - logged; the coding does not depend on the viewer's copy
             log.exception('round %s: the converted PDF could not be stored for the viewer', round_.pk)
+            shown = (Round.objects.filter(encounter_id=round_.encounter_id, view_pdf_storage_name__isnull=False)
+                     .exclude(view_pdf_storage_name='').order_by('-number').first())
+            if shown is not None and shown.pk != round_.pk:
+                # customer.converted_view would serve an earlier round's other conversion beside this round's codes
+                _fail(round_, STORAGE)
             return
     _update_round(round_, view_pdf_storage_name=name, view_pdf_sha256=document.sha256)
 
