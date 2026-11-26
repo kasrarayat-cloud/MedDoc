@@ -1,5 +1,5 @@
 'use strict';
-// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-24: the build
+// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-26: the build
 // specification, sections 6 and 7, with the fix passes' line identity). Every code row is named by its line ("L1".."Ln",
 // "M1".."Mk"), never by its code alone: one code may stand on two lines. The review dialog, the reason it shows, the
 // buttons and every decision use the row's line and the number of the coding review the page shows; an Undo names the
@@ -29,7 +29,7 @@ const VIEW_URL = new RegExp(`^/api/encounters/${UUID_PART}/original\\?(?:[\\w.-]
 // The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
 // call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
-const CLIENT_VERSION = 'customer-2026-11-24';
+const CLIENT_VERSION = 'customer-2026-11-26';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
 // What the page says when the server refuses a decision with a conflict status (the coding review the page shows, or a
 // line of it, is no longer the latest): nothing was recorded, and the page has read the document again.

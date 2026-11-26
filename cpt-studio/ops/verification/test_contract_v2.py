@@ -1,5 +1,5 @@
 """The customer contract of the Fable coding build (ops/verification/customer-contract.json; BUILD-SPEC section 6, client
-contract customer-2026-11-24), held to itself, to the tools that read it and to the client build they name. The Django
+contract customer-2026-11-26), held to itself, to the tools that read it and to the client build they name. The Django
 suite holds the server to the same file (tests/test_api_customer.py, through ops/scan_customer.py's readers). No Django,
 no database, no network.
 
