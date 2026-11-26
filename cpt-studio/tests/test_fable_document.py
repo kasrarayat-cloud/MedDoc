@@ -1424,7 +1424,25 @@ class InsertedDocumentTests(SimpleTestCase):
                              ('afchunk1.docx?v=1', 'word/afchunk1.docx'),
                              ('/word/afchunk1.docx?x#y', 'word/afchunk1.docx'),
                              ('AFCHUNK1.DOCX', 'word/afchunk1.docx'),
-                             ('afchunk%201.docx', 'word/afchunk 1.docx')):
+                             ('afchunk%201.docx', 'word/afchunk 1.docx'),
+                             # refutation round 2, loss[2]: an authority urlsplit cannot parse - no reading names a
+                             # part, and LibreOffice opens one (C9 fails closed); an opaque path under a scheme
+                             ('//[x]/word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('file://[x/word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('//x／y/word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('urn:Zword/afchunk1.docx', 'word/afchunk1.docx'),
+                             # loss[3]: a rootless path under a scheme opens that path, its dot segments removed, minus
+                             # its first character
+                             ('x:afchunk1.docx', 'fchunk1.docx'), ('file:afchunk1.docx', 'fchunk1.docx'),
+                             ('x:word/afchunk1.docx', 'ord/afchunk1.docx'), ('x:./fchunk1.docx', 'chunk1.docx'),
+                             ('x:a/../fchunk1.docx', 'fchunk1.docx'), ('x:afchunk1.docx?v=1#f', 'fchunk1.docx'),
+                             # D-R2-40: the doctor's Word resolves a zip name percent-decoded and drops a '..' past the
+                             # package root (round 1's loss[4], the three Word-only spellings)
+                             ('chunk a.docx', 'word/chunk%20a.docx'), ('chünk.docx', 'word/ch%C3%BCnk.docx'),
+                             ('chünk.docx', 'word/ch%c3%bcnk.docx'),
+                             ('../../word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('/../word/afchunk1.docx', 'word/afchunk1.docx'),
+                             ('../../../word/afchunk1.docx', 'word/afchunk1.docx')):
             forms[f'named {target!r}, the part {part!r}'] = full_package(
                 TEXT + R2_ALT + TEXT, document_rels=(relationship('rIdChunk', 'aFChunk', target),),
                 parts=[(part, r2_imported_docx())], defaults=docx_default)

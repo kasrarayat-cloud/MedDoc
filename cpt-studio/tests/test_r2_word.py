@@ -681,6 +681,12 @@ class ImportHoldingNothingTests(ReleaseOneCase):
                                                          (rel('rIdChunk', 'aFChunk', 'missing.docx?v=1'),)),
             'a missing part named by a file URI': package(BEFORE + alt + AFTER,
                                                           (rel('rIdChunk', 'aFChunk', 'file:///word/missing.docx'),)),
+            # refutation round 2, loss[3]: a rootless path under a scheme that names no part, as LibreOffice opens it
+            'a missing part named x:afchunk1.docx': package(BEFORE + alt + AFTER,
+                                                            (rel('rIdChunk', 'aFChunk', 'x:afchunk1.docx'),)),
+            # D-R2-40: a '..' past the root, dropped as the doctor's Word drops it, still names no part
+            'a missing part named past the root': package(BEFORE + alt + AFTER,
+                                                          (rel('rIdChunk', 'aFChunk', '../../word/missing.docx'),)),
         }
         for label, data in shapes.items():
             with self.subTest(label):
@@ -781,6 +787,34 @@ class ZipNameTests(ReleaseOneCase):
             docx_package._safe_package(data)
         with self.assertRaises(docx_package.ConversionRefused):
             docx_package.check_in_child(data)
+
+    def test_an_import_named_by_a_stored_name_a_reader_may_read_is_refused(self):
+        # refutation round 2, loss[6]: the entry stored as 'word/afchunk1.docx' carries a Unicode Path field naming it
+        # 'word/afchunk2.docx', which zipfile reads; a reader that ignores the field opens the stored name the import
+        # names. And a name stored as UTF-8 without the flag, read as cp437 - as zipfile, release 1 and a reader of
+        # the code page do (D-R2-40's principle: a spelling the doctor's Word may resolve)
+        unicode_path = with_unicode_path(package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
+                                                 (rel('rIdChunk', 'aFChunk', 'afchunk1.docx'),),
+                                                 (('word/afchunk1.docx', inner_docx('IMPORTED')),)),
+                                         'word/afchunk1.docx', 'word/afchunk2.docx')
+        with zipfile.ZipFile(io.BytesIO(unicode_path)) as archive:
+            self.assertEqual([info.orig_filename for info in archive.infolist() if 'afchunk' in info.filename],
+                             ['word/afchunk1.docx'])
+            self.assertIn('word/afchunk2.docx', archive.namelist())
+        code_page = flagless(package(BEFORE + '<w:altChunk r:id="rIdChunk"/>' + AFTER,
+                                     (rel('rIdChunk', 'aFChunk', 'afchunk_\u251c\u00f1.docx'),),
+                                     (('word/afchunk_XX.docx', inner_docx('IMPORTED')),)),
+                             b'word/afchunk_XX.docx', 'word/afchunk_\u00e4.docx')
+        for label, data in (('a Unicode Path name', unicode_path), ('a cp437 reading', code_page)):
+            with self.subTest(label):
+                self.assertEqual(self.release_1()._safe_package(data)[1]['chunks'], 1)  # release 1 removed it
+                with self.assertRaises(docx_package.ContentNotShown) as caught:
+                    docx_package._safe_package(data)
+                self.assertEqual((caught.exception.code, caught.exception.counts),
+                                 (docx_package.INSERTED_DOCUMENT, IMPORTED_COUNTS))
+                with self.assertRaises(docx_package.ConversionRefused) as checked:  # C8: a stored conversion of it
+                    docx_package.check_in_child(data)
+                self.assertEqual(checked.exception.code, docx_package.INSERTED_DOCUMENT)
 
 
 class CharacterReferenceTests(ReleaseOneCase):

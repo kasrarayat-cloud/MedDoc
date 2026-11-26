@@ -365,6 +365,7 @@ def _package(data: bytes, report: dict):
             parts[info.filename] = _read_part(archive, info)
             _check_time(deadline)
     by_folded = {name.casefold(): name for name in parts}
+    reader_names = _reader_names(infos)  # R2-28 step 2: every name a reader may give each part (an import's lookup)
     _require_word_main_part(parts, by_folded)
     rewritten, dropped_targets, kept_targets, kept_rows, dropped_rows = {}, set(), set(), {}, {}
     for name in parts:
@@ -392,7 +393,7 @@ def _package(data: bytes, report: dict):
     external_orphans = frozenset(orphans)  # what the rule before release 1 drops: the content types keep their bytes
     report['read'] = True
     removed, held, unshown, shells = _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten,
-                                                            special, orphans, deadline)
+                                                            special, orphans, deadline, reader_names)
     report['shells'] = sum(made for name, made in shells.items() if name not in orphans)
     released = orphans - external_orphans  # what E2 dropped, with the content it removed
     if released:  # a part E2 dropped takes its Override with it
@@ -1449,7 +1450,8 @@ def _refuse_any_dtd(raw):
         pass
 
 
-def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten, special, orphans, deadline):
+def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rewritten, special, orphans, deadline,
+                           reader_names):
     """E2 over every part still sent (not a relationships part or the content types): a part whose bytes hold field or
     object markup is read and edited (``rewritten``), and every part that would bring a DTD to a parser is refused - an
     SVG picture's excepted. A part read as XML here is held to E1's size limits only, as every part is. The
@@ -1467,7 +1469,7 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
         try:
             triggered = _TRIGGER.search(view) is not None
             if triggered:
-                pictures, inserted = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows)
+                pictures, inserted = _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names)
                 outcome = _edited_part(raw, deadline, pictures, inserted)
                 if outcome is not None:
                     edited, counts, ids, lost, made = outcome
@@ -1508,7 +1510,7 @@ def _remove_active_content(infos, parts, by_folded, kept_rows, dropped_rows, rew
     return removed, held, unshown, shells
 
 
-def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
+def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows, reader_names):
     """(pictures, inserted) of the part ``name``'s relationships, by id (refutation round 1 split them):
     - pictures, what a preview must name (R2-29 step 1): an id whose relationship LibreOffice reads - the first kept row
       of that id with an Id, a Type and a Target, as its relations reader keeps the first (refutation round 2, loss[1])
@@ -1516,9 +1518,13 @@ def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
       round 2, loss[0] and refuse[0]), a part whose bytes begin as a picture (_is_picture: refutation round 1, loss[0]);
     - inserted, what makes a w:altChunk an inserted document (R2-28 step 2): a relationship that reaches outside
       (TargetMode other than Internal: dropped), and a kept one - any row of its id - whose target names a part that is
-      not empty by any name a reader resolves - as written or percent-decoded, and without case, as Word does (loss[5]);
-      and by its URI path alone, whatever scheme, authority, query or fragment it carries, as LibreOffice opens an
-      Internal target (loss[4])."""
+      not empty by any name a reader resolves: read as release 1 reads it (_part_name), by its URI path alone as
+      LibreOffice opens an Internal target (_uri_path_name: refutation round 1, loss[4]; round 2, loss[3]), and as RFC
+      3986 resolves it, a '..' past the root dropped (_word_name: D-R2-40) - each as written or percent-decoded, and
+      matched without case, as Word does (loss[5]), against every name a reader may give a part (_reader_names: its zip
+      name percent-decoded, D-R2-40; a stored name zipfile read otherwise, round 2, loss[6]). A target no reading
+      resolves - an authority urlsplit cannot parse, nothing but an authority, an empty one - is refused too: a reader
+      may still open a part by it, and lane D cannot tell which (round 2, loss[2]: C9 fails closed)."""
     folder, _, leaf = name.rpartition('/')
     rels = by_folded.get((f'{folder}/_rels/{leaf}.rels' if folder else f'_rels/{leaf}.rels').casefold())
     pictures, inserted, read = set(), {row.get('Id') for row in dropped_rows.get(rels, ())}, set()
@@ -1529,11 +1535,13 @@ def _relationship_ids(name, parts, by_folded, kept_rows, dropped_rows):
             read.add(rid)
             if _is_picture(parts.get(_opened_name(folder, written), b'')):
                 pictures.add(rid)
-        for named in (target, _uri_path_name(source, written)):
-            for form in {named, unquote(named)} if named is not None else ():
-                part = by_folded.get(form.casefold())
-                if part is not None and parts[part]:
-                    inserted.add(row.get('Id'))
+        readings = (target, _uri_path_name(source, written), _word_name(source, written))
+        if all(reading is None for reading in readings):
+            inserted.add(rid)  # loss[2]: no reading names a part, and a reader may still open one - C9 fails closed
+        for reading in readings:
+            for form in {reading, unquote(reading)} if reading is not None else ():
+                if any(parts[part] for part in reader_names.get(form.casefold(), ())):
+                    inserted.add(rid)
     return frozenset(pictures), frozenset(inserted)
 
 
@@ -1561,14 +1569,83 @@ def _opened_name(folder, target):
 
 def _uri_path_name(folder, target):
     """The package part a relationship's target names by its URI path alone - its scheme, authority, query and fragment
-    dropped, as LibreOffice opens an Internal target (refutation round 1, loss[4]) - or None."""
+    dropped, as LibreOffice opens an Internal target (refutation round 1, loss[4]) - and, for a rootless path under a
+    scheme, that path with its dot segments removed, minus its first character, as LibreOffice opens it (it takes that
+    character for the root's '/': 'x:afchunk1.docx' opens 'fchunk1.docx'; refutation round 2, loss[3]); or None (a
+    target urlsplit cannot parse is for _relationship_ids to refuse: loss[2])."""
     try:
         split = urlsplit(target or '')
     except ValueError:
         return None
-    if not split.path or not (split.path.startswith('/') or not (split.scheme or split.netloc)):
+    if not split.path:
         return None
+    if split.scheme and not split.path.startswith('/'):
+        return _dot_segments_removed(split.path)[1:].lstrip('/') or None
     return _part_name(folder, split.path)
+
+
+def _word_name(folder, target):
+    """The package part a target with no scheme and no authority names as RFC 3986 resolves it against its part's own
+    name - its query and fragment dropped, its dot segments removed and a '..' past the package root dropped, as the
+    doctor's Word resolves a part name (D-R2-40: release 1's reading and LibreOffice's then find no part) - or None."""
+    try:
+        split = urlsplit(target or '')
+    except ValueError:
+        return None
+    if split.scheme or split.netloc or not split.path:
+        return None
+    path = split.path if split.path.startswith('/') else f'/{folder}/{split.path}' if folder else f'/{split.path}'
+    return _dot_segments_removed(path).lstrip('/') or None
+
+
+def _dot_segments_removed(path):
+    """RFC 3986 5.2.4's remove_dot_segments of ``path`` (a '..' past the root dropped), as LibreOffice's URI factory and
+    the doctor's Word apply it."""
+    out, rest = [], path
+    while rest:
+        if rest.startswith('../'):
+            rest = rest[3:]
+        elif rest.startswith('./'):
+            rest = rest[2:]
+        elif rest.startswith('/./') or rest == '/.':
+            rest = '/' + rest[3:]
+        elif rest.startswith('/../') or rest == '/..':
+            rest = '/' + rest[4:]
+            if out:
+                out.pop()
+        elif rest in ('.', '..'):
+            rest = ''
+        else:
+            cut = rest.find('/', 1)
+            cut = len(rest) if cut < 0 else cut
+            out.append(rest[:cut])
+            rest = rest[cut:]
+    return ''.join(out)
+
+
+def _reader_names(infos) -> dict:
+    """{a name a reader may give a zip entry, folded: the names, as read here, of the entries it may name} - what an
+    import's target is matched against (R2-28 step 2): an entry's name as read here (UTF-8 where a name without the
+    UTF-8 flag is valid: refutation round 1, loss[2]), its stored name as zipfile first read it (cp437 without the flag)
+    and that read as UTF-8 - also where zipfile named the entry from a Unicode Path extra field, which a reader ignoring
+    the field does not (round 2, loss[6]) -, and each percent-decoded, as Word maps a part name to its zip item
+    (D-R2-40)."""
+    names = {}
+    for info in infos:
+        stored = {info.filename, info.orig_filename, _utf8_reading(info)}
+        for form in stored | {unquote(name) for name in stored}:
+            names.setdefault(form.casefold(), set()).add(info.filename)
+    return names
+
+
+def _utf8_reading(info) -> str:
+    """A zip entry's stored name read as LibreOffice reads it: UTF-8 where that is valid, else as zipfile read it."""
+    if info.flag_bits & 0x800:
+        return info.orig_filename
+    try:
+        return info.orig_filename.encode('cp437').decode('utf-8')
+    except UnicodeDecodeError:
+        return info.orig_filename
 
 
 def _released(candidates, kept_rows, by_folded, special, dropped):
