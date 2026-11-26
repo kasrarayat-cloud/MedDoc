@@ -2234,7 +2234,7 @@ function moreDocuments() {
   if ((list?.found || list?.browse)?.button) loadMore(list, 'button');
 }
 
-// New rows go in through a template (insertAdjacentHTML is refused).
+// New rows go in through a template element, so the rows already shown are never drawn again.
 function appendRows(list, rows) {
   const table = $('#documentsTable');
   if (!table) return;
@@ -2661,20 +2661,22 @@ function scrollBehavior() {
 }
 
 // --- the PDF viewer: the original's pages drawn in the page, near the visible area only, fitted to its width --------
-// The PDF library (pdf.js; a pinned copy of its legacy build this site serves, listed with its licences and a checksum of
-// every file in studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json) is loaded only when a document is viewed as a PDF;
-// the page shell names its module and worker (data-pdf-module and data-pdf-worker on <body>, in legacy/build/; the image
-// decoders and standard fonts it fetches are the package's own wasm/ and standard_fonts/, two folders up). It reads only
-// the same-origin view address, runs with no WebAssembly, no document scripting, no XFA and no layer of links or form
-// fields (form fields' appearances are drawn on the page), and the PDF's text reaches the page as text only, in its text
-// layer. The viewer starts the library's worker itself and hands it to the library (startWorker), and downloads the
-// document itself before the library reads it (downloadDocument). Where it cannot run or cannot draw the document, the
-// browser's own viewer is framed instead, as before: a quote opens its page there (a new frame at #page=N, since that
-// viewer opens the page only as its frame loads), nothing is marked, and the note says why and names the quote's page
-// (frameNote). No wait on the library is endless: loading it and starting its worker have a time limit (withinLimit); the
-// download has one while it stops moving; and once the document has opened, the viewer's watchdog gives up its waits on
-// the library only when the library has not answered for 20 seconds (libraryWatchdog), so a library that is busy - a
-// worker decoding other pages' images - is not taken for a broken one.
+// The PDF library (pdf.js; a pinned copy of its legacy build this site serves, listed with its licences and a checksum
+// of every file in studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json) is loaded for the worker made ready ahead,
+// once the page has routed (startStandby, R2-10), or when a document is first viewed as a PDF; the page shell names its
+// module and worker (data-pdf-module and data-pdf-worker on <body>, in legacy/build/; the image decoders and standard
+// fonts it fetches are the package's own wasm/ and standard_fonts/, two folders up). It reads only the same-origin view
+// address, runs with no WebAssembly, no document scripting, no XFA and no layer of links or form fields (form fields'
+// appearances are drawn on the page), and the PDF's text reaches the page as text only, in its text layer. The viewer
+// starts the library's worker itself, or takes the one made ready ahead (takeWorker), and hands it to the library, and
+// downloads the document itself (downloadDocument: beside the library once a worker has started here, R2-12; a re-open
+// answered 304 is drawn from the bytes kept in page memory, R2-15). Where it cannot run or cannot draw the document,
+// the browser's own viewer is framed instead, as before: a quote opens its page there (a new frame at #page=N, since
+// that viewer opens the page only as its frame loads), nothing is marked, and the note says why and names the quote's
+// page (frameNote). No wait on the library is endless: loading it and starting its worker have a time limit
+// (withinLimit); the download has one while it stops moving; and once the document has opened, the viewer's watchdog
+// gives up its waits on the library only when the library has not answered for 20 seconds (libraryWatchdog), so a
+// library that is busy - a worker decoding other pages' images - is not taken for a broken one.
 
 // gap: around the pages and a mark scrolled to; settleMs: how often a quote's scroll is looked at to see whether it has
 // stopped; closeMs: how long a closed document's worker is given to let go of it before it is ended.
@@ -4545,9 +4547,10 @@ function generateReport(kind, fmt) {
 // deadline is the earlier of the idle end and the session's cap (finding 16). A warning comes SESSION_IDLE_WARNING_SECONDS
 // before it: before the idle end with a button that sends the ping, before the cap with a sentence to send or copy what
 // is typed, since the cap cannot be moved. When the warning closes the focus goes back where it was, into the viewer's
-// frame too (finding 15). At the end the page closes the viewer, lets go of its object addresses, empties #main and every
-// dialog, and submits the sign-out form. Answers typed and not sent are lost then: the warning is their protection (no
-// drafts are kept, because a draft would put a document's text in the browser's storage).
+// frame too (finding 15). At the end the page closes the viewer, wipes what it keeps for speed (forgetMemory, R2-18),
+// lets go of its object addresses, empties #main and every dialog, and submits the sign-out form. Answers typed and not
+// sent are lost then: the warning is their protection (no drafts are kept, because a draft would put a document's text
+// in the browser's storage).
 // Every message between tabs names its session (data-session: a per-sign-in value, which the ping answers too), and a
 // tab acts on its own session's news only. A message of another session - the browser was signed in again, or the
 // message is stale - makes the tab ask the server which session it is in (the ping marked a poll: no activity), and a

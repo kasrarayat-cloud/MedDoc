@@ -284,8 +284,9 @@ apart from the page script.
 - **The viewer's own worker, download and watchdog.** The viewer starts the library's worker itself (a module worker at
   the worker's address), waits for the worker to say it is ready, and only then hands it to the library as its port, so
   the library never starts a worker of its own or its stand-in on the page's thread; closing the document ends the
-  worker. The viewer downloads the view address itself (same origin, the browser's default credentials), chunk by chunk,
-  and gives the library the bytes. Once the document has opened, one watchdog per viewer watches every wait on the
+  worker (a worker made ready ahead, holding no document, becomes the next document's own: release 2 below). The viewer
+  downloads the view address itself (same origin, the browser's default credentials), chunk by chunk, and gives the
+  library the bytes. Once the document has opened, one watchdog per viewer watches every wait on the
   library (the pages fetched, a page drawn, a page's text read, a text layer rendered): a wait is given up only when the
   library has not answered for 20 seconds of visible time, counted from the later of its last answer and the start of the
   wait, where an answer is any message from the viewer's worker or any of these waits settling. So a scan whose pages
@@ -408,9 +409,10 @@ sentence can bring about is repaired; the rest is recorded here):
   names the page at the middle of the view, which for a quote in a page's last lines (a footer; the last lines on a
   phone) can be the next page.
 - Zoom in and back out within 150 ms can leave a drawn page's canvas at the earlier size, stretched (blurred, the marks
-  in place), until its next drawing. A viewer closed while its worker is starting can set the library aside 20 seconds
-  later, so the next document downloads it again. A worker that says it is ready and then stops before the document
-  opens is named as a stalled download ('slow') rather than the marking tool ('library').
+  in place), until its next drawing. (Release 1 only: a viewer closed while its worker was starting set the library
+  aside 20 seconds later, so the next document downloaded it again; release 2 keeps it, R2-11.) A worker that says it is
+  ready and then stops before the document opens is named as a stalled download ('slow') rather than the marking tool
+  ('library').
 - In the browser's own viewer the quoted passages' lead still says choosing marks the words; the note after each choice
   says why nothing is marked. An overprint copy stays in the drawn page's text for assistive technology, so a screen
   reader reads fake-bold words twice (once marked).
@@ -423,6 +425,50 @@ sentence can bring about is repaired; the rest is recorded here):
   until that reload's load comes (a moment, normally), and stays on, over the unmarked text, if it never comes, until
   the next choice (round 8). A body of size 0 is read as a size the browser did not tell (no view the app serves is
   empty).
+
+### Release 2: the page's speed (RELEASE-2-SPEC R2-10 to R2-18 and R2-22)
+
+The page keeps release 1's words, look and read records, but for "Show more documents"; what changes is when it asks
+and what it keeps. Each part works on release 1's server answers too: a list without `next` or `total` is one whole
+list, a view without a tag is never kept, and a shell with an empty `data-session-json` means the session is read first.
+
+- **The lists, a page at a time** (R2-22). Overview, Documents and the Review queue each ask for their own first page
+  (`GET /api/encounters?list=recent|documents|queue`): the Overview's five, else pages of 50, newest first. Rows, empty
+  states and descriptions keep their words; the description's number is the list's `total` (else the rows on the page),
+  and a `total` also sets that list's own sidebar number. `#listMore` (`div.list-more`) follows `#documentsTable`: empty,
+  and watched, while up to three pages load by themselves as it comes within 600 px of the window; once those are used up,
+  or one has failed, it holds "Show more documents" (`button[data-action=more-documents]`), and from then on only the
+  button loads more, while more rows follow. A load that fails says why there, the button staying. A browser without
+  IntersectionObserver shows the button from 51 documents. New rows are appended through a `template`.
+- **The search** (`#documentSearch`; R2-22, the critics' C2). Up to 200 documents (the first page's `total`), the first
+  input loads any pages not yet loaded, one at a time, each recorded as a later page, and the search runs in the page with
+  release 1's rule - a row stays when its text, lower-cased, holds the words - inside the keystroke, with no request per
+  key. Above 200, the rows shown are filtered at once and the server is asked (`POST /api/encounters/search`, the words in
+  the body only, with the CSRF header) after a 300 ms pause, one search at a time, the newest words winning, and only
+  while documents that could match may lie beyond the page; the list's own pages then load nothing more by themselves.
+  `#searchEmpty` says "No documents match your search." only when nothing more can match, and "Loading documents…"
+  while a load or a search could still bring a match; a refused search (429) says why under the list, never "no match".
+  Clearing the box shows the list's rows again. The list lives in page memory only and goes with every route and at
+  sign-out.
+- **Opening a document** (R2-10, R2-12 to R2-14, R2-16, R2-17). The entrance fade plays on a page load's first view
+  only (`main[data-entrance]`, removed at the first route after it); the review never fades. A document chosen in a list
+  keeps the list shown, unscrolled, until its review is drawn or 150 ms have passed; from anywhere else the loading line
+  shows at once. The page shell carries the session (`<body data-session-json>`), so a page load asks no
+  `/api/session`, and a document refreshes it at most once a minute. One worker of the PDF library is made ready ahead,
+  500 ms after the first route and 600 ms after a viewer closes or draws a page, when the browser is idle, holding no
+  document: the next document takes it as its own, so each document still has its own worker, ended with its viewer.
+  None is made on Save-Data, where the viewer cannot run, or after two failures. Once a worker has started in the page,
+  the view is downloaded beside the library instead of after it; and where the list said a row opens as a PDF of at
+  most 1 MiB (`opens_pdf`), or the page keeps its bytes, the view is asked for with the click itself, no later than the
+  details (never on a hover or a list). Page 1 is drawn at once, its text read beside its drawing.
+- **A re-open from page memory** (R2-15). A PDF the page opened is kept in its memory under the tag the server gave it
+  (a quoted UUID; anything else is no tag): at most six documents and 24 MiB, the least recently viewed going first, and
+  never a Blob, the Cache API, IndexedDB or Web Storage. A re-open sends the tag (`If-None-Match`) and draws the kept
+  bytes only when the server answers 304, which it records as it records any view; any other answer, or none, drops the
+  copy and overwrites it.
+- **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401, another tab's sign-out, a forced
+  password change, a document refused with 404, and the page left (`pagehide`, the back-forward cache included) each
+  drop the view asked for with the click, overwrite and drop the kept copies, and end the worker made ready ahead.
 
 ## 9. Install and verify
 

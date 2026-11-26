@@ -6883,3 +6883,9 @@ test('R2-19, R2-20, R2-24: the dev preview pages its list and answers the search
   }
   assert.equal(preview.searchAnswer(many, { text: 'é'.repeat(240), before: null })[0], 200, '240 characters are words');
 });
+
+test('R2: the page script and the stylesheet stay within section 8\'s static weight, as WhiteNoise compresses them (gzip, level 9)', () => {
+  const gzipped = file => zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
+  assert.ok(gzipped(BUNDLE) <= 80000, `app.js: ${gzipped(BUNDLE)} B gzipped, the gate 80,000`);
+  assert.ok(gzipped(STYLES) <= 16000, `styles.css: ${gzipped(STYLES)} B gzipped, the gate 16,000`);
+});
