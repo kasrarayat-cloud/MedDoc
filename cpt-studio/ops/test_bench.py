@@ -160,7 +160,9 @@ class BenchProtocolTests(unittest.TestCase):
             first = RUN.take_lock(Path(out) / 'bench.lock')
             self.assertIsNotNone(first)
             self.assertIsNone(RUN.take_lock(Path(out) / 'bench.lock'))
+            self.assertFalse(RUN.lock_free(Path(out) / 'bench.lock'))  # the driver waits while another bench runs
             first.close()
+            self.assertTrue(RUN.lock_free(Path(out) / 'bench.lock'))
             again = RUN.take_lock(Path(out) / 'bench.lock')
             self.assertIsNotNone(again)
             again.close()

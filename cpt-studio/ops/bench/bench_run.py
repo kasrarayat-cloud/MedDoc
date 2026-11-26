@@ -135,6 +135,15 @@ def claim_output(out: Path, tag: str, round_no: int, parts, profiles=None) -> Pa
     return target
 
 
+def lock_free(path: Path) -> bool:
+    """Whether no bench holds the lock at ``path`` now (taken and released at once)."""
+    handle = take_lock(path)
+    if handle is None:
+        return False
+    handle.close()
+    return True
+
+
 def take_lock(path: Path):
     """An exclusive lock held for the process's life; None when another bench holds it."""
     handle = open(path, 'a+')
@@ -1820,11 +1829,12 @@ def driver(argv=None) -> int:
         profiles = own.split('+') if own else None
         for tag, first_round in order:
             tree = Path(trees[tag]).resolve() / 'cpt-studio'
-            for attempt in range(args.retries + 1):
+            attempt, busy = 0, 0
+            while attempt <= args.retries:
                 round_no = first_round + 100 * attempt
                 waited = 0
-                while (os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and \
-                        waited < args.wait_minutes * 60:
+                while ((os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and
+                       waited < args.wait_minutes * 60) or not lock_free(out / 'bench.lock'):
                     time.sleep(30)
                     waited += 30
                 env = {**os.environ, 'BENCH_TAG': tag, 'BENCH_ROUND': str(round_no), 'BENCH_PARTS': group,
@@ -1841,6 +1851,11 @@ def driver(argv=None) -> int:
                                            'bench_run.py', '--noinput'], cwd=tree, env=env, stdout=handle,
                                           stderr=subprocess.STDOUT, timeout=4 * 3600)
                 written = out / out_name(tag, round_no, group.split(','), profiles)
+                if not written.exists() and 'another bench holds the lock' in run_log.read_text() and busy < 50:
+                    busy += 1  # another bench took the lock first: nothing was measured, the same round is run again
+                    log.write(f'{utc()} {tag}:{round_no} {spec} the lock was held by another bench; waiting\n')
+                    log.flush()
+                    continue
                 peak = json.loads(written.read_text()).get('load_max', 99) if written.exists() else 99
                 log.write(f'{utc()} {tag}:{round_no} {spec} exit {done.returncode} load_max={peak}\n')
                 log.flush()
@@ -1849,6 +1864,7 @@ def driver(argv=None) -> int:
                 log.write(f'{utc()} {tag}:{round_no} {spec} INVALID (exit {done.returncode}, load {peak}); '
                           f'{"run again" if attempt < args.retries else "no retries left"}\n')
                 log.flush()
+                attempt += 1
             status = status or done.returncode
     log.close()
     return status
