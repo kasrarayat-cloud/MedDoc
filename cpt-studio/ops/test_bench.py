@@ -679,9 +679,9 @@ class AcceptanceTableTests(unittest.TestCase):
 
     def test_every_check_and_metric_family_is_one_the_bench_produces(self):
         sources = ''.join((BENCH / name).read_text() for name in ('bench.cjs', 'bench_run.py'))
-        for row in self.table['rows']:
+        for row in self.table['rows']:  # the whole name, quoted, as the bench records it: never a longer name
             if row.get('kind') == 'check':
-                self.assertIn(row['check'], sources, row['id'])
+                self.assertRegex(sources, '[\'"`]' + re.escape(row['check']) + '[\'"`]', row['id'])
         families = {row['metric'].split('.')[0] for row in self.table['rows'] if row.get('metric')}
         self.assertEqual(families - {'open', 'lists', 'server', 'queries', 'cold', 'pause', 'load', 'office', 'static'},
                          set())
