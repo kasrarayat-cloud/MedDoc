@@ -1,4 +1,4 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -7,10 +7,10 @@
   <title>{% block title %}Operator console{% endblock %} · CPT Studio</title>
   {# The operator console's look (owner direction 2026-11-22, DECISIONS D395): the design's tokens; fonts served by the site itself (font-src 'self'). #}
   <style>
-    @font-face { font-family: "Manrope"; font-weight: 400; font-style: normal; font-display: swap; src: url("/static/studio/fonts/Manrope-Regular.ttf") format("truetype"); }
-    @font-face { font-family: "Manrope"; font-weight: 600; font-style: normal; font-display: swap; src: url("/static/studio/fonts/Manrope-SemiBold.ttf") format("truetype"); }
-    @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("/static/studio/fonts/IBMPlexMono-Regular.ttf") format("truetype"); }
-    @font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("/static/studio/fonts/IBMPlexMono-Medium.ttf") format("truetype"); }
+    @font-face { font-family: "Manrope"; font-weight: 400; font-style: normal; font-display: swap; src: url("{% static 'studio/fonts/Manrope-Regular.ttf' %}") format("truetype"); }
+    @font-face { font-family: "Manrope"; font-weight: 600; font-style: normal; font-display: swap; src: url("{% static 'studio/fonts/Manrope-SemiBold.ttf' %}") format("truetype"); }
+    @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("{% static 'studio/fonts/IBMPlexMono-Regular.ttf' %}") format("truetype"); }
+    @font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("{% static 'studio/fonts/IBMPlexMono-Medium.ttf' %}") format("truetype"); }
     :root { color-scheme: light;
       --ink: #17292B; --muted: #526365; --paper: #F4F6F3; --white: #FFFFFF; --line: #D9E1DB; --control: #7B8C85;
       --nav: #17292B; --nav-muted: #B8C7C2; --nav-surface: #243A3B; --citron: #DDF39A;
