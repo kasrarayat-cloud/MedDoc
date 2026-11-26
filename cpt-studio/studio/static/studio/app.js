@@ -3874,7 +3874,8 @@ function noteFrameLoad(event) {
   }
   loadedPages.set(frame, page || UNREADABLE);
   watchFrameInput(page);
-  if (state.viewer?.frame === frame) noteRefusedFrame(frame);
+  // the PDF viewer's own frame, and the text viewer's (#documentViewer, the frame itself)
+  if (state.viewer?.frame === frame || frame.id === 'documentViewer') noteRefusedFrame(frame);
   if (state.framePassage?.frame === frame) paintFrame(frame);
 }
 
@@ -3893,6 +3894,7 @@ function noteRefusedFrame(frame) {
   }
   if (!Number.isInteger(status) || status === 0 || status === 200) return;
   if (status === 401 || status === 403) forgetMemory();  // an end (R2-18), as at the viewer's own download
+  if (frame.id === 'documentViewer') return;  // the text viewer's frame: paintFrame says what it holds, as in release 1
   frame.dataset.refused = String(status);
   setMarkNote(status === 429 ? FRAME_LIMIT_TEXT : FRAME_REFUSED_TEXT, true);
 }

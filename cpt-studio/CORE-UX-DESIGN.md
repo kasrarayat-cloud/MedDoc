@@ -467,9 +467,10 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   bytes only when the server answers 304, which it records as it records any view; any other answer, or a failed
   request, drops the copy and overwrites it, and the page's own abort (a route away, a second click) leaves it kept.
 - **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
-  the page meets it (the view's own download, a download the page saves, and the framed viewer's load: the site's
-  refusals forbid framing, so the browser does not let the page read a refused frame, and the page then asks the server
-  for the session, marked a poll, whose 401 or 403 is the end), another tab's sign-out, a document refused with 404 (on
+  the page meets it (the view's own download, a download the page saves, and the load of either viewer's frame, the
+  text's or the browser's own PDF viewer's: the site's refusals forbid framing, so the browser does not let the page read
+  a refused frame, and the page then asks the server for the session, marked a poll, whose 401 or 403 is the end; the
+  text viewer's frame otherwise says what it holds as before), another tab's sign-out, a document refused with 404 (on
   its first read, a poll or a refresh, the page out of date or not, or after the member has left it, sparing only the
   view the route now shown is opening), and the page left (`pagehide`, the back-forward cache included) each drop the
   view asked for with the click, overwrite and drop the kept copies, and end the worker made ready ahead. A document

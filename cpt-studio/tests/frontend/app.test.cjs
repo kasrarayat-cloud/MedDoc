@@ -5653,6 +5653,43 @@ test('R2-18: a framed load whose answer cannot be read - the site\'s refusals fo
   }
 });
 
+test('R2-18: the text viewer\'s frame, refused, is an end as the PDF viewer\'s is - an answer it cannot read asks the server for the session, as a poll (401, 403: ends; 200: nothing) - and what it holds it says itself, as in release 1', async () => {
+  // the text viewer's frame is #documentViewer itself; the browser's blocked page in it cannot be read (Chromium V9c)
+  const textFrame = timing => ({ tagName: 'IFRAME', id: 'documentViewer', dataset: {}, contentDocument: null, contentWindow: { get performance() { return timing(); } } });
+  const blocked = () => textFrame(() => { throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError'); });
+  const readable = status => () => textFrame(() => ({ getEntriesByType: () => [{ responseStatus: status }] }));
+  for (const [what, frameOf, answer, sent, end] of [
+    ['blocked, the session ended', blocked, { status: 401, body: { error: 'signed_out', reason: 'idle' } }, app.loginAddress('idle', ''), true],
+    ['blocked, a forced password change', blocked, { status: 403, body: { error: 'password_change_required' } }, '/account/?required=1', true],
+    ['blocked, the session open', blocked, { status: 200, body: fixture('session.json') }, null, false],
+    ['a readable 401', readable(401), null, null, true],
+    ['a readable 503', readable(503), null, null, false]]) {
+    await withSignedInPage({ answers: answer ? [{ match: (method, url) => method === 'GET' && url === '/api/session', ...answer }] : [] }, async ({ calls, element }) => {
+      const viewer = app.state.viewer;
+      const data = Uint8Array.from([37, 80]);
+      app.keepView(OTHER_VIEW, 'abcdef00-0000-4000-8000-000000000000', data);
+      app.state.viewHints = new Map([[OTHER_ID, true]]);
+      const thread = { terminated: false, terminate() { this.terminated = true; } };
+      app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+      Object.assign(app.state, { leaving: false, viewer: null });  // a text document: no PDF viewer
+      const frame = frameOf();
+      try {
+        app.noteFrameLoad({ target: frame });
+        await settle(() => false);
+        assert.deepEqual(calls.filter(call => call.url === '/api/session').map(call => [call.method ?? 'GET', call.headers[app.POLL_HEADER]]), answer ? [['GET', '1']] : [],
+          `${what}: ${answer ? 'the session asked once, as a poll' : 'an answer it can read asks nothing'}`);
+        assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby === null, thread.terminated],
+          end ? [0, [0, 0], 0, true, true] : [1, [37, 80], 1, false, false], `${what}: ${end ? 'an end: overwritten, dropped, the hints gone, the worker ended' : 'no end: all kept'}`);
+        assert.deepEqual(calls.filter(call => call.assign).map(call => call.assign), sent ? [sent] : [], `${what}: where the page goes`);
+        assert.deepEqual([frame.dataset.refused, element('#viewerMark').textContent], [undefined, ''], `${what}: the text viewer's own look, as in release 1`);
+      } finally {
+        app.state.viewer = viewer;
+        app.forgetMemory();
+      }
+    });
+  }
+});
+
 test('R2-18: a forced password change met at a download the page saves - the original, an earlier export, the Word file - overwrites the kept copies, clears the hints, ends the worker made ready ahead and saves nothing; any other refusal is no end', async () => {
   const original = `/api/encounters/${UUID}/original`;
   const keep = () => {
