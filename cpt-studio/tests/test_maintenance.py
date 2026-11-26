@@ -508,13 +508,24 @@ class DueTests(OriginalsCase, TestCase):
     def test_a_process_that_cannot_take_the_lock_runs_nothing(self):
         default = connections['default']
         holder = type(default)(dict(default.settings_dict), alias='lane4-lock-holder')
+        holder_pid = None
         try:
             with holder.cursor() as cursor:
-                cursor.execute('SELECT pg_advisory_lock(%s)', [maintenance.LOCK_KEY])
+                cursor.execute('SELECT pg_advisory_lock(%s), pg_backend_pid()', [maintenance.LOCK_KEY])
+                holder_pid = cursor.fetchone()[1]
             self.assertEqual(maintenance.run_due(), {'daily': None, 'verified': None, 'locked': False})
             self.assertFalse(models.SecurityEvent.objects.filter(event__startswith='maintenance.').exists())
         finally:
             holder.close()
+        # The server frees the lock when the holder's backend ends, which happens after close() returns: wait (bounded)
+        # for that backend to be gone, so the next tick's non-blocking try does not race it (release 2, lane F).
+        deadline = time.monotonic() + 10
+        with default.cursor() as cursor:
+            while True:
+                cursor.execute('SELECT count(*) FROM pg_stat_activity WHERE pid = %s', [holder_pid])
+                if cursor.fetchone()[0] == 0 or time.monotonic() > deadline:
+                    break
+                time.sleep(0.02)
         with tempfile.TemporaryDirectory() as scratch, mock.patch('tempfile.gettempdir', return_value=scratch):
             self.assertTrue(maintenance.run_due()['locked'])  # released with its session: the next tick runs it
 

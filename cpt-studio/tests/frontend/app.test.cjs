@@ -1,5 +1,5 @@
 'use strict';
-// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-24 (the
+// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-26 (the
 // build specification, sections 6 and 7, with the fix passes' line identity: every code row is named by its line, a
 // decision names the line and the coding review the page shows, an Undo the decision it undoes and a download the
 // coding review its dialog was opened on) and its fixtures in tests/fixtures/customer.
@@ -368,7 +368,7 @@ test('every upload attempt carries a version-4 client key', () => {
 });
 
 test('the page names its build, and a 409 client_outdated is the update notice while other answers are plain sentences', () => {
-  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-24');
+  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-26');
   assert.equal(app.CLIENT_HEADER, 'X-CPT-Studio-Client');
   assert.equal(app.isClientOutdated(409, { error_code: 'client_outdated' }), true);
   assert.equal(app.isClientOutdated(409, { error: 'x' }), false);
@@ -2796,7 +2796,7 @@ test('Approve opens the dialog with the session\'s statement; the approval posts
     assert.deepEqual(Object.keys(sent.body), ['round', 'line', 'code', 'action', 'acknowledgement', 'note']);
     const call = calls.find(item => item.method === 'POST');
     assert.deepEqual([call.headers['X-CSRFToken'], call.headers['X-CPT-Studio-Client'], call.headers['Content-Type'], call.credentials, call.cache],
-      ['token123', 'customer-2026-11-24', 'application/json', 'same-origin', 'no-store']);
+      ['token123', 'customer-2026-11-26', 'application/json', 'same-origin', 'no-store']);
     assert.equal(element('#reviewDialog').open, false);
   });
 });
@@ -4895,7 +4895,10 @@ test('the PDF library is named on the page as same-origin static modules, and no
   }
   // the shell names the pinned copy; the page script names no address of its own
   const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
-  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}" data-idle-seconds="\{\{ idle_seconds \}\}" data-cap-seconds="\{\{ cap_seconds \}\}" data-warning-seconds="\{\{ warning_seconds \}\}" data-session="\{\{ session \}\}">/);
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}" data-idle-seconds="\{\{ idle_seconds \}\}" data-cap-seconds="\{\{ cap_seconds \}\}" data-warning-seconds="\{\{ warning_seconds \}\}" data-session="\{\{ session \}\}" data-session-json="\{\{ session_json \}\}">/);
+  // release 2's shell seams (lane F): the session the page shell carries (R2-17; empty until the view fills it) and the
+  // entrance a page load's first view plays (R2-14), on <main> until the page's first route after load
+  assert.match(template, /<main id="main" tabindex="-1" data-entrance>/);
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
   assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
   // the image decoders and standard fonts are the package's own folders, two up from the legacy worker

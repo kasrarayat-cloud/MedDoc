@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="{% static 'studio/styles.css' %}">
   <script defer src="{% static 'studio/app.js' %}"></script>
 </head>
-<body data-pdf-module="{% static 'studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.mjs' %}" data-pdf-worker="{% static 'studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.mjs' %}" data-specialty="{{ specialty }}" data-idle-seconds="{{ idle_seconds }}" data-cap-seconds="{{ cap_seconds }}" data-warning-seconds="{{ warning_seconds }}" data-session="{{ session }}">
+<body data-pdf-module="{% static 'studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.mjs' %}" data-pdf-worker="{% static 'studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.mjs' %}" data-specialty="{{ specialty }}" data-idle-seconds="{{ idle_seconds }}" data-cap-seconds="{{ cap_seconds }}" data-warning-seconds="{{ warning_seconds }}" data-session="{{ session }}" data-session-json="{{ session_json }}">
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></symbol>
@@ -58,7 +58,7 @@
         <div class="breadcrumb"><button class="icon-button mobile-menu" id="menuButton" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><svg aria-hidden="true"><use href="#i-menu"/></svg></button><span>CPT Studio</span><span class="slash">/</span><strong id="breadcrumbCurrent">Overview</strong></div>
         <div class="topbar-right"><span class="preview-badge"><span></span>Synthetic only</span><button class="top-help icon-button" data-action="about" aria-label="About CPT Studio"><svg aria-hidden="true"><use href="#i-info"/></svg></button><span class="top-avatar" id="topAvatar" aria-hidden="true"></span></div>
       </header>
-      <main id="main" tabindex="-1"><noscript><p class="empty-state">CPT Studio needs JavaScript enabled in this browser.</p></noscript></main>
+      <main id="main" tabindex="-1" data-entrance><noscript><p class="empty-state">CPT Studio needs JavaScript enabled in this browser.</p></noscript></main>
       <footer class="app-footer"><span>Original documentation. Clearer decisions.</span><span>Synthetic documents only · Not for billing</span></footer>
     </div>
   </div>

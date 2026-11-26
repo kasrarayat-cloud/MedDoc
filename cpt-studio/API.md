@@ -1,6 +1,6 @@
 # CPT Studio customer API
 
-Client contract `customer-2026-11-24` (`studio/client_contract.py`; the fix passes' line identity, the id of each
+Client contract `customer-2026-11-26` (`studio/client_contract.py`; the fix passes' line identity, the id of each
 decision shown, which an undo names, and the round an export names). Handlers:
 `studio/api.py`; every payload is built by `studio/customer.py` from stored rows on each request.
 `ops/verification/customer-contract.json` lists the keys and `ops/verification/customer-denylist.json` what a customer
@@ -9,7 +9,7 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
 ## Conventions
 
 - **Session authentication** (`/login/`). A call without a session answers `401 {"error": "Sign in to continue."}`.
-- **The client header.** The page sends `X-CPT-Studio-Client: customer-2026-11-24` on every API call. A call without it,
+- **The client header.** The page sends `X-CPT-Studio-Client: customer-2026-11-26` on every API call. A call without it,
   or naming another build (a tab left open across an install), answers `409 {"error": "CPT Studio was updated. Reload
   this page to continue.", "error_code": "client_outdated"}` before the view runs. Downloads and the in-page view of the
   original are browser navigations and are outside the contract.

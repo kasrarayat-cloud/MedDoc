@@ -1,4 +1,4 @@
-"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-24). Session auth; CSRF enforced on every POST by
+"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-26). Session auth; CSRF enforced on every POST by
 the middleware; every response no-store (access.SecurityHeadersMiddleware).
 
 Every handler resolves the caller's ACTIVE membership first and scopes every row through it, so another workspace's

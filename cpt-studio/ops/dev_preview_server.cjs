@@ -4,7 +4,7 @@
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
 // anything else fails loudly), the files in studio/static/studio/ (the PDF library's as its manifest lists them, with
 // exactly the headers the site sends for them, its own policy included), and a
-// mock of the customer JSON API (client contract customer-2026-11-24) backed by the hand-made customer fixtures in
+// mock of the customer JSON API (client contract customer-2026-11-26) backed by the hand-made customer fixtures in
 // tests/fixtures/customer/. Binds 127.0.0.1 on the port given as --port=N, else on the first free port in 9170-9179.
 // A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
 // action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
@@ -29,6 +29,9 @@
 // POST /__preview__/reset restarts the uploads and the retried documents; POST /__preview__/outdated makes every API
 // call answer 409 {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a
 // document fail (503) until the next reset, which shows the page's reconnecting line.
+// Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
+// for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
+// outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -68,6 +71,9 @@ const CHANGED = 'This coding review has changed. Reload to see the latest.';
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const UPLOAD_TYPES = { pdf: 'application/pdf', txt: 'text/plain', docx: DOCX_TYPE };
 const INSURANCE = new Set(['medicare', 'medicaid', 'commercial', 'unknown']);
+// studio.views.activity_ping's answer for a signed-in session: how long it has before it idles out and before its cap
+// (the member's limits), the warning's lead, and the session's tag - empty here, as the shell's data-session is.
+const ACTIVITY = { idle_seconds: 900, cap_seconds: 28800, warning_seconds: 120, session: '' };
 
 // The synthetic documents the fixtures' quotes come from: invented, no real patient.
 const SYNTHETIC_DOCUMENTS = {
@@ -592,7 +598,10 @@ async function handle(req, res) {
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {
-    return send(res, 200, renderTemplate('index.html', { specialty: fixtures.session.workspace.specialty }), {
+    // the shell as studio.views.index renders it, carrying the session GET /api/session would answer this request
+    const session = req.headers['x-preview-session'] === 'agent' ? fixtures.agent : fixtures.session;
+    const shell = renderTemplate('index.html', { specialty: fixtures.session.workspace.specialty, session_json: JSON.stringify(session) });
+    return send(res, 200, shell, {
       'Content-Type': 'text/html; charset=utf-8', 'Set-Cookie': `cptstudio_csrf=${CSRF}; Path=/; SameSite=Strict`,
     });
   }
@@ -604,6 +613,14 @@ async function handle(req, res) {
     });
   }
   if (req.method === 'POST' && url.pathname === '/logout/') return send(res, 302, '', { Location: '/login/' });
+  if (url.pathname === '/session/activity') {
+    // as the site answers it: a POST past the CSRF check, any other method 405
+    if (req.method !== 'POST') return send(res, 405, '', { Allow: 'POST', 'Content-Type': 'text/html; charset=utf-8' });
+    if (req.headers['x-csrftoken'] !== CSRF) {
+      return send(res, 403, '<h1>Forbidden (403)</h1><p>CSRF verification failed. Request aborted.</p>', { 'Content-Type': 'text/html; charset=utf-8' });
+    }
+    return json(res, 200, ACTIVITY);
+  }
   const name = url.pathname.startsWith('/static/studio/') ? url.pathname.slice('/static/studio/'.length) : '';
   if (req.method === 'GET' && Object.hasOwn(STATIC_TYPES, name)) {
     return send(res, 200, fs.readFileSync(path.join(STATIC, name)), { 'Content-Type': STATIC_TYPES[name] });

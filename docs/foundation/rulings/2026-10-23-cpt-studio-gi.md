@@ -4436,3 +4436,43 @@ live database or the live files. Applied narrowly on 2026-11-25: the 40 copies m
 document the record calls real reached live) and the 18 cptg_* test databases restored from them, deleted with a manifest
 (sha256) kept; the ten copies made after that moment kept, because on 2026-11-20 (D352) he wrote "here is the lsit of real pdf
 doc with out name" and those ten may hold those PDFs. They go on his word that those PDFs were made up too, or on counsel's.
+
+
+### Session record, 2026-11-25 (738699b2) — release 2's plan and the critics' ten findings — DECISIONS D427
+
+Release 2 (speed for the GI document pages, paged lists with exact counts, the web process's settings, and E2's Word fix: a
+file with another document inserted is refused with a sentence instead of coded with that part missing) was designed by five
+area designers and checked by two critics (workflow wf_f95d77f7-345). The specification has 32 items in six lanes: F
+(foundation) merges first and alone, then M (measurement), D (Word), W (web process and front door), P (the page) and S
+(server API, records and schema), each through scripts/merge-pr.sh, then the integration, the reviewed release package, the
+committed declaration and a blue/green install through the ruled-act door, as release 1.
+
+The critics found ten things; the session checked each against the tree or the critic's own probe and took all ten into the
+specification before any lane was built:
+- search stays inside the keystroke up to 200 documents (release 1 already searched every document locally; the server
+  search is used only above 200), so the live practice's search does not get slower;
+- a stored Word conversion is checked too: a later round of a revision that release 1 converted with content missing is
+  refused with the sentence, never coded (release 2's refusals had covered fresh conversions only);
+- an inserted-document element that holds nothing (missing part, no id, empty part) is removed as before, not refused;
+  an External inserted document and a master-document link (w:subDoc) are refused on purpose, because the doctor's own
+  Word can pull that outside content in;
+- five speed gates corrected against release 1's own measured values (statements per list request, renderer memory with
+  the waiting worker and kept copies, the sign-in request count, the run-to-run spread, a gain required at 100 documents),
+  Word documents get the click-time download, and "Show more documents" appears only after the automatic loads.
+
+Decided under D422 ("Stop asking my Yes just do what ever we need it to have to do"): no yes or no is asked for a technical
+choice. No money, keys, deletion of data or product decision without precedent is involved. The new Word refusals take away
+something release 1 did (convert such a file with the part missing): that is class b, and the owner is told once in plain
+words with the plan, recorded as D428.
+
+### Session record, 2026-11-26 (738699b2) — release 2's new Word refusals told to the owner once (class b) — DECISIONS D428
+
+At 00:01:51Z, in the release-2 plan message, the owner was told, not asked: "Some Word files are now refused, with a sentence
+asking for a PDF: a file with another document inserted in it; a file that links to outside documents; a file with an
+embedded object that has no picture. Release 1 coded these files with that part missing and didn't say so. The cost is that
+such files no longer go through at all. Word files that are already uploaded get the same check if they're coded again."
+Release 1 converted such files with the part missing; release 2 refuses them with a sentence (R2-28, R2-29, D-R2-23, and the
+critics' C8 and C9). That is an accepted-capability loss (class b), recorded as told under D422 ("Stop asking my Yes just do
+what ever we need it to have to do"). The Word corpus run on the image's LibreOffice 7.4 the same night showed one more case
+(a removed field inside another field's instruction with a plain stored result, whose words 7.4 drops with or without
+release 2's change): it takes R2-30's fallback, a refusal, and the owner is told that one sentence before the install.

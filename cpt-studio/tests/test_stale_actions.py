@@ -1,7 +1,7 @@
 """Acts from a page that no longer shows the latest (FIX-SPEC-2 section 5; findings LINES-5, LINES-6, LINES-9). An undo
 names the decision it undoes (the id the page shows for the current decision) and a download names the coding review
 the page shows; either is refused with "This coding review has changed. Reload to see the latest." when it no longer
-matches. The activity names the line with the code. The client contract is customer-2026-11-24. Synthetic data only;
+matches. The activity names the line with the code. The client contract is customer-2026-11-26. Synthetic data only;
 nothing reaches the network."""
 import json
 from pathlib import Path
@@ -155,14 +155,14 @@ class ActivityNamesTheLineTests(StaleCase):
 
 class ClientContractTests(StaleCase):
     def test_the_client_contract_is_the_stale_action_build(self):
-        self.assertEqual(client_contract.VERSION, 'customer-2026-11-24')
+        self.assertEqual(client_contract.VERSION, 'customer-2026-11-26')
         for earlier in ('customer-2026-11-21', 'customer-2026-11-20'):
             with self.subTest(earlier=earlier):
                 response = self.client_for(self.reviewer).get('/api/session', HTTP_X_CPT_STUDIO_CLIENT=earlier)
                 self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
         contract = json.loads((Path(settings.BASE_DIR) / 'ops' / 'verification' / 'customer-contract.json')
                               .read_text(encoding='utf-8'))
-        self.assertIn('customer-2026-11-24', contract['about'])
+        self.assertIn('customer-2026-11-26', contract['about'])
         self.assertEqual(contract['types']['decision']['keys']['id'], 'string')
 
     def test_a_decided_encounter_is_held_to_the_contract(self):

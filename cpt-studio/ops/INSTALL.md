@@ -923,8 +923,9 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   After a switch-back to that pair, `verify --revision <its revision>` passes.
   Release 1's own `verify_login.py`, `scan_customer.py` and walk do not, and
   are not meant to (refutation round 2, switchback-1; round 1 recorded it as
-  rollback-4): each sends release 1's client version (`X-CPT-Studio-Client:
-  customer-2026-11-24`, which the server pins: specification 3.6), so that
+  rollback-4): each sends release 1's client version (the build of
+  2026-11-24; this release's tools send `X-CPT-Studio-Client:
+  customer-2026-11-26`), which the server pins (specification 3.6), so that
   pair's web answers `/api/session` and `/api/encounters` with `409`
   (`client_outdated`); and release 1's shared contract
   (`ops/verification/customer-contract.json`) lists keys that pair's session
