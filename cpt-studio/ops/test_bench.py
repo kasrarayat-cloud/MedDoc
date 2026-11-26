@@ -1,10 +1,10 @@
 """The release-2 bench's own tests (RELEASE-2-SPEC R2-2): no database, no browser, in CI's ops suite.
 
-They cover every refusal arm (the pure check, the bench's settings, the module-level refusal before a test database could
-be made, the protocol driver), the lock and the never-overwritten output, benchdata's equal bytes twice, the barcode
-(encode, decode, the page's decoder against Python's, and the barcode read back out of a scan's pixels), that bench.cjs
-and proxy.cjs parse, the judge's arithmetic, its C5 floors and its INVALID cases, the office model's arithmetic against
-the tree's own vhost, and that ops/bench never ships in the image and is never discovered as tests.
+They cover every refusal arm (the pure check, the bench's settings, the module-level refusal before a test database
+could be made, the protocol driver), the lock and the never-overwritten output, benchdata's equal bytes twice, the
+barcode (encode, decode, the page's decoder against Python's, and the barcode read back out of a scan's pixels), that
+bench.cjs and proxy.cjs parse, the judge's arithmetic, its C5 floors and its INVALID cases, the office model's
+arithmetic against the tree's own vhost, and that ops/bench never ships in the image and is never discovered as tests.
 """
 import copy
 import importlib.util
@@ -48,7 +48,8 @@ class BenchRefusesAnythingButTheThrowawayServerTests(unittest.TestCase):
         for change, expected in (
                 ({'HOST': 'localhost'}, 'host'), ({'HOST': '10.0.0.5'}, 'host'),
                 ({'PORT': '55451'}, "55451, live's"), ({'PORT': '5432'}, 'port is not 55461'),
-                ({'TEST': {'NAME': 'cptstudio'}}, 'test_cptstudio_'), ({'TEST': {'NAME': 'test_other'}}, 'test_cptstudio_')):
+                ({'TEST': {'NAME': 'cptstudio'}}, 'test_cptstudio_'),
+                ({'TEST': {'NAME': 'test_other'}}, 'test_cptstudio_')):
             db = {**GOOD_DB, **change}
             with self.subTest(change=change):
                 why = RUN.refusals(db, 'disabled')
@@ -73,8 +74,8 @@ class BenchRefusesAnythingButTheThrowawayServerTests(unittest.TestCase):
         return env
 
     def _run(self, code, **extra):
-        return subprocess.run([sys.executable, '-B', '-c', code], cwd=APP, env=self._environ(**extra), capture_output=True,
-                              text=True, timeout=120)
+        return subprocess.run([sys.executable, '-B', '-c', code], cwd=APP, env=self._environ(**extra),
+                              capture_output=True, text=True, timeout=120)
 
     def test_the_bench_settings_refuse_another_database(self):
         load = 'import bench_settings'
@@ -109,8 +110,9 @@ class BenchRefusesAnythingButTheThrowawayServerTests(unittest.TestCase):
                           {'CPT_STUDIO_CODING_MODE': 'live'}):
                 with self.subTest(extra=extra):
                     env = self._environ(**{'CPT_STUDIO_TEST_DB_SUFFIX': 'x', **extra})
-                    done = subprocess.run([sys.executable, '-B', str(BENCH / 'bench_run.py'), '--tree', f'A={APP.parent}',
-                                           '--order', 'A:1', '--group', 'server', '--out', out, '--ports', '9300-9349'],
+                    done = subprocess.run([sys.executable, '-B', str(BENCH / 'bench_run.py'), '--tree',
+                                           f'A={APP.parent}', '--order', 'A:1', '--group', 'server', '--out', out,
+                                           '--ports', '9300-9349'],
                                           env=env, capture_output=True, text=True, timeout=120)
                     self.assertEqual(done.returncode, 2, done.stderr[-600:])
                     self.assertIn('refused', done.stderr)
@@ -260,7 +262,7 @@ def _node_bits(number):
     return json.loads(subprocess.run([NODE, '-e', script], capture_output=True, text=True, timeout=60).stdout)
 
 
-# --- the judge ---------------------------------------------------------------------------------------------------------------
+# --- the judge --------------------------------------------------------------------------------------------------------
 
 def _round(tag, number, metrics, *, parts=('open',), app_js='aaa', controls=True, checks=None, **extra):
     data = {'tag': tag, 'round': number, 'parts': list(parts), 'metrics': metrics, 'checks': checks or {},
@@ -368,8 +370,8 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(JUDGE.judge_row(tight, a, {1: {'metrics': {'m': [135]}}})['verdict'], 'PASS')  # 1.36 wins
 
     def test_a_gain_must_exceed_twice_the_spread(self):
-        row = {'id': 'g', 'metric': 'm', 'min_samples': 1, 'a_section8': None, 'gate': [{'rel_max': 0.98}], 'gain': True,
-               'spread': 0.03}
+        row = {'id': 'g', 'metric': 'm', 'min_samples': 1, 'a_section8': None, 'gate': [{'rel_max': 0.98}],
+               'gain': True, 'spread': 0.03}
         a = {1: {'metrics': {'m': [100]}}}
         self.assertEqual(JUDGE.judge_row(row, a, {1: {'metrics': {'m': [97]}}})['verdict'], 'FAIL')  # 3% <= 6%
         row['gate'] = [{'rel_max': 0.95}]
@@ -385,8 +387,8 @@ class JudgeTests(unittest.TestCase):
                                           'max': 1.3}, {}, b)['verdict'], 'PASS')  # 1.25
         self.assertEqual(JUDGE.judge_row({'id': 'r', 'kind': 'ratio', 'metric': 'x', 'over': 'y', 'max': 1.5}, {}, b)
                          ['verdict'], 'PASS')
-        self.assertEqual(JUDGE.judge_row({'id': 'r', 'kind': 'max_ratio', 'metrics': ['x', 'y', 'z'], 'max': 1.25}, {}, b)
-                         ['verdict'], 'FAIL')
+        ratio = {'id': 'r', 'kind': 'max_ratio', 'metrics': ['x', 'y', 'z'], 'max': 1.25}
+        self.assertEqual(JUDGE.judge_row(ratio, {}, b)['verdict'], 'FAIL')
         self.assertEqual(JUDGE.judge_row({'id': 'e', 'kind': 'equal', 'metrics': ['s50', 's5000']}, {}, b)['verdict'],
                          'PASS')
         b[1]['metrics']['s5000'] = [14]
@@ -462,6 +464,110 @@ class OfficeModelTests(unittest.TestCase):
         typing = [(350 * i, 'POST', '/api/encounters/search') for i in range(30)]
         busy = JUDGE.office_429s(zones, JUDGE.office_requests(model, {**measured, 'typing': typing}))
         self.assertGreater(busy['cpt_write'], 0, busy)  # in the write zone, 5 typists at 2.9 a second each pass it
+
+
+DOC_A, DOC_B = '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'
+
+
+def _entry(rid, method, url, status=200, poll=False):
+    headers = {'x-request-id': rid, **({'x-cpt-poll': '1'} if poll else {})}
+    return {'method': method, 'url': url, 'status': status, 'reqHeaders': headers}
+
+
+def _row(rid, view, ids=(), at=1000.0, sign_in='s1', outcome='served'):
+    return {'request_id': rid, 'view': view, 'encounter_ids': list(ids), 'count': len(ids), 'created_at': at,
+            'sign_in_ref': sign_in, 'outcome': outcome, 'filters': {}}
+
+
+class RecordsJudgementTests(unittest.TestCase):
+    """The records part's exact gates (R2-32 M4), over synthetic proxy logs and access rows."""
+
+    def flow(self):
+        entries = [_entry('l1', 'GET', '/api/encounters'), _entry('l2', 'GET', '/api/encounters'),
+                   _entry('d1', 'GET', f'/api/encounters/{DOC_A}'),
+                   _entry('v1', 'GET', f'/api/encounters/{DOC_A}/original?view=1'),
+                   _entry('p1', 'GET', f'/api/encounters/{DOC_A}', poll=True),
+                   _entry('s1', 'GET', '/static/studio/app.js'), _entry('x1', 'POST', '/session/activity')]
+        rows = [_row('l1', 'member.list', [DOC_A, DOC_B]), _row('d1', 'member.detail', [DOC_A], at=2000),
+                _row('v1', 'member.inline', [DOC_A], at=2100)]
+        actions = [{'kind': 'records-open', 'label': 'text-2p', 'mode': 'pdf', 'canvasEpoch': 2300,
+                    'rids': [['GET', '/api/encounters/<id>', 200, 'd1', 1],
+                             ['GET', '/api/encounters/<id>/original?view=1', 200, 'v1', 5]]}]
+        lists = [{'rid': 'l1', 'path': '/api/encounters', 'ids': [DOC_A, DOC_B]},
+                 {'rid': 'l2', 'path': '/api/encounters', 'ids': [DOC_A, DOC_B]}]
+        return entries, rows, actions, lists
+
+    def test_every_served_read_is_one_row_or_a_counted_repeat(self):
+        entries, rows, actions, lists = self.flow()
+        got = RUN.judge_records(entries, rows, 1, actions, lists)
+        for name in ('equation', 'polls', 'openings', 'inline_before_pixels', 'list_ids'):
+            self.assertTrue(got[name]['ok'], (name, got[name]))
+
+    def test_each_bad_shape_fails_its_gate(self):
+        entries, rows, actions, lists = self.flow()
+        self.assertFalse(RUN.judge_records(entries, rows, 0, actions, lists)['equation']['ok'])  # a repeat uncounted
+        no_detail = [r for r in rows if r['request_id'] != 'd1']
+        got = RUN.judge_records(entries, no_detail, 1, actions, lists)
+        self.assertFalse(got['equation']['ok'])
+        self.assertFalse(got['openings']['ok'])
+        orphan = rows + [_row('zz', 'member.inline', [DOC_B])]
+        self.assertFalse(RUN.judge_records(entries, orphan, 1, actions, lists)['equation']['ok'])
+        twice = rows + [_row('v1', 'member.inline', [DOC_A], at=2150)]
+        self.assertFalse(RUN.judge_records(entries, twice, 1, actions, lists)['openings']['ok'])
+        late = [dict(r, created_at=2400) if r['request_id'] == 'v1' else r for r in rows]
+        self.assertFalse(RUN.judge_records(entries, late, 1, actions, lists)['inline_before_pixels']['ok'])
+        unnamed = [dict(r, encounter_ids=[], count=2) if r['view'] == 'member.list' else r for r in rows]
+        self.assertFalse(RUN.judge_records(entries, unnamed, 1, actions, lists)['list_ids']['ok'])
+        self.assertFalse(RUN.judge_records(entries, rows, 1, actions, [])['list_ids']['ok'])  # nothing seen: no pass
+        crowded = entries + [_entry('p2', 'GET', f'/api/encounters/{DOC_A}', poll=True)]
+        polled = rows + [_row('p1', 'member.detail', [DOC_A], at=5000), _row('p2', 'member.detail', [DOC_A], at=9000)]
+        self.assertFalse(RUN.judge_records(crowded, polled, 1, actions, lists)['polls']['ok'])
+        spaced = rows + [_row('p1', 'member.detail', [DOC_A], at=5000), _row('p2', 'member.detail', [DOC_A],
+                                                                          at=70000)]
+        self.assertTrue(RUN.judge_records(crowded, spaced, 1, actions, lists)['polls']['ok'])
+
+    def test_a_failed_library_may_write_a_second_inline_row(self):
+        entries, rows, actions, lists = self.flow()
+        actions[0]['mode'] = 'frame'
+        entries.append(_entry('v2', 'GET', f'/api/encounters/{DOC_A}/original?view=1'))
+        actions[0]['rids'].append(['GET', '/api/encounters/<id>/original?view=1', 200, 'v2', 5])
+        rows.append(_row('v2', 'member.inline', [DOC_A], at=2200))
+        self.assertTrue(RUN.judge_records(entries, rows, 1, actions, lists)['openings']['ok'])
+
+    def test_requests_map_to_the_views_they_record(self):
+        self.assertEqual(RUN.read_kind('GET', '/api/encounters?list=documents&before=x'), 'member.list')
+        self.assertEqual(RUN.read_kind('POST', '/api/encounters/search'), 'member.list')
+        self.assertEqual(RUN.read_kind('GET', f'/api/encounters/{DOC_A}'), 'member.detail')
+        self.assertEqual(RUN.read_kind('GET', f'/api/encounters/{DOC_A}/original?view=1'), 'member.inline')
+        self.assertEqual(RUN.read_kind('GET', f'/api/encounters/{DOC_A}/original'), 'member.download')
+        for method, url in (('POST', '/api/encounters'), ('GET', '/api/session'), ('GET', '/static/studio/app.js'),
+                            ('GET', '/api/encounters/search'), ('POST', f'/api/encounters/{DOC_A}/decisions')):
+            self.assertIsNone(RUN.read_kind(method, url), url)
+
+
+class BenchTreeReadingTests(unittest.TestCase):
+    def test_release_two_s_index_names_come_from_its_own_migrations(self):
+        with tempfile.TemporaryDirectory() as d:
+            migrations = Path(d, 'studio', 'migrations')
+            migrations.mkdir(parents=True)
+            Path(migrations, '0018_r1_availability.py').write_text("models.Index(name='studio_old_one')")
+            Path(migrations, '0019_r2_document_lists.py').write_text(
+                "AddIndex(index=models.Index(fields=['a'], name='studio_enc_ws_time'))\n"
+                "AddIndex(index=models.Index(fields=['b'], name=\"studio_enc_ws_queue\"))")
+            Path(migrations, '0020_r2_run_lookups.py').write_text("models.Index(F('x'), name='studio_run_round')")
+            self.assertEqual(RUN.release2_index_names(Path(d)),
+                             ['studio_enc_ws_queue', 'studio_enc_ws_time', 'studio_run_round'])
+        self.assertEqual(RUN.release2_index_names(APP), sorted(RUN.release2_index_names(APP)))
+
+    def test_the_other_tree_s_client_header_is_read_from_its_own_file(self):
+        header, version = RUN.read_client(APP)
+        self.assertEqual(header, 'X-CPT-Studio-Client')
+        self.assertTrue(version.startswith('customer-'))
+
+    def test_profile_p3_gets_two_distinct_cpus(self):
+        cores = RUN.idlest_cores(2, seconds=0.2).split(',')
+        self.assertEqual(len(set(cores)), 2)
+        self.assertTrue(all(c.isdigit() for c in cores))
 
 
 class BenchNeverShipsTests(unittest.TestCase):

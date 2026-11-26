@@ -21,7 +21,7 @@ worker codes with a fake coder that answers synthetic messages (bench_worker.py)
 instead of sending them.
 
 Instruments that lied in the measure area's prototype, and the rule each gave:
-- a server answering 500 still gave timings, so every status is asserted (a round with one unexpected status is INVALID);
+- a server answering 500 still gave timings, so every status is asserted (one unexpected status makes a round INVALID);
 - CDP counted cached worker scripts, so the server-side log (proxy.cjs, gunicorn's access log) is the truth for counts;
 - Runtime.queryObjects(ArrayBuffer.prototype) always answered 0, so heap snapshots are used;
 - CDP's CPU throttling does not slow workers, so profile P3 confines Chromium to two cores with taskset.
@@ -63,7 +63,7 @@ PLAYWRIGHT = os.environ.get('BENCH_PLAYWRIGHT', '/opt/meddoc-pro/node_modules/pl
 SLOW_STATUS_OK = {200, 201, 204, 302, 303, 304}
 
 
-# --- pure helpers: no Django, no database (ops/test_bench.py tests these) ------------------------------------------------
+# --- pure helpers: no Django, no database (ops/test_bench.py tests these) ---------------------------------------------
 
 def refusals(db: dict, coding_mode: str, base_urls=()) -> list[str]:
     """Why the bench must not run against these settings; empty when it may. ``db`` is Django's DATABASES['default']
@@ -196,7 +196,7 @@ def statuses_unexpected(lines, allowed=frozenset(SLOW_STATUS_OK)) -> dict:
     return bad
 
 
-# --- the refusal, before the test runner creates any database ------------------------------------------------------------
+# --- the refusal, before the test runner creates any database ---------------------------------------------------------
 
 def _django_settings():
     try:
@@ -213,7 +213,7 @@ if _SETTINGS is not None and os.environ.get('BENCH_PARTS'):
         raise RuntimeError('bench refused: ' + '; '.join(_why))
 
 
-# --- processes ---------------------------------------------------------------------------------------------------------------
+# --- processes --------------------------------------------------------------------------------------------------------
 
 class Env:
     """What every server of this round is started with: the tree, the throwaway database, loopback ports."""
@@ -251,9 +251,9 @@ class Web:
         environ = env.environ(**extra_env)
         environ['PYTHONPATH'] = f'{self.tree}:{HERE}'
         self.proc = subprocess.Popen(
-            [sys.executable, '-B', '-m', 'gunicorn', '-c', 'deploy/gunicorn.conf.py', '--bind', f'127.0.0.1:{self.port}',
-             '--access-logfile', str(self.log), '--access-logformat', ACCESS_FORMAT, '--error-logfile', str(self.err_path),
-             *extra, 'cptstudio.wsgi'],
+            [sys.executable, '-B', '-m', 'gunicorn', '-c', 'deploy/gunicorn.conf.py',
+             '--bind', f'127.0.0.1:{self.port}', '--access-logfile', str(self.log), '--access-logformat', ACCESS_FORMAT,
+             '--error-logfile', str(self.err_path), *extra, 'cptstudio.wsgi'],
             cwd=self.tree, env=environ, stdout=self.err, stderr=self.err, start_new_session=True)
         self.wait_ready()
 
@@ -288,8 +288,8 @@ class Web:
             for line in self.log.read_text().splitlines():
                 parts = line.split(' ')
                 if len(parts) >= 8:
-                    out.append({'pid': int(parts[0].strip('<>')), 'ms': int(parts[1]) / 1000, 'method': parts[2], 'path': parts[3],
-                                'query': parts[4], 'status': int(parts[5]),
+                    out.append({'pid': int(parts[0].strip('<>')), 'ms': int(parts[1]) / 1000, 'method': parts[2],
+                                'path': parts[3], 'query': parts[4], 'status': int(parts[5]),
                                 'bytes': int(parts[6]) if parts[6].isdigit() else 0, 'rid': parts[7]})
         return out
 
@@ -394,11 +394,12 @@ def get(base: str, path: str, timeout=60) -> dict:
     return out
 
 
-# --- the act server: bench.cjs asks the test process to change its own throwaway database mid-flow ---------------------------
+# --- the act server: bench.cjs asks the test process to change its own throwaway database mid-flow --------------------
 
 class Acts:
     """POST /act {"name": ..., ...} on 127.0.0.1. Each act runs in this thread's own connection to the bench's test
-    database, so the web sees it at once. Nothing here can reach another database: the connection is the test runner's."""
+    database, so the web sees it at once. Nothing here can reach another database: the connection is the test
+    runner's."""
 
     TRIGGER = 'bench_refuse_access'
 
@@ -493,12 +494,13 @@ class Acts:
         self.server.server_close()
 
 
-# --- the data a round needs -----------------------------------------------------------------------------------------------
+# --- the data a round needs -------------------------------------------------------------------------------------------
 
-NEEDS = {'cold': {'n100'}, 'pause': {'n100'}, 'server': {'n100', 'n1500', 'n18000'}, 'queries': {'n50', 'n5000', 'n100'},
-         'open': {'n100'}, 'lists': {'n100', 'n1500', 'n18000'}, 'office': {'n101', 'n5000'}, 'load': {'n100'},
-         'records': {'n100', 'n1500'}, 'left-behind': {'n100', 'n1500'}, 'correct': {'n100', 'n1500'}, 'walk': set(),
-         'bluegreen': {'n100'}, 'plans': set(), 'requests': set()}
+NEEDS = {
+    'cold': {'n100'}, 'pause': {'n100'}, 'server': {'n100', 'n1500', 'n18000'}, 'queries': {'n50', 'n5000', 'n100'},
+    'open': {'n100'}, 'lists': {'n100', 'n1500', 'n18000'}, 'office': {'n101', 'n5000'}, 'load': {'n100'},
+    'records': {'n100', 'n1500'}, 'left-behind': {'n100', 'n1500'}, 'correct': {'n100', 'n1500'}, 'walk': set(),
+    'bluegreen': {'n100'}, 'plans': set(), 'requests': set()}
 SIZES = {'n50': 50, 'n100': 100, 'n101': 101, 'n1500': 1500, 'n5000': 5000, 'n18000': 18000}
 RICH_IN = 'n100'
 
@@ -525,7 +527,7 @@ def seed(names, password) -> dict:
     return out
 
 
-# --- one round ----------------------------------------------------------------------------------------------------------------
+# --- one round --------------------------------------------------------------------------------------------------------
 
 try:
     from django.test import TransactionTestCase
@@ -625,12 +627,13 @@ class Bench(TransactionTestCase):
         finally:
             sampling.set()
             result['load_after'] = os.getloadavg()
-            result['load_max'] = max([result['load_before'][0], result['load_after'][0], *result.get('load_samples', [])])
+            result['load_max'] = max([result['load_before'][0], result['load_after'][0],
+                                      *result.get('load_samples', [])])
             target.write_text(json.dumps(result, indent=1, default=str))
             self.password_file.unlink(missing_ok=True)
             print(f'\nbench: wrote {target}', flush=True)
 
-    # -- helpers ----------------------------------------------------------------------------------------------------------
+    # -- helpers -------------------------------------------------------------------------------------------------------
 
     def metric(self, name, values):
         values = values if isinstance(values, list) else [values]
@@ -651,7 +654,8 @@ class Bench(TransactionTestCase):
         return Member(base, self.data[name]['username'], self.password, self.client)
 
     def warm(self, web: Web, rounds_per_worker=2, limit=60.0):
-        """Every worker has served ``rounds_per_worker`` requests (a lazily loading tree's first request is its slowest)."""
+        """Every worker has served ``rounds_per_worker`` requests (a lazily loading tree's first request is its
+        slowest)."""
         workers = max(1, len(web.pids()))
         deadline = time.time() + limit
         while time.time() < deadline:
@@ -666,7 +670,7 @@ class Bench(TransactionTestCase):
             for t in threads:
                 t.join()
 
-    # -- cold: first requests, recycling, garbage collection, the database ending connections, memory -------------------
+    # -- cold: first requests, recycling, garbage collection, the database ending connections, memory ------------------
 
     def part_cold(self):
         out = {}
@@ -795,7 +799,7 @@ class Bench(TransactionTestCase):
             web.stop()
         self.result['cold'] = out
 
-    # -- pause: a detail 62 s after the last request, each round its own session ------------------------------------------
+    # -- pause: a detail 62 s after the last request, each round its own session ---------------------------------------
 
     def part_pause(self):
         rounds = int(os.environ.get('BENCH_PAUSE_ROUNDS', '7'))
@@ -826,7 +830,7 @@ class Bench(TransactionTestCase):
         finally:
             web.stop()
 
-    # -- server: warm server times and bodies, one worker ----------------------------------------------------------------
+    # -- server: warm server times and bodies, one worker --------------------------------------------------------------
 
     def part_server(self):
         out = {}
@@ -868,7 +872,8 @@ class Bench(TransactionTestCase):
                         self.metric('server.search_nomatch.ms.18000', [round(r['ms'], 1) for r in none])
             after_big = smaps(web.pids()[0])
             out['worker_around_18000'] = {'before': before_big, 'after': after_big}
-            self.metric('server.worker.retained_after_18000', round(after_big.get('Pss', 0) - before_big.get('Pss', 0), 1))
+            retained = round(after_big.get('Pss', 0) - before_big.get('Pss', 0), 1)
+            self.metric('server.worker.retained_after_18000', retained)
             m = self.member(web.base)
             details, views = [], {}
             for d in self.docs:
@@ -899,7 +904,7 @@ class Bench(TransactionTestCase):
             web.stop()
         self.result['server'] = out
 
-    # -- queries: statements per request, in this process, with the tree's own views ---------------------------------------
+    # -- queries: statements per request, in this process, with the tree's own views -----------------------------------
 
     def part_queries(self):
         from django.db import connection
@@ -937,8 +942,8 @@ class Bench(TransactionTestCase):
                     r, later = count(c, 'GET', f'/api/encounters?list=documents&before={answer["next"]}', **api)
                     self.unexpected([r.status_code], 'queries')
                     out[f'list_later.{size}'] = classify(later)
-                r, search = count(c, 'POST', '/api/encounters/search', data=json.dumps({'text': 'note', 'before': None}),
-                                  **api)
+                r, search = count(c, 'POST', '/api/encounters/search',
+                                  data=json.dumps({'text': 'note', 'before': None}), **api)
                 if r.status_code == 200:
                     out[f'search.{size}'] = classify(search)
                 out[f'search_status.{size}'] = r.status_code
@@ -946,7 +951,8 @@ class Bench(TransactionTestCase):
             enc = self.docs_by_label['text-4p']['id']
             for label, method, path, extra in (
                     ('shell', 'GET', '/', {}), ('session', 'GET', '/api/session', api),
-                    ('detail', 'GET', f'/api/encounters/{enc}', api), ('detail_again', 'GET', f'/api/encounters/{enc}', api),
+                    ('detail', 'GET', f'/api/encounters/{enc}', api),
+                    ('detail_again', 'GET', f'/api/encounters/{enc}', api),
                     ('poll', 'GET', f'/api/encounters/{enc}', {**api, 'HTTP_X_CPT_POLL': '1'}),
                     ('view', 'GET', f'/api/encounters/{enc}/original?view=1', {'HTTP_X_CPT_POLL': '1'})):
                 r, sql = count(c, method, path, **extra)
@@ -961,7 +967,7 @@ class Bench(TransactionTestCase):
                 self.metric(f'queries.{key}.builder', value['builder'])
         self.result['queries'] = out
 
-    # -- load: throughput, and a session read behind two sign-ins and one report PDF ---------------------------------------
+    # -- load: throughput, and a session read behind two sign-ins and one report PDF -----------------------------------
 
     def part_load(self):
         from concurrent.futures import ThreadPoolExecutor
@@ -970,7 +976,8 @@ class Bench(TransactionTestCase):
         try:
             self.warm(web)
             m = self.member(web.base)
-            paths = [f'/api/encounters/{self.docs_by_label[x]["id"]}' for x in ('text-2p', 'text-4p', 'text-10p', 'word-3p')]
+            paths = [f'/api/encounters/{self.docs_by_label[x]["id"]}'
+                     for x in ('text-2p', 'text-4p', 'text-10p', 'word-3p')]
             serial = [m.req('GET', paths[i % 4], api=True) for i in range(24)]
             self.unexpected([r['status'] for r in serial], 'load')
             out['serial_detail_ms'] = median([r['ms'] for r in serial])
@@ -1003,7 +1010,8 @@ class Bench(TransactionTestCase):
                               body=json.dumps({'kind': 'draft', 'fmt': 'pdf', 'round': 1}),
                               headers={'Content-Type': 'application/json'})
                     statuses.append(r['status'])
-                busy = [threading.Thread(target=sign_in), threading.Thread(target=sign_in), threading.Thread(target=report)]
+                busy = [threading.Thread(target=sign_in), threading.Thread(target=sign_in),
+                        threading.Thread(target=report)]
                 for t in busy:
                     t.start()
                 time.sleep(0.03)
@@ -1022,7 +1030,7 @@ class Bench(TransactionTestCase):
             web.stop()
         self.result['load'] = out
 
-    # -- requests (R2-3): what the coder is sent, as hashes, for fixed synthetic documents ---------------------------------
+    # -- requests (R2-3): what the coder is sent, as hashes, for fixed synthetic documents -----------------------------
 
     def part_requests(self):
         from unittest import mock
@@ -1033,7 +1041,8 @@ class Bench(TransactionTestCase):
         ws = f.workspace('Bench requests')
         user = f.member(ws)
         cases = [('pdf-text', dict(data=bd.text_pdf(2, 101, 1), filename='a.pdf', media_type='application/pdf')),
-                 ('pdf-scan', dict(data=bd.scan_pdf(1, 104, 4, dpi=60), filename='s.pdf', media_type='application/pdf')),
+                 ('pdf-scan', dict(data=bd.scan_pdf(1, 104, 4, dpi=60), filename='s.pdf',
+                                   media_type='application/pdf')),
                  ('text', dict(data=b'SYNTHETIC NOTE polyp removed by cold snare.', filename='n.txt',
                                media_type='text/plain')),
                  ('paste', None)]
@@ -1051,7 +1060,7 @@ class Bench(TransactionTestCase):
         self.result['requests'] = rows
         self.check('requests.recorded', len(rows) >= 8, rows=len(rows))
 
-    # -- the browser parts ------------------------------------------------------------------------------------------------
+    # -- the browser parts ---------------------------------------------------------------------------------------------
 
     def browser(self, flow, profile, *, size='n100', label=None, allowed=frozenset(SLOW_STATUS_OK), limit=1800,
                 web_args=(), extra=()):
@@ -1074,7 +1083,8 @@ class Bench(TransactionTestCase):
             env = {**os.environ, 'TMPDIR': os.environ.get('TMPDIR', str(self.raw))}
             started = time.time()
             done = subprocess.run(cmd, capture_output=True, text=True, timeout=limit, env=env)
-            (self.raw / f'browser-{label}.log').write_text(done.stdout[-20000:] + '\n--- stderr\n' + done.stderr[-20000:])
+            (self.raw / f'browser-{label}.log').write_text(
+                done.stdout[-20000:] + '\n--- stderr\n' + done.stderr[-20000:])
             data = json.loads(out.read_text()) if out.exists() else {'errors': ['no output'], 'metrics': {}}
             data['_rc'], data['_s'] = done.returncode, round(time.time() - started, 1)
             if done.returncode:
@@ -1114,7 +1124,8 @@ class Bench(TransactionTestCase):
                         door[kind] = [r[:2] if isinstance(r, list) else r.split(' ')[:2] for r in (req or [])]
                 self.result['front_door'] = door
             self.headers_audit(entries, f'open-{profile}')
-            barcodes = [(a['label'], a['number'], (a.get('barcode') or {}).get('number')) for a in data.get('actions', [])
+            barcodes = [(a['label'], a['number'], (a.get('barcode') or {}).get('number'))
+                        for a in data.get('actions', [])
                         if a.get('firstPage') is not None and a.get('label') in self.docs_by_label]
             self.result.setdefault('barcodes', []).extend(barcodes)
         bad = [b for b in self.result.get('barcodes', []) if b[1] != b[2]]
@@ -1136,7 +1147,7 @@ class Bench(TransactionTestCase):
         office['vhost_zones'] = vhost_zones(self.tree)
         self.result['office'] = office
 
-    # -- records (M4): every read served is recorded, once, before its pixels; fail closed; no marker anywhere ----------
+    # -- records (M4): every read served is recorded, once, before its pixels; fail closed; no marker anywhere ---------
 
     def part_records(self):
         from studio import models
@@ -1146,7 +1157,8 @@ class Bench(TransactionTestCase):
             repeats_before = dict(models.AccessRecordRepeat.objects.values_list('record_id', 'repeats'))
             data, entries, lines = self.browser('records', 'P0', size=size, label=f'records-{size}')
             rows = list(models.AccessRecord.objects.order_by('created_at', 'id').values(
-                'view', 'encounter_ids', 'count', 'filters', 'request_id', 'created_at', 'outcome', 'sign_in_ref')[since:])
+                'view', 'encounter_ids', 'count', 'filters', 'request_id', 'created_at', 'outcome',
+                'sign_in_ref')[since:])
             for row in rows:
                 row['created_at'] = row['created_at'].timestamp() * 1000
                 row['sign_in_ref'] = str(row['sign_in_ref'])
@@ -1167,13 +1179,14 @@ class Bench(TransactionTestCase):
         self.result['records'] = judged
 
     def part_left_behind(self):
-        data, entries, lines = self.browser('left-behind', 'P0', label='left-behind', allowed=frozenset(range(100, 600)))
+        data, entries, lines = self.browser('left-behind', 'P0', label='left-behind',
+                                            allowed=frozenset(range(100, 600)))
         self.headers_audit(entries, 'left-behind')
 
     def part_correct(self):
         self.browser('correct', 'P0', label='correct', allowed=frozenset(range(100, 600)))
 
-    # -- walk (M9): the tree's own walk over its web, its worker (a fake coder) and the admin host ------------------------
+    # -- walk (M9): the tree's own walk over its web, its worker (a fake coder) and the admin host ---------------------
 
     def part_walk(self):
         from studio import models
@@ -1227,7 +1240,7 @@ class Bench(TransactionTestCase):
             web.stop()
             creds.unlink(missing_ok=True)
 
-    # -- blue/green (M12): one open page's upstream flipped between the two releases; release 1's web on this schema ----
+    # -- blue/green (M12): one open page's upstream flipped between the two releases; release 1's web on this schema ---
 
     def part_bluegreen(self):
         other = Path(os.environ.get('BENCH_OTHER_TREE', '')).resolve() / 'cpt-studio'
@@ -1249,7 +1262,8 @@ class Bench(TransactionTestCase):
                    '--password-file', str(self.password_file), '--out', str(out), '--playwright', PLAYWRIGHT,
                    '--size', 'n100', '--web-mine', str(mine.port), '--web-other', str(theirs.port)]
             done = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
-            (self.raw / 'browser-bluegreen.log').write_text(done.stdout[-20000:] + '\n--- stderr\n' + done.stderr[-20000:])
+            (self.raw / 'browser-bluegreen.log').write_text(
+                done.stdout[-20000:] + '\n--- stderr\n' + done.stderr[-20000:])
             data = json.loads(out.read_text()) if out.exists() else {'errors': ['no output']}
             self.result['checks'].update(data.get('checks', {}))
             for message in data.get('errors', []):
@@ -1301,7 +1315,7 @@ class Bench(TransactionTestCase):
         return not wrong and not any(v >= 500 for v in got.values()), {'statuses': got, 'wrong': wrong,
                                                                       'migrations_beyond_the_other': extra}
 
-    # -- plans (M14): the changed reads at 18,000 documents, 36,000 runs and 200,000 access records -------------------------
+    # -- plans (M14): the changed reads at 18,000 documents, 36,000 runs and 200,000 access records --------------------
 
     def part_plans(self):
         out = {'release_2_indexes': release2_index_names(self.tree)}
@@ -1313,7 +1327,8 @@ class Bench(TransactionTestCase):
         out['reads'] = explain_changed_reads(self, big)
         seq = [r for r in out['reads'] if r['seq_scans']]
         slow = [r for r in out['reads'] if r['ms'] > 20]
-        self.check('plans.no_seq_scan', bool(out['reads']) and not seq, scans=[(r['read'], r['seq_scans']) for r in seq])
+        self.check('plans.no_seq_scan', bool(out['reads']) and not seq,
+                   scans=[(r['read'], r['seq_scans']) for r in seq])
         self.check('plans.reads_20ms', bool(out['reads']) and not slow, slow=[(r['read'], r['ms']) for r in slow])
         builds = out['index_build_big_ms'] | {f'live:{k}': v for k, v in out['index_build_live_ms'].items()}
         self.check('plans.index_build', bool(out['release_2_indexes'])
@@ -1338,7 +1353,8 @@ class Bench(TransactionTestCase):
         not_no_store, hashed, bad_etag = [], [], []
         for e in entries:
             path = e['url'].split('?', 1)[0]
-            headers = {k.lower(): (v if isinstance(v, str) else ','.join(v)) for k, v in e.get('resHeaders', {}).items()}
+            headers = {k.lower(): (v if isinstance(v, str) else ','.join(v))
+                       for k, v in e.get('resHeaders', {}).items()}
             if e['status'] in (200, 304) and not path.startswith('/static/') and 'no-store' not in headers.get(
                     'cache-control', ''):
                 not_no_store.append(f'{e["method"]} {path} {e["status"]}')
@@ -1359,7 +1375,7 @@ class Bench(TransactionTestCase):
 EXPECTED_EXTRA = set()  # (method, url, status) answers a flow expects beyond the allowed statuses
 
 
-# --- module helpers -----------------------------------------------------------------------------------------------------------
+# --- module helpers ---------------------------------------------------------------------------------------------------
 
 def idlest_cores(n: int, seconds: float = 1.5) -> str:
     """The ``n`` CPUs with the most idle time over ``seconds`` (profile P3 confines Chromium to them; a shared host's
@@ -1375,7 +1391,8 @@ def idlest_cores(n: int, seconds: float = 1.5) -> str:
     first = sample()
     time.sleep(seconds)
     second = sample()
-    idle = {cpu: (second[cpu][0] - first[cpu][0]) / max(1, second[cpu][1] - first[cpu][1]) for cpu in second if cpu in first}
+    idle = {cpu: (second[cpu][0] - first[cpu][0]) / max(1, second[cpu][1] - first[cpu][1])
+            for cpu in second if cpu in first}
     return ','.join(str(cpu) for cpu in sorted(sorted(idle, key=idle.get, reverse=True)[:n]))
 
 
@@ -1478,12 +1495,12 @@ def vhost_zones(tree: Path) -> dict:
              re.finditer(r'limit_req_zone\s+\$(\S+)\s+zone=(\w+):\S+\s+rate=(\S+?);', text)}
     for m in re.finditer(r'limit_req\s+zone=(\w+)\s+burst=(\d+)', text):
         zones.setdefault(m.group(1), {})['burst'] = int(m.group(2))
-    maps = {m.group(1): m.group(2) for m in re.finditer(r'map\s+"\$cpt_exempt:\$request_method \$uri"\s+\$(\w+)\s*\{(.*?)\}',
-                                                       text, re.S)}
+    key_map = r'map\s+"\$cpt_exempt:\$request_method \$uri"\s+\$(\w+)\s*\{(.*?)\}'
+    maps = {m.group(1): m.group(2) for m in re.finditer(key_map, text, re.S)}
     return {'zones': zones, 'maps': maps}
 
 
-# --- the gate parts' judgements and probes (records, markers, the other tree, plans) -------------------------------------------
+# --- the gate parts' judgements and probes (records, markers, the other tree, plans) ----------------------------------
 
 UUID_RE = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
@@ -1586,7 +1603,8 @@ def marker_audit(raw: Path, word: str):
 def read_client(tree: Path) -> tuple[str, str]:
     """Another tree's client header and version, read from its own studio/client_contract.py (never written here)."""
     text = (tree / 'studio' / 'client_contract.py').read_text()
-    return (re.search(r"^HEADER = '([^']+)'", text, re.M).group(1), re.search(r"^VERSION = '([^']+)'", text, re.M).group(1))
+    header = re.search(r"^HEADER = '([^']+)'", text, re.M).group(1)
+    return header, re.search(r"^VERSION = '([^']+)'", text, re.M).group(1)
 
 
 def get_with_host(base: str, path: str, host: str) -> dict:
@@ -1637,7 +1655,8 @@ def plans_seed(password: str, *, documents: int, runs_per: int, records: int, na
 
 
 def rebuild_indexes(names: list) -> dict:
-    """{index: ms}: each index dropped and built again by its own definition (pg_indexes), at the database's size now."""
+    """{index: ms}: each index dropped and built again by its own definition (pg_indexes), at the database's size
+    now."""
     from django.db import connection
     out = {}
     with connection.cursor() as cur:
@@ -1760,7 +1779,7 @@ def explain_changed_reads(bench, big: dict) -> list:
     return out
 
 
-# --- the protocol: trees in a declared, interleaved order ------------------------------------------------------------------
+# --- the protocol: trees in a declared, interleaved order -------------------------------------------------------------
 
 def driver(argv=None) -> int:
     """Run rounds in order, one part group at a time: for each group, every TAG:ROUND of --order in turn, so the trees
@@ -1780,7 +1799,8 @@ def driver(argv=None) -> int:
                              'the 5-minute load at most 8')
     parser.add_argument('--wait-minutes', type=int, default=90)
     parser.add_argument('--retries', type=int, default=2,
-                        help='a round whose load passed 8 (the judge\'s INVALID) is run again as round + 100, this often')
+                        help='a round whose load passed 8 (the judge\'s INVALID) is run again as round + 100, '
+                             'this often')
     args = parser.parse_args(argv)
     trees = dict(item.split('=', 1) for item in args.tree)
     order = [(tag, int(n)) for tag, n in (item.split(':') for item in args.order.split(','))]
@@ -1801,7 +1821,8 @@ def driver(argv=None) -> int:
             for attempt in range(args.retries + 1):
                 round_no = first_round + 100 * attempt
                 waited = 0
-                while (os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and waited < args.wait_minutes * 60:
+                while (os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and \
+                        waited < args.wait_minutes * 60:
                     time.sleep(30)
                     waited += 30
                 env = {**os.environ, 'BENCH_TAG': tag, 'BENCH_ROUND': str(round_no), 'BENCH_PARTS': group,

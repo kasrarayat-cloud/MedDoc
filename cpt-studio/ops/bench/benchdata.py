@@ -29,15 +29,15 @@ BITS = 12
 SQUARES = BITS + 3  # start, 12 bits, parity, stop
 BAR_X0, BAR_PITCH, BAR_SIZE, BAR_Y = 56, 14, 10, 772  # square i spans x0 + pitch*i .. + size, y .. y + size
 WORDS = ('colonoscopy cecum reached withdrawal time minutes boston bowel preparation scale polyp sessile ascending '
-         'transverse descending sigmoid rectum cold snare polypectomy retrieved biopsy forceps hemostasis clip erythema '
-         'mucosa diverticulosis internal hemorrhoids retroflexion terminal ileum intubated sedation propofol monitored '
-         'anesthesia care indication screening surveillance history adenoma recommendation repeat interval pathology '
-         'follow-up patient tolerated procedure well no immediate complications').split()
+         'transverse descending sigmoid rectum cold snare polypectomy retrieved biopsy forceps hemostasis clip '
+         'erythema mucosa diverticulosis internal hemorrhoids retroflexion terminal ileum intubated sedation '
+         'propofol monitored anesthesia care indication screening surveillance history adenoma recommendation '
+         'repeat interval pathology follow-up patient tolerated procedure well no immediate complications').split()
 QUOTE = 'the synthetic polyp was removed by cold snare and retrieved.'
 DOCX_MEDIA = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 
-# --- the barcode ---------------------------------------------------------------------------------------------------------
+# --- the barcode ------------------------------------------------------------------------------------------------------
 
 def barcode_bits(number: int) -> list[int]:
     """The 15 squares for ``number`` (1..4095): 1 = dark."""
@@ -75,7 +75,7 @@ def _squares(number):
             yield BAR_X0 + BAR_PITCH * i, BAR_Y, BAR_SIZE, BAR_SIZE
 
 
-# --- the bytes -------------------------------------------------------------------------------------------------------------
+# --- the bytes --------------------------------------------------------------------------------------------------------
 
 def sentence(rng: random.Random, n: int) -> str:
     return (' '.join(rng.choice(WORDS) for _ in range(n)) + '.').capitalize()
@@ -253,7 +253,7 @@ def all_bytes() -> bytes:
     return out.getvalue()
 
 
-# --- the rows (Django; only ever in the bench's throwaway test database) ----------------------------------------------------
+# --- the rows (Django; only ever in the bench's throwaway test database) ----------------------------------------------
 
 STATE_MIX = ['ready'] * 30 + ['needs_review'] * 15 + ['awaiting_answer'] * 5 + ['failed'] * 30 + ['no_codes'] * 20 + [
     'reviewed'] * 900  # a live-like mix of today's derived states, as the measure area's prototype used
@@ -293,7 +293,8 @@ def practice(name: str, rows: int, password: str, *, seed: int):
     with connection.cursor() as cur:
         cur.execute('UPDATE studio_encounter e SET current_revision_id = r.id FROM studio_sourcerevision r '
                     'WHERE r.encounter_id = e.id AND e.workspace_id = %s', [ws.pk])
-        cur.execute("UPDATE studio_encounter e SET created_at = now() - interval '1 hour' - (n.k * interval '25 minutes') "
+        cur.execute("UPDATE studio_encounter e "
+                    "SET created_at = now() - interval '1 hour' - (n.k * interval '25 minutes') "
                     'FROM (SELECT id, row_number() OVER (ORDER BY title DESC) k FROM studio_encounter '
                     'WHERE workspace_id = %s) n WHERE n.id = e.id', [ws.pk])
     return ws, user
@@ -305,7 +306,8 @@ def _codes(pages: int):
     for n in range(1, 10):
         line = f'L{n}'
         status = ['ready', 'needs_review', 'not_supported'][n % 3]
-        reason = 'The synthetic note documents this service in the findings and the impression, with its technique. ' * 3
+        reason = ('The synthetic note documents this service in the findings and the impression, with its '
+                  'technique. ') * 3
         check = {'agrees': True, 'verdict': 'agree', 'reason': 'Agreed on the same passages. ' * 4, 'question': None,
                  'correct_code': f'4538{n}', 'correct_units': 1, 'correct_modifiers': [], 'correct_status': status,
                  'evidence': [], 'reviews': 1, 'unmatched': 0, 'unplaced': 0}
@@ -328,8 +330,9 @@ def add_rich(ws, user, spec: dict, *, order: int):
         id=uuid.uuid5(NS, f'rich:{ws.pk}:{spec["label"]}'), workspace=ws, title=f'Rich {spec["label"]}',
         created_by=user, user_values={'service_date': '2026-11-02', 'insurance': 'medicare'}, state='ready')
     name, digest, size = storage.store_original(ws.pk, files['data'], files['filename'])
-    src = models.SourceFile.objects.create(encounter=enc, original_name=files['filename'], media_type=files['media_type'],
-                                           size=size, sha256=digest, storage_name=name, uploaded_by=user)
+    src = models.SourceFile.objects.create(encounter=enc, original_name=files['filename'],
+                                           media_type=files['media_type'], size=size, sha256=digest,
+                                           storage_name=name, uploaded_by=user)
     rev = models.SourceRevision.objects.create(encounter=enc, number=1, kind='upload', source_file=src,
                                                synthetic_attested_by=user, synthetic_attested_at=timezone.now(),
                                                created_by=user)
@@ -360,8 +363,8 @@ def reconvert(enc, spec: dict):
     from django.utils import timezone
     from studio import models, storage
     last = models.CodingRound.objects.filter(encounter=enc).order_by('-number').first()
-    vname, vdigest, _ = storage.store_original(enc.workspace_id, text_pdf(spec['pages'], spec['renumber'], spec['seed']),
-                                               'converted.pdf')
+    view = text_pdf(spec['pages'], spec['renumber'], spec['seed'])
+    vname, vdigest, _ = storage.store_original(enc.workspace_id, view, 'converted.pdf')
     now = timezone.now()
     return models.CodingRound.objects.create(
         encounter=enc, revision=last.revision, number=last.number + 1, trigger='retry', context={}, state='done',

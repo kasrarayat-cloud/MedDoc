@@ -1,7 +1,7 @@
-"""The walk's worker (RELEASE-2-SPEC R2-32, the walk part): the measured tree's own `run_worker` over the tree's own fake
-coder (tests.support), which answers synthetic reader and checker messages. Every stage but the paid send is the shipped
-code; nothing is sent to any vendor: the coder object is replaced before the worker starts, and bench_settings refuses
-any CODING_MODE but 'disabled'.
+"""The walk's worker (RELEASE-2-SPEC R2-32, the walk part): the measured tree's own `run_worker` over the tree's own
+fake coder (tests.support), which answers synthetic reader and checker messages. Every stage but the paid send is the
+shipped code; nothing is sent to any vendor: the coder object is replaced before the worker starts, and bench_settings
+refuses any CODING_MODE but 'disabled'.
 
     DJANGO_SETTINGS_MODULE=bench_settings PYTHONPATH=<tree>:<this folder> python -B bench_worker.py
 

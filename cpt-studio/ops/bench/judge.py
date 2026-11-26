@@ -33,7 +33,7 @@ MAX_LOAD = 8.0
 A_TOLERANCE = 0.20
 
 
-# --- reading rounds ------------------------------------------------------------------------------------------------------------
+# --- reading rounds ---------------------------------------------------------------------------------------------------
 
 def load_rounds(out: Path) -> dict:
     """{tag: {round: merged}}: every round file of the folder, the files of one tag and round merged."""
@@ -95,7 +95,7 @@ def stat(values, how='median'):
     raise ValueError(how)
 
 
-# --- the A/A spread and the floors (C5) -------------------------------------------------------------------------------------
+# --- the A/A spread and the floors (C5) -------------------------------------------------------------------------------
 
 def spread(first: dict, second: dict, how='median') -> dict:
     """{metric: |m1 - m2| / mean(m1, m2)} over the metrics both runs measured (0 when both medians are 0)."""
@@ -133,7 +133,7 @@ def needs_floor(gate: dict) -> bool:
         'abs_max' not in gate
 
 
-# --- one row ------------------------------------------------------------------------------------------------------------------
+# --- one row ----------------------------------------------------------------------------------------------------------
 
 def a_column_close(a_now, a_section8) -> bool:
     """Release 1's own value is within 20% of section 8's A column (a number, or a [low, high] range)."""
@@ -212,7 +212,8 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
             out['verdict'], out['why'] = 'FAIL', [f'{out["b"]} round trips > {row["max"]}']
         return out
     if len(b_values) < need or (row.get('needs_a') and len(a_values) < need):
-        return {**out, 'verdict': 'INVALID', 'why': [f'too few samples (A {len(a_values)}, B {len(b_values)}, need {need})']}
+        return {**out, 'verdict': 'INVALID',
+                'why': [f'too few samples (A {len(a_values)}, B {len(b_values)}, need {need})']}
     if not control and row.get('a_section8') is not None and row.get('needs_a', True) and a is not None and \
             not a_column_close(a, row['a_section8']):
         return {**out, 'verdict': 'INVALID', 'why': [f'A {a} is more than 20% from section 8\'s A {row["a_section8"]}']}
@@ -247,7 +248,8 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
                 limit = max(limit, floor)
             limits.append(('max', limit, f'{factor} A + {plus}'))
     for direction, limit, label in limits:
-        if (direction == 'max' and b > limit) or (direction == 'min' and b < limit) or (direction == 'eq' and b != limit):
+        if (direction == 'max' and b > limit) or (direction == 'min' and b < limit) or \
+                (direction == 'eq' and b != limit):
             out['verdict'] = 'FAIL'
             out['why'].append(f'{b} vs {label} limit {round(limit, 2)}')
     out['limits'] = [[d, round(v, 2), lab] for d, v, lab in limits]
@@ -258,11 +260,12 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
         gain = None if not a else ((b / a - 1) if row.get('gain_direction') == 'up' else (1 - b / a))
         if gain is None or gain <= 2 * s:
             out['verdict'] = 'FAIL'
-            out['why'].append(f'the gain {None if gain is None else round(gain, 3)} does not exceed twice the A/A spread {s}')
+            shown = None if gain is None else round(gain, 3)
+            out['why'].append(f'the gain {shown} does not exceed twice the A/A spread {s}')
     return out
 
 
-# --- the verdict ----------------------------------------------------------------------------------------------------------------
+# --- the verdict ------------------------------------------------------------------------------------------------------
 
 def invalid_reasons(rounds: dict, tags, *, control: bool, controls: list) -> list:
     why = []
@@ -276,7 +279,8 @@ def invalid_reasons(rounds: dict, tags, *, control: bool, controls: list) -> lis
             if r['unexpected_statuses']:
                 why.append(f'{where}: unexpected statuses {r["unexpected_statuses"]}')
             if r['console_errors']:
-                why.append(f'{where}: {len(r["console_errors"])} console error(s), first: {r["console_errors"][0][:120]}')
+                first = r['console_errors'][0][:120]
+                why.append(f'{where}: {len(r["console_errors"])} console error(s), first: {first}')
             if r['blocked_requests']:
                 why.append(f'{where}: requests left loopback: {r["blocked_requests"][:3]}')
             peaks = [load[0] for load in r['loads'] if load] + r.get('load_max', [])
@@ -310,7 +314,7 @@ def verdict(rounds: dict, table: dict, a: str, b: str, *, control: bool = False)
     return {'verdict': answer, 'invalid': why, 'rows': rows}
 
 
-# --- the office model: arithmetic against the vhost's zones (section 8) ---------------------------------------------------------
+# --- the office model: arithmetic against the vhost's zones (section 8) -----------------------------------------------
 
 def rate_per_ms(rate: str) -> float:
     m = re.fullmatch(r'(\d+)r/([sm])', rate)
@@ -382,8 +386,10 @@ def office_429s(zones: dict, requests: list) -> dict:
         if 'burst' not in spec or 'rate' not in spec:
             continue
         key = spec['key']
-        times = [t for t, method, path in requests if key in zone_of(zones['maps'], method, path)] if key != 'cpt_all_key' \
-            else [t for t, method, path in requests]
+        if key == 'cpt_all_key':
+            times = [t for t, method, path in requests]
+        else:
+            times = [t for t, method, path in requests if key in zone_of(zones['maps'], method, path)]
         out[zone] = limit_req(times, rate_per_ms(spec['rate']), spec['burst'])
     return out
 
@@ -415,7 +421,7 @@ def judge_office(row: dict, b_rounds: dict, table_office: dict | None) -> dict:
     return out
 
 
-# --- command line -----------------------------------------------------------------------------------------------------------------
+# --- command line -----------------------------------------------------------------------------------------------------
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
