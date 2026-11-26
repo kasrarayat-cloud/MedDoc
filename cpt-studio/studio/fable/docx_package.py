@@ -555,13 +555,17 @@ def _names(*local_names):
 
 
 # The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
-# with one dictionary lookup. A w:subDoc shares the w:altChunk's role (R2-28 step 5); a w:pict is read for R2-29 only.
-_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION, _PICT = range(11)
+# with one dictionary lookup. A w:subDoc shares the w:altChunk's role (R2-28 step 5); a w:pict is read for R2-29 only;
+# a mark - a note's reference, which brings the note's words, or a non-breaking hyphen - is what a reader sees in a
+# stored result besides text and a symbol, and is read past in an instruction (refutation round 2, loss[4]).
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION, _PICT, \
+    _MARK = range(12)
 _ROLES = {name: role for role, local_names in (
     (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
     (_ALTCHUNK, ('altChunk', 'subDoc')), (_POINTER, ('objectEmbed', 'objectLink')),
     (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')),
-    (_DELETION, ('del', 'moveFrom')), (_PICT, ('pict',)))
+    (_DELETION, ('del', 'moveFrom')), (_PICT, ('pict',)),
+    (_MARK, ('footnoteReference', 'endnoteReference', 'noBreakHyphen')))
     for name in _names(*local_names)}
 # Text a tracked change deleted: these elements inside a w:del or w:moveFrom (repair round 1, C5: see _Field).
 _DELETED_TEXT = _names('delInstrText', 'delText')
@@ -604,7 +608,8 @@ def _is_picture(data: bytes) -> bool:
         return len(data) >= 18 and int.from_bytes(data[14:18], 'little') in _BMP_HEADER_SIZES \
             and (data[6:10] == bytes(4) or data[14] in (12, 40))
     return data.startswith(_PICTURE_SIGNATURES)
-# R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object.
+# R2-30's fallback: what a reader sees in a field's stored result besides text - a picture, a drawing, an object (a
+# symbol and a mark: _PartReader._role_starts).
 _SHOWN = _names('drawing', 'pict', 'object')
 # outer types whose stored result 7.4 keeps with release 1's edit (R2-30): HYPERLINK and TOC, and QUOTE and STYLEREF
 # (the lead's 7.4 run on lane D's corpus inputs H7f and H7g, refutation round 1); any other type, an unknown name
@@ -741,7 +746,8 @@ class _Field:
         self.holds_removed = self.watched = self.result_shown = False
         self.simple = 0
         # refutation round 1, loss[1]: an INCLUDEPICTURE (read at its first separate), and whether its own stored
-        # result shows text or a symbol - then it is no picture alone, and stays a field (R2-30's QUOTE)
+        # result shows text, a symbol or a mark (round 2, loss[4]) - then it is no picture alone, and stays a field
+        # (R2-30's QUOTE)
         self.picture = self.text_shown = False
 
     def feed(self, text, name=None, deleted=False):
@@ -784,9 +790,10 @@ class _Field:
         return self._types() == {_PICTURE_TYPE}
 
     def picture_alone(self) -> bool:
-        """INCLUDEPICTURE whose stored result shows no text and no symbol: a picture, which LibreOffice draws wherever
-        it stands, so it is unwrapped as release 1 unwraps it (refutation round 1, loss[1]: one whose result shows text
-        lost that text once unwrapped inside a kept field's result)."""
+        """INCLUDEPICTURE whose stored result shows no text, no symbol and no mark: a picture, which LibreOffice draws
+        wherever it stands, so it is unwrapped as release 1 unwraps it (refutation round 1, loss[1]: one whose result
+        shows text lost that text once unwrapped inside a kept field's result; round 2, loss[4]: one whose result
+        holds a note's reference lost the note's words, a non-breaking hyphen its hyphen)."""
         return self.names_a_picture() and not self.text_shown
 
     def loses_its_result(self) -> bool:
@@ -830,7 +837,7 @@ class _PartReader:
         self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
         self.watched = 0  # open fields whose result is read for R2-30's fallback
         self.simple = 0  # open w:fldSimple elements (refutation round 1, refuse[1])
-        self.simple_pictures = []  # open w:fldSimple INCLUDEPICTUREs: [element, its result shows text or a symbol]
+        self.simple_pictures = []  # open w:fldSimple INCLUDEPICTUREs: [element, its result shows text, symbol, mark]
         self.text_field = self.text_name = self.parser = self.shown_field = None
         self.shown_picture = self.shown_simple = None  # the INCLUDEPICTURE whose result the text being read stands in
         self.nested_removal = self.text_deleted = False
@@ -954,9 +961,10 @@ class _PartReader:
                     self.parser.CharacterDataHandler = self._shown_text
         elif role == _DELETION:
             self.deletions += 1
-        elif open_type:  # a symbol stands for its character, a tab or a break for white space
-            field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
-        elif role == _SYMBOL:
+        elif open_type:  # a symbol stands for its character, a tab or a break for white space; a mark is read past
+            if role != _MARK:
+                field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
+        elif role in (_SYMBOL, _MARK):  # in a stored result: a reader sees it (a mark: refutation round 2, loss[4])
             if field is not None and field.watched and self.simple <= field.simple:
                 field.result_shown = True
             if field is not None and field.picture:

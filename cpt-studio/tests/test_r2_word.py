@@ -858,6 +858,7 @@ class CharacterReferenceTests(ReleaseOneCase):
 # --- R2-30: a removed field inside another field's result stays a field ----------------------------------------------
 
 QUOTE_BEGIN = '<w:r><w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>'
+NOTE_REFERENCE = '<w:r><w:footnoteReference w:id="2"/></w:r>'  # refutation round 2, loss[4]: it brings the note
 
 
 def document_part(data):
@@ -982,6 +983,14 @@ class FieldShellTests(ReleaseOneCase):
             'an empty simple field in an IF result': package(BEFORE + p(
                 fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), '<w:fldSimple w:instr=\' INCLUDETEXT x \'/>',
                 fc('end')) + AFTER),
+            # refutation round 2, loss[4]: a note's reference outside the INCLUDEPICTURE is the IF's own (a picture
+            # alone stays unwrapped); in an instruction a reference is read past, so 'LI' + reference + 'NK' is LINK
+            'INCLUDEPICTURE a picture alone, a note\'s reference beside it in the IF result': package(BEFORE + p(
+                fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), picture, NOTE_REFERENCE, fc('end')) + AFTER,
+                (rel('rIdPrev', 'image', 'media/image1.emf'),), (('word/media/image1.emf', EMF),)),
+            'a note\'s reference in a removed field\'s instruction': package(BEFORE + p(
+                fc('begin'), instr(' LI'), NOTE_REFERENCE, instr('NK Excel.Sheet.12 "c:\\\\SECRET.xlsx" '),
+                fc('separate'), t('LINKED'), fc('end')) + AFTER),
         }
         for label, data in cases.items():
             with self.subTest(label):
@@ -1000,7 +1009,23 @@ class FieldShellTests(ReleaseOneCase):
                 ('a complex one with a caption beside its picture, in a complex IF', picture.replace(
                     fc('separate') + '<w:r><w:pict>', fc('separate') + t('CAPTION') + '<w:r><w:pict>'), None),
                 ('a complex one whose result is a symbol', fc('begin') + instr(' INCLUDEPICTURE "SECRET.png" ')
-                 + fc('separate') + symbol + fc('end'), None)):
+                 + fc('separate') + symbol + fc('end'), None),
+                # refutation round 2, loss[4]: a note's reference brings the note's words, a non-breaking hyphen shows;
+                # unwrapped into the IF's result, LibreOffice dropped them with it
+                ('a picture and a footnote reference', picture.replace(
+                    '</w:pict></w:r>' + fc('end'), '</w:pict></w:r>' + NOTE_REFERENCE + fc('end')), None),
+                ('a picture and an endnote reference', picture.replace(
+                    '</w:pict></w:r>' + fc('end'), '</w:pict></w:r><w:r><w:endnoteReference w:id="2"/></w:r>'
+                    + fc('end')), None),
+                ('a footnote reference alone', fc('begin') + instr(' INCLUDEPICTURE "SECRET.png" ') + fc('separate')
+                 + NOTE_REFERENCE + fc('end'), None),
+                ('a simple one holding a picture and a footnote reference, in a simple IF',
+                 '<w:fldSimple w:instr=\' INCLUDEPICTURE "x" \'><w:r><w:pict>' + SHAPETYPE + vshape()
+                 + '</w:pict></w:r>' + NOTE_REFERENCE + '</w:fldSimple>',
+                 '<w:fldSimple w:instr=" QUOTE "><w:r><w:pict>' + SHAPETYPE + vshape() + '</w:pict></w:r>'
+                 + NOTE_REFERENCE + '</w:fldSimple>'),
+                ('a picture and a non-breaking hyphen', picture.replace(
+                    '</w:pict></w:r>' + fc('end'), '</w:pict></w:r><w:r><w:noBreakHyphen/></w:r>' + fc('end')), None)):
             with self.subTest(f'INCLUDEPICTURE with text: {label}'):
                 outer = (p('<w:fldSimple w:instr=" IF 1 = 1 ">', inner, '</w:fldSimple>') if shell is not None
                          else p(fc('begin'), instr(' IF 1 = 1 "a" "b" '), fc('separate'), inner, fc('end')))
@@ -1056,6 +1081,12 @@ def fallback_shapes():
         # refutation round 1, refuse[1]: a w:fldSimple in the result is a field of it, as a complex one is
         ('outer IF, its stored result text beside a simple field', nested_in_instruction(
             if_before, if_after, t('INCLUDED ') + '<w:fldSimple w:instr=" PAGE ">' + t('3') + '</w:fldSimple>'), 1),
+        # refutation round 2 (loss[4]'s marks, failing closed): a note's reference or a non-breaking hyphen as the
+        # plain result is something a reader sees - not measured on 7.4, which drops such a result's text
+        ('outer IF, its plain result a footnote reference', nested_in_instruction(if_before, if_after,
+                                                                                 NOTE_REFERENCE), 1),
+        ('outer IF, its plain result a non-breaking hyphen', nested_in_instruction(
+            if_before, if_after, '<w:r><w:noBreakHyphen/></w:r>'), 1),
         ('two outer fields, one in the other\'s instruction, each a plain result', package(BEFORE + p(
             fc('begin'), instr(' IF 1 = 1 "'), fc('begin'), instr(' QUOTE "'), field(INC, 'INCLUDED'), instr('" '),
             fc('separate'), t('QUOTED'), fc('end'), instr('" "" '), fc('separate'), t('IF RESULT'), fc('end'))
@@ -1084,6 +1115,8 @@ def fallback_shapes():
         ('outer IF, its result a simple field holding a picture', nested_in_instruction(
             if_before, if_after, '<w:fldSimple w:instr=\' QUOTE "x" \'><w:r><w:pict>' + SHAPETYPE + vshape()
             + '</w:pict></w:r></w:fldSimple>'), 0),
+        ('outer IF, its result a kept field holding a footnote reference', nested_in_instruction(
+            if_before, if_after, fc('begin') + instr(' QUOTE "x" ') + fc('separate') + NOTE_REFERENCE + fc('end')), 0),
         ('outer IF, its result a simple field holding a symbol', nested_in_instruction(
             if_before, if_after, '<w:fldSimple w:instr=\' QUOTE "x" \'><w:r><w:sym w:font="Wingdings" w:char="F0E0"/>'
             '</w:r></w:fldSimple>'), 0),
@@ -1118,7 +1151,7 @@ class FieldFallbackTests(ReleaseOneCase):
 
     def test_a_removed_field_in_an_instruction_with_a_plain_stored_result_is_refused(self):
         shapes = fallback_shapes()
-        self.assertEqual(sum(1 for *_, fields in shapes if fields), 14)
+        self.assertEqual(sum(1 for *_, fields in shapes if fields), 16)
         for label, data, fields in shapes:
             with self.subTest(label):
                 if fields:
