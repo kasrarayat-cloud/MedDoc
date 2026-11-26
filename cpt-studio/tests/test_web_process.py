@@ -24,16 +24,13 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from django.conf import settings
 from django.test import SimpleTestCase
 
-ROOT = Path(settings.BASE_DIR)
-
 # The probe: tripwires first, then the step (argv[1]), then one line of JSON. Nothing in it reaches a database or the
 # network: a connection attempt is refused before any socket opens.
-PROBE = r'''
+IMPORT_PROBE = r'''
 import json, sys, threading
 
 opened, started = [], []
@@ -78,7 +75,7 @@ print('PROBE ' + json.dumps({
 }))
 '''
 
-SETUP = '''
+DJANGO_SETUP_STEP = '''
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cptstudio.settings')
 import django
@@ -86,7 +83,7 @@ django.setup()
 '''
 # What the web loads: the WSGI application, then both hosts' URLconfs as a first request resolves them (and as R2-5's
 # warm-up does in the master).
-WEB = '''
+WEB_IMPORT_STEP = '''
 import cptstudio.wsgi
 from django.conf import settings
 from django.urls import get_resolver
@@ -94,10 +91,10 @@ from studio import hosts
 for urlconf in (settings.ROOT_URLCONF, hosts.ADMIN_URLCONF):
     get_resolver(urlconf).reverse_dict
 '''
-JOBS = SETUP + 'import studio.jobs\n'
-WORKER = SETUP + 'import studio.management.commands.run_worker\n'
+JOBS_IMPORT_STEP = DJANGO_SETUP_STEP + 'import studio.jobs\n'
+WORKER_IMPORT_STEP = DJANGO_SETUP_STEP + 'import studio.management.commands.run_worker\n'
 # The control: after the web, a connection asked of Django, one asked of the driver, and a thread - each must trip.
-CONTROL = WEB + '''
+TRIPWIRE_CONTROL_STEP = WEB_IMPORT_STEP + '''
 import threading
 import psycopg
 from django.db import connection
@@ -108,13 +105,13 @@ for attempt in (connection.ensure_connection, lambda: psycopg.connect('')):
         pass
 threading.Thread(target=print, name='lane-f-control').start()
 '''
-THE_WEB = ('cptstudio.wsgi', 'cptstudio.urls', 'cptstudio.urls_admin', 'studio.api', 'studio.jobs')
+WEB_MODULES = ('cptstudio.wsgi', 'cptstudio.urls', 'cptstudio.urls_admin', 'studio.api', 'studio.jobs')
 
 
 @functools.cache
-def probe(step: str) -> dict:
+def import_probe(step: str) -> dict:
     """The report of a fresh interpreter that ran ``step`` under the tripwires."""
-    done = subprocess.run([sys.executable, '-B', '-c', PROBE, step], cwd=ROOT, env=dict(os.environ),
+    done = subprocess.run([sys.executable, '-B', '-c', IMPORT_PROBE, step], cwd=settings.BASE_DIR, env=dict(os.environ),
                           capture_output=True, timeout=300)
     reports = [line for line in done.stdout.decode().splitlines() if line.startswith('PROBE ')]
     if done.returncode != 0 or len(reports) != 1:
@@ -124,20 +121,20 @@ def probe(step: str) -> dict:
 
 class TheWebLoadsNoAiLibraryTests(SimpleTestCase):
     def test_the_web_holds_no_ai_library(self):
-        web = probe(WEB)
+        web = import_probe(WEB_IMPORT_STEP)
         self.assertIsNone(web['error'])
         # the web was loaded, studio.jobs with it (studio.api imports it), so the absence below is the web's
-        self.assertEqual([name for name in THE_WEB if name in web['loaded']], list(THE_WEB))
+        self.assertEqual([name for name in WEB_MODULES if name in web['loaded']], list(WEB_MODULES))
         self.assertEqual(web['ai'], [])
 
     def test_importing_the_jobs_module_leaves_the_sender_unloaded(self):
-        jobs = probe(JOBS)
+        jobs = import_probe(JOBS_IMPORT_STEP)
         self.assertIsNone(jobs['error'])
         self.assertIn('studio.jobs', jobs['loaded'])
         self.assertEqual(jobs['ai'], [])
 
     def test_the_worker_loads_the_sender_and_its_sdk_at_its_start(self):
-        worker = probe(WORKER)
+        worker = import_probe(WORKER_IMPORT_STEP)
         self.assertIsNone(worker['error'])
         for name in ('studio.management.commands.run_worker', 'studio.fable.client', 'anthropic'):
             with self.subTest(name=name):
@@ -148,19 +145,19 @@ class NothingHappensAtImportTests(SimpleTestCase):
     """Specification 2.4's two import rules, held for everything the web loads."""
 
     def test_the_web_opens_no_database_connection_at_import(self):
-        web = probe(WEB)
+        web = import_probe(WEB_IMPORT_STEP)
         self.assertIsNone(web['error'])
         self.assertEqual(web['opened'], [])
 
     def test_the_web_starts_no_thread_at_import(self):
-        web = probe(WEB)
+        web = import_probe(WEB_IMPORT_STEP)
         self.assertIsNone(web['error'])
         self.assertEqual(web['started'], [])
         self.assertEqual(web['threads'], 1)
 
     def test_the_probe_sees_a_connection_and_a_thread(self):
         # the positive control: the same tripwires, after the same import, catch each kind of act
-        control = probe(CONTROL)
+        control = import_probe(TRIPWIRE_CONTROL_STEP)
         self.assertIsNone(control['error'])
         self.assertEqual(control['opened'], ['django:default', 'psycopg'])
         self.assertEqual(control['started'], ['lane-f-control'])

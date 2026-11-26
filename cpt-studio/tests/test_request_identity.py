@@ -1,7 +1,7 @@
 """Release 2, R2-3 (measure M10; specification 2.1, D358): what the coder is sent, pinned.
 
-Release 2 moves the coder's import (R2-4) and changes the Word package (R2-28 to R2-31). A byte diff cannot show that the
-requests are unchanged, so this module holds them to release 1's, two ways.
+Release 2 moves the coder's import (R2-4) and changes the Word package (R2-28 to R2-31). A byte diff cannot show that
+the requests are unchanged, so this module holds them to release 1's, two ways.
 
 1. The requests. The shipped job path - jobs.start_round, then jobs.run_job of the claimed job: the round's document
    prepared from its stored original, the READER built and sent, its answer read, the CHECKER built from it and sent -
@@ -25,8 +25,8 @@ requests are unchanged, so this module holds them to release 1's, two ways.
    .git: there the second check says so and is skipped, and the first still runs.
 
 A failure here is the alarm working (R2-3's risk: a new SDK version or a changed document rebuild breaks the equality),
-never a value to re-pin: what the coder is sent may change only through the coding-path gate (D358). Synthetic data only;
-nothing reaches the network.
+never a value to re-pin: what the coder is sent may change only through the coding-path gate (D358). Synthetic data
+only; nothing reaches the network.
 """
 from __future__ import annotations
 
@@ -54,9 +54,9 @@ PASTED = ('SYNTHETIC PROCEDURE NOTE\nProcedure: colonoscopy to the cecum.\nFindi
 
 
 def synthetic_pdf() -> bytes:
-    """A valid one-page PDF of three synthetic lines, built here byte for byte: the coding step never parses a PDF (it is
-    sent as it was stored, studio.fable.document), so fixed bytes exercise the PDF request exactly as a generated file
-    would, and stay the same wherever the suite runs."""
+    """A valid one-page PDF of three synthetic lines, built here byte for byte: the coding step never parses a PDF (it
+    is sent as it was stored, studio.fable.document), so fixed bytes exercise the PDF request exactly as a generated
+    file would, and stay the same wherever the suite runs."""
     lines = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE',
              'Colonoscopy to the cecum. One 6 mm sigmoid polyp was removed by cold snare.',
              'Release 2, R2-3: the request identity case.')
@@ -138,7 +138,8 @@ def requests_sent(ws, user, case) -> tuple:
     upload = CASES[case]
     revision = f.upload(enc, user, **upload) if upload else f.paste(enc, user, text=PASTED)
     jobs.start_round(enc, revision, models.CodingRound.UPLOAD, user)
-    fake = f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)), checker=f.succeeded(r.checker_message(r.CHECKER)))
+    fake = f.FakeCoder(reader=f.succeeded(r.reader_message(r.READER)),
+                       checker=f.succeeded(r.checker_message(r.CHECKER)))
     with mock.patch.object(fable_client, 'coder', return_value=fake):
         jobs.run_job(jobs.claim_next())
     sent = tuple((role, request.sha256, hashlib.sha256(fable_client.canonical(request.params)).hexdigest(),

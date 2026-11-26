@@ -35,11 +35,11 @@ CURRENT_BUILD = 'customer-2026-11-26'
 RELEASE_1_BUILD = 'customer-2026-11-24'
 # A later page's cursor as a list's `next` gives it (RELEASE-2-SPEC R2-19: the console's format, a UTC time to the
 # microsecond and an id, studio.console.CURSOR_RE)
-LATER_PAGE = '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17'
+LATER_PAGE_CURSOR = '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17'
 # Generated or installed trees inside cpt-studio/ that are not the tree's own files
-NOT_THE_TREE = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv'}
+NOT_THE_TREES_OWN_FILES = {'.git', '__pycache__', 'node_modules', 'staticfiles', '.venv', 'venv'}
 # RELEASE-2-SPEC section 7: every file that holds a copy of the value
-COPIES = ('studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
+VERSION_COPIES = ('studio/client_contract.py', 'studio/static/studio/app.js', 'ops/verify_login.py', 'ops/walk.cjs',
           'ops/scan_customer.py', 'ops/verification/customer-contract.json', 'tests/test_frontend.py',
           'tests/test_api_customer.py', 'tests/test_stale_actions.py', 'tests/frontend/app.test.cjs',
           'ops/test_verify_login.py', 'ops/test_walk.cjs', 'ops/verification/test_contract_v2.py', 'API.md',
@@ -80,7 +80,7 @@ class ContractTests(TestCase):
         # list, a later page - is answered 409 before the view runs, and reads nothing (the search is lane S's route)
         client = self.signed_in(**{client_contract.WSGI_KEY: RELEASE_1_BUILD})
         for path in ('/api/session', '/api/encounters', '/api/encounters?list=documents', '/api/encounters?list=queue',
-                     '/api/encounters?list=recent', f'/api/encounters?list=documents&before={LATER_PAGE}'):
+                     '/api/encounters?list=recent', f'/api/encounters?list=documents&before={LATER_PAGE_CURSOR}'):
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
@@ -136,7 +136,7 @@ class OneValueTests(SimpleTestCase):
         # RELEASE-2-SPEC section 7's table, file by file: the server, the page, the tools, the tests and the documents
         # (the image ships no ops/: deploy/.dockerignore)
         shipped_ops = (ROOT / 'ops').is_dir()
-        for name in COPIES:
+        for name in VERSION_COPIES:
             if name.startswith('ops/') and not shipped_ops:
                 continue
             with self.subTest(copy=name):
@@ -149,7 +149,7 @@ class OneValueTests(SimpleTestCase):
         needle = RELEASE_1_BUILD.encode('ascii')
         found, seen = [], set()
         for folder, dirs, files in os.walk(ROOT):
-            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREE)
+            dirs[:] = sorted(name for name in dirs if name not in NOT_THE_TREES_OWN_FILES)
             for name in files:
                 path = Path(folder) / name
                 seen.add(path.relative_to(ROOT).as_posix())
