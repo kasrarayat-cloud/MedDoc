@@ -6,6 +6,7 @@ barcode (encode, decode, the page's decoder against Python's, and the barcode re
 bench.cjs and proxy.cjs parse, the judge's arithmetic, its C5 floors and its INVALID cases, the office model's
 arithmetic against the tree's own vhost, and that ops/bench never ships in the image and is never discovered as tests.
 """
+import contextlib
 import copy
 import importlib.util
 import io
@@ -1083,6 +1084,107 @@ class RecordsJudgementTests(unittest.TestCase):
         for method, url in (('POST', '/api/encounters'), ('GET', '/api/session'), ('GET', '/static/studio/app.js'),
                             ('GET', '/api/encounters/search'), ('POST', f'/api/encounters/{DOC_A}/decisions')):
             self.assertIsNone(RUN.read_kind(method, url), url)
+
+
+NO_STORE = {'content-type': 'application/json', 'cache-control': 'no-store'}
+
+
+class _FakeWeb:
+    def __init__(self, env, label, *extra, **kw):
+        self.port, self.label, self.base = 9301, label, 'http://127.0.0.1:9301'
+
+    def stop(self):
+        pass
+
+    def lines(self):
+        return []
+
+    def pids(self):
+        return [1]
+
+
+class _FakeProxy:
+    entries_for = {}  # label -> the proxy's log of that flow
+
+    def __init__(self, env, upstream, label, host_header=''):
+        self.base, self.control, self.label = 'http://127.0.0.1:9302', 9303, label
+
+    def entries(self, since=0):
+        return list(_FakeProxy.entries_for.get(self.label, []))
+
+    def stop(self):
+        pass
+
+
+def _flows_bench(raw: Path, outputs: dict):
+    """A Bench with no database and no browser: its servers and bench.cjs are fakes, so a part's own code runs on the
+    proxy log and the flow outputs given (by label)."""
+    bench = object.__new__(RUN.Bench)
+    bench.raw, bench.env, bench.acts_port, bench.contexts = raw, None, 9304, 3
+    bench.docs_file, bench.password_file = raw / 'docs.json', raw / 'password'
+    bench.docs_by_label, bench.warm = {}, (lambda web, **kw: None)
+    bench.result = {'metrics': {}, 'checks': {}, 'controls': {}, 'errors': [], 'unexpected_statuses': {},
+                    'console_errors': [], 'blocked_requests': []}
+
+    def run(cmd, **kw):
+        out = Path(cmd[cmd.index('--out') + 1])
+        label = out.name[len('browser-'):-len('.json')]
+        out.write_text(json.dumps({'metrics': {}, 'checks': {}, 'controls': {}, 'actions': [], 'lists': [],
+                                   'errors': [], 'blocked': [], 'consoleErrors': [], 'pageErrors': [],
+                                   **outputs.get(label, {})}))
+        return subprocess.CompletedProcess(cmd, 0, '', '')
+    patches = [unittest.mock.patch.object(RUN, 'Web', _FakeWeb), unittest.mock.patch.object(RUN, 'Proxy', _FakeProxy),
+               unittest.mock.patch.object(RUN.subprocess, 'run', run), unittest.mock.patch.object(RUN.bd, 'RICH', [])]
+    return bench, patches
+
+
+class BenchGateFlowStatusTests(unittest.TestCase):
+    def statuses(self, status):
+        _FakeProxy.entries_for = {label: [
+            {'method': 'GET', 'url': '/api/encounters', 'status': 200, 'resHeaders': NO_STORE, 'reqHeaders': {}},
+            {'method': 'GET', 'url': f'/api/encounters/{DOC_A}', 'status': status,
+             'resHeaders': {'content-type': 'text/html'}, 'reqHeaders': {}}] for label in ('left-behind', 'correct')}
+        with tempfile.TemporaryDirectory() as d:
+            bench, patches = _flows_bench(Path(d), {})
+            with contextlib.ExitStack() as stack:
+                for patch in patches:
+                    stack.enter_context(patch)
+                bench.part_left_behind()
+                bench.part_correct()
+        return bench.result['unexpected_statuses']
+
+    def test_a_500_in_the_left_behind_or_correctness_flows_reaches_the_judge(self):
+        """judge[8]: both flows allowed every status from 100 to 599, so a 500 after an access end was never seen."""
+        for status in (401, 404, 499):
+            self.assertEqual(self.statuses(status), {}, status)  # the flows' own ends
+        got = self.statuses(500)
+        self.assertEqual(got, {'left-behind:500': 1, 'correct:500': 1})
+        self.assertNotIn(403, RUN.GATE_STATUS_OK)  # release 1 answers another practice's document as missing (404)
+
+
+class BenchServerPartTests(unittest.TestCase):
+    def test_the_typical_search_fills_its_first_page(self):
+        """bench[2]: '0042' matched 12 of 18,000 titles, so the 'typical' search walked the whole practice."""
+        self.assertTrue(all(RUN.TYPICAL_WORD in BD.TITLE.format(i=i) for i in range(17999, 17948, -1)))
+        self.assertTrue(all(RUN.TYPICAL_WORD in BD.TITLE.format(i=i) for i in range(0, 18000, 997)))
+        self.assertFalse(RUN.MARKER_WORD in BD.TITLE.format(i=0))
+        source = (BENCH / 'bench_run.py').read_text()
+        self.assertNotIn("'0042'", source)  # the server part and the plans part search the typical word
+        self.assertEqual(source.count("{'text': TYPICAL_WORD,"), 3)
+
+    def test_a_request_row_is_every_byte_but_the_effort(self):
+        """bench[3]: the row hashes the exact parameters with output_config.effort taken out, and carries the effort."""
+        canonical = lambda v: json.dumps(v, sort_keys=True, separators=(',', ':')).encode()  # noqa: E731
+        params = {'model': 'm', 'system': 's', 'messages': [{'role': 'user', 'content': 'x'}],
+                  'output_config': {'effort': 'max'}}
+        a = RUN.request_row('text', 'reader', params, 2, canonical)
+        b = RUN.request_row('text', 'reader', {**params, 'output_config': {'effort': 'high'}}, 2, canonical)
+        self.assertEqual((a['effort'], b['effort']), ('max', 'high'))
+        self.assertEqual(a['params_sha256'], b['params_sha256'])
+        c = RUN.request_row('text', 'reader', {**params, 'system': 't'}, 2, canonical)
+        self.assertNotEqual(a['params_sha256'], c['params_sha256'])  # one prompt byte
+        self.assertEqual(params['output_config'], {'effort': 'max'})  # the request itself is never changed
+        self.assertIn("self.result['requests_effort'] = settings.CODING_EFFORT", (BENCH / 'bench_run.py').read_text())
 
 
 class BenchTreeReadingTests(unittest.TestCase):

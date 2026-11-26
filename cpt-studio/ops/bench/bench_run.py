@@ -62,6 +62,12 @@ MARKER_WORD = 'zqxbenchmarkerword'  # typed into the search; must appear in no U
 ACCESS_FORMAT = '%(p)s %(D)s %(m)s %(U)s %(q)s %(s)s %(B)s %({x-request-id}i)s'
 PLAYWRIGHT = os.environ.get('BENCH_PLAYWRIGHT', '/opt/meddoc-pro/node_modules/playwright')
 SLOW_STATUS_OK = {200, 201, 204, 302, 303, 304}
+# judge[8]: the left-behind and correctness flows' own ends answer 401 (the sessions ended), 404 (access ended) and
+# 499 (a request the page left); every 5xx stays unexpected, so a 500 there makes the round INVALID
+GATE_STATUS_OK = frozenset(SLOW_STATUS_OK | {401, 404, 499})
+# bench[2]: the typical server search - every bench title holds this word, so its first page fills at once; a word
+# with fewer than 51 matches walks the whole practice, which is the no-match case (R2-20)
+TYPICAL_WORD = 'note'
 
 
 # --- pure helpers: no Django, no database (ops/test_bench.py tests these) ---------------------------------------------
@@ -890,11 +896,12 @@ class Bench(TransactionTestCase):
                 self.metric(f'server.list.bytes.{size}', len(lists[-1]['body']))
                 self.metric(f'server.session.ms.{size}', [round(r['ms'], 1) for r in session])
                 if name == 'n18000':  # the server search (release 2), answered 404 or 405 by a tree without it
-                    probe = m.req('POST', '/api/encounters/search', body=json.dumps({'text': '0042', 'before': None}),
+                    probe = m.req('POST', '/api/encounters/search',
+                                  body=json.dumps({'text': TYPICAL_WORD, 'before': None}),
                                   headers={'Content-Type': 'application/json'}, api=True)
                     out['search_status'] = probe['status']
                     if probe['status'] == 200:
-                        typical = [m.req('POST', '/api/encounters/search', body=json.dumps({'text': '0042',
+                        typical = [m.req('POST', '/api/encounters/search', body=json.dumps({'text': TYPICAL_WORD,
                                    'before': None}), headers={'Content-Type': 'application/json'}, api=True)
                                    for _ in range(9)]
                         none = [m.req('POST', '/api/encounters/search', body=json.dumps({'text': MARKER_WORD,
@@ -1067,6 +1074,7 @@ class Bench(TransactionTestCase):
 
     def part_requests(self):
         from unittest import mock
+        from django.conf import settings
         from studio import jobs, models
         from studio.fable import client as fable_client
         from tests.support import coding as f, rounds as r
@@ -1087,10 +1095,10 @@ class Bench(TransactionTestCase):
                                checker=f.succeeded(r.checker_message(r.CHECKER)))
             with mock.patch.object(fable_client, 'coder', return_value=fake):
                 jobs.run_job(jobs.claim_next())
-            for role, request in fake.calls:
-                rows.append([label, role, request.sha256[:16],
-                             hashlib.sha256(fable_client.canonical(request.params)).hexdigest()[:16], request.attempts])
+            for role, request in fake.calls:  # bench[3]: every byte the coder is sent but its effort, and the effort
+                rows.append(request_row(label, role, request.params, request.attempts, fable_client.canonical))
         self.result['requests'] = rows
+        self.result['requests_effort'] = settings.CODING_EFFORT  # the tree's own setting (R2-33: 'high' in B)
         self.check('requests.recorded', len(rows) >= 8, rows=len(rows))
 
     # -- the browser parts ---------------------------------------------------------------------------------------------
@@ -1218,12 +1226,12 @@ class Bench(TransactionTestCase):
         self.result['records'] = judged
 
     def part_left_behind(self):
-        data, entries, lines = self.browser('left-behind', 'P0', label='left-behind',
-                                            allowed=frozenset(range(100, 600)), timing=False)
+        data, entries, lines = self.browser('left-behind', 'P0', label='left-behind', allowed=GATE_STATUS_OK,
+                                            timing=False)
         self.headers_audit(entries, 'left-behind')
 
     def part_correct(self):
-        self.browser('correct', 'P0', label='correct', allowed=frozenset(range(100, 600)), timing=False)
+        self.browser('correct', 'P0', label='correct', allowed=GATE_STATUS_OK, timing=False)
 
     # -- walk (M9): the tree's own walk over its web, its worker (a fake coder) and the admin host ---------------------
 
@@ -1548,6 +1556,16 @@ def vhost_zones(tree: Path) -> dict:
 UUID_RE = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 
+def request_row(case: str, role: str, params: dict, attempts: int, canonical) -> dict:
+    """One request the coder was sent, as the coder row compares it (bench[3], D-R2-44): the sha256 of its exact
+    parameters (the document's bytes included) with output_config.effort taken out, and that effort beside it, so
+    release 1 at 'max' and R2-33's 'high' are compared byte for byte on everything else."""
+    rest = json.loads(canonical(params))
+    effort = (rest.get('output_config') or {}).pop('effort', None)
+    return {'case': case, 'role': role, 'params_sha256': hashlib.sha256(canonical(rest)).hexdigest()[:16],
+            'effort': effort, 'attempts': attempts}
+
+
 def read_kind(method: str, url: str):
     """The access row a served request writes, by its method and path (studio.read_audit.VIEW_KINDS), or None."""
     path, _, query = url.partition('?')
@@ -1791,7 +1809,8 @@ def explain_changed_reads(bench, big: dict) -> list:
         api = {f'HTTP_{bench.client[0].upper().replace("-", "_")}': bench.client[1]}
         capture('list page', lambda: c.get('/api/encounters?list=documents', **api))
         capture('queue page', lambda: c.get('/api/encounters?list=queue', **api))
-        capture('search', lambda: c.post('/api/encounters/search', data=json.dumps({'text': '0042', 'before': None}),
+        capture('search', lambda: c.post('/api/encounters/search',
+                                         data=json.dumps({'text': TYPICAL_WORD, 'before': None}),
                                          content_type='application/json', **api))
         capture('counts', lambda: c.get('/api/session', **api))
     round_ = models.CodingRound.objects.get(pk=big['round'][0])
