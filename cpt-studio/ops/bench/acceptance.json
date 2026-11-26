@@ -579,7 +579,8 @@
    "section8": "after a quick leave (R2-11), the next document's first text: <= 300 ms",
    "metric": "open.quick_leave.first_text.P0",
    "min_samples": 3,
-   "a_section8": 877,
+   "a_reference": 877,
+   "a_reference_note": "section 8's 877 ms is the viewer area's figure (viewer-proto/quickleave.cjs): release 1's page served by serve.cjs, a node server with modelled server times, timed in node from before the click to waitForSelector(\".pdf-text span\"). The bench times release 1's own gunicorn from the click's event time to the first text drawn; the two are not the same measurement, so section 8's figure is kept as a reference only and the A-column check compares with lane M's recorded A (a_recorded), as every other row does. Its gate is absolute and unchanged.",
    "gate": [
     {
      "abs_max": 300
@@ -2083,6 +2084,13 @@
    "check": "left.no_store"
   },
   {
+   "id": "left.not_from_http_cache",
+   "table": "left",
+   "section8": "none is served from the HTTP cache (R2-32 M7: every 200 and 304 on a non-static path carries no-store, and none is served from the HTTP cache)",
+   "kind": "check",
+   "check": "left.not_from_http_cache"
+  },
+  {
    "id": "left.no_hash_header",
    "table": "left",
    "section8": "no ETag is a hash; no header holds a body's sha256 or 16 characters of one",
@@ -2149,7 +2157,15 @@
    "id": "coder-requests",
    "table": "coder",
    "section8": "the coder: 8 request hashes equal to A (and every round equal)",
-   "kind": "same_as_a"
+   "kind": "same_as_a",
+   "min_rows": 8
+  },
+  {
+   "id": "requests.recorded",
+   "table": "coder",
+   "section8": "the coder: the requests part recorded at least the 8 requests it sends (a round that recorded fewer measured nothing)",
+   "kind": "check",
+   "check": "requests.recorded"
   },
   {
    "id": "coder-blobs",

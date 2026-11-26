@@ -226,6 +226,11 @@ def judge_row(row: dict, a_rounds: dict, b_rounds: dict, *, control: bool = Fals
         b_list = [r['requests'] for r in b_rounds.values() if r.get('requests') is not None]
         if not a_list or not b_list:
             return {**out, 'verdict': 'INVALID', 'why': ['the requests part is missing']}
+        need = row.get('min_rows', 1)  # section 8: 8 request hashes; two empty lists are equal and prove nothing
+        if any(len(x) < need for x in a_list + b_list):
+            return {**out, 'verdict': 'INVALID',
+                    'why': [f'too few coder requests recorded: {min(len(x) for x in a_list + b_list)} in a round, '
+                            f'need {need}']}
         if any(x != a_list[0] for x in a_list + b_list):
             return {**out, 'verdict': 'FAIL', 'why': ['what the coder is sent differs between the trees or rounds']}
         return out

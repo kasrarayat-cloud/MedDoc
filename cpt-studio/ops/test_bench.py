@@ -495,6 +495,20 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(JUDGE.judge_row(row, {1: {'requests': same}}, {1: {'requests': other}})['verdict'], 'FAIL')
         self.assertEqual(JUDGE.judge_row(row, {1: {'requests': None}}, {1: {'requests': same}})['verdict'], 'INVALID')
 
+    def test_the_coder_row_never_passes_on_requests_nobody_recorded(self):
+        """Two empty lists are equal, so a requests part that recorded nothing on both trees passed this row; it is
+        INVALID now. Section 8 asks for 8 request hashes, and the committed row says so (min_rows 8)."""
+        row = {'id': 'c', 'kind': 'same_as_a'}
+        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': []}}, {1: {'requests': []}})['verdict'], 'INVALID')
+        eight = [['text', 'reader', f'{n:02d}', 'bb', 2] for n in range(8)]
+        row = {**row, 'min_rows': 8}
+        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight[:7]}}, {1: {'requests': eight[:7]}})['verdict'],
+                         'INVALID')
+        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight}}, {1: {'requests': []}})['verdict'], 'INVALID')
+        self.assertEqual(JUDGE.judge_row(row, {1: {'requests': eight}}, {1: {'requests': eight}})['verdict'], 'PASS')
+        table = json.loads((BENCH / 'acceptance.json').read_text())
+        self.assertEqual(next(r for r in table['rows'] if r['id'] == 'coder-requests').get('min_rows'), 8)
+
     def test_the_spread_and_its_floor(self):
         first = {'metrics': {'m': [100, 102, 98], 'n': [10, 10, 10], 'z': [0]}}
         second = {'metrics': {'m': [104, 106, 102], 'n': [10, 10, 10], 'z': [0]}}
@@ -731,6 +745,17 @@ class AcceptanceTableTests(unittest.TestCase):
                          set())
         self.assertEqual(self.table['controls'], ['nomarker', 'planted_delay', 'planted_fetch', 'planted_detail',
                                                   'reduced_motion', 'heap_probe'])
+
+    def test_every_check_the_bench_records_is_judged(self):
+        """The reverse of the test above: a check the bench measures that no row reads is a gate nobody judges, as
+        left.not_from_http_cache and requests.recorded were until lane M's review of its A/A."""
+        sources = ''.join((BENCH / name).read_text() for name in ('bench.cjs', 'bench_run.py'))
+        files = {'cjs', 'js', 'log', 'json', 'jsonl', 'py', 'txt'}  # walk.cjs and walk.log are file names, not checks
+        named = re.findall(r'[\'"`]((?:records|correct|left|walk|bluegreen|plans|requests)\.[a-z0-9_]+)[\'"`]', sources)
+        produced = {name for name in named if name.split('.')[1] not in files}
+        judged = {row['check'] for row in self.table['rows'] if row.get('kind') == 'check'}
+        self.assertGreaterEqual(len(produced), 30)  # a pattern that matched nothing would pass vacuously
+        self.assertEqual(produced - judged, set())
 
 
 class BenchNeverShipsTests(unittest.TestCase):
