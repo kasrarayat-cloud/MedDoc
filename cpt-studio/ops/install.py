@@ -1130,11 +1130,16 @@ KEPT_LOG_FORMATS = {
         # installer-6): its address, path, status, size and time, nothing more
         rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
         rf'\d{{3}} (?:\d+|-) \d+ms',
-        # gunicorn's own life cycle
+        # gunicorn's own life cycle; since release 2 (R2-9) also how a worker ended - the kernel's kill with gunicorn
+        # 23's own hint ('Perhaps out of memory?'), an exit code, or a web that could not boot a worker or load the
+        # application - each in numbers and fixed words only, so a deploy that removes the container keeps the evidence.
+        # The worker class is a fixed word: deploy/gunicorn.conf.py's own (ops/test_install_r2web.py ties the two).
         r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
         r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
         r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
-        r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?|WORKER TIMEOUT \(pid:\d+\)|Autorestarting worker after current request\.)',
+        r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?(?: Perhaps out of memory\?)?|WORKER TIMEOUT \(pid:\d+\)|'
+        r'Autorestarting worker after current request\.|Reason: (?:Worker failed to boot|App failed to load)\.|'
+        r'Worker \(pid:\d+\) exited with code \d+\.?)',
         # django.request's warning and error lines name the path alone (its traceback lines are dropped)
         rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
         rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
@@ -2907,6 +2912,12 @@ def installed_image(ctx) -> str:
 # The worker's container limits (memory and swap, pids, the /tmp tmpfs): service_args starts it with them, and the image
 # phase's conversion gate (image_conversion) converts a Word file under the same ones, so the gate is the worker's case.
 WORKER_LIMITS = ('1536m', 256, '1g')
+# The web's (release 2, R2-6, D-R2-17): gunicorn's four sync processes, forked from one master that holds the loaded
+# application (deploy/gunicorn.conf.py), each serving one request at a time. The worst case measured - every process
+# hashing a sign-in's password after the largest upload, download and report - is about 610 MiB of the gibibyte, which
+# leaves the health check's own process and some growth room; memory and swap stay equal (hardening), so no swap. A
+# worker killed for memory is kept in its log (KEPT_LOG_FORMATS['web']). The one-shots keep their own 768m.
+WEB_LIMITS = ('1g', 128, '256m')
 
 
 def hardening(memory, pids, tmp_size, user=f'{APP_UID}:{APP_UID}'):
@@ -3087,15 +3098,17 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
     environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes,
                               interpreter=interpreting, coding=coder)
     if role == 'web':
-        # The path, never the file. A context change in the web builds the request it would send to tell a
-        # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
-        # sends. Without the path, live mode had no provider in the web, so every setting or billing save
-        # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
-        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8). And the
-        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.fable_adapter),
-        # and the Fable coder (CODER: only the worker sends).
-        return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
-                image_id, 'web']
+        # The path, never the file (service_problems refuses a bind in a web). runtime_env gives every container the
+        # same flags, and this revision's web reads none of these paths: only the worker sends, and the web never even
+        # imports the sender (release 2, R2-4: studio.jobs imports it inside the worker's send stages, and the worker's
+        # command at its start). A path matters only to an earlier revision's web, which a switch-back may start:
+        # before the Fable coding build a context change in the web built the request it would send, to tell a
+        # re-check from a re-send (that revision's jobs._run_answers, removed with its deterministic stages), and
+        # building a request opened nothing; without the path its live mode had no provider in the web, so every
+        # setting or billing save re-predicted and the worker re-sent a failed or not-sent request (pre-install review,
+        # 2026-10-26). Its live harness participants alike (their adapters built requests without credentials,
+        # HARNESS.md 8), and its interpreter (design/FINAL.md 13; its adapter read the key only to send).
+        return [*common, *hardening(*WEB_LIMITS), '-p', f'127.0.0.1:{port}:8000', *environment, image_id, 'web']
     # release 1 (A7): a revision that has the converter mounts its socket's volume (read-only: connecting needs no write)
     # and is told the socket and that it is required, so it never converts in-process; an older revision's worker - a
     # switch-back to the pair before release 1 - is started exactly as before
@@ -6999,13 +7012,18 @@ def phase_image(ctx) -> dict:
                    '--fail-level', 'ERROR', check=False, timeout=120)
     # Loading the WSGI application runs the middleware, which reads every static
     # file: as the image's own user on a read-only root, exactly as the web role.
+    # Release 2 (R2-4, R2-5): it also warms the web - both URLconfs with every view,
+    # and every template - and the worker's command loads the coder's SDK, which the
+    # web no longer imports, so a release whose web or worker cannot load stops here.
     wsgi = docker(*smoke, '-e', 'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', '--entrypoint', 'python',
-                  image['Id'], '-c', 'import cptstudio.wsgi', check=False, timeout=120)
+                  image['Id'], '-c', 'import cptstudio.wsgi, studio.management.commands.run_worker', check=False,
+                  timeout=120)
     journal('oneshot', 'image manage check', check.returncode)  # A13
     journal('oneshot', 'image wsgi load', wsgi.returncode)
     if check.returncode or wsgi.returncode:
-        raise InstallError('The image fails Django system checks, or cannot load the web application as its own '
-                           'user.', output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
+        raise InstallError('The image fails Django system checks, or cannot load the web application or the '
+                           "worker's command as its own user.",
+                           output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
     office = image_soffice(smoke, image['Id'])
     sdk = image_anthropic(smoke, image['Id'])
     conversion = image_conversion(image['Id'])
