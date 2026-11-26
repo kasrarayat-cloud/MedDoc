@@ -5,9 +5,10 @@
  * ahead, the re-open answered 304 and drawn from page memory (three times over, and after a re-open left while it was
  * answered), the view asked for with the click, what is left after another tab's sign-out, after a session ended or a
  * password to change met first at a viewer's frame - the PDF's fallback and the text's (refused with the site's own
- * headers) - and after pagehide (on a page that saves data too), and the lists above 200 documents (an unchanged search
- * never asked again; a failure said under its own list; the list's last page, come under a search answer, searched in
- * the page). Twelve tests; release 1's page fails all twelve. Skipped where Playwright is not installed
+ * headers) - and after pagehide (on a page that saves data too), a late 404 and pagehide met while a document opens, and
+ * the lists above 200 documents (an unchanged search never asked again; a failure said under its own list; the list's
+ * last page, come under a search answer, searched in the page, the answer's rows kept). Fourteen tests; release 1's page
+ * fails all fourteen. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -540,6 +541,67 @@ test('V11, R2-15: a re-open left while it is answered - the page aborts its own 
   }
 });
 
+test('V11b, R2-15, R2-18: a late 404 to a route already left, met while the next document opens for the first time, leaves that open its copy - the re-open is a 304; pagehide met there keeps none - the re-open downloads', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const site = siteRefusal();
+  const refused = 'f5000000-0000-4000-8000-0000000000ff';
+  for (const [what, end] of [['no end', ''], ['the late 404', '404'], ['pagehide', 'pagehide']]) {
+    const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+      const { page, calls, errors } = await open(context);
+      await listed(page);
+      const started = await page.waitForFunction(() => Boolean(state.pdfStarted && state.pdfStandby), null, { timeout: 20000 }).then(() => true, () => false);
+      assert.equal(started, true, `${what}: a worker made ready ahead (R2-10)`);
+      // the refused document's details are held; READY's first view is held while its viewer opens
+      let detail = null;
+      await context.route(url => url.pathname === `/api/encounters/${refused}`, route => { detail = route; });
+      let view = null;
+      await context.route(url => url.pathname === `/api/encounters/${READY}/original` && url.search === '?view=1', route => {
+        if (view) route.continue();
+        else view = route;
+      });
+      await page.evaluate(id => { location.hash = `doc/${id}`; }, refused);
+      for (let turn = 0; turn < 400 && !detail; turn += 1) await page.waitForTimeout(25);
+      await page.evaluate(id => { location.hash = `doc/${id}`; }, READY);  // the member goes on before that 404 comes
+      for (let turn = 0; turn < 400 && !view; turn += 1) await page.waitForTimeout(25);
+      await page.waitForFunction(address => state.viewer?.view === address && state.viewer.mode === 'loading' && state.early === null, viewOf(READY));
+      const counted = await page.evaluate(() => {
+        window.__forgets = [];
+        const forget = window.forgetMemory;
+        window.forgetMemory = function forgetAndSay(...args) {
+          window.__forgets.push(typeof args[0] === 'string' ? args[0] : typeof args[0]);
+          forget(...args);
+        };
+        return state.wipes;
+      });
+      if (end === '404') {
+        await detail.fulfill(site(404, { error: 'Not found.' }));
+        await page.waitForFunction(() => window.__forgets.length > 0);
+      }
+      if (end === 'pagehide') await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+      const met = await page.evaluate(address => ({ forgets: window.__forgets.slice(), counted: state.wipes, loading: state.viewer?.view === address && state.viewer.mode === 'loading' }),
+        viewOf(READY));
+      await view.continue();
+      await drawn(page);
+      const kept = await page.evaluate(() => [...state.keptViews.keys()]);
+      await page.evaluate(() => { location.hash = 'documents'; });
+      await listed(page);
+      calls.length = 0;
+      await openRow(page, READY);
+      await settled(calls);
+      const again = calls.filter(call => call.url === viewOf(READY)).map(call => [/^"[0-9a-f-]{36}"$/.test(call.condition), call.status, call.body > 0]);
+      const ended = end === 'pagehide';
+      assert.deepEqual({ ...met, counted: met.counted - counted, kept, again },
+        // pagehide reaches the page's own listener, the function boot bound, not the name wrapped here
+        { forgets: end === '404' ? [viewOf(READY)] : [], counted: ended ? 1 : 0, loading: true, kept: ended ? [] : [viewOf(READY)],
+          again: [ended ? [false, 200, true] : [true, 304, false]] },
+        `${what}: ${ended ? 'an end met while it opened: counted, no copy kept, the re-open downloads' : 'the open keeps its copy, the re-open is a 304'}`);
+      assert.deepEqual(errors.filter(error => !/^Failed to load resource/.test(error)), [], `${what}: no error in the page`);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('V12, R2-22: above 200 documents a key that leaves the search words unchanged asks nothing and keeps the results loaded; a failure is said under its own list alone', { skip: SKIP, timeout: LIMIT_MS }, async () => {
   const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'X-Preview-Encounters': '400' } });
   try {
@@ -614,5 +676,52 @@ test('V12b, R2-22: above 200 documents, the list\'s last page that comes while a
     assert.deepEqual(errors, []);
   } finally {
     await context.close();
+  }
+});
+
+test('V12c, R2-22: above 200 documents, the list\'s last page that comes under a search answer keeps what that answer, asked later, showed - a document made since the list\'s first page, a state changed since', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const added = { id: '5effffff-0000-4000-8000-0000000fffff', title: 'Synthetic discharge summary (new)', state: 'ready', state_label: 'Ready for approval',
+    service_date: '2026-11-21', insurance: 'medicare', created_at: '2026-11-20T10:30:00Z', kind: 'upload', opens_pdf: false };
+  const changed = body => ({ ...body, encounters: body.encounters.map(row => (/Riley \(6\)$/.test(row.title) ? { ...row, state: 'reviewed', state_label: 'Reviewed' } : row)) });
+  for (const [what, words, change, rows, says] of [['a document made since', 'discharge summary', body => ({ ...body, encounters: [added, ...body.encounters] }), 231, 'Synthetic discharge summary (new)'],
+    ['a state changed since', 'Riley (6)', changed, 230, 'Reviewed']]) {
+    const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'X-Preview-Encounters': '230' } });
+    try {
+      // the search answered as the server answers once the practice changed after the list's first page
+      await context.route(/\/api\/encounters\/search$/, async route => {
+        const answer = await route.fetch();
+        await route.fulfill({ status: answer.status(), contentType: 'application/json', body: JSON.stringify(change(await answer.json())) });
+      });
+      const { page, errors } = await open(context);
+      await listed(page);
+      assert.equal(await page.evaluate(() => Boolean(document.querySelector('#listMore'))), true, 'the list\'s end, watched');
+      for (const expected of [100, 150, 200]) {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await page.waitForFunction(count => document.querySelectorAll('#documentsTable .document-row').length === count && !state.list.loading, expected);
+      }
+      let held = null;
+      const pattern = /\/api\/encounters\?list=documents&before=/;
+      await page.route(pattern, route => { held = route; });
+      await page.click('[data-action="more-documents"]');  // the list's last page, held
+      for (let turn = 0; turn < 200 && !held; turn += 1) await page.waitForTimeout(25);
+      await page.fill('#documentSearch', words);
+      await page.waitForFunction(typed => state.list?.found?.query === typed.toLowerCase() && !state.list.searching, words);
+      const look = () => page.evaluate(() => {
+        const visible = [...document.querySelectorAll('#documentsTable .document-row')].filter(row => !row.hidden);
+        return { found: Boolean(state.list.found), rows: document.querySelectorAll('#documentsTable .document-row').length, shown: visible.length,
+          text: visible[0]?.textContent || '', said: document.querySelector('#searchEmpty')?.textContent || null };
+      });
+      const atAnswer = await look();
+      await held.continue();
+      await page.unroute(pattern);
+      await page.waitForFunction(() => !state.list.loading && state.list.browse.next === null);
+      const after = await look();
+      assert.deepEqual([atAnswer.shown, atAnswer.text.includes(says)], [1, true], `${what}: the answer shows it`);
+      assert.deepEqual([after.found, after.rows, after.shown, after.text.includes(says), after.said], [false, rows, 1, true, null],
+        `${what}: the whole list on the page keeps the answer's row as the answer showed it`);
+      assert.deepEqual(errors, [], `${what}: no error in the page`);
+    } finally {
+      await context.close();
+    }
   }
 });

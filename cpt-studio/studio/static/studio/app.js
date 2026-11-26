@@ -133,8 +133,7 @@ const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text' };
 const TRIGGER_TEXT = { answers: 'after your answers', retry: 'after a retry' };
 const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review', team: 'Team' };
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
-// R2-22: the lists a page at a time (R2-19; release 1 answers the whole list to any), the search's POST (R2-20), the
-// automatic pages before "Show more documents" (C7), and the search in the page up to LOCAL_SEARCH_MAX documents (C2).
+// R2-22: the lists a page at a time (R2-19), the search's POST (R2-20), automatic pages (C7), a search in the page (C2).
 const LIST_ADDRESS = { workspace: '/api/encounters?list=recent', documents: '/api/encounters?list=documents', queue: '/api/encounters?list=queue' };
 const SEARCH_URL = '/api/encounters/search';
 const SEARCH_PAUSE_MS = 300;
@@ -1261,7 +1260,7 @@ const state = {
   // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
   sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
   // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16); the
-  // ends met (forgetMemory, R2-18): a document opening across one keeps no copy
+  // ends that spare no view (forgetMemory, R2-18): a document opening across one keeps no copy
   keptViews: new Map(), early: null, viewHints: new Map(), wipes: 0,
   // the list on the page (R2-22)
   list: null,
@@ -2110,8 +2109,7 @@ function askWordOriginal(address) {
     run: () => saveDownload(address, '').catch(error => toast(error.message)) });
 }
 
-// R2-22: a list view asks for its first page; rows and words are release 1's. The description and the list's own
-// sidebar number follow its total (else its rows: release 1's whole list). The list is page memory only.
+// R2-22: a list view asks for its first page, its rows and words release 1's; its total sets the counts (page memory).
 async function showList(name, serial) {
   $('#main').innerHTML = name === 'workspace' ? overviewView() : documentsView(name);
   const list = { name, loaded: false, total: null, local: true, browse: null, found: null, query: '', words: '',
@@ -2221,10 +2219,16 @@ async function loadMore(list, why) {
     hintRows(page.rows);
     if (shown) appendRows(list, page.rows);
     if (source.next && source.auto >= AUTO_PAGES) source.button = true;
-    // the list's last page, a search answer shown: the whole list is on the page, and searched there (C2)
-    if (source === list.browse && !source.next && list.found) {
-      list.found = null;
-      $('#documentsTable').innerHTML = listBody(list.name, list.browse.rows);
+    // the list's last page: the whole list, searched here (C2); an answer's rows, asked later, stay, its new ones first
+    if (source === list.browse && !source.next) {
+      list.refused = '';
+      if (list.found) {
+        const newer = new Map(list.found.rows.map(row => [row.id, row]));
+        source.rows = source.rows.map(row => newer.get(row.id) || row);
+        source.rows.unshift(...list.found.rows.filter(row => !source.rows.includes(row)));
+        list.found = null;
+        $('#documentsTable').innerHTML = listBody(list.name, source.rows);
+      }
     }
   } else {
     source.problem = `Documents could not be loaded. ${failure}`;  // said while its own list is shown
@@ -2294,9 +2298,8 @@ function filterRows() {
   }
 }
 
-// The search box (C2): up to LOCAL_SEARCH_MAX documents, the first input loads the pages not yet loaded and the search
-// runs in the page; above, the rows shown are filtered and the server asked after SEARCH_PAUSE_MS, while matches may
-// lie beyond the page. Clearing the box shows the list's rows again.
+// The search box (C2): up to LOCAL_SEARCH_MAX documents it loads the rest and runs in the page; above, it filters the rows
+// shown and asks the server after SEARCH_PAUSE_MS while matches may lie beyond. Clearing it shows the list again.
 function applySearch() {
   const input = $('#documentSearch');
   const list = state.list;
@@ -2407,10 +2410,11 @@ async function loadDocument(id, serial, silent, poll = false) {
   try {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
-    // a 404 - another practice's document, or access ended - is an end (R2-18): on a first read, a poll or a refresh;
-    // to a read no longer awaited (a route left, an older read), it spares the view the route shown is opening
+    // a 404 (another practice's document, access ended) is an end (R2-18); to a route left it spares the view the
+    // route shown is opening (an older read is the open document's own)
     if (serial !== state.routeSerial || older()) {
-      if (error.status === 404) forgetMemory(state.viewer?.view || state.early?.view || '');
+      if (error.status === 404) forgetMemory(serial === state.routeSerial ? '' : state.viewer?.view || state.early?.view
+        || (state.route?.name === 'doc' ? `/api/encounters/${state.route.id}/original?view=1` : ''));
       return;
     }
     if (error.status === 404) forgetMemory();
@@ -2993,8 +2997,8 @@ function dropView(view, held) {
   held.data.fill(0);
 }
 
-// R2-16: the view of the document chosen, asked for with the click, once a worker has started, on a page not outdated,
-// leaving or signed out that can draw a PDF, for a kept copy or an opens_pdf row only - never on a hover or a list.
+// R2-16: the view chosen, asked with the click once a worker has started, on a live page that can draw a PDF, for a
+// kept copy or an opens_pdf row only - never on a hover or a list.
 function startEarly(id) {
   dropEarly();
   const view = `/api/encounters/${id}/original?view=1`;
@@ -3153,12 +3157,13 @@ function takeWorker(viewer, address, loading) {
 
 // R2-18: at every end - sign-out, idle, cap, a 401, another tab, a forced password change, a refused document,
 // pagehide - the early view, the kept copies (overwritten), the hints and the worker made ready ahead go; the view
-// `opening` keeps its early view and its copy (pagehide's Event is no view).
+// `opening` keeps its early view, its copy and its own opening (pagehide's Event is no view).
 function forgetMemory(opening = '') {
-  state.wipes += 1;
-  if (!opening || state.early?.view !== opening) dropEarly();
+  const spared = typeof opening === 'string' ? opening : '';
+  if (!spared) state.wipes += 1;
+  if (!spared || state.early?.view !== spared) dropEarly();
   for (const [view, { data }] of state.keptViews) {
-    if (view === opening) continue;
+    if (view === spared) continue;
     data.fill(0);
     state.keptViews.delete(view);
   }
@@ -3210,9 +3215,8 @@ async function openPdf(viewer) {
   const early = takeEarly(viewer.view);
   if (!early) dropEarly();
   let downloading = early || state.pdfStarted ? downloadFor(viewer, early) : null;
-  // the library and the viewer's own worker, within the time limit: where either does not start, marking did not work
-  // here, and the next document tries the library again at fresh addresses; a viewer closed meanwhile concludes
-  // nothing (R2-11)
+  // the library and the viewer's worker, within the time limit: one that does not start is the library's failure, and
+  // the next document tries it afresh; a viewer closed meanwhile concludes nothing (R2-11)
   const loading = loadPdfLibrary();
   try {
     await withinLimit((async () => {
@@ -4451,7 +4455,10 @@ async function saveDownload(url, filename) {
     sessionEnded('expired');
     throw new ApiError('Your session has ended. Sign in again.', 401);
   }
-  if (response.status === 403) forgetMemory();  // a forced password change: an end (R2-18), as at the view's download
+  if (response.status === 403) {
+    forgetMemory();  // a forced password change: an end (R2-18), as at the view's download
+    state.standbyOn = false;  // it holds: no worker made ready ahead again (R2-10)
+  }
   if (!response.ok) throw new ApiError(await downloadRefusal(response), response.status);
   const address = URL.createObjectURL(await response.blob());
   if (!(state.objectUrls instanceof Set)) state.objectUrls = new Set();

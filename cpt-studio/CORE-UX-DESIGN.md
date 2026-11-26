@@ -446,6 +446,9 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   key. Above 200, the rows shown are filtered at once and the server is asked (`POST /api/encounters/search`, the words in
   the body only, with the CSRF header) after a 300 ms pause, one search at a time, the newest words winning, and only
   while documents that could match may lie beyond the page; the list's own pages then load nothing more by themselves.
+  Once the list's last page is on the page, the whole list is searched there and nothing more is asked: a search answer
+  shown keeps its rows as it showed them (asked after the list's pages, a document only it holds first), and a refused
+  search is no longer said.
   `#searchEmpty` says "No documents match your search." only when nothing more can match, and "Loading documents…"
   while a load or a search could still bring a match; a refused search (429) says why under the list, never "no match".
   Clearing the box shows the list's rows again. The list lives in page memory only and goes with every route and at
@@ -472,10 +475,11 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   a refused frame, and the page then asks the server for the session, marked a poll, whose 401 or 403 is the end; the
   text viewer's frame otherwise says what it holds as before), another tab's sign-out, a document refused with 404 (on
   its first read, a poll or a refresh, the page out of date or not, or after the member has left it, sparing only the
-  view the route now shown is opening), and the page left (`pagehide`, the back-forward cache included) each drop the
-  view asked for with the click, overwrite and drop the kept copies, and end the worker made ready ahead. A document
-  that opens across an end keeps no copy of it. A first read refused because the page is out of date drops the
-  click's view too.
+  view the route now shown is opening, and that view's own open), and the page left (`pagehide`, the back-forward cache
+  included) each drop the view asked for with the click, overwrite and drop the kept copies, and end the worker made
+  ready ahead. A document that opens across an end keeps no copy of it, unless the end spared its view. A forced
+  password change met at a download the page saves leaves the page where it is, and no worker is made ready ahead after
+  it. A first read refused because the page is out of date drops the click's view too.
 
 ## 9. Install and verify
 

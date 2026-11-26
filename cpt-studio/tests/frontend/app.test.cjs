@@ -5721,6 +5721,28 @@ test('R2-18: a forced password change met at a download the page saves - the ori
   });
 });
 
+test('R2-18, R2-10: a forced password change met at a download the page saves holds: no worker is made ready ahead after it', async () => {
+  const working = fakeLibrary();
+  const original = `/api/encounters/${UUID}/original`;
+  const refused = () => Promise.resolve({ ok: false, status: 403, redirected: false, url: `http://studio.test${original}`,
+    headers: { get: name => (String(name).toLowerCase() === 'content-type' ? 'application/json' : null) },
+    json: async () => ({ error: 'password_change_required' }) });
+  await withPdfPage(() => Promise.resolve(working.library), async () => {
+    await withStandby(async () => {
+      app.startStandby();
+      await settle(() => FakeWorker.made.length === 1 && app.state.pdfStarted);
+      await app.state.pdfStandby.ready;
+      assert.equal(FakeWorker.made.length, 1, 'a worker waits before the end');
+      await assert.rejects(app.saveDownload(original, ''), { status: 403 });
+      assert.equal(app.state.pdfStandby, null, 'the waiting worker ended at the end');
+      // a page drawn after the end reschedules the standby (renderPage); its idle start is this call
+      app.startStandby();
+      await settle(() => FakeWorker.made.length > 1);
+      assert.equal(FakeWorker.made.length, 1, 'no worker made ready ahead after the end');
+    });
+  }, refused);
+});
+
 // --- release 2: the page's speed (RELEASE-2-SPEC R2-10 to R2-18 and R2-22), on release 1's server answers too ------------
 
 test('R2 V6: the entrance fade is a page load\'s first view\'s alone: the approved rule stands, the appended rule ends it after that view, and the review never fades', async () => {
@@ -6586,9 +6608,9 @@ test('R2-18: a document the server refuses (404: another practice\'s, or access 
       }
     });
   }
-  // ... and a 404 to a read the page no longer waits for - a route already left, or a read older than the one shown - is
-  // an end that spares the view the route shown is opening: its early download and its copy stand (R2-15, R2-16)
-  for (const [what, serial, ahead] of [['a route already left', 30, 0], ['a read older than the one shown', 31, 2]]) {
+  // ... and a 404 to a route already left is an end that spares the view the route shown is opening: its early download
+  // and its copy stand (R2-15, R2-16)
+  for (const [what, serial, ahead] of [['a route already left', 30, 0]]) {
     await withPage({ answers: [{ match: (method, url) => url === `/api/encounters/${id}`, status: 404, body: { error: 'Not found.' } }] }, async () => {
       const next = 'f5000000-0000-4000-8000-000000000001';
       const view = `/api/encounters/${next}/original?view=1`;
@@ -6611,6 +6633,93 @@ test('R2-18: a document the server refuses (404: another practice\'s, or access 
       }
     });
   }
+  // ... and a 404 to a read older than the one shown - under the route's own serial, so the open document's own - wipes
+  // everything, that document's own copy too
+  await withPage({ answers: [{ match: (method, url) => url === `/api/encounters/${id}`, status: 404, body: { error: 'Not found.' } }] }, async () => {
+    const view = `/api/encounters/${id}/original?view=1`;
+    const data = Uint8Array.from([37, 80]);
+    app.keepView(view, 'abcdef00-0000-4000-8000-000000000000', data);
+    app.state.viewHints = new Map([[id, true]]);
+    const thread = { terminated: false, terminate() { this.terminated = true; } };
+    app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+    const viewer = app.state.viewer;
+    const applied = app.state.reads.applied;
+    Object.assign(app.state, { viewer: { view }, early: null, route: { name: 'doc', id }, routeSerial: 31 });
+    app.state.reads.applied = app.state.reads.asked + 2;
+    try {
+      await app.loadDocument(id, 31, true, true);
+      assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated], [0, [0, 0], 0, null, true],
+        'a read older than the one shown: its own copy goes too');
+    } finally {
+      Object.assign(app.state, { viewer });
+      app.state.reads.applied = applied;
+      app.forgetMemory();
+    }
+  });
+});
+
+// A route to a document the server refuses, left for a PDF before that 404 comes, while the PDF opens. `end`: the late 404
+// after its viewer has mounted ('after') or before ('before'), pagehide meanwhile ('pagehide'), or none. What the open kept,
+// whether the end was counted, and how the open and the re-open were asked (their If-None-Match).
+async function lateEndOpen({ end = '', keptBefore = false } = {}) {
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  const refused = 'f5000000-0000-4000-8000-0000000000ff';
+  let refuse = null;
+  const views = [];
+  const out = {};
+  const turns = async () => { for (let turn = 0; turn < 4; turn += 1) await settle(() => false); };
+  const opened = () => Promise.resolve(fakeLibrary({ open: () => Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }) }).library);
+  await withPdfPage(opened, async ({ element: find }) => {
+    app.state.keptViews.clear();
+    app.state.viewHints = new Map();
+    Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), early: null });
+    const kept = keptBefore ? Uint8Array.from([37, 80, 68, 70]) : null;
+    if (kept) app.keepView(view, VIEW_TAG_A.slice(1, -1), kept);
+    global.location.hash = `#doc/${refused}`;
+    app.route();
+    await settle(() => refuse !== null);
+    global.location.hash = `#doc/${word.id}`;  // no worker has started here: no early view
+    app.route();
+    const wipes = app.state.wipes;
+    if (end === 'before') {
+      refuse(response({ status: 404, body: { error: 'Not found.' } }));
+      await turns();
+    }
+    await mount(word, find, () => views.length === 1);
+    if (end === 'after') refuse(response({ status: 404, body: { error: 'Not found.' } }));
+    if (end === 'pagehide') app.forgetMemory(new Event('pagehide'));  // as window's pagehide listener calls it
+    await turns();
+    Object.assign(out, { kept: kept ? [...kept] : null, counted: app.state.wipes - wipes, open: views[0].tag });
+    views[0].release(views[0].tag ? taggedView(304, [], views[0].tag) : taggedView(200, undefined, VIEW_TAG_A));
+    await turns();
+    out.keptAfterOpen = [...app.state.keptViews.keys()];
+    global.location.hash = '#how-it-works';
+    app.route();
+    global.location.hash = `#doc/${word.id}`;
+    app.route();
+    await mount(word, find, () => views.length === 2);
+    out.reopen = views[1].tag;
+    views[1].release(taggedView(304, [], VIEW_TAG_A));
+    await turns();
+    app.forgetMemory();
+  }, (url, init) => {
+    if (url === `/api/encounters/${refused}`) return new Promise(resolve => { refuse = resolve; });
+    if (url === view) return new Promise(resolve => { views.push({ tag: init?.headers?.['If-None-Match'] || '', release: resolve }); });
+    return new Promise(() => {});
+  });
+  return out;
+}
+
+test('R2-18, R2-15: a late 404 to a route already left spares the open the route shown makes - its copy kept, the re-open asked with its tag - and pagehide meanwhile is still an end that keeps none', async () => {
+  const view = fixture('encounter-word.json').document.view_url;
+  assert.deepEqual(await lateEndOpen(), { kept: null, counted: 0, open: '', keptAfterOpen: [view], reopen: VIEW_TAG_A }, 'no end: the open kept, the re-open tagged');
+  assert.deepEqual(await lateEndOpen({ end: 'after' }), { kept: null, counted: 0, open: '', keptAfterOpen: [view], reopen: VIEW_TAG_A },
+    'the late 404 while the document opens for the first time: spared, not counted, the copy kept');
+  assert.deepEqual(await lateEndOpen({ end: 'before', keptBefore: true }), { kept: [37, 80, 68, 70], counted: 0, open: VIEW_TAG_A, keptAfterOpen: [view], reopen: VIEW_TAG_A },
+    'before its viewer mounts, no early view: the route\'s own copy spared, the open asked with its tag');
+  assert.deepEqual(await lateEndOpen({ end: 'pagehide' }), { kept: null, counted: 1, open: '', keptAfterOpen: [], reopen: '' },
+    'pagehide while it opens: an end, counted, no copy kept, the re-open downloads');
 });
 
 test('R2-18: a 404 on a refresh or a poll of the open document while its own view is on the way is an end: once the document opens, no copy of it is kept, and the copy made is overwritten', async () => {
@@ -7488,6 +7597,164 @@ test('R2-22, C2: the list\'s last page, come while a search answer is shown or w
       assert.deepEqual(calls.slice(mark).filter(call => call.url === app.SEARCH_URL).map(call => call.body), [], `${order}: the whole list on the page: nothing asked`);
       assert.deepEqual([shown().map(row => row.href), empty.attached ? empty.textContent : null], [[hrefOf(match)], null],
         `${order}: its match shown, never "No documents match your search."`);
+    });
+  }
+});
+
+test('R2-22, C2: the narrowness of the last-page rule: a page of the list that is not its last, come while a search answer is shown, keeps the answer and every match of it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);  // 'polyp report 2': 36 matches, three on the list's first two pages
+  const matches = rows.filter(row => listText(row).includes('polyp report 2')).map(hrefOf);
+  const server = holding(pagedServer(rows));
+  await withListPage(server.answer, async ({ calls, empty, near, type, shown }) => {
+    app.state.routeSerial = 94;
+    await app.showList('documents', 94);
+    const list = () => app.state.list;
+    server.holdWhen((method, url) => method === 'GET' && url.includes('&before='));
+    near(true);  // the list's second page (of eight), held
+    await settle(() => server.waiting.length === 1);
+    type('polyp report 2');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => list().found?.query === 'polyp report 2' && !list().searching);
+    const mark = calls.length;
+    server.holdWhen(() => false);
+    server.waiting.shift().release();
+    await settle(() => !list().loading && list().browse.rows.length === 100);
+    t.mock.timers.tick(1000);
+    await settle(() => false);
+    assert.deepEqual([matches.length, list().browse.next !== null, list().found?.query ?? null], [36, true, 'polyp report 2'], 'the answer kept');
+    assert.deepEqual([shown().map(row => row.href), empty.attached ? empty.textContent : null], [matches, null], 'every match of it shown');
+    assert.deepEqual(calls.slice(mark).filter(call => call.url === app.SEARCH_URL), [], 'nothing asked');
+  });
+});
+
+test('R2-22, C2: the narrowness of the last-page rule: a search answer\'s own last page keeps the whole answer', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(400);  // 'polyp': 133 matches, the answer's three pages (50, 50, 33)
+  const matches = rows.filter(row => listText(row).includes('polyp')).map(hrefOf);
+  await withListPage(pagedServer(rows), async ({ empty, near, type, shown }) => {
+    app.state.routeSerial = 95;
+    await app.showList('documents', 95);
+    const list = () => app.state.list;
+    type('polyp');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => list().found?.query === 'polyp' && !list().searching);
+    for (let page = 0; page < 2; page += 1) {
+      const held = list().found?.rows.length;
+      near(true);
+      await settle(() => !list().loading && list().found?.rows.length !== held);
+    }
+    assert.deepEqual([matches.length, Boolean(list().found), list().found ? list().found.next : 'no answer'], [133, true, null], 'the whole answer, kept');
+    assert.deepEqual([shown().map(row => row.href), empty.attached ? empty.textContent : null], [matches, null], 'all 133 shown, in order');
+  });
+});
+
+// A server that pages along (created_at, id) descending, each later page strictly older than its cursor, and searches
+// the practice as it stands when asked (lane S's paging.older_than and search_page): `live` changes it.
+function keysetServer(initial) {
+  const live = initial.map(row => ({ ...row }));
+  const time = row => Date.parse(row.created_at);
+  const order = (a, b) => (time(b) - time(a)) || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0);
+  const cursorOf = row => `${time(row)}~${row.id}`;
+  const older = (list, cursor) => {
+    const [t, id] = cursor.split('~');
+    return list.filter(row => time(row) < Number(t) || (time(row) === Number(t) && row.id < id));
+  };
+  const pageOf = (list, before, first) => {
+    const ordered = list.slice().sort(order);
+    const from = before ? older(ordered, before) : ordered;
+    const shown = from.slice(0, 50);
+    return { status: 200, body: { encounters: shown.map(row => ({ ...row })), next: from.length > 50 ? cursorOf(shown[shown.length - 1]) : null,
+      total: first ? ordered.length : null } };
+  };
+  return {
+    live,
+    answer: (method, url, body) => {
+      const where = new URL(url, 'http://studio.test');
+      if (method === 'GET' && where.pathname === '/api/encounters') {
+        const before = where.searchParams.get('before');
+        return pageOf(live, before, !before);
+      }
+      if (method === 'POST' && where.pathname === '/api/encounters/search') return pageOf(live.filter(row => listText(row).includes(body.text.toLowerCase())), body.before, false);
+      return { status: 404, body: { error: 'Not found.' } };
+    },
+  };
+}
+
+// 230 documents, 'Synthetic visit note n', n = 7 'Synthetic pathology report'; odd rows ready, even ones reviewed.
+function keysetRows() {
+  return Array.from({ length: 230 }, (_, index) => {
+    const n = index + 1;
+    return { id: `a1000000-0000-4000-8000-${String(n).padStart(12, '0')}`, title: n === 7 ? 'Synthetic pathology report' : `Synthetic visit note ${n}`,
+      state: n % 2 ? 'ready' : 'reviewed', state_label: n % 2 ? 'Ready for approval' : 'Reviewed', service_date: '2026-11-03', insurance: 'medicaid',
+      created_at: new Date(Date.UTC(2026, 10, 21) - n * 60000).toISOString().replace('.000', ''), kind: 'paste' };
+  });
+}
+
+test('R2-22, C2: the list\'s last page under a search answer keeps what the answer, asked later, showed: a document made since the list\'s first page, and a state changed since', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const [words, title, label] of [['discharge summary', 'Synthetic discharge summary (new)', 'Ready for approval'], ['pathology report', 'Synthetic pathology report', 'Reviewed']]) {
+    const server = keysetServer(keysetRows());
+    const held = holding(server.answer);
+    await withListPage(held.answer, async ({ table, empty, near, type, shown }) => {
+      app.state.routeSerial = 702;
+      await app.showList('documents', 702);
+      for (const expected of [100, 150, 200]) {
+        near(true);
+        await settle(() => table.rows.length === expected && !app.state.list.loading);
+      }
+      near(false);
+      server.live.push({ id: 'a1000000-0000-4000-8000-999999999999', title: 'Synthetic discharge summary (new)', state: 'ready', state_label: 'Ready for approval',
+        service_date: '2026-11-04', insurance: 'medicaid', created_at: '2026-11-21T01:00:00Z', kind: 'paste' });
+      Object.assign(server.live.find(row => row.title === 'Synthetic pathology report'), { state: 'reviewed', state_label: 'Reviewed' });
+      held.holdWhen((method, url) => method === 'GET' && url.includes('&before='));
+      app.moreDocuments();
+      await settle(() => held.waiting.length === 1);
+      type(words);
+      t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      await settle(() => app.state.list.found?.query === words && !app.state.list.searching);
+      const seen = () => shown().map(row => row.textContent);
+      assert.equal(seen().length, 1, `${words}: the answer`);
+      held.holdWhen(() => false);
+      held.waiting.shift().release();
+      await settle(() => !app.state.list.loading && app.state.list.browse.next === null);
+      assert.deepEqual([seen().length, seen()[0]?.includes(title), seen()[0]?.includes(label), empty.attached ? empty.textContent : null], [1, true, true, null],
+        `${words}: the list's last page keeps the answer's row`);
+    });
+  }
+});
+
+test('R2-22, C2: a search refused before the list\'s last page lands is not said under the whole list, which is searched in the page', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const [what, first, words, shownCount, said] of [['an answer shown, narrower words matching nothing', 'synthetic', 'synthetic polyp report 999', 0, 'No documents match your search.'],
+    ['no answer shown', null, 'polyp report 23', 3, null]]) {
+    const rows = listRowsOf(240);
+    let refusing = false;
+    const server = holding(pagedServer(rows, { refuse: method => (refusing && method === 'POST' ? { status: 429, body: { error: 'rate_limited', retry_after: 30 } } : null) }));
+    await withListPage(server.answer, async ({ table, more, empty, near, type, shown }) => {
+      app.state.routeSerial = 96;
+      await app.showList('documents', 96);
+      for (const expected of [100, 150, 200]) {
+        near(true);
+        await settle(() => table.rows.length === expected && !app.state.list.loading);
+      }
+      server.holdWhen((method, url) => method === 'GET' && url.includes('&before='));
+      app.moreDocuments();  // the list's last page, held
+      await settle(() => server.waiting.length === 1);
+      if (first) {
+        type(first);
+        t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+        await settle(() => app.state.list.found?.query === first && !app.state.list.searching);
+      }
+      refusing = true;
+      type(words);
+      t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      await settle(() => !app.state.list.searching && Boolean(app.state.list.refused));
+      assert.match(more.innerHTML, /Too many requests/, `${what}: the refusal said while more could match`);
+      server.waiting.shift().release();
+      await settle(() => !app.state.list.loading && app.state.list.browse.next === null);
+      assert.deepEqual([more.hidden, more.innerHTML, shown().length, empty.attached ? empty.textContent : null], [true, '', shownCount, said],
+        `${what}: the whole list on the page, nothing more asked: the refusal goes`);
     });
   }
 });
