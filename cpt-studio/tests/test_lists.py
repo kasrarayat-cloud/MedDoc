@@ -503,7 +503,13 @@ class ListPlanTests(TestCase):
                     self.assertNotIn('studio_codinground', rows_sql)
                     self.assertNotIn('studio_sourcefile', rows_sql)
                 for sql, plan in found:
+                    # the queue's total is one COUNT of every waiting document: its round test is the planner's to
+                    # choose, a hash of the rounds when that is cheaper (customer.in_queue); every statement that
+                    # reads the page itself - its rows, their rounds and their files - reads by an index
+                    counts_the_queue = which == 'queue' and sql.startswith('SELECT COUNT(*)')
                     for table in ('studio_encounter', 'studio_codinground', 'studio_sourcefile'):
+                        if table == 'studio_codinground' and counts_the_queue:
+                            continue
                         self.assertNotIn(f'Seq Scan on {table}', plan, (sql[:120], plan[:1500]))
 
 

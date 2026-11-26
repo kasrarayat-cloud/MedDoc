@@ -47,7 +47,7 @@ from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
 from django.db import connection
-from django.db.models import OuterRef, Subquery
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from . import decisions, jobs, models, paging, state
@@ -186,11 +186,12 @@ def initials(user) -> str:
 def in_queue(queryset):
     """``queryset``'s documents that wait on a member - questions to answer, codes to review or to approve: a stored
     state of QUEUE_STATES and a coding round. The one rule the Review queue's pages, its total and the session's queue
-    count all read, so the three agree by construction (release 2, R2-19). The round is asked for per document, as a
-    one-row subquery: PostgreSQL may answer an EXISTS here with a hash of every practice's rounds (a sequential scan
-    that grows with all practices; measured on the queue's count at 20,000 documents), and never does a LIMIT 1."""
-    first_round = Subquery(Round.objects.filter(encounter_id=OuterRef('pk')).order_by().values('pk')[:1])
-    return queryset.filter(state__in=QUEUE_STATES).alias(queue_round=first_round).filter(queue_round__isnull=False)
+    count all read, so the three agree by construction (release 2, R2-19). The round is an EXISTS in the WHERE clause,
+    so PostgreSQL chooses how to test it: a page, which stops at 51 rows, probes the rounds per row; a count of every
+    waiting document may hash the rounds instead, when that is cheaper (measured at 18,250 documents among 30,000, after
+    VACUUM: 8.6 ms, against 30.7 ms for one probe per waiting document - a one-row subquery per document made the
+    session's read 35.9 ms and the queue's first page 40.1 ms, where this form gives 18.3 ms and 25.1 ms)."""
+    return queryset.filter(state__in=QUEUE_STATES).filter(Exists(Round.objects.filter(encounter_id=OuterRef('pk'))))
 
 
 def live(queryset):
@@ -359,9 +360,12 @@ def list_page(membership, which, before=None) -> dict:
 # letters - so when the words hold either (or the combining dot), both sides are also folded (translate: final sigma to
 # sigma, the combining dot dropped), and the search never finds fewer documents than the page's rule, more only there.
 # One statement returns up to 51 rows, newest first, along studio_enc_ws_time; then the list's own steps 2 and 3
-# (list_rows_of). Each round and file is looked up per document, as a one-row subquery (never a hash of every practice's
-# rows; in_queue says why). A document whose stored state is none of today's would match by its stored word, where the
-# page draws it computed; none exists once the app phase has recomputed the states (R2-19's recorded risk).
+# (list_rows_of). The text needs each row's revision kind and whether it has a round (and, for an earlier system's row,
+# a file): each is looked up per row, as a one-row subquery, so the walk stops at the 51st match - a join made
+# PostgreSQL hash every practice's revisions and sort the practice instead, and an EXISTS inside an expression may be
+# planned as a hash of every practice's rounds. A document whose stored state is none of today's would match by its
+# stored word, where the page draws it computed; none exists once the app phase has recomputed the states (R2-19's
+# recorded risk).
 
 JS_WHITE_SPACE = ('\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f'
                   '\u205f\u3000\ufeff')  # what JavaScript's String.prototype.trim removes (measured on node 22)
