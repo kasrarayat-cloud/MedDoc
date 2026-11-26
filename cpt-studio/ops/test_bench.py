@@ -1739,6 +1739,14 @@ class JudgeTests(unittest.TestCase):
             with self.subTest(a=low):
                 got = JUDGE.judge_row(row, {1: {'metrics': {'m': [low]}}}, {1: {'metrics': {'m': [398]}}})
                 self.assertEqual(got['verdict'], 'FAIL', got['why'])
+        # section 8 gives some A as a [low, high] range (gc-pause [194, 199] against 5 ms): the limit below the whole
+        # range asks the gain, and the range is never compared as a number (the replay's crash, under --control)
+        ranged = {'id': 'g', 'metric': 'm', 'min_samples': 1, 'a_section8': [194, 199], 'gate': [{'abs_max': 5}],
+                  'spread': 0.05, 'stat': 'max'}
+        three = {1: {'metrics': {'m': [3]}}}
+        self.assertEqual(JUDGE.judge_row(ranged, three, three, control=True)['verdict'], 'FAIL')  # A cannot beat A
+        self.assertEqual(JUDGE.judge_row(ranged, {1: {'metrics': {'m': [196]}}}, three)['verdict'], 'PASS')
+        self.assertEqual(JUDGE.judge_row(ranged, three, three)['verdict'], 'INVALID')  # A is not the A column's
         # a relative no-worse-than-A limit is built from the session's A alone: a low A asks it no gain
         worse = {'id': 'n', 'metric': 'm', 'min_samples': 1, 'a_recorded': 436, 'spread': 0.0461,
                  'gate': [{'rel_max': 1.0, 'spread': 0.0461, 'floor_factor': 1.0922}]}
