@@ -183,6 +183,16 @@ class BenchProtocolTests(unittest.TestCase):
         self.assertEqual(got, {'total': 6, 'builder': 1, 'record': 3, 'rate': 1, 'other': 1})
 
 
+class BenchDriverStartTests(unittest.TestCase):
+    def test_the_driver_starts_a_run_only_when_both_loads_are_within_their_bounds(self):
+        quiet = RUN.bench_host_quiet
+        self.assertTrue(quiet(3.0, 7.9, 6.0, 8.0))
+        self.assertFalse(quiet(3.0, 8.1, 6.0, 8.0))  # the default 5-minute bound
+        self.assertFalse(quiet(6.1, 2.0, 6.0, 8.0))
+        self.assertTrue(quiet(5.0, 12.0, 5.0, 99.0))  # --max-load-5 99: start as soon as the 1-minute load settles
+        self.assertFalse(quiet(5.5, 12.0, 5.0, 99.0))
+
+
 class BenchDataTests(unittest.TestCase):
     def test_benchdata_gives_equal_bytes_twice(self):
         self.assertEqual(BD.all_bytes(), BD.all_bytes())

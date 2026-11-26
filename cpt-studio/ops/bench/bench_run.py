@@ -1786,6 +1786,13 @@ def explain_changed_reads(bench, big: dict) -> list:
 
 # --- the protocol: trees in a declared, interleaved order -------------------------------------------------------------
 
+def bench_host_quiet(load1: float, load5: float, max_load: float, max_load_5: float) -> bool:
+    """The driver starts a run only when the 1-minute load is at most max_load and the 5-minute at most max_load_5. On a
+    host whose other work comes in waves, a 5-minute bound of 8 starts runs minutes into each quiet window; the judge's
+    own rule (no load sample above 8 during the run) is what makes a round valid, whatever the start."""
+    return load1 <= max_load and load5 <= max_load_5
+
+
 def driver(argv=None) -> int:
     """Run rounds in order, one part group at a time: for each group, every TAG:ROUND of --order in turn, so the trees
     being compared are interleaved in time. Each run is `manage.py test` inside its own tree, with this folder's
@@ -1803,7 +1810,9 @@ def driver(argv=None) -> int:
     parser.add_argument('--profiles', default=','.join(PROFILES))
     parser.add_argument('--max-load', type=float, default=4.0,
                         help='before each run, wait (up to --wait-minutes) until the 1-minute load is at most this and '
-                             'the 5-minute load at most 8')
+                             'the 5-minute load at most --max-load-5')
+    parser.add_argument('--max-load-5', type=float, default=8.0,
+                        help='the 5-minute load bound for a start (higher: sooner after a wave of other work)')
     parser.add_argument('--wait-minutes', type=int, default=90)
     parser.add_argument('--retries', type=int, default=2,
                         help='a round whose load passed 8 (the judge\'s INVALID) is run again as round + 100, '
@@ -1831,7 +1840,7 @@ def driver(argv=None) -> int:
             while attempt <= args.retries:
                 round_no = first_round + 100 * attempt
                 waited = 0
-                while ((os.getloadavg()[0] > args.max_load or os.getloadavg()[1] > 8) and
+                while (not bench_host_quiet(*os.getloadavg()[:2], args.max_load, args.max_load_5) and
                        waited < args.wait_minutes * 60) or not lock_free(out / 'bench.lock'):
                     time.sleep(30)
                     waited += 30
