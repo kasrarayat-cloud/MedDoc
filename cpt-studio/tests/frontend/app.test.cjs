@@ -265,8 +265,8 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'standbyFrame', 'pdfStarted',
-    'list'];
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'standbyFrame', 'standbyIdle',
+    'pdfStarted', 'list'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
   try {
@@ -6283,6 +6283,78 @@ test('D-R2-54, R2-18: every end met between boot\'s first route and the frame th
       global.requestIdleCallback = savedIdle;
     }
   });
+});
+
+// D-R2-54, R2-18 (the idle stage): the worker made ready ahead is asked for in two stages - a timer, then, once it fires,
+// an idle callback - so an end can come in the second as in the first: a refused document's 404 answered while the
+// browser is busy. One idle callback waits at a time (a second schedule's timer, fired meanwhile, asks for none), its
+// handle kept, and every end cancels it (endStandby) as it cancels the timer. The browser's idle callbacks are stood in
+// for with their cancel, as a browser has both.
+test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its idle callback ran - a refused document\'s 404, one schedule\'s timer fired or two - cancels the one idle callback waiting and makes no worker; the next schedule asks again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const refused = 'f5000000-0000-4000-8000-0000000000ee';  // another practice's: its details answer 404
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const idles = new Map();
+  let handle = 0;
+  global.requestIdleCallback = (fn, options) => { handle += 1; idles.set(handle, { fn, options }); return handle; };
+  global.cancelIdleCallback = id => { idles.delete(id); };
+  // the browser is idle: every idle callback still waiting runs
+  const idleNow = () => {
+    const due = [...idles.values()];
+    idles.clear();
+    for (const { fn } of due) fn({ didTimeout: false, timeRemaining: () => 50 });
+  };
+  try {
+    for (const timers of [1, 2]) {
+      let refuse = null;
+      idles.clear();
+      await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element }) => {
+        const frames = [];
+        global.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+        global.cancelAnimationFrame = () => {};
+        try {
+          global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+          global.location.hash = `#doc/${refused}`;
+          Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyIdle: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+          await app.firstRoute();
+          frames.shift()();
+          t.mock.timers.tick(app.PDF_STANDBY.first);
+          if (timers === 2) {
+            app.scheduleStandby(app.PDF_STANDBY.next);  // a closed viewer or a drawn page: its timer fires while the first callback waits
+            t.mock.timers.tick(app.PDF_STANDBY.next);
+          }
+          assert.deepEqual([idles.size, [...idles.values()][0]?.options, FakeWorker.made.length], [1, { timeout: 2000 }, 0], `${timers} fired: one idle callback waits, nothing made yet`);
+          await settle(() => refuse !== null);
+          refuse(response({ status: 404, body: { error: 'Not found.' } }));
+          await settle(() => element('#main').innerHTML?.includes('This document is not available.'));
+          assert.ok(element('#main').innerHTML.includes('This document is not available.'), `${timers} fired: the end happened`);
+          assert.equal(idles.size, 0, `${timers} fired: the end cancelled the idle callback waiting`);
+          idleNow();
+          await settle(() => false);
+          assert.deepEqual([FakeWorker.made.length, app.state.pdfStandby], [0, null], `${timers} fired: no worker made after the end`);
+          // still signed in after a 404: the next schedule asks again and makes the worker (the control), and a callback that
+          // ran leaves none kept, so the schedule after it asks again too
+          app.scheduleStandby(app.PDF_STANDBY.next);
+          t.mock.timers.tick(app.PDF_STANDBY.next);
+          assert.equal(idles.size, 1, `${timers} fired: asked for again after the end`);
+          idleNow();
+          await settle(() => FakeWorker.made.length === 1);
+          assert.equal(FakeWorker.made.length, 1, `${timers} fired: the control - made when no end came`);
+          app.scheduleStandby(app.PDF_STANDBY.next);
+          t.mock.timers.tick(app.PDF_STANDBY.next);
+          assert.equal(idles.size, 1, `${timers} fired: asked for again after a callback ran`);
+        } finally {
+          app.endStandby();
+          app.state.standbyOn = false;
+          delete global.requestAnimationFrame;
+          delete global.cancelAnimationFrame;
+        }
+      }, url => (url === `/api/encounters/${refused}` ? new Promise(resolve => { refuse = resolve; }) : new Promise(() => {})));
+    }
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
 });
 
 test('R2 V1: leaving a document while its worker starts never makes the page forget a working library', async t => {

@@ -1241,7 +1241,7 @@ const state = {
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
   // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
-  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, standbyFrame: 0, pdfStarted: false,
+  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, standbyFrame: 0, standbyIdle: 0, pdfStarted: false,
   // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16); the
   // ends that spare no view (forgetMemory, R2-18): a document opening across one keeps no copy
   keptViews: new Map(), early: null, viewHints: new Map(), wipes: 0,
@@ -3083,14 +3083,14 @@ function forgetPdfLibrary(loading) {
   state.pdfStarted = false;  // tried again at fresh addresses, so fetched again (R2-12)
 }
 
-// R2-10: the worker made ready ahead, asked for in `ms`, when the browser is idle.
+// R2-10: the worker made ready ahead, asked for in `ms`, when the browser is idle (one idle callback waits at a time).
 function scheduleStandby(ms) {
   clearTimeout(state.standbyTimer);
   state.standbyTimer = 0;
   if (!state.standbyOn) return;
   state.standbyTimer = setTimeout(() => {
     state.standbyTimer = 0;
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(startStandby, { timeout: PDF_STANDBY.idle });
+    if (typeof requestIdleCallback === 'function') state.standbyIdle ||= requestIdleCallback(() => { state.standbyIdle = 0; startStandby(); }, { timeout: PDF_STANDBY.idle });
     else startStandby();
   }, ms);
 }
@@ -3130,6 +3130,8 @@ function endStandby() {
   state.standbyTimer = 0;
   if (state.standbyFrame) cancelAnimationFrame(state.standbyFrame);
   state.standbyFrame = 0;
+  if (state.standbyIdle && typeof cancelIdleCallback === 'function') cancelIdleCallback(state.standbyIdle);
+  state.standbyIdle = 0;
   const standby = state.pdfStandby;
   state.pdfStandby = null;
   standby?.end?.();
