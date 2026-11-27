@@ -31,6 +31,15 @@ UUID_TAG = re.compile(r'"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 CONVERTED = b'%PDF-1.7\n% a synthetic conversion of a Word file\n%%EOF\n'
 CONVERTED_AGAIN = b'%PDF-1.7\n% another synthetic conversion of the Word file\n%%EOF\n'
+# What Chromium sends (147, measured for I1-17) when the review page asks for a stored PDF's view: the frame the viewer
+# falls back to loads it as a navigation of an iframe (app.js showFrame), the page's own download fetches it from the
+# same origin (app.js downloadDocument). The fetch metadata and the Accept of each, nothing that names a person.
+FRAME_LOAD_HEADERS = {'HTTP_SEC_FETCH_DEST': 'iframe', 'HTTP_SEC_FETCH_MODE': 'navigate',
+                      'HTTP_SEC_FETCH_SITE': 'same-origin', 'HTTP_UPGRADE_INSECURE_REQUESTS': '1',
+                      'HTTP_ACCEPT': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,'
+                                     'image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'}
+PAGE_FETCH_HEADERS = {'HTTP_SEC_FETCH_DEST': 'empty', 'HTTP_SEC_FETCH_MODE': 'cors', 'HTTP_SEC_FETCH_SITE': 'same-origin',
+                      'HTTP_ACCEPT': '*/*'}
 
 
 class ViewerCase(ReadCase):
@@ -133,13 +142,19 @@ class ViewTagTests(ViewerCase):
 
     def test_a_row_that_cannot_be_written_serves_no_request_shape_a_byte(self):
         # integrated refutation round 1, failclosed-1: the page's own download is poll-marked, and once it is refused the
-        # viewer frames the browser's own viewer, whose load is a plain GET - no poll mark, no tag. Every shape the page
-        # and its frame send, for a stored PDF (the frame fallback exists only for one), answers 503 with no PDF byte
-        # and no row while the row cannot be written; the control serves each once the row can be.
+        # viewer frames the browser's own viewer, whose load is a navigation - no poll mark, no tag, the frame's fetch
+        # metadata and an HTML Accept (I1-17: the checker's F1; the session does not count it as activity either,
+        # studio.sessions.automatic). Every shape the page and its frame send, for a stored PDF (the frame fallback
+        # exists only for one) - with the headers Chromium sends, and with none - answers 503 with no PDF byte and no
+        # row while the row cannot be written; the control serves each once the row can be.
         tag = self.view(self.enc)['ETag']
         rows = len(self.inline_rows(self.enc))
-        shapes = {'the frame\'s plain load': {}, 'the page\'s download': {'HTTP_X_CPT_POLL': '1'},
-                  'the page\'s re-open': {'HTTP_X_CPT_POLL': '1', 'HTTP_IF_NONE_MATCH': tag},
+        shapes = {'the frame\'s load, as Chromium sends it': FRAME_LOAD_HEADERS,
+                  'the page\'s download, as Chromium sends it': {**PAGE_FETCH_HEADERS, 'HTTP_X_CPT_POLL': '1'},
+                  'the page\'s re-open, as Chromium sends it': {**PAGE_FETCH_HEADERS, 'HTTP_X_CPT_POLL': '1',
+                                                                'HTTP_IF_NONE_MATCH': tag},
+                  'a plain load with no header': {}, 'a download with no fetch metadata': {'HTTP_X_CPT_POLL': '1'},
+                  'a re-open with no fetch metadata': {'HTTP_X_CPT_POLL': '1', 'HTTP_IF_NONE_MATCH': tag},
                   'a tagged plain load': {'HTTP_IF_NONE_MATCH': tag}}
         for what, headers in shapes.items():
             with self.subTest(shape=what):
