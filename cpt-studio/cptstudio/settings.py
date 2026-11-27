@@ -93,9 +93,12 @@ DATABASES = {'default': {
     # The web keeps each process's one connection for an hour and checks it at the first query of each request, so a
     # click after a pause opens no connection inside the request, and a connection the database ended between requests
     # is replaced, never answered with an error (R2-7); one lost while a request runs, or a database that refuses
-    # connections, answers 503 (studio.db_unavailable). An hour, not for ever, so a changed database setting that needs
-    # a new session reaches the web within it. The worker and the commands keep 60 s and no check: a worker thread's
-    # connection holds its provider slot's session lock across a send (studio.jobs._take_slot).
+    # connections, answers 503 (studio.db_unavailable) - except a loss in Django's own write of the session's row after
+    # the view, which is Django's 400 (SessionInterrupted), a recorded limit (I1-20): rare, since a request writes its
+    # session only when it changed it, its activity time at most once a minute (SESSION_ACTIVITY_WRITE_SECONDS). An
+    # hour, not for ever, so a changed database setting that needs a new session reaches the web within it. The worker
+    # and the commands keep 60 s and no check: a worker thread's connection holds its provider slot's session lock
+    # across a send (studio.jobs._take_slot).
     'CONN_MAX_AGE': 3600 if _web_process else 60,
     'CONN_HEALTH_CHECKS': _web_process,
     # The web waits at most 5 s for a new connection (refutation round 1 of R2-7), so a database that accepts and never

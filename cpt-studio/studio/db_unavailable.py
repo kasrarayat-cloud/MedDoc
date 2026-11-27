@@ -8,8 +8,16 @@ checks them at a request's first query, which replaces one the database ended be
 
 - DatabaseUnavailableMiddleware (cptstudio/settings.py MIDDLEWARE) answers such an error a view raises;
 - server_error, both urlconfs' handler500 (cptstudio/urls.py, cptstudio/urls_admin.py), answers one another middleware
-  raises - the session's load in studio.sessions.SessionPolicyMiddleware, its save in SessionMiddleware - which Django
-  converts at that middleware's own layer through handler500, calling no middleware's process_exception.
+  raises - the session's load in studio.sessions.SessionPolicyMiddleware, the session store's own bookkeeping of its
+  links around the save in SessionMiddleware (studio.session_store) - which Django converts at that middleware's own
+  layer through handler500, calling no middleware's process_exception.
+
+A recorded limit (integrated refutation round 1, I1-20): a loss in Django's own write of the session's row at that save
+reaches neither. Django's SessionStore.save turns a database error of an update into UpdateError, which
+SessionMiddleware raises as SessionInterrupted: Django's own 400 (an HTML page, no Retry-After), left as Django answers
+it, since catching it would catch more than a lost database. The view's answer is not sent then either, and a read's
+record, already written, says it was served. A request writes its session only when it changed it: under /api/ only its
+activity time, at most once a minute (SESSION_ACTIVITY_WRITE_SECONDS).
 
 Both answer database_unavailable: 503 with Retry-After; under /api/ the API's fail-closed answer (studio.read_audit's
 NOT_RECORDED sentence: no exception text), elsewhere Django's own plain error page, titled "Service Unavailable (503)".

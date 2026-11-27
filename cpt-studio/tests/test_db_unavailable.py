@@ -4,20 +4,25 @@ is, never Django's HTML 500 (studio.db_unavailable).
 The connection is lost at ONE chosen statement of a signed-in request - an execute wrapper raises the error Django
 raises for a connection the database ended (OperationalError) or one already closed (InterfaceError) - so each place a
 loss can land is named exactly: in a middleware (the session's load, before any view), in a view before its read is
-recorded, and after. (The session's save after a view is Django's own 400, a recorded limit: see its test.) Each answers 503 with Retry-After, under /api/ the API's fail-closed JSON,
-elsewhere the plain error page; no byte of the request is served. Any other error stays Django's own 500. The real web,
-its connections ended while requests run and refused for a while, is tests/test_web_process.py's
+recorded, and after. (A loss in Django's own write of the session's row, at its save after a view, is Django's own
+400, a recorded limit the documents name, I1-20: see its tests.) Each answers 503 with Retry-After, under /api/ the
+API's fail-closed JSON, elsewhere the plain error page; no byte of the request is served. Any other error stays Django's
+own 500. The real web, its connections ended while requests run and refused for a while, is tests/test_web_process.py's
 test_a_database_lost_while_requests_run_or_restarted_answers_503_never_500. Synthetic data only.
 """
 from __future__ import annotations
 
+import ast
 import json
+from pathlib import Path
+from unittest import mock
 
+from django.conf import settings
 from django.db import IntegrityError, InterfaceError, OperationalError, connection
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import get_resolver
 
-from studio import db_unavailable, models, read_audit
+from studio import db_unavailable, models, read_audit, session_store
 from tests.support import coding as f
 from tests.support import rounds as r
 from tests.test_frontend import PLAIN_STATIC
@@ -113,11 +118,32 @@ class TheDatabaseLostAtOneStatementTests(TestCase):
         # a recorded limit: Django's database SessionStore.save turns any database error of an update into UpdateError,
         # which SessionMiddleware answers 400 (SessionInterrupted, as for a session deleted while the request ran)
         # before either door sees an OperationalError - left as Django answers it, since catching it would catch more
-        # than a lost database. The write comes at most once a SESSION_ACTIVITY_WRITE_SECONDS: here at every ping
+        # than a lost database. The write comes at most once a SESSION_ACTIVITY_WRITE_SECONDS: here at every request.
+        # An API read's answer is not sent either, and its record, written before it, says it was served (I1-20: the
+        # batch B check's probe, a signed-in GET of a document)
         with override_settings(SESSION_ACTIVITY_WRITE_SECONDS=0):
-            response, _ = self.lost_at('UPDATE "django_session"', '/session/activity', method='post')
-        self.assertEqual((response.status_code, response.has_header('Retry-After')), (400, False))
-        self.assertNotIn(LOST.encode(), response.content)
+            for path, method, recorded in (('/session/activity', 'post', 0), (self.detail, 'get', 1)):
+                with self.subTest(path=path):
+                    response, served = self.lost_at('UPDATE "django_session"', path, method=method)
+                    self.assertEqual((response.status_code, response.has_header('Retry-After'),
+                                      response['Content-Type']), (400, False, 'text/html; charset=utf-8'))
+                    self.assertNotIn(LOST.encode(), response.content)
+                    self.assertNotIn(b'Synthetic database-loss note', response.content)
+                    self.assertEqual(served, recorded)
+
+    def test_a_connection_lost_in_the_session_stores_own_links_at_the_save_answers_503(self):
+        # the store keeps the session's links around Django's write of its row, in the save's own transaction
+        # (studio.session_store.sync_links): a loss there leaves SessionMiddleware as an OperationalError, which the
+        # urlconf's handler500 answers 503 - the read's record already written, nothing of its answer sent (I1-20)
+        with override_settings(SESSION_ACTIVITY_WRITE_SECONDS=0), \
+                mock.patch.object(session_store, 'sync_links', side_effect=OperationalError(LOST)) as links, \
+                self.assertLogs('django.request', 'ERROR'):
+            before = models.AccessRecord.objects.filter(outcome=read_audit.SERVED).count()
+            response = self.client.get(self.detail)
+            self.assertUnavailable(response, api=True, what="the store's links at the session's save")
+        self.assertEqual(links.call_count, 1)
+        self.assertNotIn(b'Synthetic database-loss note', response.content)
+        self.assertEqual(models.AccessRecord.objects.filter(outcome=read_audit.SERVED).count() - before, 1)
 
     def test_a_loss_in_a_view_is_answered_by_the_middleware_before_djangos_own_handling(self):
         # the middleware answers what a view raises: Django's handling of an uncaught exception never runs for it (no
@@ -158,6 +184,33 @@ class TheDatabaseLostAtOneStatementTests(TestCase):
         # a request of the admin host whose session's load is lost (the cookie of this browser's session): the same 503
         response, _ = self.lost_at('"django_session"', '/account/', HTTP_HOST='admin.quillmd.com')
         self.assertUnavailable(response, api=False, what='the admin host')
+
+
+class TheSessionSaveLimitDocumentTests(SimpleTestCase):
+    """I1-20 (integrated refutation round 1, batch B's check): the documents name the recorded limit the tests above
+    measure - a loss in Django's own write of the session's row is Django's 400, not the 503 - and the module's account
+    of its two doors no longer counts that save among the losses they answer."""
+
+    def test_the_documents_say_a_loss_in_the_sessions_own_write_is_djangos_400(self):
+        root = Path(settings.BASE_DIR)
+        api = (root / 'API.md').read_text(encoding='utf-8')
+        start = api.index('- **A database that cannot be reached**')
+        bullet = ' '.join(api[start:api.index('\n- **', start)].split())
+        for words in ("a connection lost at the session's own save after the view, in Django's write of the session's "
+                      "row, is Django's own `400` (`SessionInterrupted`: an HTML page, no `Retry-After`), "
+                      "not this `503`", 'written at most once a minute (`SESSION_ACTIVITY_WRITE_SECONDS`)'):
+            self.assertIn(words, bullet)
+        self.assertEqual(settings.SESSION_ACTIVITY_WRITE_SECONDS, 60)  # "at most once a minute"
+        source = (root / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
+        start = source.index("# The web keeps each process's one connection")
+        comment = ' '.join(source[start:source.index("'CONN_MAX_AGE'", start)].replace('#', ' ').split())
+        self.assertIn("answers 503 (studio.db_unavailable) - except a loss in Django's own write of the session's row "
+                      "after the view, which is Django's 400 (SessionInterrupted)", comment)
+        module = ' '.join(ast.get_docstring(ast.parse((root / 'studio' / 'db_unavailable.py').read_text(
+            encoding='utf-8'))).split())
+        self.assertNotIn('its save in SessionMiddleware', module)
+        self.assertIn("a loss in Django's own write of the session's row at that save reaches neither", module)
+        self.assertIn("SessionMiddleware raises as SessionInterrupted: Django's own 400", module)
 
 
 class TheTwoDoorsTests(SimpleTestCase):
