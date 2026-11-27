@@ -1241,7 +1241,7 @@ const state = {
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
   // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
-  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
+  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, standbyFrame: 0, pdfStarted: false,
   // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16); the
   // ends that spare no view (forgetMemory, R2-18): a document opening across one keeps no copy
   keptViews: new Map(), early: null, viewHints: new Map(), wipes: 0,
@@ -1960,13 +1960,15 @@ function endEntrance() {
 }
 
 // Boot's first route: at once from the shell's session (R2-17), else after reading it, as release 1; the worker made
-// ready ahead is asked for after it (R2-10).
+// ready ahead is asked for `first` ms after the next frame, the one that draws the route (R2-10, D-R2-54), and an end
+// before that frame cancels it (endStandby).
 function firstRoute() {
   const carried = shellSession();
   const begin = () => {
     route();
     state.standbyOn = true;
-    scheduleStandby(PDF_STANDBY.first);
+    if (typeof requestAnimationFrame !== 'function') scheduleStandby(PDF_STANDBY.first);
+    else state.standbyFrame = requestAnimationFrame(() => { state.standbyFrame = 0; scheduleStandby(PDF_STANDBY.first); });
   };
   if (!carried) return loadSession().then(begin);
   state.session = carried;
@@ -3126,6 +3128,8 @@ function startStandby() {
 function endStandby() {
   clearTimeout(state.standbyTimer);
   state.standbyTimer = 0;
+  if (state.standbyFrame) cancelAnimationFrame(state.standbyFrame);
+  state.standbyFrame = 0;
   const standby = state.pdfStandby;
   state.pdfStandby = null;
   standby?.end?.();

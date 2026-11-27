@@ -265,7 +265,7 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'pdfStarted',
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'standbyFrame', 'pdfStarted',
     'list'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
@@ -6112,20 +6112,41 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
   } finally {
     global.requestIdleCallback = savedIdle;
   }
-  // boot: after its first route
-  await withPage({}, async () => {
-    global.document.body.dataset = { sessionJson: JSON.stringify(fixture('session.json')) };
-    global.location.hash = '#how-it-works';
-    Object.assign(app.state, { route: null, standbyOn: false });
-    try {
-      await app.firstRoute();
-      assert.equal(app.state.standbyOn, true, 'on, from the page\'s first route');
-      assert.ok(app.state.standbyTimer, 'and asked for');
-    } finally {
-      app.endStandby();
-      app.state.standbyOn = false;
-    }
-  });
+  // boot (D-R2-54): 500 ms after the frame that draws its first route - the script that routes runs before that frame -
+  // the delay itself pinned: nothing at 499 ms, asked for at 500; a page without frames counts it from the route
+  for (const framed of [false, true]) {
+    await withPage({}, async () => {
+      global.document.body.dataset = { sessionJson: JSON.stringify(fixture('session.json')) };
+      global.location.hash = '#how-it-works';
+      Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0 });
+      const frames = [];
+      const idleAsked = [];
+      const savedIdleCallback = global.requestIdleCallback;
+      global.requestIdleCallback = (fn, options) => idleAsked.push(options);
+      if (framed) Object.assign(global, { requestAnimationFrame: fn => frames.push(fn), cancelAnimationFrame: () => {} });
+      try {
+        await app.firstRoute();
+        assert.equal(app.state.standbyOn, true, 'on, from the page\'s first route');
+        if (framed) {
+          assert.deepEqual([app.state.standbyTimer, frames.length], [0, 1], 'not asked for before the frame that draws the route; that frame asked for');
+          t.mock.timers.tick(300);  // the frame comes after the route: the 500 ms are not counted from the route
+          assert.equal(idleAsked.length, 0);
+          frames.shift()();
+        }
+        assert.ok(app.state.standbyTimer, framed ? 'asked for at that frame' : 'asked for at the route');
+        t.mock.timers.tick(499);
+        assert.deepEqual([idleAsked.length, Boolean(app.state.standbyTimer)], [0, true], `not before 500 ms after ${framed ? 'that frame' : 'the route'}`);
+        t.mock.timers.tick(1);
+        assert.deepEqual([idleAsked, app.state.standbyTimer], [[{ timeout: 2000 }], 0], `asked for 500 ms after ${framed ? 'that frame' : 'the route'}, when the browser is idle`);
+      } finally {
+        app.endStandby();  // before the frame's stubs go: a failed assertion is never hidden by its cleanup
+        app.state.standbyOn = false;
+        delete global.requestAnimationFrame;
+        delete global.cancelAnimationFrame;
+        global.requestIdleCallback = savedIdleCallback;
+      }
+    });
+  }
   const source = fs.readFileSync(BUNDLE, 'utf8');
   assert.match(source, /function closeViewer\(\) \{[^}]*stopPdf\(viewer\);\n  viewer\.mode = 'closed';\n  scheduleStandby\(PDF_STANDBY\.next\);\n\}/);
   assert.match(source, /    page\.drawn = key;\n    scheduleStandby\(PDF_STANDBY\.next\);\n/);
@@ -6137,6 +6158,131 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
   assert.equal(aroundPagehide.length, 2, 'the pagehide line stands once in boot\'s own body, at its top level');
   assert.doesNotMatch(aroundPagehide[0], /\breturn\b/, 'no return in boot before it');
   assert.match(aroundPagehide[0], /[;}]$/, 'the line before it is a whole statement');
+});
+
+// D-R2-54, R2-18: boot asks for the worker made ready ahead at the frame that draws its first route, so an end can come
+// between the route and that frame - a deep link to a document the server refuses, its 404 answered within one frame (a
+// near server), the skeptic's case. Every end there leaves nothing asked for, as every end after the frame does.
+test('D-R2-54, R2-18: every end met between boot\'s first route and the frame that draws it - a refused document\'s 404, a late 404 that spares the view shown, pagehide, a 401, a forced password change, another tab\'s sign-out, the idle end, the cap, the sign-out form - leaves no timer, no frame and no worker', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const refused = 'f5000000-0000-4000-8000-0000000000ff';  // another practice's: its details answer 404
+  const own = 'f5000000-0000-4000-8000-000000000001';
+  const otherView = '/api/encounters/fe000000-0000-4000-8000-0000000000aa/original?view=1';  // another document's, kept
+  const notFound = () => response({ status: 404, body: { error: 'Not found.' } });
+  const api = (status, body) => url => (url === '/api/encounters' ? response({ status, body }) : new Promise(() => {}));
+  let refuse = null;
+  const ends = [
+    ['a refused document, its 404 before the frame', `#doc/${refused}`, url => (url === `/api/encounters/${refused}` ? notFound() : new Promise(() => {})),
+      async ({ element }) => { await settle(() => element('#main').innerHTML?.includes('This document is not available.')); return element('#main').innerHTML.includes('This document is not available.'); }],
+    ['a late 404 that spares the view the route shown opens', `#doc/${refused}`, url => (url === `/api/encounters/${refused}` ? new Promise(resolve => { refuse = resolve; }) : new Promise(() => {})),
+      async () => {
+        await settle(() => refuse !== null);
+        global.location.hash = `#doc/${own}`;
+        app.route();
+        const wipes = app.state.wipes;
+        refuse(notFound());
+        await settle(() => false);
+        return app.state.wipes === wipes;  // an end that spares a view counts no wipe: endStandby is what it shares
+      }],
+    ['pagehide', '#how-it-works', () => new Promise(() => {}), async () => { app.forgetMemory({ type: 'pagehide', persisted: false }); return true; }],
+    ['a 401', '#how-it-works', api(401, { error: 'signed_out', reason: 'idle' }), async () => { await app.api('/api/encounters').catch(() => {}); return app.idle.gone; }],
+    ['a forced password change', '#how-it-works', api(403, { error: 'password_change_required' }), async ({ calls }) => {
+      await app.api('/api/encounters').catch(() => {});
+      return calls.some(call => typeof call.assign === 'string' && call.assign.includes('/account'));
+    }],
+    ['another tab\'s sign-out', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { gone: false, session: 'tag-a' });
+      app.receiveSession({ type: 'signed-out', reason: 'idle', session: 'tag-a' });
+      return app.idle.gone;
+    }],
+    ['the idle end', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { deadline: Date.now() - 1, gone: false });
+      app.scheduleIdle();
+      return app.idle.gone;
+    }],
+    ['the cap', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { deadline: Date.now() - 1, capEnd: Date.now() - 1, idleEnd: Date.now() + 60000, gone: false });
+      app.scheduleIdle();
+      return app.idle.gone;
+    }],
+    ['the sign-out form', '#how-it-works', () => new Promise(() => {}), async ({ element }) => {
+      const listeners = {};
+      element('#signoutForm').addEventListener = (type, fn) => { listeners[type] = fn; };
+      global.document.addEventListener = () => {};
+      global.window.addEventListener = () => {};
+      const channel = globalThis.BroadcastChannel;
+      globalThis.BroadcastChannel = undefined;
+      try {
+        Object.assign(app.idle, { started: false, gone: false, channel: null });
+        app.startIdleWatch();
+      } finally {
+        globalThis.BroadcastChannel = channel;
+      }
+      listeners.submit();
+      return app.idle.gone;
+    }],
+  ];
+  const savedIdle = global.requestIdleCallback;
+  const asked = [];
+  global.requestIdleCallback = fn => asked.push(fn);
+  try {
+    for (const [what, hash, answer, end] of ends) {
+      refuse = null;
+      await withPdfPage(() => Promise.resolve(fakeLibrary().library), async page => {
+        const frames = new Map();
+        let handle = 0;
+        global.requestAnimationFrame = fn => { handle += 1; frames.set(handle, fn); return handle; };
+        global.cancelAnimationFrame = id => frames.delete(id);
+        try {
+          global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+          global.location.hash = hash;
+          Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+          asked.length = 0;
+          const kept = Uint8Array.from([37, 80]);
+          app.state.keptViews.clear();
+          app.keepView(otherView, 'abcdef00-0000-4000-8000-000000000000', kept);
+          await app.firstRoute();
+          assert.deepEqual([app.state.standbyOn, app.state.standbyTimer, frames.size], [true, 0, 1], `${what}: the frame that draws the route asked for, nothing else yet`);
+          assert.equal(await end(page), true, `${what}: the end happened as this case says`);
+          assert.deepEqual([app.state.keptViews.has(otherView), [...kept]], [false, [0, 0]], `${what}: an end - another document's kept copy overwritten and dropped`);
+          for (const fn of [...frames.values()]) fn();  // the frame comes after the end
+          assert.equal(app.state.standbyTimer, 0, `${what}: no timer after the frame`);
+          t.mock.timers.tick(10000);
+          assert.deepEqual([asked.length, FakeWorker.made.length, app.state.pdfStandby], [0, 0, null], `${what}: nothing asked for, no worker made`);
+        } finally {
+          app.endStandby();
+          app.state.standbyOn = false;
+          delete global.requestAnimationFrame;
+          delete global.cancelAnimationFrame;
+        }
+      }, answer);
+    }
+  } finally {
+    global.requestIdleCallback = savedIdle;
+  }
+  // and the control: with no end, the same page asks for the worker 500 ms after that frame and makes it
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+    const frames = [];
+    global.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+    global.cancelAnimationFrame = () => {};
+    global.requestIdleCallback = undefined;
+    try {
+      global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+      global.location.hash = '#how-it-works';
+      Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+      await app.firstRoute();
+      frames.shift()();
+      t.mock.timers.tick(500);
+      await settle(() => FakeWorker.made.length === 1);
+      assert.equal(FakeWorker.made.length, 1, 'the control: a worker made ready ahead, 500 ms after the frame');
+    } finally {
+      app.endStandby();
+      app.state.standbyOn = false;
+      delete global.requestAnimationFrame;
+      delete global.cancelAnimationFrame;
+      global.requestIdleCallback = savedIdle;
+    }
+  });
 });
 
 test('R2 V1: leaving a document while its worker starts never makes the page forget a working library', async t => {
