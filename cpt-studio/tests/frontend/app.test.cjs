@@ -4366,6 +4366,24 @@ test('the viewer is offered only where every built-in it and the legacy library 
   }
 });
 
+// I1-19 (the independent check's F3): I1-3 trimmed the comment above pdfCapable to keep app.js's weight, pointing at
+// CORE-UX-DESIGN.md for what it moved, and two measured facts reached no file. The section it points at records how the
+// measurement deleted each built-in and what the documents did without each one the legacy build puts back.
+test('the measurement the pdfCapable comment points at is recorded in CORE-UX-DESIGN.md: how each built-in was deleted, and that the documents drew and marked as before (I1-19)', () => {
+  assert.ok(fs.readFileSync(BUNDLE, 'utf8').includes('CORE-UX-DESIGN.md ("Browsers that mark")'), 'the comment points at it');
+  const design = fs.readFileSync(path.join(ROOT, 'CORE-UX-DESIGN.md'), 'utf8');
+  const start = design.indexOf('\n- **Browsers that mark**');
+  assert.ok(start >= 0, 'the section is there');
+  const end = design.indexOf('\n- **', start + 1);
+  const section = design.slice(start, end < 0 ? undefined : end).replace(/\s+/g, ' ');
+  for (const fact of [
+    'deleted in the page and in the library\'s worker before the library loaded',
+    'its `typeof` read before and after, so a deletion that did not apply could not pass',
+    'then the preview\'s PDFs and the walk\'s gi-02 opened and every quote chosen',
+    'seen present again once it had run, and with each one deleted the documents drew and marked exactly as before',
+  ]) assert.ok(section.includes(fact), fact);
+});
+
 // A synthetic PDF, one content stream per page, with Helvetica as /F1 and Helvetica-Bold as /F2 (standard fonts, no
 // embedded data): enough to read what the library makes of a drawing.
 function rawPdf(pages) {

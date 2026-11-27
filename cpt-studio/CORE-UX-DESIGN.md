@@ -298,12 +298,15 @@ apart from the page script.
   worker that has stopped still gives the library's note about 20 seconds later. A page released from the view is no
   longer waited on.
 - **Browsers that mark** (measured in Chromium only, with each candidate built-in deleted in the page and in the
-  library's worker; Firefox and Safari were not run, and their versions are MDN's browser-compat-data for what the
-  measurement found needed): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
+  library's worker before the library loaded - its `typeof` read before and after, so a deletion that did not apply
+  could not pass - then the preview's PDFs and the walk's gi-02 opened and every quote chosen; Firefox and Safari were
+  not run, and their versions are MDN's browser-compat-data for what the measurement found needed): Chrome and Edge
+  119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
   and iPadOS, Samsung Internet 25+. The floor is set by what the legacy library calls with no stand-in
   (`Promise.withResolvers`, `ArrayBuffer.prototype.transferToFixedLength`, `Array.prototype.at`; `structuredClone` and
   `Object.hasOwn` on paths the test documents did not take) and by the matcher's `Intl.Segmenter` (Firefox 125). The
-  legacy build puts back itself, when missing, what else it calls (seen present again once it had run): Map and WeakMap
+  legacy build puts back itself, when missing, what else it calls (each seen present again once it had run, and with
+  each one deleted the documents drew and marked exactly as before): Map and WeakMap
   `getOrInsert` and `getOrInsertComputed`, `Math.sumPrecise`, `Promise.try`, Uint8Array `fromBase64`, `toBase64`,
   `toHex`, `setFromBase64` and `setFromHex`, `Iterator` with its `map`, `filter`, `toArray`, `flatMap`, `forEach`,
   `some`, `every` and `find`, the seven new Set methods, `URL.parse`, and Response and Blob `bytes()`; it does not put
