@@ -4987,3 +4987,38 @@ the entry.
   declaration.
 
 (Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10, file sha256 375c7a0a18863c93..., on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2's B measurement: two fixes and the rows accepted in the open, declared before B is measured again (D-R2-54)
+
+Recorded before the second B measurement starts, so that its commit time precedes every value it will be judged on.
+
+- **D-R2-54** (2026-11-27, the lead; B session `laneM/b2` and the investigation `investigate/RESULT.json`; DECLARED BEFORE
+  B IS MEASURED AGAIN, and committed before that measurement starts). B on `ccb350d0b` was INVALID (A drifted beyond
+  tolerance on five rows; A's bluegreen part was not given the other tree) with 9 FAIL rows. Dispositions:
+  (1) Two fixes, then B is measured again in full (A B A B A B, every group, `BENCH_OTHER_TREE` = release 1's tree for
+  the whole driver, no other work on the host):
+  - long-tasks-max-P1 (b2: A 136, B 186; gate 160): renderPage yields one task before a later page's text layer when
+    another page is already drawn (investigation F1-p2: 199 -> 151 ms at P1; long-tasks-total-P1 564.5 -> 475).
+  - standby-delay (b2: min 489; gate >= 500): the standby's 500 ms counts from the frame that draws the first route
+    (investigation F1); its test pins the delay itself, and every R2-18 end cancels the timer, an end before the first
+    frame included.
+  (2) Rows accepted in the open, each ONLY within the bound written here; a value past its bound is a FAIL that stands:
+  - quote-mark-P0: R2-14 recorded before B that the canvases' one-time re-raster "now falls on the first interaction
+    after a document is drawn" (measured once at about 23 ms), which this row's gate (1.1 A + 15, about 33-36 ms) cannot
+    hold by construction. Accepted: B median <= 75 ms, and the second click (nth 3) no worse than 1.1 A + 15.
+  - opaque-P1: the 200 ms target is missed narrowly (b2 230.15; investigation 202.8-218.2) against release 1's 656-691;
+    no small change passes it robustly. Accepted: B <= 240 ms and B <= 0.40 A.
+  - memory-signed-out: the standby PDF worker (R2-10), ended at sign-out, leaves allocator memory in the renderer; no
+    page data is held. Accepted: B <= A + 2.0 MiB.
+  - plans.no_seq_scan: both flagged statements are the documents list's whole-list COUNT (`customer.py:353` and `:223`,
+    byte-identical texts), which D-R2-37 accepts and which D-R2-49 recorded this gate counts. Accepted: that COUNT alone
+    may Seq Scan; a Seq Scan in any other statement is a FAIL.
+  - detail-10-p95, server-list-100, session-18000: their gain rule cannot show a gain at their A/A spread
+    (detail-10-p95 by construction, 2 x 0.641 > 1; the other two would need B <= 9.1 and <= 11.0 ms against section 8's
+    30 and 20 ms). Accepted as "gain not shown": B <= the section-8 limit (150, 30, 20 ms) and B <= A in the same session.
+  - the cold row: accepted as D-R2-50 declared (b2 hand-run: max 112.8 ms against release 1's 1,970 ms median).
+  Every other row: the frozen judge's verdict stands, and any other FAIL stops the release.
+  (3) The owner is told these residuals in one sentence in the install message, told and not asked (D422, D428's
+  pattern); if he objects, the act does not start.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
