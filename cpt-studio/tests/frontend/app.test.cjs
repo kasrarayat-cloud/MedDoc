@@ -6084,12 +6084,18 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
       t.mock.timers.tick(10000);
       assert.equal(asked.length, 0, 'not on a page that has not booted');
       await withStandby(async () => {
+        // asked for twice, the second 300 ms after the first: the second clears the first one's timer, so the delay counts
+        // from the second - nothing at 500 ms, asked for once at 800. A count alone cannot show the clear: one idle
+        // callback waits at a time (D-R2-54), so a first timer left to fire would ask at 500 and the second ask for nothing.
         app.scheduleStandby(500);
+        t.mock.timers.tick(300);
         app.scheduleStandby(500);
-        t.mock.timers.tick(499);
-        assert.equal(asked.length, 0);
+        t.mock.timers.tick(200);
+        assert.equal(asked.length, 0, 'nothing at 500 ms: the second ask cleared the first one\'s timer');
+        t.mock.timers.tick(299);
+        assert.equal(asked.length, 0, 'nor before 500 ms after the second ask');
         t.mock.timers.tick(1);
-        assert.equal(asked.length, 1, 'once, asked twice');
+        assert.equal(asked.length, 1, 'once, asked twice: 500 ms after the second ask');
         assert.deepEqual(asked[0].options, { timeout: 2000 }, 'when the browser is idle, or 2 s at the latest');
         assert.equal(FakeWorker.made.length, 0, 'nothing before the browser says it is idle');
         asked[0].fn();
@@ -6288,16 +6294,18 @@ test('D-R2-54, R2-18: every end met between boot\'s first route and the frame th
 // D-R2-54, R2-18 (the idle stage): the worker made ready ahead is asked for in two stages - a timer, then, once it fires,
 // an idle callback - so an end can come in the second as in the first: a refused document's 404 answered while the
 // browser is busy. One idle callback waits at a time (a second schedule's timer, fired meanwhile, asks for none), its
-// handle kept, and every end cancels it (endStandby) as it cancels the timer. The browser's idle callbacks are stood in
-// for with their cancel, as a browser has both.
+// handle kept, and every end cancels it (endStandby) as it cancels the timer. The one waiting keeps its earlier deadline:
+// a later timer neither cancels it nor asks again (which, on a busy thread, would put the worker off at every timer). The
+// browser's idle callbacks are stood in for with their cancel, as a browser has both.
 test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its idle callback ran - a refused document\'s 404, one schedule\'s timer fired or two - cancels the one idle callback waiting and makes no worker; the next schedule asks again', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const refused = 'f5000000-0000-4000-8000-0000000000ee';  // another practice's: its details answer 404
   const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
   const idles = new Map();
+  const cancelled = [];
   let handle = 0;
   global.requestIdleCallback = (fn, options) => { handle += 1; idles.set(handle, { fn, options }); return handle; };
-  global.cancelIdleCallback = id => { idles.delete(id); };
+  global.cancelIdleCallback = id => { cancelled.push(id); idles.delete(id); };
   // the browser is idle: every idle callback still waiting runs
   const idleNow = () => {
     const due = [...idles.values()];
@@ -6308,6 +6316,7 @@ test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its
     for (const timers of [1, 2]) {
       let refuse = null;
       idles.clear();
+      cancelled.length = 0;
       await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element }) => {
         const frames = [];
         global.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
@@ -6319,11 +6328,14 @@ test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its
           await app.firstRoute();
           frames.shift()();
           t.mock.timers.tick(app.PDF_STANDBY.first);
+          const first = [...idles.keys()];  // the idle callback the first timer asked for
           if (timers === 2) {
             app.scheduleStandby(app.PDF_STANDBY.next);  // a closed viewer or a drawn page: its timer fires while the first callback waits
             t.mock.timers.tick(app.PDF_STANDBY.next);
           }
           assert.deepEqual([idles.size, [...idles.values()][0]?.options, FakeWorker.made.length], [1, { timeout: 2000 }, 0], `${timers} fired: one idle callback waits, nothing made yet`);
+          // and it is the first one asked for, its handle still queued and never cancelled: its deadline is the earlier one
+          assert.deepEqual([[...idles.keys()], first.length, cancelled], [first, 1, []], `${timers} fired: the idle callback waiting is the first one asked for, never cancelled`);
           await settle(() => refuse !== null);
           refuse(response({ status: 404, body: { error: 'Not found.' } }));
           await settle(() => element('#main').innerHTML?.includes('This document is not available.'));
@@ -6351,6 +6363,91 @@ test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its
         }
       }, url => (url === `/api/encounters/${refused}` ? new Promise(resolve => { refuse = resolve; }) : new Promise(() => {})));
     }
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
+});
+
+// D-R2-54, R2-18: a schedule clears the timer of the one before it (scheduleStandby) and an end clears the timer kept
+// (endStandby), so two schedules and then an end leave no timer behind: a page drawn asks for the worker made ready ahead,
+// the viewer closed by the next route asks again 300 ms later, before the first one's timer fired, and that route's
+// document is refused - its 404 is an end, still signed in. Nothing is asked for after the end and no worker is made; the
+// next schedule asks again and makes it (the control). The browser's idle callbacks are stood in for with their cancel.
+test('D-R2-54, R2-18: an end after two schedules - the second asked for before the first one\'s timer fired - leaves no timer: nothing is asked for and no worker made; the next schedule makes it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const idles = new Map();
+  let handle = 0;
+  let asks = 0;
+  global.requestIdleCallback = fn => { asks += 1; handle += 1; idles.set(handle, fn); return handle; };
+  global.cancelIdleCallback = id => { idles.delete(id); };
+  // the browser is idle: every idle callback still waiting runs
+  const idleNow = () => {
+    const due = [...idles.values()];
+    idles.clear();
+    for (const fn of due) fn({ didTimeout: false, timeRemaining: () => 50 });
+  };
+  try {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      await withStandby(async () => {
+        Object.assign(app.state, { standbyTimer: 0, standbyIdle: 0 });
+        app.scheduleStandby(app.PDF_STANDBY.next);  // a page drawn (renderPage)
+        t.mock.timers.tick(300);
+        app.scheduleStandby(app.PDF_STANDBY.next);  // the viewer closed by the next route (closeViewer)
+        app.forgetMemory();  // that route's document refused: its 404 is an end (R2-18), still signed in
+        t.mock.timers.tick(10000);
+        idleNow();
+        await settle(() => FakeWorker.made.length > 0);
+        assert.deepEqual([asks, FakeWorker.made.length, Boolean(app.state.pdfStandby)], [0, 0, false], 'two schedules, then an end: nothing asked for after it, no worker made');
+        // the control: the next schedule asks again and makes the worker
+        app.scheduleStandby(app.PDF_STANDBY.next);
+        t.mock.timers.tick(app.PDF_STANDBY.next);
+        assert.equal(asks, 1, 'the control: the next schedule asks again');
+        idleNow();
+        await settle(() => FakeWorker.made.length === 1);
+        assert.equal(FakeWorker.made.length, 1, 'the control: made when no end came');
+      });
+    });
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
+});
+
+// D-R2-54 (the idle stage): the one idle callback waiting keeps its earlier deadline. On a busy thread, where an idle
+// callback runs only at its deadline (2 s), pages drawn one after another ask for the worker made ready ahead every
+// 600 ms; each of those timers finds the first idle callback still waiting and leaves it be, so the worker is made at
+// that callback's deadline, 2600 ms - never put off by cancelling it and asking again at every timer, which would make
+// none for as long as pages keep being drawn. The browser's idle callbacks are stood in for by timers at their deadline,
+// with their cancel.
+test('D-R2-54 (the idle stage): on a busy thread - an idle callback runs only at its 2 s deadline - pages drawn every 600 ms never put the worker made ready ahead off: it is made at the first idle callback\'s deadline, 2600 ms', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const due = new Map();
+  let handle = 0;
+  global.requestIdleCallback = (fn, options) => {
+    handle += 1;
+    const id = handle;
+    due.set(id, setTimeout(() => { due.delete(id); fn({ didTimeout: true, timeRemaining: () => 0 }); }, options.timeout));
+    return id;
+  };
+  global.cancelIdleCallback = id => { clearTimeout(due.get(id)); due.delete(id); };
+  try {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      await withStandby(async () => {
+        Object.assign(app.state, { standbyTimer: 0, standbyIdle: 0 });
+        app.scheduleStandby(app.PDF_STANDBY.next);  // at 0 ms: its timer fires at 600, the idle callback it asks for runs at 2600
+        let madeAt = null;
+        for (let at = 100; at <= 6000; at += 100) {
+          t.mock.timers.tick(100);
+          if (at % 600 === 0 && at <= 4800) app.scheduleStandby(app.PDF_STANDBY.next);  // a page drawn every 600 ms, to 4800
+          await settle(() => FakeWorker.made.length > 0);
+          if (madeAt === null && FakeWorker.made.length > 0) madeAt = at;
+        }
+        assert.deepEqual([madeAt, FakeWorker.made.length], [2600, 1], 'made once, at the first idle callback\'s deadline (2600 ms): the later timers did not put it off');
+      });
+    });
   } finally {
     global.requestIdleCallback = saved.request;
     global.cancelIdleCallback = saved.cancel;
