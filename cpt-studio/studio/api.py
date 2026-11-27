@@ -561,6 +561,11 @@ def download_report(request, report_id):
 # the bytes, recorded as today. Both stay no-store (access.SecurityHeadersMiddleware): nothing is kept by a proxy.
 
 SHOWN_FROM_PAGE_MEMORY = {'shown_from': 'page_memory'}  # a 304's record: the page drew its own copy
+# A Word document's converted view names, on its 200 and its 304 alike, the stored conversion it serves at that read
+# (customer.view_conversion_of, the detail's document.view_conversion): the page draws the bytes it holds only when they
+# are the conversion the detail it shows names - the click's early view is read before that detail, and a later round
+# may store another conversion between the two (integrated refutation round 2, I2-1, viewer-0).
+VIEW_CONVERSION_HEADER = 'X-CPT-View-Conversion'
 
 
 def view_tag(request, encounter, shown):
@@ -605,6 +610,8 @@ def original(request, encounter_id):
                 _recorded(request, view, filters=SHOWN_FROM_PAGE_MEMORY, **record)
                 held = HttpResponseNotModified()
                 held['ETag'] = f'"{tag}"'
+                if shown.conversion:
+                    held[VIEW_CONVERSION_HEADER] = shown.conversion
                 return held
             data = customer.view_bytes(encounter, shown)
             _recorded(request, view, **record)
@@ -614,6 +621,8 @@ def original(request, encounter_id):
             response['Content-Security-Policy'] = VIEW_CSP
             if tag is not None:
                 response['ETag'] = f'"{tag}"'
+            if shown.conversion:
+                response[VIEW_CONVERSION_HEADER] = shown.conversion
             return response
         try:
             found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)

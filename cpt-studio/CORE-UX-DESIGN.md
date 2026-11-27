@@ -200,7 +200,7 @@ apart from the page script.
   dropped and Unicode NFKC applies, on both sides, and a match is exact-case first, case-blind only where there is no
   exact-case occurrence, and always of whole characters (`Intl.Segmenter` grapheme clusters, joined again wherever NFKC
   combines two of them, so that NFKC of the page's text is exactly its characters' NFKC). No fuzzy or nearest match, no
-  word list.
+  word list: nothing in the rule reads what the words mean, only Unicode character classes, NFKC and the items' geometry.
 - **Word edges.** At each end of a match a word edge is asked for, in this order, read in the page's text above (copies
   left out, line breaks in) as the page writes it, not after NFKC:
   1. *Separate drawings* (R2b). Where the match's end lies between the last character of one item and the first
@@ -230,7 +230,7 @@ apart from the page script.
   it is still found.
 - **Pages.** It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping
   only a passage that starts on the quote's page and runs onto the next (the marked part on each page is shown; the edges
-  are read on each page). Nothing is ever marked on another page; a quote found only on another page is not marked. A
+  are read on each page; a character never spans two pages). Nothing is ever marked on another page; a quote found only on another page is not marked. A
   quote with no page is looked for on every page, and its pages are named. Each page's prepared text is made once per
   document and reused; a quote with no page reads and prepares the pages in slices, so the page never stops answering
   for long.
@@ -453,7 +453,12 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   and watched, while up to three pages load by themselves as it comes within 600 px of the window; once those are used up,
   or one has failed, it holds "Show more documents" (`button[data-action=more-documents]`), and from then on only the
   button loads more, while more rows follow. A load that fails says why there, the button staying. A browser without
-  IntersectionObserver shows the button from 51 documents. New rows are appended through a `template`.
+  IntersectionObserver shows the button from 51 documents. New rows are appended through a `template`. Every page names
+  the practice it was read in: a later page or a search of another practice than the list's first page, and a first
+  page of another practice than the page shows (the member's access changed while the page was open), is never drawn -
+  nothing appended, no number set - the session is read again, and the route is drawn afresh once it names another
+  practice (integrated refutation rounds 1 and 2, exact-0 and exact-1); a page and a session of the same practice read
+  no session, and a session that cannot be read draws nothing more.
 - **The search** (`#documentSearch`; R2-22, the critics' C2). Up to 200 documents (the first page's `total`), the first
   input loads any pages not yet loaded, one at a time, each recorded as a later page, and the search runs in the page with
   release 1's rule - a row stays when its text, lower-cased, holds the words - inside the keystroke, with no request per
@@ -485,7 +490,17 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   request, drops the copy and overwrites it, and the page's own abort (a route away, a second click) leaves it kept.
   A document whose detail names no PDF view (a Word file a later round refused, integrated refutation round 1: I1-1)
   keeps no copy, whichever of its answers comes first: the view's 404, or the detail, which lets the click's view go
-  (I1-16, viewer-2); and when the open page's poll brings the refusal, no view is asked and the copy goes too.
+  (I1-16, viewer-2), and the detail that comes after the member has left the document (the route's abort kept the
+  copy; integrated refutation round 2, viewer-2); and when the open page's poll brings the refusal, no view is asked and
+  the copy goes too.
+- **The conversion drawn is the one the detail names** (integrated refutation round 2, I2-1, viewer-0). A Word
+  document's view answers (the `200` and the `304` alike) name the stored conversion they serve, and the page draws
+  the bytes it holds only when that is the conversion its detail names (`document.view_conversion`): the click's view
+  is asked for before the detail is read, and a later round may store another conversion between the two reads. An
+  early answer of another conversion is asked again (with the kept tag: the server answers `200` with the conversion it
+  now serves); an answer newer than the detail (asked after it) makes the page read the document again, as a poll, and
+  that read's redraw asks afresh; a poll that names another conversion while the view comes redraws the viewer whole.
+  Each answer is recorded as served, so such an opening writes more `member.inline` rows than one - never fewer.
 - **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
   the page meets it (the view's own download, a download the page saves, and the load of either viewer's frame, the
   text's or the browser's own PDF viewer's: the site's refusals forbid framing, so the browser does not let the page read

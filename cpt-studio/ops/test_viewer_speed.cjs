@@ -14,7 +14,9 @@
  * Word document kept open while a later round converts it again draws that round's conversion (the page's poll redraws
  * the viewer whole; its kept copy asked with its tag). A seventeenth (V15, integrated refutation round 2, viewer-1): one
  * zoomed and scrolled across a later round that reads back the same stored conversion keeps its viewer, its zoom and
- * the member's place, asking nothing. Skipped where Playwright is not installed
+ * the member's place, asking nothing. An eighteenth (V16, integrated refutation round 2, viewer-0): a Word document
+ * opened again while a later round stores its conversion draws that conversion, whichever of the click's view and the
+ * detail is read first. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -904,5 +906,74 @@ test('V15, I2-2: a Word document kept open, zoomed and scrolled, across a later 
   } finally {
     await previewControl('reset');
     await context.close();
+  }
+});
+
+test('V16, I2-1: a Word document opened again while a later round stores its own conversion draws that conversion - the click\'s view read before the round stored it (a 304 of the kept copy) and the detail after, or the detail first and the view after - asking again until the bytes are the conversion the detail names; its quote is marked', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const { RECONVERTED_LINE } = require('./dev_preview_server.cjs');
+  for (const order of ['the view first', 'the detail first']) {
+    const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+      const { page, calls, errors } = await open(context);
+      await listed(page);
+      await openRow(page, WORD);  // round 1's conversion drawn, its copy kept under its tag
+      const firstTag = await page.evaluate(view => state.keptViews.get(view)?.tag || '', viewOf(WORD));
+      assert.match(firstTag, /^[0-9a-f-]{36}$/, `${order}: a copy kept`);
+      await back(page);
+      await previewControl('reconvert');  // another member's answers began round 2, which converts the file again
+      const detailUrl = `${kit.base}/api/encounters/${WORD}`;
+      let held = false;
+      const answered = { view: null, detail: null };
+      const seen = { view: new Promise(resolve => { answered.view = resolve; }), detail: new Promise(resolve => { answered.detail = resolve; }) };
+      page.on('response', response => {
+        if (response.url() === `${kit.base}${viewOf(WORD)}`) answered.view();
+        if (response.url() === detailUrl) answered.detail();
+      });
+      if (order === 'the view first') {
+        // the round has been read once (reading): the click's view is read while round 1's conversion is still served,
+        // and the detail - held in the browser until that view's answer came - is read once the round stored its own
+        assert.equal((await fetch(detailUrl)).status, 200);
+        await page.route(url => url.href === detailUrl, async route => {
+          if (!held) {
+            held = true;
+            await seen.view;
+          }
+          await route.continue();
+        });
+      } else {
+        // the detail is read first (round 1's conversion still served); the round stores its own; then the click's view
+        await page.route(url => url.href === `${kit.base}${viewOf(WORD)}`, async route => {
+          if (!held) {
+            held = true;
+            await seen.detail;
+            assert.equal((await fetch(detailUrl)).status, 200);  // the round's next read: its own conversion stored
+          }
+          await route.continue();
+        });
+      }
+      calls.length = 0;
+      await page.click(`a.document-row[href="#doc/${WORD}"]`);
+      await page.waitForFunction(line => [...document.querySelectorAll('#documentViewer .pdf-text')].some(layer => layer.textContent.includes(line)),
+        RECONVERTED_LINE, { timeout: 30000 });
+      const views = calls.filter(call => call.url === viewOf(WORD));
+      await settled(views);
+      console.log(`V16 ${order} ${JSON.stringify(views.map(call => [call.condition, call.status, call.body > 0]))}`);
+      const first = views[0];
+      assert.deepEqual([first.condition, first.status], order === 'the view first' ? [`"${firstTag}"`, 304] : [`"${firstTag}"`, 200],
+        `${order}: the click's view, with the kept tag`);
+      assert.ok(views.slice(1).every(call => call.status === 200 && call.body > 0), `${order}: asked again, the new bytes`);
+      const shown = await page.evaluate(view => ({ conversion: state.doc.document.view_conversion, viewer: state.viewer?.conversion,
+        kept: state.keptViews.get(view)?.tag || '' }), viewOf(WORD));
+      assert.equal(shown.viewer, shown.conversion, `${order}: the viewer draws the conversion the detail names`);
+      assert.ok(shown.kept && shown.kept !== firstTag, `${order}: the new conversion kept under its own tag`);
+      // round 2 finishes: its quote of words only its conversion has is marked in it
+      await page.waitForFunction(() => state.doc?.progress?.phase === 'done' && state.doc.round.number === 2, null, { timeout: 30000 });
+      await page.click(`button.quote:has-text("${RECONVERTED_LINE.slice(0, 30)}")`);
+      await page.waitForFunction(() => document.querySelector('#documentViewer')?.dataset.markStatus === 'marked', null, { timeout: 15000 });
+      assert.deepEqual(errors, [], `${order}: no error in the page`);
+    } finally {
+      await previewControl('reset');
+      await context.close();
+    }
   }
 });

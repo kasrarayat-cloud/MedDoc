@@ -54,7 +54,9 @@
 // time, total null; blank words answer 400, words past 240 characters or holding a NUL or a lone surrogate an empty page.
 // Release 2 (R2-15): a PDF view carries an ETag shaped as the server's (a quoted UUID, never a hash of the file: here an
 // HMAC of this run's key, the document and its bytes), and a request whose If-None-Match names it (its weak form too,
-// never '*') is answered 304 with no body, as studio.api answers the copy a page holds.
+// never '*') is answered 304 with no body, as studio.api answers the copy a page holds. A converted Word view's 200 and
+// 304 name the stored conversion served at that read (X-CPT-View-Conversion, document.view_conversion's value), as
+// studio.api names it (integrated refutation round 2, I2-1).
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -638,14 +640,16 @@ async function handleApi(req, res, url) {
     // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
     const { bytes, type } = viewBytes(name, plays.get(match[1]));
     const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
-    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type
+    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type; I2-1: a
+    // converted Word view names the stored conversion it serves at this read, on the 200 and the 304 alike
     const tag = type === 'application/pdf' ? viewTag(match[1], bytes) : '';
+    const named = doc.document.converted === true && doc.document.view_conversion ? { 'X-CPT-View-Conversion': doc.document.view_conversion } : {};
     if (tag && namesTag(req.headers['if-none-match'], tag)) {
-      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP });
+      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP, ...named });
     }
     return send(res, 200, bytes, {
       'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
-      ...(tag ? { ETag: tag } : {}),
+      ...(tag ? { ETag: tag } : {}), ...named,
     });
   }
   match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);

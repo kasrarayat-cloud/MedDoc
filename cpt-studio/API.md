@@ -320,7 +320,13 @@ the site's key from the sign-in, the document and the stored file's recorded has
 pasted view carries none. A request naming it in `If-None-Match` (the page sends it only for a copy it holds in its
 memory; the weak form `W/"..."` matches, `*` never does) is recorded first, as shown from the page's memory, and answered
 `304` with no body and no stored file read; another sign-in, another document, or a newer conversion of a Word document
-gets the `200` with the bytes. Both answers stay `no-store`. The review page fetches a PDF view itself (same origin, the session's cookie) and
+gets the `200` with the bytes. Both answers stay `no-store`. A Word document's converted view names, on its `200` and
+its `304` alike, the stored conversion it serves at that read: `X-CPT-View-Conversion: <uuid>`, the value of the
+detail's `document.view_conversion` (integrated refutation round 2, I2-1); no other view and no download carries it.
+The page draws the bytes it holds only when they are the conversion the detail it shows names: the click's view is
+asked for before the detail is read, and a later round may store another conversion between the two reads, so an
+answer naming another is asked again, and one newer than the detail makes the page read the document again (each such
+answer is recorded as served: more rows, never fewer). The review page fetches a PDF view itself (same origin, the session's cookie) and
 draws it with its pinned PDF library, marking a chosen quote's words on its page; where the browser cannot run that
 library, the library does not work or answer in time, it cannot draw the document, or the download fails or stalls, the
 page frames this address instead, a new frame at `#page=N` for a quote on another page, and says why. A text view is

@@ -2801,6 +2801,55 @@ class StoredConversionTests(r.CustomerCase, TestCase):
         jobs.start_round(busy, busy.current_revision, Round.UPLOAD, self.reviewer)
         self.assertEqual(customer.document_json(busy)['view_conversion'], None)
 
+    # --- integrated refutation round 2, I2-1 (viewer-0): a converted view's 200 and 304 name the stored conversion they
+    # serve at that read (X-CPT-View-Conversion, the detail's view_conversion), so the page draws the bytes it holds only
+    # when they are the conversion the detail it shows names: the click's early view is read before that detail, and a
+    # later round may store another conversion between the two reads; any other view names none
+
+    def test_the_views_answers_name_the_stored_conversion_they_serve(self):
+        from studio import api
+        from tests.test_read_audit import member_client
+
+        member = member_client(self.reviewer)
+        enc, rev, _, _ = self.stored(SHELLED_WORD)
+        base = f'/api/encounters/{enc.pk}'
+        named = member.get(base).json()['document']['view_conversion']
+        first = member.get(f'{base}/original?view=1')
+        self.assertEqual((first.status_code, first.content, first[api.VIEW_CONVERSION_HEADER]), (200, STORED_PDF, named))
+        held = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((held.status_code, held.content, held[api.VIEW_CONVERSION_HEADER]), (304, b'', named))
+        # the race: the click's view read while round 1's conversion is served, then a later round stores its own, then
+        # the detail is read - the two name different conversions, which is what the page compares
+        early = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        round_, _, _ = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
+        self.assertEqual((round_.number, round_.state), (2, Round.DONE))
+        fresh = member.get(base).json()['document']['view_conversion']
+        self.assertEqual((early.status_code, early[api.VIEW_CONVERSION_HEADER]), (304, named))
+        self.assertNotEqual(fresh, named)
+        # asked again with the kept tag: 200, the new bytes, under the name the detail now gives; a re-open of those, 304
+        kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((kept.status_code, kept.content, kept[api.VIEW_CONVERSION_HEADER]), (200, FRESH_PDF, fresh))
+        again = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=kept['ETag'])
+        self.assertEqual((again.status_code, again[api.VIEW_CONVERSION_HEADER]), (304, fresh))
+        # the download and a refused file's 404 name none; nor does any view that is not a converted Word document's
+        self.assertNotIn(api.VIEW_CONVERSION_HEADER, member.get(f'{base}/original'))
+        refused, refused_rev, _, _ = self.stored(IMPORTING_WORD)
+        self.next_round(refused, refused_rev, Round.ANSWERS, f.FakeCoder())
+        gone = member.get(f'/api/encounters/{refused.pk}/original?view=1')
+        self.assertEqual(gone.status_code, 404)
+        self.assertNotIn(api.VIEW_CONVERSION_HEADER, gone)
+        for label, make in (('a PDF', lambda e: f.upload(e, self.reviewer)),
+                            ('a text', lambda e: f.upload(e, self.reviewer, data=b'Synthetic text note.\n',
+                                                          filename='synthetic-note.txt', media_type='text/plain')),
+                            ('a paste', lambda e: f.paste(e, self.reviewer))):
+            with self.subTest(label):
+                other = f.encounter(self.ws, self.reviewer, title='Synthetic note')
+                make(other)
+                shown = member.get(f'/api/encounters/{other.pk}/original?view=1')
+                self.assertEqual(shown.status_code, 200)
+                self.assertNotIn(api.VIEW_CONVERSION_HEADER, shown)
+                self.assertIsNone(member.get(f'/api/encounters/{other.pk}').json()['document']['view_conversion'])
+
 
 # --- refutation round 1, view[0] and loss[3]: a resumed Word round that recorded its own view reads, records and shows
 # one PDF (refutation round 2, rounds[2]: a round that stored no view has none to read back, and converts afresh) ----

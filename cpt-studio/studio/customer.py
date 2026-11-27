@@ -571,11 +571,14 @@ def _converted_file(view):
 class Shown(NamedTuple):
     """What the in-page viewer shows (release 2, R2-15), read from the rows alone: the stored file it serves (a
     SourceFile, or a Word document's converted view: anything with storage_name and sha256) - or None for a paste, whose
-    ``text`` it is - the content type it is served as and its file name."""
+    ``text`` it is - the content type it is served as and its file name; and for a Word document's converted view the
+    name of the stored conversion (view_conversion_of), which the view's answers carry so the page draws only the
+    conversion its detail names (integrated refutation round 2, I2-1)."""
     stored: object
     text: Optional[str]
     content_type: str
     filename: str
+    conversion: Optional[str] = None
 
 
 def view_source(encounter) -> Optional[Shown]:
@@ -596,7 +599,7 @@ def view_source(encounter) -> Optional[Shown]:
         view = shown_view(encounter)
         if view is None:
             return None
-        return Shown(_converted_file(view), None, PDF, converted_name(source))
+        return Shown(_converted_file(view), None, PDF, converted_name(source), view_conversion_of(encounter, view))
     return None
 
 

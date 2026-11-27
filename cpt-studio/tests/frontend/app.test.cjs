@@ -1398,6 +1398,18 @@ function viewResponse({ status = 200, chunks = [Uint8Array.from([37, 80, 68, 70,
 const PDF_MODULE = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.0123456789ab.mjs';
 const PDF_WORKER = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.0123456789ab.mjs';
 
+// I2-1: a view's answers name the stored conversion they serve (X-CPT-View-Conversion), as the server's do: a test's
+// answer names its address's fixture's own (document.view_conversion), unless it names one itself (`conversion`, null
+// for none). The page draws only the conversion its detail names.
+const CONVERSION_HEADER = 'X-CPT-View-Conversion';
+const FIXTURE_CONVERSIONS = new Map(ENCOUNTERS.map(name => fixture(name).document).map(part => [part.view_url, part.view_conversion]));
+function namingConversion(answer, url) {
+  if (!answer || typeof answer !== 'object') return answer;
+  const conversion = Object.hasOwn(answer, 'conversion') ? answer.conversion : FIXTURE_CONVERSIONS.get(url) ?? null;
+  const get = typeof answer.headers?.get === 'function' ? answer.headers.get.bind(answer.headers) : () => null;
+  return { ...answer, headers: { get: name => (name === CONVERSION_HEADER ? conversion ?? null : get(name)) } };
+}
+
 // Runs fn on a page that can draw a PDF (the observers a browser has, and Worker), with the library's module loaded by
 // `load`, the view's download answered by `download(url, init)` (a whole document by default) and the page's state kept
 // apart. fn gets {element, loads, fetches} besides the page's own.
@@ -1419,7 +1431,7 @@ async function withPdfPage(load, fn, download = () => Promise.resolve(viewRespon
       const fetches = [];
       global.fetch = (url, init = {}) => {
         fetches.push({ url, init });
-        return download(url, init);
+        return Promise.resolve(download(url, init)).then(answer => namingConversion(answer, url));
       };
       Object.assign(app.state, { pdfLibrary: null, pdfAttempt: 0, viewer: null, pdfStarted: false });
       await fn({ ...page, loads, fetches });
@@ -6693,6 +6705,202 @@ test('I1-1, I1-16: a Word document a later round refused draws no copy the page 
       'the poll: no viewer, the copy dropped and overwritten');
     assert.equal(library.made.tasks.length, 0, 'the poll: nothing drawn');
     app.forgetMemory();
+  });
+});
+
+// --- I2-1 (integrated refutation round 2, viewer-0): the page draws a view only as the stored conversion its detail
+// names, whatever the order of the click's early view, the detail and a poll -----------------------------------------
+
+const C_ONE = 'c9000000-0000-4000-8000-0000000000c1';  // the Word fixture's own conversion (round 1's)
+const C_TWO = 'c9000000-0000-4000-8000-0000000000c2';  // a later round's fresh conversion
+const ALPHA = [37, 80, 68, 70, 45, 65];  // '%PDF-A': round 1's conversion, kept under VIEW_TAG_A
+const BRAVO = [37, 80, 68, 70, 45, 66];  // '%PDF-B': the later round's
+const viewAnswer = (status, bytes, tag, conversion) => taggedView(status, bytes ? [Uint8Array.from(bytes)] : [], tag)
+  .then(answer => ({ ...answer, conversion }));
+
+test('I2-1 (viewer-0): a re-open draws only the conversion its detail names - the click\'s early answer of another (a 304 read before a later round stored its own) is asked again and the new one drawn; one newer than the detail reads the document again, whose redraw draws it; a poll naming another while the view comes redraws it whole; an agreeing answer draws at once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  assert.equal(word.document.view_conversion, C_ONE);
+  const later = clone(word);  // the detail read once the later round stored its own conversion
+  later.document.view_conversion = C_TWO;
+  later.round = { ...later.round, number: 2 };
+  const cases = [
+    { what: 'the early 304 read before the later round stored its conversion, the detail after (the finding\'s order)', detail: later,
+      answers: [[304, null, VIEW_TAG_A, C_ONE], [200, BRAVO, VIEW_TAG_B, C_TWO]], drawn: BRAVO, asked: [VIEW_TAG_A, VIEW_TAG_A], reads: 0 },
+    { what: 'the early 304 and the detail agree', detail: word, answers: [[304, null, VIEW_TAG_A, C_ONE]], drawn: ALPHA, asked: [VIEW_TAG_A], reads: 0 },
+    { what: 'a 304 naming the conversion the detail names, its bytes the copy\'s (the server\'s tag matched them)', detail: later,
+      answers: [[304, null, VIEW_TAG_A, C_TWO]], drawn: ALPHA, asked: [VIEW_TAG_A], reads: 0 },
+    { what: 'the early answer read after the later round stored its conversion, the detail before it', detail: word,
+      answers: [[200, BRAVO, VIEW_TAG_B, C_TWO], [200, BRAVO, VIEW_TAG_B, C_TWO], [200, BRAVO, VIEW_TAG_B, C_TWO]], drawn: BRAVO,
+      asked: [VIEW_TAG_A, undefined, undefined], reads: 1, again: later },
+  ];
+  for (const item of cases) {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    const answers = [...item.answers];
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 7, pdfStarted: true, reads: { asked: 0, applied: 0 } });
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), Uint8Array.from(ALPHA));
+      app.startEarly(word.id);  // the click: the view asked for with the kept copy's tag
+      await mount(item.detail, find, () => opened.length === 1);
+      assert.deepEqual(opened, [item.drawn], `${item.what}: drawn`);
+      const views = fetches.filter(call => call.url === view);
+      assert.deepEqual(views.map(call => call.init.headers['If-None-Match']), item.asked, `${item.what}: the view's requests`);
+      assert.equal(fetches.filter(call => call.url === `/api/encounters/${word.id}`).length, item.reads, `${item.what}: the document read again`);
+      assert.equal(app.state.viewer.conversion, (item.again || item.detail).document.view_conversion, `${item.what}: the viewer names what it drew`);
+      await settle(() => app.state.keptViews.get(view)?.data?.[5] === item.drawn[5]);
+      assert.deepEqual([...app.state.keptViews.get(view).data], item.drawn, `${item.what}: the copy kept is the one drawn`);
+      app.closeViewer();
+      app.forgetMemory();
+    }, url => {
+      if (url === view) {
+        const [status, bytes, tag, conversion] = answers.length > 1 ? answers.shift() : answers[0];
+        return viewAnswer(status, bytes, tag, conversion);
+      }
+      if (url === `/api/encounters/${word.id}`) return Promise.resolve(response({ status: 200, body: item.again }));
+      return new Promise(() => {});
+    });
+  }
+  // a first open (no early view) answered with another conversion than its detail names: never drawn, the document is
+  // read again, and the redraw that brings the conversion draws it
+  {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 8, pdfStarted: true, reads: { asked: 0, applied: 0 } });
+      await mount(word, find, () => opened.length === 1);
+      assert.deepEqual(opened, [BRAVO]);
+      assert.deepEqual(fetches.map(call => call.url), [view, `/api/encounters/${word.id}`, view], 'the view, the document again (a poll), the view');
+      assert.equal(fetches[1].init.headers['X-CPT-Poll'], '1', 'the page\'s own read: never the member\'s activity');
+      assert.equal(app.state.doc.document.view_conversion, C_TWO);
+      app.closeViewer();
+      app.forgetMemory();
+    }, url => (url === view ? viewAnswer(200, BRAVO, VIEW_TAG_B, C_TWO)
+      : url === `/api/encounters/${word.id}` ? Promise.resolve(response({ status: 200, body: later })) : new Promise(() => {})));
+  }
+  // a poll that names another conversion while the click's view is on the way: the viewer is redrawn whole, its early
+  // view let go of, and the new viewer draws the poll's conversion; the early answer, come late, draws nothing
+  {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    let late = null;
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 9, pdfStarted: true, docKey: '', viewerKey: '' });
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), Uint8Array.from(ALPHA));
+      app.startEarly(word.id);
+      const first = await mount(word, find, made => made.mode === 'loading');
+      Object.assign(app.state, { docKey: app.renderKey(word), viewerKey: app.viewerKey(word) });
+      app.renderDocument(later, false);  // the poll
+      assert.equal(first.mode, 'closed', 'the viewer of the conversion no longer served is closed');
+      assert.equal(fetches[0].init.signal.aborted, true, 'its early view let go of');
+      await settle(() => opened.length === 1);
+      late?.(viewAnswer(304, null, VIEW_TAG_A, C_ONE));
+      await settle(() => false);
+      assert.deepEqual(opened, [BRAVO], 'the poll\'s conversion drawn, and nothing else');
+      assert.equal(app.state.viewer.conversion, C_TWO);
+      app.closeViewer();
+      app.forgetMemory();
+    }, (url, init) => {
+      if (url === view && init.headers['If-None-Match'] === VIEW_TAG_A && !late) return new Promise(resolve => { late = resolve; });
+      if (url === view) return viewAnswer(200, BRAVO, VIEW_TAG_B, C_TWO);
+      return new Promise(() => {});
+    });
+  }
+  // a PDF document names no conversion, nor do its view's answers: drawn at once, as before
+  {
+    const ready = fixture('encounter-ready.json');
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: ready.id }, routeSerial: 10, pdfStarted: true });
+      await mount(ready, find, () => opened.length === 1);
+      assert.deepEqual([ready.document.view_conversion, fetches.length], [null, 1]);
+      app.closeViewer();
+      app.forgetMemory();
+    }, () => viewAnswer(200, ALPHA, VIEW_TAG_A, undefined));
+  }
+});
+
+test('I1-16, I2-1 (viewer-2): a refused Word document clicked and left before either answer keeps no copy - the route away, or a second click on another document; a PDF left so keeps its copy (R2-15)', async () => {
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  const refused = clone(word);
+  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false, view_conversion: null });
+  const browserFetch = answer => (url, init = {}) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    answer(url).then(resolve, reject);
+  });
+  for (const [what, leave, doc] of [['back to Documents', '#documents', refused], ['a second click on another document', '#doc/f5000000-0000-4000-8000-000000000001', refused],
+    ['a PDF document, back to Documents', '#documents', word]]) {
+    let release = null;
+    const detail = new Promise(resolve => { release = resolve; });
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
+      const data = Uint8Array.from(ALPHA);
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), data);
+      global.location.hash = `#doc/${word.id}`;
+      app.route();
+      global.location.hash = leave;  // left before either answer
+      app.route();
+      assert.equal(fetches.find(call => call.url === view).init.signal.aborted, true, `${what}: the click's view let go of`);
+      assert.equal(app.state.keptViews.has(view), true, `${what}: the page's own abort keeps the copy (R2-15)`);
+      release(response({ status: 200, body: doc }));  // the detail, come after the route left
+      await settle(() => !app.state.keptViews.has(view));
+      const kept = doc === word;
+      assert.deepEqual([app.state.keptViews.has(view), [...data]], kept ? [true, ALPHA] : [false, [0, 0, 0, 0, 0, 0]],
+        `${what}: ${kept ? 'a PDF view: the copy kept for a re-open' : 'no view named: the copy dropped and overwritten'}`);
+      app.forgetMemory();
+    }, browserFetch(url => (url === view ? new Promise(() => {}) : url === `/api/encounters/${word.id}` ? detail : new Promise(() => {}))));
+  }
+});
+
+test('I1-2, exact-1: a first page of another practice than the page shows - the member\'s access changed - is never drawn: the session is read once, and the route drawn afresh under its name; the same practice reads no session; a session that cannot be read draws nothing more', { timeout: 60000 }, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const name of ['documents', 'queue', 'workspace']) {
+    const practices = twoPractices(60);
+    practices.active = 'B';  // the page shows A (its shell's session); A's owner turned the member's access to A off
+    await withListPage(practices.answer, async ({ calls, table, element }) => {
+      const session = fixture('session.json');
+      app.state.session = { ...session, workspace: { ...session.workspace, id: practices.ids.A, name: 'Practice A' } };
+      global.location.hash = `#${name}`;
+      app.state.routeSerial = 50;
+      await app.showList(name, 50);
+      assert.equal(table.rows.length, 0, `${name}: none of B's rows drawn under A's name`);
+      assert.equal(app.state.list.loaded, false, name);
+      await settle(() => app.state.list?.loaded);
+      assert.equal(calls.filter(call => call.url === '/api/session').length, 1, `${name}: the session read once`);
+      assert.equal(app.state.session.workspace.id, practices.ids.B, `${name}: the page now shows B`);
+      assert.equal(app.state.list.workspace, practices.ids.B, `${name}: the route drawn afresh, B's own list`);
+      assert.ok(table.rows.length > 0 && table.rows.every(row => row.href.startsWith('#doc/b0')), `${name}: B's rows`);
+      app.state.list.observer?.disconnect();
+    });
+  }
+  // the page and the server name the same practice: no session read (R2-17: a page load asks none)
+  const same = twoPractices(60);
+  await withListPage(same.answer, async ({ calls, table }) => {
+    const session = fixture('session.json');
+    app.state.session = { ...session, workspace: { ...session.workspace, id: same.ids.A } };
+    app.state.routeSerial = 51;
+    await app.showList('documents', 51);
+    assert.deepEqual([table.rows.length, calls.filter(call => call.url === '/api/session').length], [50, 0]);
+    app.state.list.observer?.disconnect();
+  });
+  // a session read that fails leaves the page's practice as it was: nothing drawn, and the route not drawn again (each
+  // answer comes a turn later, as a network's does, so a page that asked again and again would be counted, not hang)
+  const failing = twoPractices(60);
+  failing.active = 'B';
+  const answer = (method, url, body) => new Promise(resolve => setImmediate(() => resolve(url === '/api/session'
+    ? { status: 503, body: { error: 'Unavailable.' } } : failing.answer(method, url, body))));
+  await withListPage(answer, async ({ calls, table }) => {
+    const session = fixture('session.json');
+    app.state.session = { ...session, workspace: { ...session.workspace, id: failing.ids.A } };
+    app.state.routeSerial = 52;
+    await app.showList('documents', 52);
+    await settle(() => false);
+    assert.deepEqual([table.rows.length, calls.filter(call => call.url === '/api/session').length,
+      calls.filter(call => call.url.startsWith('/api/encounters')).length], [0, 1, 1], 'one session read, the list asked once');
   });
 });
 
