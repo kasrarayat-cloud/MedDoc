@@ -42,16 +42,23 @@ reload by the client header (below) before any of these is read, so it never rea
   its list and cursor (never search words); the same page read again within a minute by the same sign-in, showing the
   same documents in the same order, is counted on that record. A re-open of the in-page view answered `304` is recorded
   too, as shown from the page's memory (R2-15).
-- **A database that cannot be reached** (integrated refutation round 1, avail-0): a connection the database ended while
-  the request ran, or one it refuses (a restart), answers `503` with `Retry-After: 5` and nothing of the request -
-  under `/api/` `{"error": "This could not be recorded, so nothing was shown.", "details": {}}`, elsewhere a plain
-  error page (`studio/db_unavailable.py`). A recorded limit (I1-20): a connection lost at the session's own save after
-  the view, in Django's write of the session's row, is Django's own `400` (`SessionInterrupted`: an HTML page, no
-  `Retry-After`), not this `503`; the view's answer is not sent then either, and a read's record, already written,
-  says it was served. It is rare: a request writes its session only when it changed it, and under `/api/` that is only
-  its activity time, written at most once a minute (`SESSION_ACTIVITY_WRITE_SECONDS`). Any other server error is
-  `500`, as before. A connection the database ended between requests is replaced at the next request's first query
-  and answers as usual (R2-7).
+- **A database that cannot be reached** (integrated refutation rounds 1 and 2, avail-0 and I2-4): a lost or unusable
+  connection - one the database ended while the request ran, one it refuses (a restart, a crash, a database not yet
+  accepting connections), one already closed: an `InterfaceError`, or an `OperationalError` the driver raised itself
+  (no SQLSTATE) or the server raised with class `08` or `57P01`-`57P03` - answers `503` with `Retry-After: 5` and
+  nothing of the request - under `/api/` `{"error": <sentence>, "details": {}}`, elsewhere a plain error page
+  (`studio/db_unavailable.py`). A read's sentence (a `GET`, and the search) is "This could not be recorded, so nothing
+  was shown."; a change's, which the database may have kept before the connection was lost (a decision's refresh after
+  its transaction, an upload whose `COMMIT`'s answer was lost), is "This action is not available right now. Reload the
+  page to see the latest state.", which says neither. A read whose own record is lost as it is written answers the same
+  `503`, `Retry-After` included. Any other error the database reports - a deadlock, a cancelled statement, a lock not
+  granted, a full disk - is Django's `500` with its traceback logged, as any other server error is. A recorded limit
+  (I1-20): a connection lost at the session's own save after the view, in Django's write of the session's row, is
+  Django's own `400` (`SessionInterrupted`: an HTML page, no `Retry-After`), not this `503`; the view's answer is not
+  sent then either, and a read's record, already written, says it was served. It is rare: a request writes its session
+  only when it changed it, and under `/api/` that is only its activity time, written at most once a minute
+  (`SESSION_ACTIVITY_WRITE_SECONDS`). A connection the database ended between requests is replaced at the next
+  request's first query and answers as usual (R2-7).
 - **Limits** (release 1, C5): 10 reports made per member in 10 minutes and 60 per practice in an hour, 30 uploads per
   member in 10 minutes. Only a report actually made counts. The stored copy answered again (200) counts toward no limit
   and is never refused by one, and neither is a refused request. Over a limit, any of these calls answers

@@ -46,8 +46,8 @@ from django.utils.crypto import salted_hmac
 from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, paging, rate, read_audit
-from . import request_meta, security_events, session_store, sessions
+from . import audit, client_contract, customer, db_unavailable, decisions, exports, intake, jobs, models, paging, rate
+from . import read_audit, request_meta, security_events, session_store, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -171,10 +171,12 @@ def api_view(view=None, *, contract=True):
 
 def _recorded(request, view, **fields):
     """The AccessRecord of this read, written before it is served; ApiError 503 (read_audit.NOT_RECORDED, no PHI) when
-    it cannot be written."""
+    it cannot be written - or, when the write met a lost connection, that error, which studio.db_unavailable answers as
+    a database that cannot be reached (the same 503, with Retry-After: integrated refutation round 2, I2-4)."""
     try:
         return read_audit.record(request, view=view, **fields)
-    except read_audit.NotRecorded:
+    except read_audit.NotRecorded as refused:
+        db_unavailable.raise_if_lost(refused)
         raise ApiError(503, read_audit.NOT_RECORDED)
 
 

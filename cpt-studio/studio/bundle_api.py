@@ -14,7 +14,9 @@ GET only (HEAD and every other method 405). In order:
 4. the bundle is built in memory: over settings.BUNDLE_MAX_BYTES, 413 with record_bundle.TOO_LARGE; a stored file that
    cannot be read back unchanged, 409;
 5. the read is recorded (read_audit.record, member.bundle_download, the document's id) before any byte is sent: a row
-   that cannot be written answers 503 read_audit.NOT_RECORDED and serves nothing (fail closed);
+   that cannot be written answers 503 read_audit.NOT_RECORDED and serves nothing (fail closed) - one whose write met a
+   lost connection is answered as a database that cannot be reached, the same 503 with Retry-After (studio.
+   db_unavailable; integrated refutation round 2, I2-4);
 6. the zip, as an attachment named by the document's id - never its title.
 """
 import functools
@@ -26,7 +28,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from . import models, rate, read_audit, record_bundle, security_events
+from . import db_unavailable, models, rate, read_audit, record_bundle, security_events
 from .access import active_membership
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -96,7 +98,8 @@ def encounter_bundle(request, encounter_id):
     try:
         read_audit.record(request, view=read_audit.MEMBER_BUNDLE_DOWNLOAD, workspace_id=encounter.workspace_id,
                           encounter_ids=[encounter.pk])
-    except read_audit.NotRecorded:
+    except read_audit.NotRecorded as refused:
+        db_unavailable.raise_if_lost(refused)  # a lost connection: the 503 with Retry-After (I2-4)
         return JsonResponse({'error': read_audit.NOT_RECORDED}, status=503)
     response = HttpResponse(data, content_type='application/zip')
     response['Content-Disposition'] = f'attachment; filename="cpt-studio-document-{encounter.pk}.zip"'
