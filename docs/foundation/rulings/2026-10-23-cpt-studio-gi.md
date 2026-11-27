@@ -4657,3 +4657,333 @@ D438 — 2026-11-26T18:58:55Z — OWNER QUESTION: connect CommandHealth rather t
     finished notes), a test account with made-up patients, and how a doctor's CommandHealth account is matched to ours.
 
 (Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2's design decisions D-R2-1 to D-R2-53, recorded before the install's declaration
+
+The lead's decisions for CPT Studio release 2, made under the standing rules and D422, copied verbatim from the specification's section 10. Section 9.3 said lane F would record them here in its first commit; that had not happened (found by the install package's builder, G4), so they are recorded now, before the declaration that cites them is committed. D-R2-48 had been written only in lane M's notes and is recorded with them.
+
+These are decided under the standing rules and D422. Lane F records them in its first commit
+(`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` and `RULINGS.md` rows), and the session's `DECISIONS.md` gets
+the entry.
+
+- **D-R2-1.** The release is scoped as in section 1. Section 1.2's items stay out, each with its stated reason; L8
+  (SCALE-7) and the console's indexes go to release 3.
+- **D-R2-2.** Lanes, file ownership and merge order are as in section 5: F first, then M, D, W, P and S, then the
+  integration. Lane P owns `app.js`; lane S owns the API contract; lane F owns the client version.
+- **D-R2-3.** The client contract version is `customer-2026-11-26`, every copy in one commit (section 7).
+- **D-R2-4.** The entrance fade follows the audit's first option. The approved 350 ms fade plays on a page load's first
+  view only; nothing fades after it. The ≤ 120 ms fade on every view is not taken (R2-14).
+- **D-R2-5.** Kept PDF bytes:
+  - at most 6 documents and 24 MiB per tab;
+  - ArrayBuffers in page memory only;
+  - overwritten and dropped at every end, including `pagehide`;
+  - named in the declaration's ePHI evaluation (R2-15, R2-18).
+- **D-R2-6.** A re-open answered 304 writes `member.inline`, with filters `{"shown_from": "page_memory"}`, before it is
+  answered. A row that cannot be written answers 503 (R2-15).
+- **D-R2-7.** The view's ETag is an HMAC of the sign-in, the document and the stored sha256, shown as a UUID. It is
+  never a hash, and the tools check its shape (R2-15, R2-24).
+- **D-R2-8.** The page shell carries the session. Document opens refresh it at most once a minute. The lists area's
+  parallel boot is not built (R2-17).
+- **D-R2-9.** The standby worker starts 500 ms after the first route, not 1.5 s, and is skipped on Save-Data. One
+  worker waits, holding no document, and each document has its own (R2-10; section 4, rows 19 and 27).
+- **D-R2-10.** `opens_pdf` is on every list row: a first stored file that is a PDF of at most 1 MiB (R2-16).
+- **D-R2-11.** Paging:
+  - 50 rows a page, 5 on the Overview;
+  - up to 3 pages load by scrolling; the button "Show more documents" is added only once they are used up or one of
+    them failed (D-R2-32);
+  - the browser's own find sees the loaded rows only.
+
+  This comes with the paging the owner's approved plan names (REPORT section 4, Tier 1 item 10) (R2-19, R2-22).
+- **D-R2-12.** Search on the server, for a Documents list of more than 200 documents (D-R2-27):
+  - a POST;
+  - `strpos` over the row's own text in `pg_c_utf8`;
+  - no minimum length; a 300 ms pause; one search at a time;
+  - at most 240 characters, not counting the combining dot above (U+0307);
+  - PostgreSQL 17 or newer is required on any server (R2-20).
+- **D-R2-13.** A list record names the served ids. The repeat rule compares them. Later pages and searches are limited
+  to 120 a minute per member (R2-21).
+- **D-R2-14.** A search counts as a read at the front door. The vhost is republished through `cert` and `https-vhost`,
+  and its capacity comment is corrected (R2-27).
+- **D-R2-15.** Migrations 0019-0021 are plain `AddIndex`, one table each, with no CONCURRENTLY. Live is stopped before
+  `app` if it is more than 100 times its baseline (section 6).
+- **D-R2-16.** R2-25 is kept, with `state.py` changed by extraction only and proved. The optional membership argument
+  to `read_audit.record` is not taken.
+- **D-R2-17.** The web process:
+  - 4 sync workers in 1 GiB;
+  - preload, warm-up and `gc.freeze`;
+  - connections kept 3,600 s, with health checks, in the web only;
+  - recycling at 10,000 ± 1,000 requests;
+  - R2-6 and R2-7 together;
+  - the fallback of 3 workers at 768m only if the rehearsal's peak passes 768 MiB.
+- **D-R2-18.** Word:
+  - every `altChunk` that holds content is refused, of any format; so are an External `altChunk` and every
+    `w:subDoc`, on purpose; an `altChunk` that holds nothing is removed as in release 1 (D-R2-34);
+  - an object or control that would leave no picture is refused;
+  - the same check runs before a stored conversion is reused (D-R2-33);
+  - two sentences;
+  - R2-30 is built: the 7.4 corpus shows its loss (D-R2-36), and its fallback refuses the H01 shape under an outer type
+    other than `HYPERLINK`, `TOC`, `QUOTE` or `STYLEREF`, with the `inserted_document` sentence (D-R2-39);
+  - W5 is deferred;
+  - all of it is declared as an accepted-capability change under D421's principle and D422, and the owner was told
+    once, in the release-2 plan message (D-R2-35, D428).
+- **D-R2-19.** The bench is tracked at `cpt-studio/ops/bench`, never in the image, and measured on this host,
+  interleaved, under the judge's INVALID rule.
+- **D-R2-20.** No Playwright in CI. CI's floor is 59 passes, with every skip reason "no Playwright at". The local
+  browser gate (≥ 104 tests, 0 failed, 0 skipped) is a release gate.
+- **D-R2-21.** Section 8's gates replace the measure area's where the other lanes' measurements contradict them, each
+  with its reason (section 4, row 28).
+- **D-R2-22.** The pre-install reads of 9.2 and the post-install reads of 9.6 are counts and ages only. The live check
+  makes no view read.
+- **D-R2-23.** Import formats that never rendered (HTML, XHTML, MHT, RTF, TXT, flat-OPC) are refused too: a document
+  inserted whole is refused, whatever its format.
+- **D-R2-24.** Cross-browser coverage stays as in release 1: measured in Chromium; Firefox and Safari recorded as not
+  run.
+- **D-R2-25.** The audit's files copied from live before 2026-11-23 are never opened or reused, and join D425's kept
+  set.
+- **D-R2-26** (C1, D427). Statements per request: a first or a later list page ≤ 13, a search ≤ 14, each equal at 50
+  and 5,000 documents, the list builder's own ≤ 4 (R2-19, R2-20, section 8).
+- **D-R2-27** (C2, D427). Up to 200 documents, the first search input loads the rest of the list and the search runs
+  in the page with release 1's rule, inside the keystroke; the server search, and its 600 ms gate, serve only lists
+  above 200 (R2-20 to R2-22, section 8).
+- **D-R2-28** (C3, D427). After 30 opens, renderer private memory is ≤ A + 25 MB + the kept bytes on the list, and
+  ≤ A after sign-out (section 8).
+- **D-R2-29** (C4, D427). Sign-in requests are counted from the click on a fresh profile: A is 6, and the gate ≤ 7
+  includes the standby's two files when they fall inside the first 2 s (R2-17, section 8).
+- **D-R2-30** (C5, D427). No "no worse than A" limit is below A × (1 + 2 × its A/A spread) unless it is absolute; long
+  tasks ≤ 1.36 A, recomputed by lane M; the planted delay sits on the 1.67 MB scan; Documents P1 at 100 documents
+  ≤ 0.6 A (section 8).
+- **D-R2-31** (C6, D427, deferred by the lead). The Word case is deferred: no stored column gives a converted view's
+  size and release 2 adds no column; Word later opens keep two round trips and are reported in their own row, not
+  gated (R2-16, section 8, section 12).
+- **D-R2-32** (C7, D427). `#listMore` stays empty, and observed, until the three automatic loads are used up or one
+  failed; only then is "Show more documents" added. A browser without IntersectionObserver, which no supported
+  browser lacks, shows the button from 51 documents (R2-22, section 0).
+- **D-R2-33** (C8, D427). The package check runs on the stored original for every Word round, before a stored
+  conversion is reused; lane D owns `jobs._stored_conversion`'s lines, and 9.2's converter-log read is removed (R2-28,
+  R2-31, sections 5 and 9).
+- **D-R2-34** (C9, D427). An `altChunk` is refused when it names an Internal relationship to a present, non-empty part,
+  and, on purpose, when its relationship is External, as is every `w:subDoc`; any other `altChunk` holds nothing and is
+  removed and counted in `chunks`, as in release 1 (R2-28, 2.6). Present means by any name a reader could resolve,
+  the doctor's Word included (D-R2-39, D-R2-40). One naming a missing part is refused by the canonical package gate
+  (D-R2-46).
+- **D-R2-35** (C10, D428). The Word refusals beyond D421's `altChunk` are class b: the owner was told once, in plain
+  words, in the release-2 plan message, and was not asked. R2-30's refusal fallback, taken (D-R2-36), is class b too:
+  he is told it in one sentence before the install, the same way (section 4 row 37, 9.3, section 11).
+- **D-R2-53** (2026-11-27, the lead; the install package's review round 1, `release/PKG-ROUND1-DECISIONS.md`). The
+  preflight after `https-vhost` is always required (release 1's rule; `app` compares routing with the newest preflight),
+  superseding 9.4's "only if a co-tenant deployed". Before `app`: at most 2 web connections, each younger than 600 s; a
+  code job queued or running is PRE-APP STOP (wait, then pre-app again), never a declared pause. Tables that move with use
+  are a named set-aside list, and an empty or unset list fails the baseline diff. The record equation judges
+  `member.inline` and `member.download` as one count against the view route (no log field separates them). The log reads
+  cover the rotated files, and the hour after starts at S3. The runbook stops unless every file the merged revision
+  changes since B's revision `ccb350d0b` is a document.
+- **D-R2-52** (2026-11-27, the lead; the ARCHITECTURE.md pass, `ad5c36991`). The code is the truth where this
+  specification differs, corrected here rather than rewritten above: the bench has 15 parts (R2-2 says 11); the browser
+  gate `ops/test_viewer_speed.cjs` has 18 tests and release 1 fails the first 14 (R2-32 and `acceptance.json`'s descriptive
+  `suites` row say 5 of 5; the table stays frozen, B is judged with it); nothing in the code enforces the browser gate
+  before an install, so it is a runbook step on the release head; the web also sets `connect_timeout` 5 s (R2-7); the
+  load-failure line and the stream split (R2-5, R2-9); list and search answers carry `workspace` (I1-2); the
+  `X-CPT-View-Conversion` header and `document.view_conversion` replace `view_round` (I2-1, I2-2); a renamed flagless zip
+  name is refused by the canonical gate (R2-28 step 2), not converted afresh (C8's text); `scan_customer --all` fails only
+  below the smaller of `--limit` and the session's document count (R2-24); an unreachable database answers 503 with
+  `Retry-After` (I1-15, I2-4). Stale docstrings in `studio/` (docx_package's module text, `check_in_child`) wait for 2.1,
+  because `studio/` is frozen after B; `ops/INSTALL.md`'s "60 s" (the code: 70 s) is fixed with the package.
+- **D-R2-51** (2026-11-27 ~05:15Z, the lead; `lead/INT-ROUND3-DECISIONS.md`). The integrated refutation pass ends after
+  round 3. Round 3 found 14 real findings on round 2's repairs, none a leak or a wrong result in the shipped code: one
+  high and three medium are gaps in the TESTS that guard search words (each shown with a mutant the tests miss; "nothing
+  leaks today"), ten are low. Release 2 ships with them recorded; the guard is rebuilt in 2.1, before any real patient, as
+  a closed world over every request of every node test and every search path on the server.
+- **D-R2-50** (2026-11-26, the lead; `lead/INT-ROUND1B-FIXES.md`, avail-2). Cold-first-request times only GET /login/; in
+  B's measurement window the lead runs the row by hand with a signed-in GET /api/encounters/<id> as each lifetime's first
+  request (>= 12 lifetimes, max <= 100 ms), declared before it runs (`lead/d-r2-50/DECLARED.md`). Over 100 ms, the
+  residual is accepted in the open in section 8 with its value and reason, never hidden; bench-r3 fixes the row.
+- **D-R2-49** (2026-11-26 ~19:55Z, the lead; the integrated refutation pass, round 1 batch A,
+  `/home/claude/cpt-r2-20261125/lead/INT-ROUND1-FIXES.md`; decided before B is measured). The bench stays frozen for
+  release 2: aa6 measures A with bench-r2 (`68345fb9f`) and B is measured with the same bench-r2, every part. Four bench
+  gates were shown weaker than their names (records.fail_closed misses the frame fallback's bytes; records.marker and
+  marker_in_files see the search words only as typed; left.no_hash_header passes a sha256 written as a UUID; bluegreen.x3
+  cannot fail for two of its three clauses; plans.no_seq_scan counts a whole-list COUNT that D-R2-37 accepts). They are
+  not changed for release 2, because a bench change would void the A/A; their claims are carried by the CI tests the
+  round strengthens (I1-5, I1-6), by FailClosedTests, and by the lead's one-off checks (I1-8: release 1's suite on
+  release 2's schema, EXPLAIN of release 1's statements at 18,000 documents). The bench fixes land as bench-r3 after B is
+  measured (I1-D). Also amended by R2-33 (D-R2-38): section 2.1's "no effort changes" yields to the coder's effort
+  "high" (owner D433, result D434), the request otherwise byte-identical to release 1's; and a switch-back run by release
+  2's installer starts release 1's pair at effort "high" too (its CODING_EFFORT goes into every pair it starts; D434
+  measured release 1's image at "high"), to be named in 9.7 and in the declaration.
+- **D-R2-48** (2026-11-26, the lead; lane M refutation round 2, `laneM/ROUND2-FIXES.md`; recorded here 2026-11-27, it
+  had been written only in the lane's notes). Every real round-2 finding of lane M was applied as its verifier gave it
+  (22, each with a failing test and a mutation proof). No open round 3: the round closed MECHANICALLY by replaying every
+  case rounds 1 and 2 built through the repaired judge and bench (`laneM/REPLAY-R2.md`). The bench was re-frozen at the
+  final head as bench-r2 (`68345fb9f`), and the A/A was measured with it (aa6; aa5 discarded unread).
+- **D-R2-47** (2026-11-26, the lead; lane M's round-1 repairs as built, head `9cf96cc0a`,
+  `/home/claude/cpt-r2-20261125/laneM/PROOFS.md` "Round 1" and `ROUND1-FIXES.md`; D-R2-44 as built):
+  - **Units.** Section 8's MB is read as 10^6 bytes and converted into the metrics' MiB: the heap ≤ 38.3 MiB, the list
+    ≤ A + 23.88 MiB. 16 KB is 16,000 B.
+  - **The open@P0 planted-delay control** stays at 150 ms ± 40, although release 1's three recorded shifts were 182,
+    151 and 194 (one INVALID round in about four, run again by the driver): re-centring a control on its own data
+    would weaken what it proves.
+  - **As built, and accepted:** the statement rows at 51 documents (`n51`); the typical server search the word
+    `note`; the tab change judged per nav tab too (nine `tab-opaque-*` rows); the coder row byte for byte but for
+    `output_config.effort`, the efforts equal to the table's (A "max", B "high") and each tree's setting recorded;
+    the A-column tolerance with the instrument step (`a_step` / `a_recorded`; 8 ms on the nine Event Timing rows);
+    one gain rule (a limit below A, above it for a rate, asks for a gain beyond twice the row's spread); the two
+    standby clauses gated, the six reported rows the spec's own; `judge.py floors`' derived block (`--check`, exit 3
+    on an INVALID pair), the base table (`derived: null`) until the new A/A, then `DERIVED_SHA256`; the new A/A with
+    the bench frozen at `9cf96cc0a` into `laneM/aa5` (R2-2, R2-3, section 8, 9.1).
+- **D-R2-46** (2026-11-26, the lead; lane D's round 3, `/home/claude/cpt-r2-20261125/laneD/ROUND3-FIXES.md`, and the
+  gate's prototype, `/home/claude/cpt-r2-20261125/design/canon-gate/`: `canon-gate.diff`, applied by lane D verbatim,
+  and `out/`). **The canonical package gate.**
+  - Rounds 1 to 3 each found a crafted package lane D read differently from LibreOffice, and each repair grew the
+    next gap. The class (round 3's loss[0], [1], [2], [3] and [5]) is closed structurally, not by more readings.
+  - The principle: a Word package is accepted only in the one form a Word package takes, where every structural
+    reference has exactly one reading, the same for lane D, LibreOffice (24.2.7 and 7.4) and Word. Any other form is
+    refused before E2 reads a part, whatever the file holds. Release 1's own refusals still run first, with their
+    reasons, and D-R2-43's refusal stays. The forms, as built, are Group F's six (the archive, entry names,
+    relationships parts, Internal targets, content types, previews).
+  - The refusal is `PackageNotCanonical`, a `ContentNotShown` with code `inserted_document` and counts
+    `{documents: 1}` (the save-as-PDF sentence); the operator's log names the rule broken, never a part. 20 shapes
+    R2-29 refused move from `inserted_object` to `inserted_document`, and 25 `inserted_document` refusals carry the
+    gate's reason.
+  - Elsewhere: an `altChunk` naming a missing part is refused, not removed (C9); the flagless-UTF-8 name deviation is
+    gone (R2-28 step 2); the previews round 2 kept (`../../word/...`, `//word/...`, `media//...`, the repeated-id
+    first-row forms) are refused (R2-29); release 1's lower-case `external` and `internal` TargetMode is refused;
+    L-CODING keeps it on purpose. The readings round 2 added stay as a second line that no accepted package reaches.
+  - Measured: the fuzz unchanged; 21 real files coded unchanged; 309 shapes, 65 outcomes changed, the 20 newly
+    refused all crafted; every lossy input of round 3's five findings refused, the controls coded; 460 on-disk and
+    7,145 in-memory refuter cases; 25 mutation proofs, 24 killed, G11 equivalent.
+  - Known limit, class b: files from generators not measured here may be refused with the save-as-PDF message,
+    never silently coded; the owner is told once, with the other unusual Word files (D428's pattern). A real
+    generator's form can be admitted later as a measured exception.
+  - The closure is not another open refutation round: one differential lens on the gate's diff (is the gated head
+    worse than `4f8669c30` in the content-loss class, or does the gate refuse a real Word file), and the 7.4 corpus on
+    the gated head (Group F, 2.6, R2-28, R2-29, R2-31, section 4 row 37, section 8, 9.1, 9.3, section 11).
+
+  *Second part, 2026-11-26 (the gate's differential round, `/home/claude/cpt-r2-20261125/refute-d4/RESULT.json`, and
+  the 7.4 run on the gated head, `/home/claude/cpt-r2-20261125/lead/word74-d4/RESULT-7.4-laneD4.md`):*
+  - Across 9,565 packages the gated head `476d68ec9` accepts nothing `4f8669c30` refused, every package both accept is
+    byte-identical, and C8 decides the same. The 7.4 run on `476d68ec9`: 309 shapes, 771 packages, 0 accepted shapes
+    lose a token; only A15 and E07 (and the 18 crafted shapes renamed for the gate) move from coded to refused. The
+    closure is done; there is no further lane D round.
+  - One repair, which lane D builds now: the zip half runs after release 1's own package refusals (encrypted, named
+    twice, too large, OpenDocument, more than 10,000 parts, a CRC mismatch, not a Word package), so those files keep
+    release 1's reason and sentence ("The Word file could not be opened.") and are not told or recorded as inserted
+    documents. That makes "release 1's own refusals still run first, with their reasons" true as built.
+  - The class-b known limit gets its measured examples: documents the Open XML SDK creates from scratch (the main part
+    typed by a `Default`; admitting it needs a real SDK sample, because LibreOffice matches `Default` extensions by
+    suffix and order), the docx npm package's multi-word embedded font names, pandoc with `--reference-doc`, an
+    archive comment added by a re-zipping tool, a forced-zip64 local header, and Office 2007's `[trash]/` entries.
+    Each is refused with the save-as-PDF message, never silently coded, and the operator's log names the rule; any
+    can be admitted later as a measured exception from a real sample (Group F, 9.1, section 4 row 37, section 11).
+- **D-R2-45** (2026-11-26, the lead; the 7.4 run on lane D's round-2 head `464b60de5`,
+  `/home/claude/cpt-r2-20261125/lead/word74-d3/RESULT-7.4-laneD3.md`):
+  - 308 shapes, 787 packages: 0 accepted shapes lose a token the base shows, and the PDF preview is coded as release
+    1 codes it.
+  - EMZ and WMZ previews count as pictures only when their gzip stream, decompressed to a bounded prefix, begins with
+    the EMF or WMF signature lane D accepts; lane D builds it in its round-3 fixes (R2-29 step 1, 2.6).
+  - PICT and SVG previews stay refused: 7.4 draws these shapes through release 1's package, but neither format has a
+    signature as strong as the accepted ones (PICT's is a heuristic header; SVG is text that may draw nothing), so a
+    broken one could be coded with nothing in its place. A known limit, and class b: told to the owner once, with the
+    other unusual Word files (D428's pattern; section 4 row 37, 9.3, section 11).
+  - The H01 shapes whose plain result is a footnote reference or a non-breaking hyphen stay refused: R2-30's H01
+    class, refused by design (D-R2-36); nothing narrows (R2-30).
+- **D-R2-44** (2026-11-26, the lead; lane M's refutation round 1, `/home/claude/cpt-r2-20261125/laneM/ROUND1-FIXES.md`
+  and `/home/claude/cpt-r2-20261125/refute-m1/RESULT.json`: 38 real defects in the bench and judge, repaired by lane
+  M):
+  - The whole A/A is measured again with the repaired bench, frozen by its commit, in a quiet window after lane M's
+    round-1 repairs and before any B: every group, both rounds, back to back. The floors and the recorded A are
+    derived from it by lane M's tools, which reproduce `acceptance.json` exactly from a round folder, apply the
+    validity rule when deriving, and round floors up. This supersedes D-R2-41's re-measure of lists@P1 alone: the
+    repairs change what rows measure, and the host restart (kernel 6.8.0-149 to 6.8.0-151, 2026-11-26 06:47Z)
+    separates rounds more than load does. The old rounds (`laneM/aa4`) stay on disk as evidence, never as the A.
+  - A round's files are merged as AND for every check and control (a failing check in any part file fails the round),
+    and only an INVALID round may be superseded; a restarted driver never re-measures a valid one.
+  - The coder row compares B's requests with release 1's byte for byte except `output_config.effort` ("max" in A,
+    R2-33's "high" in B).
+  - Statement rows are measured at a practice size where the page and the whole list differ (not 50 documents, which
+    equals the page size), named in `acceptance.json`.
+  - A section 8 clause the bench cannot measure on this host becomes a "reported" row with its reason, never a gate
+    that cannot fail (named in lane M's round-1 report).
+
+  (R2-2, R2-3, R2-19, R2-20, section 5, section 8, 9.1, D-R2-41.)
+- **D-R2-43** (2026-11-26, the lead; lane D's round 2, head `33cde9694`,
+  `/home/claude/cpt-r2-20261125/laneD/ROUND2-FIXES.md` and `PROOFS.md` "Round 2"). Two decisions:
+  - D-R2-39's trade-off is accepted as extended: a round begun on release 1's worker and resumed after the S4 switch
+    finishes on its own PDF, which now also covers rounds[1]'s deviations, so a picture release 1 lost stays lost in
+    that one round; the next round converts afresh (9.3, 9.7).
+  - loss[6] (b), the document swap: a package any of whose entries carries a Unicode Path field (0x7075) naming it
+    differently from its stored name read as UTF-8 (the field's CRC ignored, as LibreOffice reads it) is refused
+    (`inserted_document`), so lane D never checks one part while LibreOffice opens another; Word never writes such a
+    pair. It is kept on purpose under L-CODING, and lane D builds it as round 2's last commit (R2-28 step 2, 2.6).
+- **D-R2-42** (2026-11-26, the lead; lane S refutation round 2, `/home/claude/cpt-r2-20261125/laneS/ROUND2-FIXES.md`
+  and `/home/claude/cpt-r2-20261125/refute-s2b/RESULT.json`):
+  - A whole list's COUNT keeps D-R2-37's 20 ms at the bench's live-like state mix. Where most of a large practice
+    waits, the queue COUNT probes the rounds once per waiting document (about 17-36 ms at 12,000-18,000 waiting, on a
+    clean heap after ANALYZE and after VACUUM ANALYZE), accepted rather than reading every practice's rounds
+    (plans[0], judged not a defect). The COUNT is promised an index only at the small practice (2,000 among 20,000),
+    and is held to its time, not to an index: a practice near half the table may be read whole until VACUUM
+    (plans[2]) (R2-19, D-R2-37).
+  - The server folds the 28 Unicode 17.0 pairs Chromium 153 lower-cases (U+A7CE, U+A7D2, U+A7D4 and Beria Erfe
+    U+16EA0-U+16EB8; search[0]), and the letter gate is a superset check over every engine present plus a committed
+    table of Chromium 153's pairs; lane S builds both in its round-2 fixes. Accepted residual: a browser on a newer
+    Unicode release can lower-case letters the server misses until the table is extended (R2-20).
+  - Words holding a character PostgreSQL cannot store, a lone surrogate included, keep their empty page although the
+    page's own rule can match half of a UTF-16 pair: a declared exception to "never fewer", reached only by a broken
+    string in the box (search[1], judged not a defect; R2-20).
+- **D-R2-41** (2026-11-26, the lead; lane M's report, head `c69fbd1d8`,
+  `/home/claude/cpt-r2-20261125/laneM/A-RESULTS.md`). Three decisions on the bench:
+  - The judge checks A against lane M's recorded A, pooled over the two valid A/A rounds, within the larger of 20%
+    and twice the row's own A/A spread; section 8's A column stays beside it as the design's estimates. Seven rows
+    differ from those figures by more than 20% (server list at 100 -34%, session at 18,000 -28%, the pause detail
+    -24%, a keystroke at 1,500 P1 -24%, a keystroke at 18,000 P0 +24%, Documents usable at 1,500 P1 -24%, detail at 20
+    in flight p95 -23%), so checked against them every round would be INVALID and no B could pass. The quick-leave
+    row takes the same rule: 384 ms recorded, against the viewer area's 877, a different measurement.
+  - The lists@P1 A/A pair is measured again at the integration, before any B round. Its two valid rounds straddle the
+    host restart (round 401 at a 1-minute load of 4.8-7.0, round 102 at 2.0-3.7), which widens the P1 list floors
+    (the search at 100 documents, P1, 1.941 A). In the integration's quiet window a fresh pair (both rounds, back to
+    back, the same frozen bench, the same validity rule) replaces both, the floors are derived again with lane M's
+    own tool, and `acceptance.json` is committed again before the first B round. No other group is measured again,
+    and this is the only exception to never moving the floors.
+
+    *Superseded, 2026-11-26 (D-R2-44): the whole A/A is measured again with lane M's repaired bench, before any B,
+    instead of lists@P1 alone. The text above is kept as decided.*
+  - A closed practice is not an end of access: release 1 keeps its documents readable on purpose (`disposal.close`;
+    ORG-18 (4), the data-return period). The bench judges three ends (membership off, document destroyed, session
+    ended) and records a closed practice's reading on its own (`correct.closed_keeps_reading`).
+
+  (R2-2, R2-32, section 5, section 8, 9.1.)
+- **D-R2-40** (2026-11-26, the lead; built in lane D's round 2). Two decisions after lane D's round 1:
+  - A preview whose bytes begin with `%PDF-` counts as a picture. The lead's 7.4 run on `3ad91321e`
+    (`/home/claude/cpt-r2-20261125/lead/word74-d2/RESULT-7.4-laneD2.md`: 226 shapes, 0 accepted shapes losing a
+    token) shows release 1's package drawing R1-L0e's PDF preview (as Mac Word writes one) with its words, which
+    round 1 refused. A PICT preview stays refused: no 7.4 measurement of one exists. Lane D adds a test on R1-L0e, and
+    the 7.4 corpus is run again on the fixed head (R2-29 step 1, 2.6, 9.1).
+  - An `altChunk` whose target the doctor's Word could resolve by a percent-decoded zip name or a `..` past the
+    package root (loss[4]'s three Word-only spellings, `/home/claude/cpt-r2-20261125/laneD/ROUND1-FIXES.md`) is
+    refused (`inserted_document`), never removed as holding nothing. C9 fails closed: a false refusal costs a
+    message, a silent removal costs content (R2-28 steps 2 and 4, 2.6, D-R2-34).
+- **D-R2-39** (2026-11-26, lane D refutation round 1, head `3ad91321e`;
+  `/home/claude/cpt-r2-20261125/laneD/ROUND1-FIXES.md` and the lead's decisions in it). A preview is a picture only by
+  its exact zip name and a picture signature LibreOffice decodes; PDF and PICT previews are refused until the lead's
+  7.4 run says otherwise (for PDF it has: D-R2-40). R2-30's fallback exempts outer `HYPERLINK`, `TOC`, `QUOTE` and
+  `STYLEREF` (QUOTE and STYLEREF from the lead's 7.4 run on lane D's code: H7f, H7g), refuses an unknown type name,
+  and is told with the `inserted_document` sentence. A zip name without the UTF-8 flag is read as UTF-8 where valid;
+  a non-ASCII one is the one case where a file needing no refusal and no edit differs from release 1's package (such
+  a name is refused since D-R2-46).
+  Accepted: an oversized file whose view was made before release 1 is refused at its next round; a round begun before
+  phase `converter` and resumed after S4 finishes on its own pre-R2-30 PDF (extended by D-R2-43); the converter is
+  never rolled back after S4 (R2-28 to R2-31, 9.3, 9.7).
+- **D-R2-38** (2026-11-26, D433 and D434). The coder runs at effort "high" (R2-33), set by the lead after every lane
+  merges, the pins re-measured on purpose; the re-run at "max" on a checker dispute is release 3's.
+- **D-R2-37** (2026-11-26, lane S refutation round 1). An exact COUNT of a whole list cannot avoid a full read when its
+  practice is most of the table; the plans rule binds the statements that read a page and the search, and the counts
+  are held to their time (<= 20 ms at 18,000 documents, at the bench's live-like state mix, R2-2; where most of a
+  large practice waits, the queue COUNT probes the rounds once per waiting document, about 17-36 ms at 12,000-18,000
+  waiting, measured on a clean heap after ANALYZE and after VACUUM ANALYZE, accepted rather than reading every
+  practice's rounds: plans[0], judged not a defect, D-R2-42). Lane M's plans check is narrowed to match.
+- **D-R2-36** (2026-11-26, the early 7.4 run, `word-scratch/image-corpus/RESULT-7.4.md`). R2-30 is BUILT: release 1
+  loses words on 7.4 for the nested-field shapes and the shell keeps them. The H01 shape (a removed field in an outer
+  field's instruction, plain stored result) loses its words on 7.4 with or without the shell, so it takes the fallback:
+  refused, class b, told to the owner before the install. The 7.4 corpus is run again on lane D's code before the
+  declaration.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10, file sha256 375c7a0a18863c93..., on 2026-11-27 by session 799ffbc5.)
