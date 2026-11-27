@@ -51,7 +51,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
 from . import decisions, jobs, models, paging, state
-from .fable import CONVERT
+from .fable import CONVERT, DOCUMENT
 from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_own_original
 
@@ -530,17 +530,24 @@ def converted_view(encounter):
 
 def shown_view(encounter):
     """The converted PDF the doctor's page shows and downloads (document_json, view_source, download_content): the newest
-    round that stored one, unless that round, or a round after it, ended failed on the Word file itself (CONVERT: the
-    file refused - R2-28 step 7, C8, at a later round - or not converted), when there is none; a refused file then reads
-    as one refused at its first round: no view (?view=1 404, a kept tag included), the PDF download 409 OriginalOnly, the
-    Word file by name only (integrated refutation round 1, bypass-0 and failclosed-0). A later round that stores a view of
-    its own shows it again. One statement, as converted_view."""
+    round that stored one, unless that round, or a round after it, ended failed on the Word file itself, when there is
+    none: CONVERT (the file refused - R2-28 step 7, C8, at a later round - or not converted), or DOCUMENT with no view of
+    its own (its own fresh conversion refused before it was stored: past the store's limit, jobs._keep_view, or past the
+    send limit, fable.document._pdf_document - integrated refutation round 1, I1-18). A refused file then reads as one
+    refused at its first round: no view (?view=1 404, a kept tag included; view_round null), the PDF download 409
+    OriginalOnly, the Word file by name only (integrated refutation round 1, bypass-0 and failclosed-0). A failure of
+    any other kind is not the Word file's and masks nothing (STORAGE included: a retry codes the file again), nor does a
+    DOCUMENT beside a view the round stored (that view is the conversion the round itself read), and a later round that
+    stores a view of its own shows it again. One statement, as converted_view."""
     newest = (Round.objects.filter(encounter_id=encounter.pk)
               .filter((Q(view_pdf_storage_name__isnull=False) & ~Q(view_pdf_storage_name=''))
-                      | Q(state=Round.FAILED, failure_kind=CONVERT))
+                      | Q(state=Round.FAILED, failure_kind__in=(CONVERT, DOCUMENT)))
               .order_by('-number').first())
-    if newest is None or (newest.state == Round.FAILED and newest.failure_kind == CONVERT):
-        return None  # a resumed round refused at its check fails CONVERT beside the view it recorded: none is shown
+    if newest is None or (newest.state == Round.FAILED and (
+            newest.failure_kind == CONVERT or (newest.failure_kind == DOCUMENT and not newest.view_pdf_storage_name))):
+        # CONVERT hides even a view the round recorded (a resumed round refused at its check fails CONVERT beside it);
+        # DOCUMENT only where the round stored none
+        return None
     return newest
 
 

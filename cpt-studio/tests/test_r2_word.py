@@ -46,7 +46,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import customer, jobs, models, storage
-from studio.fable import BUSY, CONVERT, DOCUMENT, docx_package
+from studio.fable import BUSY, CONVERT, DOCUMENT, FAILURE_KINDS, STORAGE, docx_package
 from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from tests.support import coding as f
@@ -2617,6 +2617,113 @@ class StoredConversionTests(r.CustomerCase, TestCase):
                          (f'/api/encounters/{enc.pk}/original?view=1', True))
         self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original?view=1').content, FRESH_PDF)
         self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original').content, FRESH_PDF)
+
+    # --- integrated refutation round 1, I1-18 (the independent check's F2, the same class as I1-1): a later round that
+    # fails DOCUMENT on the Word file's own fresh conversion - past the store's limit beside an earlier view
+    # (jobs._keep_view, refutation round 2 rounds[4]) or past the send limit (fable.document._pdf_document) - stores no
+    # view of its own, so release 1's stored conversion, which C8 decided not to read again, is not the doctor's either:
+    # the page reads as for a file refused at its first round, view_round null (I1-12), while the record keeps it
+
+    def test_a_later_round_that_fails_on_its_own_conversion_is_shown_as_one_refused_at_its_first_round(self):
+        from tests.test_read_audit import member_client
+
+        store_prefix = b'%PDF-1.7\n% a synthetic conversion past the store\'s limit\n'
+        send_prefix = b'%PDF-1.7\n% a synthetic conversion past the send limit\n'
+        store_large = store_prefix + b'0' * (settings.MAX_UPLOAD_BYTES + 1 - len(store_prefix))
+        send_large = send_prefix + b'0' * (docx_package.MAX_PDF_BYTES + 1 - len(send_prefix))
+        self.assertLess(len(store_large), docx_package.MAX_PDF_BYTES)  # sent if it could be stored: _keep_view refuses it
+        for path, conversion, logged in (('the store\'s limit', store_large, True), ('the send limit', send_large, False)):
+            with self.subTest(path=path):
+                enc, rev, _, _ = self.stored(SHELLED_WORD)
+                member = member_client(self.reviewer)
+                base = f'/api/encounters/{enc.pk}'
+                # before: round 1's conversion is the view, kept by the page under its tag
+                first = member.get(f'{base}/original?view=1')
+                self.assertEqual((first.status_code, first.content), (200, STORED_PDF))
+                tag = first['ETag']
+                self.assertEqual(member.get(base).json()['document']['view_round'], 1)
+                for trigger, number in ((Round.ANSWERS, 2), (Round.RETRY, 3)):
+                    coder = f.FakeCoder()  # it fails the test if anything is sent
+                    if logged:  # the store's refusal is logged (jobs._keep_view)
+                        with self.assertLogs('studio.jobs', 'ERROR'):
+                            round_, convert, _ = self.next_round(enc, rev, trigger, coder, converted=conversion)
+                    else:
+                        round_, convert, _ = self.next_round(enc, rev, trigger, coder, converted=conversion)
+                    convert.assert_called_once_with(SHELLED_WORD)
+                    self.assertEqual((round_.number, round_.state, round_.failure_kind, round_.error,
+                                      round_.view_pdf_storage_name),
+                                     (number, Round.FAILED, DOCUMENT, fable_document.REFUSED_TEXT['docx'], None))
+                    self.assertEqual((coder.counts, coder.calls), ([], []))
+                    self.assert_refused_as_at_first_round(member, enc, SHELLED_WORD, tag, f'{path}: round {number}')
+                    with self.assertNumQueries(2):  # its first file and shown_view, read once: no statement added
+                        self.assertEqual(customer.document_json(enc)['view_round'], None)
+                # a retry queued, not yet run, shows none either: the refusal stands until a round stores its own view
+                jobs.retry(enc, self.reviewer)
+                self.assertEqual(jobs.latest_round(enc).state, Round.QUEUED)
+                self.assert_refused_as_at_first_round(member, enc, SHELLED_WORD, tag, f'{path}: a retry queued')
+                # the record keeps what round 1 read: the operator's download and the bundle's converted/ file (its
+                # record.json is the page as shown)
+                self.assertEqual(customer.converted_view(enc).number, 1)
+                self.assertEqual(customer.download_content(enc, recorded=True).data, STORED_PDF)
+                bundle = member.get(f'{base}/bundle')
+                self.assertEqual(bundle.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+                    self.assertEqual(archive.read('converted/synthetic-note.pdf'), STORED_PDF)
+                    shown = json.loads(archive.read('record.json'))['document']['document']
+                self.assertEqual((shown['view_url'], shown['converted'], shown['view_round']), (None, False, None))
+                # the retry's own conversion fits: stored, sent and shown - the copy kept under round 1's tag is
+                # answered with it, under the round's own tag
+                self.use(self.answering())
+                with mock.patch.object(fable_document, 'convert_docx', return_value=FRESH_PDF):
+                    self.run_next()
+                round_ = jobs.latest_round(enc)
+                self.assertEqual((round_.number, round_.state, round_.view_pdf_sha256),
+                                 (4, Round.DONE, hashlib.sha256(FRESH_PDF).hexdigest()))
+                document = member.get(base).json()['document']
+                self.assertEqual((document['view_url'], document['converted'], document['view_round']),
+                                 (f'{base}/original?view=1', True, 4))
+                kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=tag)
+                self.assertEqual((kept.status_code, kept.content), (200, FRESH_PDF))
+                self.assertNotEqual(kept['ETag'], tag)
+                self.assertEqual(member.get(f'{base}/original').content, FRESH_PDF)
+
+    def test_only_a_document_failure_that_stored_no_view_of_its_own_masks_the_earlier_view(self):
+        from tests.test_read_audit import member_client
+
+        enc, _, _, _ = self.stored(SHELLED_WORD)
+        member = member_client(self.reviewer)
+        base = f'/api/encounters/{enc.pk}'
+
+        def page():
+            document = member.get(base).json()['document']
+            view = member.get(f'{base}/original?view=1')
+            download = member.get(f'{base}/original')
+            return (document['view_round'], document['converted'], view.status_code,
+                    view.content if view.status_code == 200 else None, download.status_code,
+                    download.content if download.status_code == 200 else None)
+        shown_first = (1, True, 200, STORED_PDF, 200, STORED_PDF)
+        masked = (None, False, 404, None, 409, None)
+        later = r.write_round(enc, state_=Round.FAILED, failure_kind=STORAGE, error='A synthetic failure.')
+        # a failure of another kind with no view of its own is not the Word file's: round 1's view stands, as before
+        # (STORAGE: the store path's other failure, which a retry codes again)
+        for kind in sorted(set(FAILURE_KINDS) - {CONVERT, DOCUMENT}):
+            with self.subTest(kind=kind):
+                Round.objects.filter(pk=later.pk).update(failure_kind=kind)
+                self.assertEqual(page(), shown_first)
+        # DOCUMENT with no view of its own (none, or an empty name): no view, and view_round null
+        for name in (None, ''):
+            with self.subTest(document_view=name):
+                Round.objects.filter(pk=later.pk).update(failure_kind=DOCUMENT, view_pdf_storage_name=name,
+                                                         error=fable_document.REFUSED_TEXT['docx'])
+                self.assertEqual(page(), masked)
+        # DOCUMENT beside a view the round stored - the API refused what was sent, after its view was kept - shows that
+        # view, which is the round's own (view_round 2), never round 1's
+        name, digest, _ = storage.store_original(self.ws.pk, FRESH_PDF, 'converted.pdf')
+        Round.objects.filter(pk=later.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+        self.assertEqual(page(), (2, True, 200, FRESH_PDF, 200, FRESH_PDF))
+        # and CONVERT beside it still shows none (I1-1)
+        Round.objects.filter(pk=later.pk).update(failure_kind=CONVERT)
+        self.assertEqual(page(), masked)
 
     # --- integrated refutation round 1, I1-12 (viewer-0): the document block names the round whose conversion the view
     # serves (view_round), so a page kept open across a later round that converts the file again redraws its viewer whole

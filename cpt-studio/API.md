@@ -185,8 +185,10 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
   `size` is the upload's exact number of bytes, or for a paste the bytes of its text in UTF-8, so for a text it is the
   exact size of the view (the review page checks its frame of the view against it).
 - `document.view_round` (integrated refutation round 1, viewer-0) is the number of the coding round whose conversion a
-  Word document's view serves: the newest round that stored one, none once a later round refused the file. It is null
-  for a PDF, a text, a paste and a Word document with no view. A later round that converts the Word file again (R2-28
+  Word document's view serves: the newest round that stored one, none once a later round refused the file - the file
+  itself, or the round's own fresh conversion of it as too large to store or to send (I1-1, I1-18), when the document
+  reads as one refused at its first round (`view_url` null, `converted` false). It is null for a PDF, a text, a paste
+  and a Word document with no view. A later round that converts the Word file again (R2-28
   step 7, C8) serves another PDF at the same `view_url`, so the page redraws its viewer whole when `view_round` changes:
   its kept copy is asked for with its `ETag` (`304` the same bytes, `200` the new ones). So a round's codes are never
   drawn beside another round's conversion (only a finished round has codes, and it recorded its own view).
