@@ -6606,6 +6606,131 @@ test('D-R2-54: a later page is shown in the task after its drawing ends; the fir
   }
 });
 
+// D-R2-54 (the waits' re-checks): each of renderPage's two waits - a later page's, before it is shown; the first page
+// shown's, before its text is prepared - opens a task in which nothing of the page's drawing is pending, so a page let go
+// there (released as it leaves the view, its viewer closed, or framed) is stopped by the live() re-check after the wait
+// alone: no wait on the library is left to reject. Each wait, each way a page is let go: nothing more is drawn, prepared
+// or marked for it, and a released page is drawn again when asked for. Pages drawn undisturbed in the same harness are
+// drawn, prepared, flagged and marked (the controls), so no check here passes for want of anything to see.
+test('D-R2-54: a page let go during either wait - released, its viewer closed, or framed - is drawn, prepared and marked no further; a released one is drawn again when asked for', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  // plain: one item; overprinted: item 1 is item 0 drawn again at the same place, so a page drawn flags one span
+  const plain = [{ str: 'Synthetic page text.', transform: [10, 0, 0, 10, 72, 700] }];
+  const overprinted = [{ str: 'Bold', transform: [10, 0, 0, 10, 72, 700] }, { str: 'Bold', transform: [10, 0, 0, 10, 72, 700] }];
+  const flagged = layer => layer.textDivs.filter(div => div.attributes['data-overprint'] === '1').length;
+  const marked = layer => layer.textDivs.flatMap(div => div.children).filter(node => node?.className === 'pdf-mark').length;
+  const open = (element, items) => {
+    const layers = [];
+    const viewer = pdfViewer(word, element, [['a'], ['b']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+      TextLayer: class {
+        constructor(options) {
+          layers.push(this);
+          this.textDivs = options.textContentSource.items.map(() => fakeElement({ children: [], append(...nodes) { this.children.push(...nodes); } }));
+          this.textContentItemsStr = options.textContentSource.items.map(item => item.str);
+        }
+        render() { return Promise.resolve(); }
+        cancel() {}
+      } } });
+    // the quote chosen marks the first word of each page: a page drawn has it painted
+    viewer.mark = { key: 'L1#0', quote: null, result: { status: 'marked', marks: { 1: [{ item: 0, start: 0, end: 4, occurrence: 0 }], 2: [{ item: 0, start: 0, end: 4, occurrence: 1 }] } } };
+    const draws = [];
+    for (const page of viewer.pages) {
+      page.viewport = { width: 612, height: 792, scale: 1 };
+      page.element = viewerElement({ offsetTop: 400 * (page.number - 1) });
+      page.proxy = { cleanup() {}, getTextContent: () => Promise.resolve({ items }), render: () => {
+        let resolve;
+        const promise = new Promise(done => { resolve = done; });
+        draws.push({ number: page.number, resolve });
+        return { promise, cancel() {} };
+      } };
+    }
+    app.state.viewer = viewer;
+    return { viewer, layers, draws, first: viewer.pages[0], second: viewer.pages[1] };
+  };
+  const letGo = (how, viewer, page) => {
+    if (how === 'released') app.releasePage(page);  // it left the view (nearPages)
+    else if (how === 'closed') app.closeViewer();
+    else app.fallbackViewer(viewer, 'library');
+  };
+  // the first page shown: its drawing ends, and it is shown in that task, its text prepared in the next (R2-13)
+  const firstShown = async (viewer, first, draws) => {
+    draws[0].resolve();
+    await settle(() => first.element.children.length === 2);
+  };
+  try {
+    await t.test('the control: the first page shown, not let go, is drawn, prepared, flagged and marked in the next task', async () => {
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async () => {
+        Object.assign(app.state, { doc: word, route: null });
+        const { viewer, layers, draws, first } = open(element, overprinted);
+        app.drawPage(viewer, first);
+        await firstShown(viewer, first, draws);
+        assert.deepEqual([first.element.children.length, layers.length, first.drawn, viewer.prepared.has(1)], [2, 1, '', false], 'shown at once, its text not yet prepared');
+        t.mock.timers.tick(0);
+        await settle(() => first.drawn !== '');
+        assert.deepEqual([first.drawn, viewer.prepared.has(1), flagged(layers[0]), marked(layers[0])], ['1 1', true, 1, 1], 'drawn, prepared, flagged and marked in the next task');
+        app.closeViewer();
+      });
+    });
+    for (const how of ['released', 'closed', 'framed']) {
+      // a released page lets its layer go, so it is plain text, whose drawn mark is what a later ask reads; a closed or
+      // framed one keeps its layer, so it is overprinted, for a flag to show
+      const items = how === 'released' ? plain : overprinted;
+      await t.test(`the first page shown, ${how} during the wait before its text is prepared`, async () => {
+        const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+        await withPage({ elements: { documentViewer: element } }, async () => {
+          Object.assign(app.state, { doc: word, route: null });
+          const { viewer, layers, draws, first } = open(element, items);
+          app.drawPage(viewer, first);
+          await firstShown(viewer, first, draws);
+          assert.deepEqual([first.element.children.length, layers.length, first.drawn, viewer.prepared.has(1)], [2, 1, '', false], `${how}: shown at once, its text not yet prepared`);
+          letGo(how, viewer, first);
+          t.mock.timers.tick(0);
+          await settle(() => false);
+          assert.deepEqual([first.drawn, viewer.prepared.has(1), flagged(layers[0]), marked(layers[0])], ['', false, 0, 0], `${how} during that wait: the first page is not taken as drawn, nor prepared, flagged or marked`);
+          if (how === 'released') {
+            assert.equal(first.element.children.length, 0, 'released: back to its placeholder');
+            app.drawPage(viewer, first);
+            await settle(() => draws.length === 2);
+            assert.equal(draws.length, 2, 'released during that wait: drawn again when asked for');
+          }
+          app.closeViewer();
+        });
+      });
+      await t.test(`a later page, ${how} during the wait before it is shown`, async () => {
+        const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+        await withPage({ elements: { documentViewer: element } }, async () => {
+          Object.assign(app.state, { doc: word, route: null });
+          const { viewer, layers, draws, first, second } = open(element, items);
+          app.drawPage(viewer, first);
+          app.drawPage(viewer, second);
+          await firstShown(viewer, first, draws);
+          t.mock.timers.tick(0);
+          await settle(() => draws.length === 2);
+          assert.deepEqual([first.drawn, viewer.prepared.has(1), marked(layers[0]), draws.map(item => item.number)], ['1 1', true, 1, [1, 2]], `${how}: the control - page 1 drawn, prepared and marked; then page 2 started`);
+          draws[1].resolve();
+          await settle(() => false);
+          assert.deepEqual([second.element.children.length, layers.length], [0, 1], `${how}: page 2 is not shown in the task its drawing ends in`);
+          letGo(how, viewer, second);
+          t.mock.timers.tick(0);
+          await settle(() => false);
+          assert.deepEqual([second.element.children.length, layers.length, second.layer === null, second.drawn, viewer.prepared.has(2)], [0, 1, true, '', false], `${how} during that wait: the later page is not drawn - no canvas, no text layer made, so nothing to flag or mark - nor prepared`);
+          if (how === 'released') {
+            app.drawPage(viewer, second);
+            await settle(() => draws.length === 3);
+            assert.equal(draws.length, 3, 'released during that wait: drawn again when asked for');
+          }
+          app.closeViewer();
+        });
+      });
+    }
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
 // A re-open drawn from page memory after a recorded 304, the view asked for at the click, page memory wiped at every end
 // (R2-15, R2-16, R2-18).
 
