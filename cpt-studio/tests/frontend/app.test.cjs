@@ -299,6 +299,12 @@ async function settle(done) {
   for (let turn = 0; turn < 50 && !done(); turn += 1) await new Promise(resolve => setImmediate(resolve));
 }
 
+// As settle, in a test that keeps real timers, letting the page's own next task (nextTask: a timer of 0 ms) run as well:
+// each turn is a timer of 1 ms, so a timer the page set before it has fired by the time it ends (D-R2-54).
+async function settleTasks(done) {
+  for (let turn = 0; turn < 50 && !done(); turn += 1) await new Promise(resolve => setTimeout(resolve, 1));
+}
+
 // --- helpers kept from the earlier page ---------------------------------------------------------------------------
 
 test('escapeHtml escapes every markup-significant character and tolerates empty values', () => {
@@ -1915,11 +1921,11 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
       viewer.reveal = 4;
       app.releasePage(viewer.pages[1]);
       finish.get(1).resolve();
-      await settle(() => started.length === 2);
+      await settleTasks(() => started.length === 2);  // the first page shown prepares its text in the next task (D-R2-54)
       assert.deepEqual(started, [1, 4], 'the quote\'s page next');
       assert.equal(viewer.pages[0].drawn, '1 1', 'page 1 drawn');
       finish.get(4).resolve();
-      await settle(() => started.length === 3);
+      await settleTasks(() => started.length === 3);  // a later page is shown in the task after its drawing (D-R2-54)
       assert.deepEqual(started, [1, 4, 3], 'then the others still asked for, in order; page 2 never');
       // a page released while it is drawn lets the next one start at once
       app.releasePage(viewer.pages[2]);
@@ -1942,11 +1948,11 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
       assert.equal(cancelled, false, 'the drawing under way is not cancelled');
       assert.deepEqual(viewer.queue, [first], 'the page is asked for again');
       settle1.resolve();
-      await settle(() => started.length === 5);
+      await settleTasks(() => started.length === 5);
       assert.equal(first.drawn, '1 1', 'the first drawing was shown');
       assert.deepEqual(started.slice(3), [1, 1], 'and the page is drawn again at the new size');
       finish.get(1).resolve();
-      await settle(() => first.drawn === '1.25 1');
+      await settleTasks(() => first.drawn === '1.25 1');
       assert.deepEqual([first.drawn, first.drawing], ['1.25 1', '']);
       app.closeViewer();
     });
@@ -6306,6 +6312,78 @@ test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text rea
   } finally {
     global.getComputedStyle = style;
     Object.assign(global, globals);
+    Object.assign(app.state, saved);
+  }
+});
+
+// D-R2-54 (long-tasks-max-P1): the library ends a page's drawing in an animation frame, and the page's own work after it
+// ran in that frame's task, so a page's last drawing slice, its canvas and text layer, its text prepared to be searched
+// and the canvas's commit were one long task. Here a "task" is a timer the test holds (setTimeout is mocked): what the page
+// does before the test ticks it ran in the task its drawing ended in.
+test('D-R2-54: a later page is shown in the task after its drawing ends; the first page shown, at once (R2-13), its text prepared in the next task; a redraw whose text is prepared is shown and marked in one task', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const layers = [];
+      const viewer = pdfViewer(word, element, [['a'], ['b']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+        TextLayer: class { constructor(options) { layers.push(options); this.textDivs = []; this.textContentItemsStr = []; } render() { return Promise.resolve(); } cancel() {} } } });
+      const draws = [];
+      const reads = new Map();
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.element = viewerElement({ offsetTop: 400 * (page.number - 1) });
+        page.proxy = { cleanup() {}, getTextContent: () => new Promise(resolve => { reads.set(page.number, resolve); }), render: () => {
+          let resolve;
+          const promise = new Promise(done => { resolve = done; });
+          draws.push({ number: page.number, resolve });
+          return { promise, cancel() {} };
+        } };
+      }
+      app.state.viewer = viewer;
+      const [first, second] = viewer.pages;
+      const shown = page => page.element.children.length === 2;
+      app.drawPage(viewer, first);
+      app.drawPage(viewer, second);
+      assert.deepEqual(draws.map(item => item.number), [1], 'one page at a time');
+      // the first page shown: its canvas and text layer together, in the task its drawing ends in (R2-13)
+      reads.get(1)({ items: [{ str: 'a' }] });
+      draws[0].resolve();
+      await settle(() => shown(first));
+      assert.ok(shown(first), 'the first page shown is shown in the task its drawing ends in');
+      assert.equal(layers.length, 1, 'with its text layer');
+      assert.deepEqual([first.drawn, viewer.prepared.has(1)], ['', false], 'its text is not prepared to be searched in that task');
+      t.mock.timers.tick(0);
+      await settle(() => first.drawn !== '');
+      assert.deepEqual([first.drawn, viewer.prepared.has(1)], ['1 1', true], 'it is in the next task, and the page drawn');
+      // a later page (another is drawn): shown in the task after its drawing ends, never in that task
+      await settle(() => draws.length === 2);
+      reads.get(2)({ items: [{ str: 'b' }] });
+      draws[1].resolve();
+      await settle(() => shown(second));
+      assert.equal(shown(second), false, 'a later page is not shown in the task its drawing ends in');
+      assert.equal(layers.length, 1, 'nor is its text layer made there');
+      t.mock.timers.tick(0);
+      await settle(() => second.drawn !== '');
+      assert.ok(shown(second), 'it is shown in the next task');
+      assert.deepEqual([second.drawn, viewer.prepared.has(2), layers.length], ['1 1', true, 2], 'its text layer made, its text prepared and the page drawn in that same task');
+      // a redraw (a zoom) of the only page drawn, whose text is prepared: shown and drawn - its marks painted - in the task
+      // its drawing ends in, so no frame shows it without its marks
+      app.releasePage(second);
+      first.viewport = { width: 765, height: 990, scale: 1.25 };
+      app.drawPage(viewer, first);
+      await settle(() => draws.length === 3);
+      assert.equal(draws[2].number, 1);
+      draws[2].resolve();
+      await settle(() => first.drawn === '1.25 1');
+      assert.equal(first.drawn, '1.25 1', 'a redraw whose text is prepared is drawn in the task it is shown');
+      assert.equal(layers.length, 3);
+      app.closeViewer();
+    });
+  } finally {
     Object.assign(app.state, saved);
   }
 });

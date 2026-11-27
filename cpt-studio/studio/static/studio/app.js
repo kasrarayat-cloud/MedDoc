@@ -3570,6 +3570,11 @@ async function renderPage(viewer, page) {
     reading.catch(() => {});
     await watched(viewer, page.render.promise, page);
     const content = await reading;
+    // D-R2-54: the frame that ends a page's drawing is not one long task with all the rest: a later page (another is
+    // drawn) is shown in the next task; the first page shown, at once (R2-13), and its text, unless already prepared to
+    // be searched (a redraw, whose marks are then painted with it), prepared in the next task
+    const later = viewer.pages.some(other => other !== page && other.drawn);
+    if (later) await nextTask();
     if (!live()) return;
     const text = document.createElement('div');
     text.className = 'pdf-text';
@@ -3578,6 +3583,7 @@ async function renderPage(viewer, page) {
     page.layer = new library.TextLayer({ textContentSource: content, container: text, viewport });
     page.painted = [];
     await watched(viewer, page.layer.render(), page);
+    if (!later && !viewer.prepared.has(page.number)) await nextTask();
     if (!live()) return;
     for (const item of preparedPage(viewer, page.number, content).copies) page.layer.textDivs[item]?.setAttribute('data-overprint', '1');
     page.drawn = key;
