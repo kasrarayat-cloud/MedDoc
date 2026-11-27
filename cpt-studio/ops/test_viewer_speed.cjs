@@ -103,7 +103,13 @@ async function open(context, hash = '#documents') {
     const call = calls.find(item => item.request === request);
     if (!call) return;
     if (failed) call.failed = true;
-    else Object.assign(call, { status: (await request.response())?.status(), body: (await request.sizes()).responseBodySize });
+    else {
+      try {
+        Object.assign(call, { status: (await request.response())?.status(), body: (await request.sizes()).responseBodySize });
+      } catch {
+        call.failed = true;  // its page or context closed as it finished (a test's end): no status, never an unhandled rejection
+      }
+    }
     call.finish();
   };
   page.on('requestfinished', finished(false));
