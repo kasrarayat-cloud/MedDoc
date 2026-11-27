@@ -15,7 +15,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import client_contract, customer, models, paging, read_audit
+from studio import client_contract, customer, models, paging, rate, read_audit, request_meta
 from tests.support import coding as f
 from tests.test_cux_client_contract import RELEASE_1_BUILD
 from tests.test_frontend import PLAIN_STATIC
@@ -561,6 +561,53 @@ def search_marker_forms(word: str) -> set:
     return forms
 
 
+UUID_SHAPE = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+
+def answer_retry(answer) -> int:
+    """A 429's whole seconds to wait, as its body and its Retry-After give them (the same number)."""
+    seconds = answer.json()['retry_after']
+    assert isinstance(seconds, int) and 0 < seconds <= 60 and answer['Retry-After'] == str(seconds), answer.items()
+    return seconds
+
+
+def search_answer_headers(answer, sign_in) -> dict:
+    """The headers a search's answer carries, every one with its fixed value or an id (the sign-in reference)."""
+    from studio import access
+    return {'Content-Type': 'application/json', 'Content-Length': str(len(answer.content)), 'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'Content-Security-Policy': access.SecurityHeadersMiddleware.CSP,
+            'X-Frame-Options': 'DENY', 'Cross-Origin-Opener-Policy': 'same-origin', 'Vary': 'Cookie',
+            'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', 'X-Robots-Tag': 'noindex, nofollow',
+            'X-CPT-Actor': str(sign_in)}
+
+
+def every_row() -> dict:
+    """Every row of every table the project and Django keep, read through each model's base manager: {table: {pk: {column:
+    value}}} - what a search's closed-world check compares as a whole (integrated refutation round 2, I2-3)."""
+    from django.apps import apps
+    rows = {}
+    for model in apps.get_models(include_auto_created=True):
+        pk = model._meta.pk.attname
+        rows[model._meta.db_table] = {str(row[pk]): row for row in model._base_manager.values()}
+    return rows
+
+
+def rows_changed(before, after) -> dict:
+    """{table: {'added': [row], 'removed': [row], 'changed': [(pk, {column: (before, after)})]}} for each table whose rows
+    are not what they were: rows added, rows gone, and every column that moved."""
+    out = {}
+    for table in sorted(set(before) | set(after)):
+        old, new = before.get(table, {}), after.get(table, {})
+        added = [new[key] for key in sorted(set(new) - set(old))]
+        removed = [old[key] for key in sorted(set(old) - set(new))]
+        changed = [(key, {column: (old[key].get(column), new[key][column]) for column in new[key]
+                          if old[key].get(column) != new[key][column]})
+                   for key in sorted(set(old) & set(new)) if old[key] != new[key]]
+        if added or removed or changed:
+            out[table] = {'added': added, 'removed': removed, 'changed': changed}
+    return out
+
+
 def search_marker_hits(texts, words) -> list:
     """[(form, the text's index)] of every form of each of ``words`` in ``texts``: each text read as it is and percent-
     and plus-decoded; the word's own forms matched case-folded, a base64 core as written (its case is its content)."""
@@ -698,6 +745,51 @@ class SearchCase(ListCase):
         self.assertEqual(answer.status_code, status, answer.content[:300])
         self.assertEqual(answer['Cache-Control'], 'no-store')
         return answer.json()
+
+    def assert_a_search_leaves_only_ids_counts_and_fixed_words(self, before, after, session_before, found, refused,
+                                                                logged, printed, marked, now):
+        """The closed-world half of the no-leak test (integrated refutation round 2, I2-3): every row of every table, the
+        member's session, the two answers' headers and cookies, every log record and everything printed, compared as a
+        whole with what a served search (found) and a refused one (refused, over the member's limit) may leave."""
+        from tests.test_read_audit import REQUEST_ID
+        self.maxDiff = None
+        member, practice = self.reviewer.pk, self.ws.pk
+        sign_in = uuid.UUID(str(session_before[request_meta.SESSION_SIGN_IN_REF]))
+        changed = rows_changed(before, after)
+        # the served search's one read record, the refused one's one event, and the member's list.member window: nothing
+        # else in any table, no row changed or removed anywhere (the session's own row included)
+        record, = changed.pop('studio_accessrecord', {}).get('added') or [None]
+        self.assertIsNotNone(record, changed)
+        self.assertRegex(str(record.pop('id')), UUID_SHAPE)
+        self.assertEqual(record, {
+            'created_at': now, 'host': request_meta.CPT, 'view': read_audit.MEMBER_LIST, 'actor_id': member,
+            'actor_kind': 'human', 'actor_role': models.Membership.REVIEWER, 'workspace_id': practice,
+            'encounter_ids': [str(marked.pk)], 'export_id': None, 'count': 1, 'as_of': now,
+            'filters': {'list': 'search', 'before': None}, 'reason': '', 'outcome': Record.SERVED, 'client': '127.0.0.1',
+            'sign_in_ref': sign_in, 'request_id': REQUEST_ID})
+        event, = changed.pop('studio_securityevent', {}).get('added') or [None]
+        self.assertIsNotNone(event, changed)
+        self.assertRegex(str(event.pop('id')), UUID_SHAPE)
+        self.assertEqual(event, {
+            'created_at': now, 'event': 'list.rate_limited', 'actor_id': member, 'actor_label': '', 'subject_id': member,
+            'workspace_id': practice, 'data': {'scope': 'list.member', 'limit': 1, 'window_seconds': 60},
+            'client': '127.0.0.1', 'sign_in_ref': sign_in, 'request_id': REQUEST_ID})
+        windows = changed.pop('studio_ratewindow', {})
+        self.assertEqual([{column: value for column, value in row.items() if column != 'id'} for row in windows.get('added', [])],
+                         [{'scope': 'list.member', 'key': str(member), 'window_start': rate.window_start(60), 'count': 2,
+                           'last_at': now}], windows)
+        self.assertEqual((windows.get('removed'), windows.get('changed')), ([], []))
+        self.assertEqual(changed, {}, 'nothing else, anywhere')
+        # the session: what it was, nothing added or changed
+        self.assertEqual(dict(self.member.session.items()), session_before)
+        # the answers: exactly these headers, each with its fixed value or an id; no cookie
+        for answer, extra in ((found, {}), (refused, {'Retry-After': str(answer_retry(refused))})):
+            self.assertEqual(dict(answer.items()), {**search_answer_headers(answer, sign_in), **extra}, answer.status_code)
+            self.assertEqual(list(answer.cookies), [], answer.status_code)
+        # the log: the refused answer's one line, the method and the path only; nothing printed
+        self.assertEqual([(name, level, msg, args, exc) for name, level, msg, args, exc in logged],
+                         [('django.request', 'WARNING', '%s: %s', ('Too Many Requests', SEARCH), None)])
+        self.assertEqual(printed, '')
 
 
 class SearchPropertyTests(SearchCase):
@@ -976,19 +1068,23 @@ class SearchTests(SearchCase):
         # base64url) in every row of SEARCH_MARKER_TABLES, the session store decoded, the answers' headers and cookies,
         # every log record as the console handler formats it - its exception text included - and what was printed
         # (integrated refutation round 1, phileak-0 and phileak-2)
-        self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))  # one window of the limit
-        f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
-        seen, printed = [], io.StringIO()
+        now = self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))()  # one window
+        marked = f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
+        seen, logged, printed = [], [], io.StringIO()
         formatter = logging.Formatter()
 
         class Keep(logging.Handler):
             def emit(self, record):
                 seen.append(f'{formatter.format(record)} {record.args!r}')
+                logged.append((record.name, record.levelname, record.msg, record.args, record.exc_info))
         keep = Keep(level=logging.DEBUG)
         root = logging.getLogger()
         root.addHandler(keep)
         previous = root.level
         root.setLevel(logging.DEBUG)
+        self.assertEqual(self.member.get(LIST).status_code, 200)  # the client's handler built before anything is watched
+        before = every_row()
+        session_before = dict(self.member.session.items())
         try:
             with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(printed):
                 found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
@@ -1001,6 +1097,12 @@ class SearchTests(SearchCase):
             root.setLevel(previous)
         self.assertEqual((found.status_code, refused.status_code), (200, 429))
         self.assertEqual(len(found.json()['encounters']), 1)
+        # integrated refutation round 2, I2-3 (failclosed-1): CLOSED WORLD - what the two searches left anywhere is
+        # compared as a whole with what they may leave (ids, counts, times and fixed words), so no form of the words,
+        # derived however (hex, a digest, base32, ...), can hide in a row, a session, a header or a log record; the
+        # form checks below are the second line
+        self.assert_a_search_leaves_only_ids_counts_and_fixed_words(before, every_row(), session_before, found, refused,
+                                                                   logged, printed.getvalue(), marked, now)
         stored = [json.dumps(list(table.objects.values()), default=str) for table in SEARCH_MARKER_TABLES]
         store = import_module(settings.SESSION_ENGINE).SessionStore()
         sessions = list(Session.objects.all())

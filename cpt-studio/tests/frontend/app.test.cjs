@@ -7308,7 +7308,7 @@ async function withListPage(answer, fn, { observer = true } = {}) {
       global.document.createElement = tag => (tag === 'template' ? { set innerHTML(value) { this.content = { rows: rowsOf(value) }; } } : tag === 'p' ? empty : fakeElement());
       global.fetch = async (url, init = {}) => {
         const method = init.method || 'GET';
-        calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, headers: init.headers });
+        calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, headers: init.headers, init });
         return response(await answer(method, url, typeof init.body === 'string' ? JSON.parse(init.body) : undefined));
       };
       const type = words => { search.value = words; app.onInput({ target: search }); };
@@ -7532,10 +7532,25 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
   const rows = listRowsOf(260);
   const expect = words => rows.filter(row => listText(row).includes(words)).map(hrefOf);
   const server = holding(pagedServer(rows));
-  await withListPage(server.answer, async ({ calls, table, empty, type, shown, storage }) => {
+  await withListPage(server.answer, async ({ calls, table, more, empty, type, shown, storage }) => {
     app.state.routeSerial = 14;
     await app.showList('documents', 14);
     const searches = () => calls.filter(call => call.url === app.SEARCH_URL);
+    // from here every request of any kind is recorded, and everything drawn kept (the closed-world check below)
+    const at = calls.length;
+    const other = recordOtherRequests();
+    const drawn = [];
+    for (const element of [table, more]) {
+      const own = Object.getOwnPropertyDescriptor(element, 'innerHTML');
+      let html = '';
+      Object.defineProperty(element, 'innerHTML', { get: own?.get || (() => html), set(value) { drawn.push(String(value)); if (own?.set) own.set.call(this, value); else html = value; }, configurable: true });
+    }
+    const made = global.document.createElement;
+    global.document.createElement = tag => {
+      const element = made(tag);
+      if (tag !== 'template') return element;
+      return { set innerHTML(value) { drawn.push(String(value)); element.innerHTML = value; }, get content() { return element.content; } };
+    };
     server.holdWhen(method => method === 'POST');
     type('polyp');
     assert.deepEqual(shown().map(row => row.href), rows.slice(0, 50).filter(row => listText(row).includes('polyp')).map(hrefOf), 'the rows on the page, filtered at once');
@@ -7573,17 +7588,109 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
     t.mock.timers.tick(1000);
     assert.equal(shown().length, 50, 'cleared: the list\'s rows again, from page memory');
     assert.equal(searches().length, 3);
+    // CLOSED WORLD (integrated refutation round 2, I2-3, failclosed-0): while the box searched, the page made exactly the
+    // searches it must - each one POST to the search address as a string, no query string, exactly its four headers and
+    // their values however they are given (an object, an array of pairs, a Headers), its other options exactly, the
+    // words in its body only - and no other request of any kind, nor drew anything that loads; the form checks below are
+    // the second line
+    assert.deepEqual(calls.slice(at).map(requestShape), ['polyp', 'polyp report 2', 'nothing like this'].map(searchShape),
+      'exactly the searches, each as it must be');
+    assert.deepEqual(other.requests, [], 'no other request of any kind');
+    assert.deepEqual(drawn.flatMap(loadingMarkup), [], 'nothing drawn that loads');
     // every form of the words typed - as typed, case-blind, percent- or plus-encoded, base64 or base64url at any byte
     // alignment - in no request's address and no request header (integrated refutation round 1, phileak-0)
     const typed = ['polyp', 'polyp report 2', 'polyp report 21', 'nothing like this'];
-    assert.deepEqual(calls.flatMap(call => searchMarkerHits(`${call.url}\n${JSON.stringify(call.headers ?? {})}`, typed)), [],
+    assert.deepEqual(calls.flatMap(call => searchMarkerHits(requestText(call), typed)), [],
       'the words are never in an address or a header');
     for (const form of searchMarkerForms('polyp report 2')) {  // the control: each form, in an address, is found
       assert.ok(searchMarkerHits(`/api/encounters?q=${encodeURIComponent(form)}`, ['polyp report 2']).length, form);
     }
     assert.deepEqual(storage, [], 'nothing in the browser\'s storage');
+    other.restore();
+    // the control of the form checks' reading: a header given as a Headers object or an array of pairs, and a Request's
+    // own address, are read (I2-3, failclosed-0)
+    for (const headers of [new Headers({ 'X-Q': 'polyp report 2' }), [['X-Q', 'polyp report 2']]]) {
+      assert.ok(searchMarkerHits(requestText({ url: '/x', init: { headers } }), ['polyp report 2']).length, String(headers));
+    }
+    assert.ok(searchMarkerHits(requestText({ url: new Request('http://studio.test/x?q=polyp%20report%202'), init: {} }), ['polyp report 2']).length);
   });
 });
+
+// One request the page made, as a search's closed-world check compares it whole (I2-3): its address as given (a
+// string, or what else it was), the names of its options, and each option - its headers read however they were given.
+function requestShape(call) {
+  const init = call.init && typeof call.init === 'object' ? call.init : {};
+  let headers;
+  try {
+    headers = Object.fromEntries(new Headers(init.headers ?? {}));
+  } catch (error) {
+    headers = `unreadable: ${error.message}`;  // a value no browser would send is never a search's
+  }
+  return { url: typeof call.url === 'string' ? call.url : Object.prototype.toString.call(call.url), options: Object.keys(init).sort(),
+    method: init.method, headers, body: init.body, credentials: init.credentials, cache: init.cache };
+}
+
+// A request as the form checks read it (the second line): its address - a Request's own included - and its headers,
+// however they were given (I2-3, failclosed-0: JSON.stringify read a Headers object as '{}').
+function requestText(call) {
+  const address = typeof call.url === 'string' ? call.url : call.url instanceof Request ? call.url.url : String(call.url);
+  return `${address}\n${JSON.stringify(requestShape(call).headers)}`;
+}
+
+// The one request a search of `text` is (R2-20, R2-22): its words in the POST body only.
+function searchShape(text) {
+  return { url: app.SEARCH_URL, options: ['body', 'cache', 'credentials', 'headers', 'method'], method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json', [app.CLIENT_HEADER.toLowerCase()]: app.CLIENT_VERSION, 'x-csrftoken': 'token123' },
+    body: JSON.stringify({ text, before: null }), credentials: 'same-origin', cache: 'no-store' };
+}
+
+// Every other way a page can make a request, recorded until restore() (I2-3: a closed world): XMLHttpRequest,
+// sendBeacon, EventSource, WebSocket, a worker, an image, a dynamic import, window.open, a navigation, and any element
+// made other than the list's own (its rows' template, the empty search's paragraph).
+function recordOtherRequests() {
+  const requests = [];
+  const undo = [];
+  const swap = (owner, name, value) => {
+    const before = Object.getOwnPropertyDescriptor(owner, name);
+    undo.push(() => (before ? Object.defineProperty(owner, name, before) : delete owner[name]));
+    Object.defineProperty(owner, name, { value, configurable: true, writable: true });
+  };
+  const named = kind => class { constructor(...args) { requests.push([kind, ...args.map(String)]); } };
+  swap(global, 'XMLHttpRequest', class {
+    open(...args) { requests.push(['XMLHttpRequest', ...args.map(String)]); }
+    send(body) { requests.push(['XMLHttpRequest send', String(body)]); }
+    setRequestHeader(...args) { requests.push(['XMLHttpRequest header', ...args.map(String)]); }
+  });
+  for (const kind of ['EventSource', 'WebSocket', 'Worker', 'SharedWorker', 'Request']) swap(global, kind, named(kind));
+  swap(global, 'Image', class { set src(value) { requests.push(['Image', String(value)]); } });
+  swap(global, 'navigator', { sendBeacon: (...args) => { requests.push(['sendBeacon', ...args.map(String)]); return true; } });
+  swap(global.window, 'open', (...args) => { requests.push(['window.open', ...args.map(String)]); return null; });
+  const place = global.location;
+  swap(global, 'location', { get hash() { return place.hash; }, set hash(value) { place.hash = value; },
+    get href() { return `http://studio.test/${place.hash}`; }, set href(value) { requests.push(['location', String(value)]); },
+    assign: value => requests.push(['location.assign', String(value)]), replace: value => requests.push(['location.replace', String(value)]) });
+  const make = global.document.createElement;
+  swap(global.document, 'createElement', tag => {
+    if (tag !== 'template' && tag !== 'p') requests.push(['element', String(tag)]);
+    return make(tag);
+  });
+  const load = app.PDF_IMPORT.load;
+  app.PDF_IMPORT.load = specifier => { requests.push(['import', String(specifier)]); return new Promise(() => {}); };
+  undo.push(() => { app.PDF_IMPORT.load = load; });
+  return { requests, restore: () => { while (undo.length) undo.pop()(); } };
+}
+
+// What in drawn markup could load anything (I2-3): an element or attribute the list's own markup does not have, or an
+// address that is not a place on the page itself (a fragment).
+const LIST_MARKUP = { div: ['class'], span: ['class'], a: ['class', 'href'], strong: [], small: [], p: ['class', 'role'], svg: ['class', 'aria-hidden'],
+  use: ['href'], button: ['type', 'class', 'data-action', 'disabled', 'aria-busy'] };
+function loadingMarkup(html) {
+  return [...dom(html).walk()].flatMap(node => {
+    if (!Object.hasOwn(LIST_MARKUP, node.tag)) return [`<${node.tag}>`];
+    return Object.entries(node.attrs).filter(([name, value]) => !LIST_MARKUP[node.tag].includes(name) || (name === 'href' && !/^#[\w/%.-]*$/.test(value)))
+      .map(([name, value]) => `<${node.tag} ${name}="${value}">`);
+  });
+}
 
 // Every form of a typed word a no-leak guard looks for (integrated refutation round 1, phileak-0), as the bench's
 // markerForms reads a marker (ops/bench/bench.cjs, records[4]): the word as typed and case-folded, and its base64 and
