@@ -73,7 +73,7 @@ def encounter_json() -> dict:
         'permissions': {'can_review': True},
         'document': {'name': 'synthetic-egd.pdf', 'media_type': 'application/pdf', 'size': 1673, 'kind': 'upload',
                      'original_url': base, 'view_url': f'{base}?view=1', 'view_media_type': 'application/pdf',
-                     'converted': False, 'view_round': None},
+                     'converted': False, 'view_conversion': None},
         'context': {'service_date': '2026-11-02', 'insurance': 'medicare'},
         'progress': {'phase': 'done', 'busy': False, 'started_at': '2026-11-20T07:31:05Z',
                      'finished_at': '2026-11-20T07:38:40Z', 'server_time': '2026-11-20T08:10:00Z', 'message': '',

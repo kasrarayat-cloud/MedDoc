@@ -162,7 +162,7 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
 ```text
 {id, title, created_at, updated_at, state, state_label,
  permissions: {can_review},
- document: {name, media_type, size, kind, original_url, view_url, view_media_type, converted, view_round},
+ document: {name, media_type, size, kind, original_url, view_url, view_media_type, converted, view_conversion},
  context: {service_date, insurance},
  progress: {phase, busy, started_at, finished_at, server_time, message, can_stop, can_resume, can_retry,
             error: {text} | null},
@@ -189,14 +189,17 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
   for a Word document the view is the PDF the coding review read (`converted: true`, once a round has converted it).
   `size` is the upload's exact number of bytes, or for a paste the bytes of its text in UTF-8, so for a text it is the
   exact size of the view (the review page checks its frame of the view against it).
-- `document.view_round` (integrated refutation round 1, viewer-0) is the number of the coding round whose conversion a
-  Word document's view serves: the newest round that stored one, none once a later round refused the file - the file
-  itself, or the round's own fresh conversion of it as too large to store or to send (I1-1, I1-18), when the document
-  reads as one refused at its first round (`view_url` null, `converted` false). It is null for a PDF, a text, a paste
-  and a Word document with no view. A later round that converts the Word file again (R2-28
-  step 7, C8) serves another PDF at the same `view_url`, so the page redraws its viewer whole when `view_round` changes:
-  its kept copy is asked for with its `ETag` (`304` the same bytes, `200` the new ones). So a round's codes are never
-  drawn beside another round's conversion (only a finished round has codes, and it recorded its own view).
+- `document.view_conversion` (integrated refutation rounds 1 and 2, viewer-0 and viewer-1) names the stored conversion
+  a Word document's view serves: a UUID derived with the site's key from the document and the stored file's name -
+  never the file's bytes, a hash of them or any words. It is that of the newest round that stored one, none once a
+  later round refused the file - the file itself, or the round's own fresh conversion of it as too large to store or to
+  send (I1-1, I1-18), when the document reads as one refused at its first round (`view_url` null, `converted` false).
+  It is null for a PDF, a text, a paste and a Word document with no view. A later round that converts the Word file
+  again (R2-28 step 7, C8) stores another file and serves it at the same `view_url`, so the page redraws its viewer
+  whole when `view_conversion` changes: its kept copy is asked for with its `ETag` (`304` the same bytes, `200` the new
+  ones). A later round that reads back the same stored file (a clean Word file's answers or retry round) names the same
+  conversion, and the page keeps its viewer, its zoom and its place. So a round's codes are never drawn beside another
+  round's conversion (only a finished round has codes, and it recorded its own view).
 - `codes[]` is one row per line: its `decision`, `quotes` and `allowed_actions` are that line's; `decision.id` is what
   an undo names. `units` is the whole number the coding review wrote (0 included: it writes 0 on a code it does not
   support), or null when it gave none; `modifiers` are its modifiers as written (a blank item, which carries nothing,

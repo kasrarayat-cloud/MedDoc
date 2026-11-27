@@ -37,7 +37,11 @@
 // converts the file again (release 2, C8): its next reads play it forward (reading, checking, then the Word document's
 // codes, one quoting words only the new conversion has), and from its second read - once the round has stored its own
 // conversion, as the worker does before it sends anything - the view is that conversion (other bytes, another tag) and
-// document.view_round names the round; until the next reset (integrated refutation round 1, viewer-0).
+// document.view_conversion names it; until the next reset (integrated refutation round 1, viewer-0). POST
+// /__preview__/reread begins one that reads back the same stored conversion, as a clean Word file's answers round does:
+// the same reads, the Word document's own codes, the same view and the same view_conversion throughout (integrated
+// refutation round 2, viewer-1). A stored conversion's name is shaped as studio.customer.view_conversion_of's: a UUID
+// bound to this run, the document and the conversion, never its bytes (the fixture's own for the Word fixture's).
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
@@ -259,7 +263,7 @@ function viewBytes(name, play = null) {
   if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) {
     const [first, ...rest] = SYNTHETIC_DOCUMENTS[name].pages;
     // a later round's own conversion, once that round has stored it (POST /__preview__/reconvert)
-    const pages = play?.reconverted && reconvertedNow(play) ? [[...first, RECONVERTED_LINE], ...rest] : [first, ...rest];
+    const pages = play?.reconverted && play.again && reconvertedNow(play) ? [[...first, RECONVERTED_LINE], ...rest] : [first, ...rest];
     return { bytes: syntheticPdf(pages), type: 'application/pdf' };
   }
   return documentBytes(name);
@@ -478,18 +482,32 @@ const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const clone = value => JSON.parse(JSON.stringify(value));
 
 // What the viewer shows of a played document, as the server builds it: a PDF or a text as uploaded; a Word file nothing
-// until the coding review has converted it (here from its second read on), then that PDF, named by the round whose
-// conversion it is (view_round: a round records its own view as it begins, here the play's round; a reconverted play's
-// earlier round until its second read).
+// until the coding review has converted it (here from its second read on), then that PDF, under the name of the stored
+// conversion it is (view_conversion: an answers round reads back the same one; a reconverted play's is the fixture's
+// until its second read).
 function playedView(id, play) {
   const view = `/api/encounters/${id}/original?view=1`;
   if (play.mediaType !== DOCX_TYPE) {
-    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false, view_round: null };
+    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false, view_conversion: null };
   }
-  if (play.reconverted) return { view_url: view, view_media_type: 'application/pdf', converted: true, view_round: play.round + (reconvertedNow(play) ? 1 : 0) };
+  if (play.reconverted) return { view_url: view, view_media_type: 'application/pdf', converted: true, view_conversion: playedConversion(id, play) };
   play.converted = play.converted || play.reads > 1;
-  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true, view_round: play.round + (play.answered ? 1 : 0) }
-    : { view_url: null, view_media_type: null, converted: false, view_round: null };
+  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true, view_conversion: playedConversion(id, play) }
+    : { view_url: null, view_media_type: null, converted: false, view_conversion: null };
+}
+
+// I2-2: the name of a stored conversion, as studio.customer.view_conversion_of names it - a UUID bound to this run, the
+// document and the conversion, never its bytes.
+function conversionName(id, which) {
+  const hex = crypto.createHmac('sha256', CSRF).update(`${id}:conversion:${which}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+// The stored conversion a played Word document's view serves: a reconverted play's own once it has stored it, else the
+// fixture's (a reread play, and a reconverted one before its second read); an uploaded or retried one's own.
+function playedConversion(id, play) {
+  if (!play.reconverted) return conversionName(id, 'first');
+  return play.again && reconvertedNow(play) ? conversionName(id, 'again') : play.reconverted.document.view_conversion;
 }
 
 // Whether a reconverted play's round has stored its own conversion yet: from its second read.
@@ -503,12 +521,13 @@ function reconvertedResults(word) {
   return done;
 }
 
-// POST /__preview__/reconvert: the Word fixture's next coding review, begun elsewhere, converting the file again.
-function reconvert() {
+// POST /__preview__/reconvert (again) and /__preview__/reread: the Word fixture's next coding review, begun elsewhere,
+// converting the file again - or reading back the same stored conversion.
+function reconvert(again = true) {
   const word = [...fixtures.byId.values()].find(doc => doc.document?.media_type === DOCX_TYPE && doc.document.converted === true);
   startPlay(word.id, {
     at: Date.parse(word.created_at), answers: word.answers || [], round: word.round.number, trigger: 'answers', answered: true,
-    reconverted: word, title: word.title, name: word.document.name, kind: word.document.kind, mediaType: word.document.media_type,
+    reconverted: word, again, title: word.title, name: word.document.name, kind: word.document.kind, mediaType: word.document.media_type,
     size: word.document.size, context: word.context,
   });
 }
@@ -520,7 +539,7 @@ function played(id, advance) {
   if (advance) play.reads += 1;
   const now = Date.now();
   const { reading, checking, asking, results } = fixtures;
-  const stages = play.reconverted ? [[1, reading], [2, checking], [Infinity, reconvertedResults(play.reconverted)]]
+  const stages = play.reconverted ? [[1, reading], [2, checking], [Infinity, play.again ? reconvertedResults(play.reconverted) : play.reconverted]]
     : play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
   const base = clone(stages.find(([limit]) => play.reads <= limit)[1]);
   const done = !base.progress.busy;
@@ -763,8 +782,8 @@ async function handle(req, res) {
     flags.unrecorded = true;
     return send(res, 204, '');
   }
-  if (req.method === 'POST' && url.pathname === '/__preview__/reconvert') {
-    reconvert();
+  if (req.method === 'POST' && (url.pathname === '/__preview__/reconvert' || url.pathname === '/__preview__/reread')) {
+    reconvert(url.pathname === '/__preview__/reconvert');
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {

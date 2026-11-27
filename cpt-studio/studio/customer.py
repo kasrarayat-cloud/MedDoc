@@ -42,6 +42,7 @@ Studio's: the activity names members of the workspace only.
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
@@ -49,6 +50,7 @@ from typing import NamedTuple, Optional
 from django.db import connection
 from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 from . import decisions, jobs, models, paging, state
 from .fable import CONVERT, DOCUMENT
@@ -534,7 +536,7 @@ def shown_view(encounter):
     none: CONVERT (the file refused - R2-28 step 7, C8, at a later round - or not converted), or DOCUMENT with no view of
     its own (its own fresh conversion refused before it was stored: past the store's limit, jobs._keep_view, or past the
     send limit, fable.document._pdf_document - integrated refutation round 1, I1-18). A refused file then reads as one
-    refused at its first round: no view (?view=1 404, a kept tag included; view_round null), the PDF download 409
+    refused at its first round: no view (?view=1 404, a kept tag included; view_conversion null), the PDF download 409
     OriginalOnly, the Word file by name only (integrated refutation round 1, bypass-0 and failclosed-0). A failure of
     any other kind is not the Word file's and masks nothing (STORAGE included: a retry codes the file again), nor does a
     DOCUMENT beside a view the round stored (that view is the conversion the round itself read), and a later round that
@@ -664,12 +666,25 @@ def download_content(encounter, *, original=False, recorded=False) -> Optional[D
                     EXTENSIONS.get(source.media_type, 'bin'))
 
 
+def view_conversion_of(encounter, view) -> str:
+    """The name the doctor's page knows the converted PDF ``view`` serves by (``view``: a round with view_pdf_*, as
+    shown_view answers): a UUID derived with the site's key from the document and the stored file's name - never the
+    file's bytes, a hash of them or any words - so it names the stored file served, and nothing about its content. A
+    later round that reads back the same stored file (a reuse: jobs._keep_view records the file an earlier round stored)
+    keeps it; one that converts the file again stores another file, and another name (integrated refutation round 2,
+    viewer-1)."""
+    return str(uuid.UUID(salted_hmac('studio.customer.view_conversion', f'{encounter.pk}:{view.view_pdf_storage_name}',
+                                     algorithm='sha256').hexdigest()[:32]))
+
+
 def document_json(encounter) -> dict:
-    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view. ``view_round``
-    names the coding round whose conversion a Word document's view serves (shown_view's number), null for any other
-    document and for a Word document with no view: a later round that converts the file again (R2-28 step 7, C8) serves
-    another PDF at the same view_url, so the page redraws its viewer whole when this changes (integrated refutation
-    round 1, viewer-0). shown_view is read once, as before: no statement is added."""
+    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view.
+    ``view_conversion`` names the stored conversion a Word document's view serves (view_conversion_of shown_view), null
+    for any other document and for a Word document with no view: a later round that converts the file again (R2-28 step
+    7, C8) serves another PDF at the same view_url, so the page redraws its viewer whole when this changes (integrated
+    refutation round 1, viewer-0) - and only then: a later round that reads back the same file names the same
+    conversion, so the page keeps its viewer, its zoom and its place (integrated refutation round 2, viewer-1).
+    shown_view is read once, as before: no statement is added."""
     base = f'/api/encounters/{encounter.pk}/original'
     source = original_file(encounter)
     if source is None:
@@ -677,17 +692,17 @@ def document_json(encounter) -> dict:
         text = revision.pasted_text if revision is not None and revision.kind == Revision.PASTE else None
         return {'name': None, 'media_type': TEXT, 'size': len(text.encode('utf-8')) if text is not None else None,
                 'kind': Revision.PASTE, 'original_url': None, 'view_url': f'{base}?view=1' if text is not None else None,
-                'view_media_type': TEXT if text is not None else None, 'converted': False, 'view_round': None}
-    view_type, converted, view_round = None, False, None
+                'view_media_type': TEXT if text is not None else None, 'converted': False, 'view_conversion': None}
+    view_type, converted, conversion = None, False, None
     if source.media_type in (PDF, TEXT):
         view_type = source.media_type
     elif source.media_type == DOCX:
         shown = shown_view(encounter)
         if shown is not None:
-            view_type, converted, view_round = PDF, True, shown.number
+            view_type, converted, conversion = PDF, True, view_conversion_of(encounter, shown)
     return {'name': source.original_name, 'media_type': source.media_type, 'size': source.size,
             'kind': Revision.UPLOAD, 'original_url': base, 'view_url': f'{base}?view=1' if view_type else None,
-            'view_media_type': view_type, 'converted': converted, 'view_round': view_round}
+            'view_media_type': view_type, 'converted': converted, 'view_conversion': conversion}
 
 
 # --- the round: progress, codes, questions -------------------------------------------------------------------------------------

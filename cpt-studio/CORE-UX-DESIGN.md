@@ -249,10 +249,13 @@ apart from the page script.
   scanned image), so nothing is marked."). Never a partial match.
 - The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
   passage chosen); it is painted again whenever its page is drawn again (a new width or zoom, scrolled back into view),
-  and a read of the document that only changes the codes never reloads the viewer. A read whose Word conversion is
-  another round's does (`document.view_round`, integrated refutation round 1, viewer-0: a later round that converts the
-  file again serves another PDF at the same address); the viewer is drawn afresh, its kept copy asked for with its tag
-  (304 the same bytes, 200 new ones), so a round's codes are never shown beside another round's conversion. When
+  and a read of the document that only changes the codes never reloads the viewer. A read that names another stored
+  conversion of a Word document does (`document.view_conversion`, integrated refutation round 1, viewer-0: a later round
+  that converts the file again serves another PDF at the same address); the viewer is drawn afresh, its kept copy asked
+  for with its tag (304 the same bytes, 200 new ones), so a round's codes are never shown beside another round's
+  conversion. A later round that reads back the same stored conversion (a clean Word file's answers or retry round)
+  names the same one, so the viewer, its zoom and the member's place in it stay (integrated refutation round 2,
+  viewer-1). When
   another quote is chosen, what was shown of the one before goes at once, before anything is waited on - its marks on
   every drawn page, the viewer's mark
   state and the note - and nothing of it is painted on a page drawn while the new quote's pages are read; a quote whose
@@ -289,8 +292,12 @@ apart from the page script.
   the worker's address), waits for the worker to say it is ready, and only then hands it to the library as its port, so
   the library never starts a worker of its own or its stand-in on the page's thread; closing the document ends the
   worker (a worker made ready ahead, holding no document, becomes the next document's own: release 2 below). The viewer
-  downloads the view address itself (same origin, the browser's default credentials), chunk by chunk, and gives the
-  library the bytes. Once the document has opened, one watchdog per viewer watches every wait on the
+  downloads the view address itself (same origin, the browser's default credentials), chunk by chunk (each chunk
+  restarts the stalled download's timer), into one array it gives the library; an abort (the viewer closed, or framed
+  for another reason) rejects as a failure does. The download is the page's own request whatever drew the viewer, a
+  poll's redraw included, so it is marked a poll (`X-CPT-Poll: 1`): never the member's activity, since the member's own
+  act that opened the document has counted already (refutation r2, finding 18), and a frame's load (the browser's own
+  viewer) is never counted by the server either (`studio.sessions.automatic`). Once the document has opened, one watchdog per viewer watches every wait on the
   library (the pages fetched, a page drawn, a page's text read, a text layer rendered): a wait is given up only when the
   library has not answered for 20 seconds of visible time, counted from the later of its last answer and the start of the
   wait, where an answer is any message from the viewer's worker or any of these waits settling. So a scan whose pages

@@ -12,7 +12,9 @@
  * recorded is never answered with PDF bytes, the frame the viewer falls back to included, and nothing is drawn - a path
  * release 1's page has too, so it is outside that count. A sixteenth (V14, integrated refutation round 1, viewer-0): a
  * Word document kept open while a later round converts it again draws that round's conversion (the page's poll redraws
- * the viewer whole; its kept copy asked with its tag). Skipped where Playwright is not installed
+ * the viewer whole; its kept copy asked with its tag). A seventeenth (V15, integrated refutation round 2, viewer-1): one
+ * zoomed and scrolled across a later round that reads back the same stored conversion keeps its viewer, its zoom and
+ * the member's place, asking nothing. Skipped where Playwright is not installed
  * (CPT_VERIFY_PLAYWRIGHT, as ops/walk.cjs reads it), every skip's reason beginning "no Playwright at". CPT_WALK_TEST_PORTS
  * ('first-last') keeps the preview to a range of ports, as ops/test_walk.cjs does. Synthetic documents only.
  *
@@ -825,7 +827,8 @@ test('V14, I1-12: a Word document kept open while a later round converts it agai
     await page.click('#saveReview');
     await page.waitForFunction(() => state.doc?.round?.number === 2 && state.doc.progress?.busy === true);
     // round 2 has not stored its own conversion yet: the same conversion is served, so the viewer stays and asks nothing
-    assert.equal(await page.evaluate(() => state.viewer === window.__roundOneViewer && state.doc.document.view_round), 1, 'the same viewer, round 1\'s conversion named');
+    const roundOne = await page.evaluate(() => state.viewer === window.__roundOneViewer && state.doc.document.view_conversion);
+    assert.match(String(roundOne), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'the same viewer, round 1\'s conversion named');
     assert.deepEqual(calls.filter(call => call.url === viewOf(WORD)), [], 'nothing asked of the view');
     // the poll that brings round 2's own conversion redraws the viewer whole: asked with the kept tag, answered 200
     await page.waitForFunction(line => [...document.querySelectorAll('#documentViewer .pdf-text')].some(layer => layer.textContent.includes(line)),
@@ -836,8 +839,10 @@ test('V14, I1-12: a Word document kept open while a later round converts it agai
       'once, with round 1\'s tag, answered 200 with the new bytes, as the page\'s own read');
     const secondTag = await page.evaluate(view => state.keptViews.get(view)?.tag || '', viewOf(WORD));
     assert.ok(secondTag && secondTag !== firstTag, 'the new conversion kept under its own tag');
-    assert.deepEqual(await page.evaluate(() => [state.viewer !== window.__roundOneViewer, state.doc.document.view_round,
-      document.querySelector('.viewer-note')?.textContent.trim()]), [true, 2, 'Shown as the PDF the coding review read (converted from the Word file).']);
+    const named = await page.evaluate(() => [state.viewer !== window.__roundOneViewer, state.doc.document.view_conversion,
+      document.querySelector('.viewer-note')?.textContent.trim()]);
+    assert.deepEqual([named[0], named[2]], [true, 'Shown as the PDF the coding review read (converted from the Word file).']);
+    assert.ok(named[1] && named[1] !== roundOne, 'round 2\'s own conversion named');
     // round 2 finishes: its codes are drawn beside its own conversion, which is not asked for again
     await page.waitForFunction(() => state.doc?.progress?.phase === 'done' && state.doc.round.number === 2, null, { timeout: 30000 });
     await page.waitForTimeout(300);
@@ -853,6 +858,47 @@ test('V14, I1-12: a Word document kept open while a later round converts it agai
     await settled(reopened);
     assert.deepEqual(reopened.map(call => [call.condition, call.status]), [[`"${secondTag}"`, 304]], 'a re-open: 304 from the new copy');
     assert.ok((await drawnText()).includes(RECONVERTED_LINE));
+    // the refused decision (the coding review changed under the page) is the one error the browser notes
+    assert.deepEqual(errors, ['Failed to load resource: the server responded with a status of 409 (Conflict)']);
+  } finally {
+    await previewControl('reset');
+    await context.close();
+  }
+});
+
+test('V15, I2-2: a Word document kept open, zoomed and scrolled, across a later round that reads back the same stored conversion (a clean Word file\'s answers round) keeps its viewer, its zoom and the member\'s place: nothing is asked of the view, as in release 1', { skip: SKIP, timeout: LIMIT_MS }, async () => {
+  const context = await kit.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const { page, calls, errors } = await open(context);
+    await listed(page);
+    await openRow(page, WORD);
+    // the member zooms in twice (150%) and scrolls the viewer to the second page
+    for (let step = 0; step < 2; step += 1) await page.click('#viewerZoom [data-zoom="in"]');
+    await page.waitForFunction(() => document.querySelector('#zoomLevel')?.textContent === '150%');
+    await page.evaluate(() => {
+      const viewer = document.querySelector('#documentViewer');
+      viewer.scrollTop = viewer.scrollHeight - viewer.clientHeight;
+    });
+    await page.waitForFunction(() => document.querySelector('#viewerPage')?.textContent === 'Page 2 of 2');
+    const place = () => page.evaluate(() => ({ zoom: document.querySelector('#zoomLevel')?.textContent, page: document.querySelector('#viewerPage')?.textContent,
+      top: Math.round(document.querySelector('#documentViewer').scrollTop), conversion: state.doc.document.view_conversion }));
+    const before = await place();
+    assert.ok(before.top > 0, `scrolled: ${JSON.stringify(before)}`);
+    await page.evaluate(() => { window.__keptViewer = state.viewer; });
+    await previewControl('reread');  // another member's answers began round 2, which reads back round 1's stored conversion
+    calls.length = 0;
+    // this page's decision on round 1 is refused (409: the coding review changed) and the page reads the document again
+    await page.click('button[data-decision="reject"][data-line="L2"]');
+    await page.click('#saveReview');
+    await page.waitForFunction(() => state.doc?.round?.number === 2 && state.doc.progress?.busy === true);
+    // round 2 runs (reading, checking) and finishes: every read names the same conversion
+    await page.waitForFunction(() => state.doc?.progress?.phase === 'done' && state.doc.round.number === 2, null, { timeout: 30000 });
+    await page.waitForTimeout(300);
+    const reads = calls.filter(call => call.url === `/api/encounters/${WORD}`);
+    assert.ok(reads.length >= 3, `the round was read as it ran: ${reads.length} reads`);
+    assert.deepEqual(calls.filter(call => call.url === viewOf(WORD)).map(call => call.url), [], 'nothing asked of the view');
+    assert.equal(await page.evaluate(() => state.viewer === window.__keptViewer), true, 'the same viewer');
+    assert.deepEqual(await place(), before, 'its zoom, its page and the member\'s place, and the same conversion named');
     // the refused decision (the coding review changed under the page) is the one error the browser notes
     assert.deepEqual(errors, ['Failed to load resource: the server responded with a status of 409 (Conflict)']);
   } finally {

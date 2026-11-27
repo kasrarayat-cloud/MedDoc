@@ -62,7 +62,7 @@ def encounter():
         'document': {'name': 'synthetic-note.pdf', 'media_type': 'application/pdf', 'size': 1024, 'kind': 'upload',
                      'original_url': f'/api/encounters/{eid}/original',
                      'view_url': f'/api/encounters/{eid}/original?view=1', 'view_media_type': 'application/pdf',
-                     'converted': False, 'view_round': None},
+                     'converted': False, 'view_conversion': None},
         'context': {'service_date': '2026-11-02', 'insurance': 'medicare'},
         'progress': {'phase': 'done', 'busy': False, 'started_at': '2026-11-20T10:00:01.123Z',
                      'finished_at': '2026-11-20T10:04:59Z', 'server_time': '2026-11-20T10:05:30Z', 'message': '',

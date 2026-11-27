@@ -320,16 +320,18 @@ class CustomerFixtureTests(SimpleTestCase):
         docs = self.encounters()
         self.assertEqual(len(docs), 12)
         self.assertEqual(DOCUMENT_KEYS, {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url',
-                                         'view_media_type', 'converted', 'view_round'})
+                                         'view_media_type', 'converted', 'view_conversion'})
         for name, doc in docs.items():
             with self.subTest(name):
                 self.assertEqual(set(doc), ENCOUNTER_KEYS)
                 self.assertEqual(set(doc['document']), DOCUMENT_KEYS)
                 self.assertIn(doc['document']['view_media_type'], ('application/pdf', 'text/plain', None))
                 self.assertIs(type(doc['document']['converted']), bool)
-                # I1-12: the round whose conversion a Word document's view serves, else none
-                self.assertEqual(doc['document']['view_round'],
-                                 doc['round']['number'] if doc['document']['converted'] else None)
+                # I1-12, I2-2: the stored conversion a Word document's view serves (a UUID), else none
+                if doc['document']['converted']:
+                    self.assertRegex(doc['document']['view_conversion'], UUID)
+                else:
+                    self.assertIsNone(doc['document']['view_conversion'])
                 self.assertEqual(doc['document']['view_url'] is None, doc['document']['view_media_type'] is None)
                 self.assertRegex(doc['id'], UUID)
                 self.assertIn(doc['state'], STATES)

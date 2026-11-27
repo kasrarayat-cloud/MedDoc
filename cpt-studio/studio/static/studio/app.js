@@ -2527,11 +2527,14 @@ function renderKey(doc) {
   return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
 }
 
-// What the viewer shows (another round's Word conversion included, I1-12): the page redraws it only when this
-// changes, so a poll never reloads the original.
+// The stored conversion a Word document's view serves, as the server names it (a UUID), or none (I2-2).
+const conversionOf = value => (typeof value === 'string' && UUID.test(value) ? value : '');
+
+// What the viewer shows (the Word conversion served included: I1-12, I2-2): the page redraws it only when this
+// changes, so neither a poll nor a later round reading back the same conversion reloads the original.
 function viewerKey(doc) {
   const part = record(doc?.document);
-  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${Number.isInteger(part.view_round) ? part.view_round : ''} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
+  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${conversionOf(part.view_conversion)} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
 }
 
 function renderDocument(doc, fresh, force = false) {
@@ -2924,15 +2927,9 @@ function startWorker(viewer, address, loading) {
   });
 }
 
-// Downloads the document the viewer shows (A5): its view address, same origin with the browser's default credentials,
-// read chunk by chunk - each chunk calls `moved`, which restarts the stall timer - into one array of bytes. An answer that
-// is not 2xx, a fetch that fails and a body that breaks off all reject (the 'download' reason); so does an abort (the
-// viewer closed, or framed for another reason). The download is the page's own request, whatever drew the viewer - a
-// poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
-// member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
-// counted by the server either (studio.sessions.automatic).
-// R2-15: a kept view is asked for with its tag; a 304 hands back a copy of the kept bytes; any other answer, or a
-// failed request, drops them first, and the page's own abort leaves them kept. It answers {data, tag, held}.
+// The viewer's download of its view (A5, R2-15: CORE-UX-DESIGN.md, "The viewer's own worker, download and watchdog" and
+// "A re-open from page memory"), marked a poll; each chunk calls `moved`; a failure or an abort rejects. It answers
+// {data, tag, held}.
 async function downloadDocument(view, signal, moved) {
   const held = state.keptViews.get(view) || null;
   const headers = { [POLL_HEADER]: '1' };
