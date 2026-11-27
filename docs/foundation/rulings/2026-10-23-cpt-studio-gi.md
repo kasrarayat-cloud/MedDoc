@@ -5022,3 +5022,28 @@ Recorded before the second B measurement starts, so that its commit time precede
   pattern); if he objects, the act does not start.
 
 (Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2: the install's 5xx reading as a count, the standby's idle stage as built, and the package review's end (D-R2-55 to D-R2-57)
+
+- **D-R2-57** (2026-11-27, the lead; the install package's review round 4, `release/PKG-ROUND4-DECISIONS.md`). The
+  package review ends after round 4: round 3 found 1 high and 9 medium, round 4 found no high and 2 medium (the browser
+  speed gate missing from the runbook, R4P-1; a switch-back after the class-c question was sent, R4P-2), both narrow.
+  After their repair (and R4P-3: the live check reads only the walk's two recorded documents), one independent check of
+  those three and a mechanical re-run of every package test; then the rehearsal runs the package for real and its
+  findings are fixed before the declaration. The browser speed gate runs on the release head before the install
+  (D-R2-52), all tests passing.
+- **D-R2-56** (2026-11-27, the lead; the D-R2-54 follow-up `675a9b875`, its check `lead/b-fixes2`). R2-10's standby,
+  as built, corrected here rather than rewritten above: the 500 ms (600 ms for a later schedule) counts from the frame
+  that draws the route (D-R2-54 (1)); when the timer fires it asks for one idle callback only if none is waiting, so at
+  most one waits and a later timer leaves the waiting callback its earlier 2 s deadline (asking again at every timer
+  would keep putting the standby off on a busy thread); `endStandby` cancels the timer, the frame and the idle callback,
+  so every R2-18 end cancels at each stage. Both properties are pinned by tests with mutation proofs (`lead/b-fixes3`),
+  which land before B is measured again (D-R2-53).
+- **D-R2-55** (2026-11-27, the lead; the install package's review round 3, `release/PKG-ROUND3-DECISIONS.md` R3P-1).
+  Section 9.8's 5xx reading is a COUNT, not a rate: every 5xx the new web answers to a request other than `/health/` in
+  [S3, S3 + 1 h) is listed (time, method, route template with ids removed, status), and ANY such 5xx is stop-and-judge,
+  an incident in which the lead decides switch-back or not, recorded. The hour before is printed beside it as context
+  only. A count cannot be diluted by traffic, as each repair of the rate was (the recorder, the live check, strangers).
+  Stricter than 9.8's "a 5xx rate above the hour before", which it supersedes.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
