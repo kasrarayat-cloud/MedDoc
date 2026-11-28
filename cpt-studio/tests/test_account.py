@@ -134,7 +134,10 @@ class ChangeTests(TestCase):
         for fragment in ('name="current_password"', 'name="new_password"', 'name="new_password_again"',
                          'action="/logout/everywhere"', f'at least {settings.PASSWORD_MIN_LENGTH} characters'):
             self.assertIn(fragment, body)
-        self.assertNotRegex(body, r'<script')
+        # one script: session_news.js, which tells this browser's app tabs of the page and of a sign-out everywhere
+        # (integrated refutation round 1, session-0; tests/test_session_news.py); nothing inline
+        self.assertEqual(re.findall(r'<script[^>]*>', body), ['<script defer src="/static/studio/session_news.js">'])
+        self.assertEqual(body.count('</script>'), 1)
 
     def test_the_index_links_the_account_page(self):
         self.assertIn('href="/account/">Account and password</a>', signed_in(self.member).get('/').content.decode())

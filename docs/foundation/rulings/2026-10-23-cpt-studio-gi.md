@@ -4476,3 +4476,615 @@ critics' C8 and C9). That is an accepted-capability loss (class b), recorded as 
 what ever we need it to have to do"). The Word corpus run on the image's LibreOffice 7.4 the same night showed one more case
 (a removed field inside another field's instruction with a plain stored result, whose words 7.4 drops with or without
 release 2's change): it takes R2-30's fallback, a refusal, and the owner is told that one sentence before the install.
+
+### Owner input, 2026-11-26 (738699b2) — a doctor's test, the auditor-agent idea, CommandHealth; a report before any new task — DECISIONS D429
+
+D429 — 2026-11-26 ~03:50Z — OWNER INPUT: a doctor's test, the auditor-agent idea, CommandHealth; a report before any new task (session 738699b2), verbatim
+
+> 2 task actully one lemme telling you one fo the doctors check my website and he said its accuracy 100 uplaod multiple files pdf of his clients i chenged the to syntetchi he alrtead had cpt billed numbers and bingo my web site briung as same as the bill one so he told me its 100 accuracy and eprfect in one of the uploads file name is [a file name, withheld from the tracked copy] asked 2 question one for date which i  intentially put the wrong date for testing and for first question asking doctor liek it because it ask a perfect good question he said it mostly like because we dont have ICD-10 because it related to ICD-10 and also he gave me a tip like doctors never ever liek to login and doing thier own pdf uplaod and check so we have to put an auditor agent to which ahs pwoer to search even in pdf or on internet to find a anwser for question which is possibly agent can find even with out the doctor for specefic question which needs dotor  we still have that ioption to ask a right one do you agree with me? i want you to report me what do you sugesst and what do you think before start any new task also they like to connect to their command helath which when doctor finish dictation on that site it goes autoamticlly into his login credential in our website and all the process should gone autoamticcly the doctors liek eveyrhing beinmg automatic so before anythign run any tas run i need you to give me a report
+  - Read as: no NEW task starts until he has the report and answers it; release 2 (already running) continues. Product
+    decisions (class a) are his: the auditor agent, ICD-10, the CommandHealth connection. The session did not open the
+    uploaded documents (live data; "[a file name, withheld from the tracked copy]" is named only as he named it).
+  - Flag for the report: documents made from a doctor's real charts may still hold identifiers (dates, record numbers);
+    no Anthropic BAA is signed yet, release 1b's security items are not done, and the site is set to synthetic-only.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5; one uploaded file name is withheld from this tracked copy.)
+
+### Owner decision, 2026-11-26 (738699b2) — reuse ICD-10 and add an auto-answer agent (release 3) — DECISIONS D430
+
+D430 — 2026-11-26 ~04:30Z — OWNER DECISION: reuse ICD-10 and add an auto-answer agent (session 738699b2), verbatim
+
+> So we reuse the ICD 10 and added a auto anwser agent right?
+  - In reply to the session's summary (QuillMD, the other product in the repository, already holds the official ICD-10-CM
+    code lists for 2026 and 2027; CPT Studio's AI has a reader and a checker, and every question goes to the doctor).
+    Read as a product decision (class a): CPT Studio gains (1) ICD-10 diagnosis codes, reusing QuillMD's code lists, and
+    (2) an auto-answer agent that answers its own questions from the documents with a quote before asking the doctor.
+  - Applied: the design starts now (workflow, documents and code reading only, synthetic documents, no provider call, no
+    live data). Building starts after release 2 is installed, because both change the AI coder's request, which release
+    2 freezes (D358's pins, R2-3); the change is deliberate under this decision and gets new pins. Paid tests run one pair
+    at a time with his go (2026-11-15 rule). Both add AI cost per document; the design measures it.
+  - The guardrails the session stated and keeps: an automatic answer only with a quote and its place; never a guess; the
+    doctor sees and can change every automatic answer; internet only for coding rules, never with patient details.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (738699b2) — a complete, organised, accurate Spending tab in the console — DECISIONS D431
+
+D431 — 2026-11-26 ~04:50Z — OWNER DIRECTION: a complete, organised, accurate Spending tab in the console (session 738699b2), verbatim
+
+> perfect that good also in admin dashboard usage i want you to add proper plugin and redesign or add spending tab its tonsimple and sassy like i want something better because usage is most importsnt part and it shouldnt like fail or show false informstion like i saw last date was on 2026/11/26 which is now 2026/11/25 make sure we have complete organazided spending tab llease its importsnt
+  - The date he saw: the console's Spending page sums runs by the UTC day they were sent (studio/console.py spending():
+    "summed by day (UTC ...)"; ops_spending.html: "by the day a run was sent (UTC)"). Runs sent after 16:00 Pacific on
+    2026-11-25 fall on the UTC day 2026-11-26. The figure was not false, but the page spoke in a time zone he does not
+    use: read as a defect to fix (dates and times in his time zone, labelled).
+  - Applied under D422: the session decides the design (his time zone, America/Los_Angeles, labelled; charts from a
+    library served from our own static files, never a CDN, within the console's CSP; every total cross-checked against
+    every other view; estimates and unknown costs shown as such, never as exact or zero). Design now (workflow),
+    built in its own lane beside release 2; shipped with release 2 if ready at the rehearsal, otherwise as a small
+    release right after. Reconciling with Anthropic's own billing would need an Anthropic admin key (class d: his).
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner input, 2026-11-26 (738699b2) — a flat $7 per patient note; lower the AI cost, keep the quality — DECISIONS D432
+
+D432 — 2026-11-26 ~05:20Z — OWNER INPUT: a flat $7 per patient note; lower the AI cost, keep the quality (session 738699b2), verbatim
+
+> Like we know now at least we have morethan 90% accuracy i believ its 100 but meh lets say 90% cost is not high but i belive we can lower the cost and keep the quality so i propbably goign to flat the price on 7$ per each Patitn note and i want you to give me a idea e good one to reduce the cost but keep the quality
+  - Facts used for the answer: the audit's measured AI cost per document is $2.63 mean ($1.73-$4.78), 95% of it output
+    tokens (thinking included) at effort "max" on claude-fable-5-2 ($8 in / $40 out per million); 4 calls per document
+    (2 free token counts, 2 paid passes: reader and checker); no prompt caching (studio/fable/client.py sends none).
+    Anthropic's guidance for this model (claude-api skill, Thinking & Effort): start at "high"; gains above it are uneven;
+    keep "max" for measuring the ceiling. Message Batches: 50% off every token; server-side fallbacks are rejected there.
+  - Session's recommendation (no change made; release 2 freezes the coder's request): run both passes at "high" and
+    re-run at "max" only the documents where the checker disputes the reader; Batches for documents nobody is waiting
+    on (the CommandHealth flow, overnight); caching the document for the checker is a small extra. Proved first on the
+    synthetic test set with paid tests, one pair at a time, with his go (money: class d).
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner approval, 2026-11-26 (738699b2) — a paid test of five files; change the setting if the quality holds — DECISIONS D433
+
+D433 — 2026-11-26 ~05:30Z — OWNER APPROVAL: a paid test of five files; change the setting if the quality holds (session 738699b2), verbatim
+
+> i approve do it but you dont have to do run full like just test 5 files as long as it keep the quality we cang change it and i give you permission for that
+  - In reply to D432's recommendation (both passes at effort "high", re-run at "max" only where the checker disputes the
+    reader; Batches for documents nobody waits on) and its question (the first paid pair about $3-5; 10-20 notes about
+    $30-60). Read as: money approved (class d) for a paid test on five synthetic files, current setting against the
+    proposed one; and authority to change the production setting if the quality holds (no code coded worse than today
+    on those files). Not read as approval to test on real documents, or to skip release 2's gates for the change.
+  - Applied: the test runs on synthetic documents with known codes, one document at a time (his 2026-11-15 rule), by
+    the lead (provider calls are the lead's; credentials by path only). The production change follows its own gates.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Session record, 2026-11-26 (738699b2) — the effort test's result, and the coding effort changed to "high" under D433 — DECISIONS D434
+
+D434 — 2026-11-26 ~06:40Z — CPT Studio: the effort test's result, and the coding effort changed to "high" (session 738699b2, under D433)
+
+  - The paid test D433 approved ran 04:49-06:3xZ on a throwaway container of the live image (sha256:4c81cc..., revision
+    816045c72644) with its own empty database, the five synthetic GI documents gi-01, gi-03, gi-04, gi-07 and gi-10
+    (ops/verification), each coded once at effort "max" and once at "high", one at a time. Results:
+    /home/claude/cpt-cost-20261126/results-20261126T044952Z.jsonl (10 lines); comparison by harness/compare.py.
+  - Same codes, units and modifiers at "high" as at "max" on all five; no must-not-code coded ready in either; the same
+    questions on gi-07 (the note missing facts); both match the author's expected codes except gi-07's two
+    needs_answer codes, identical in both arms. Differences: close calls listed as not supported (informational), and
+    one checker review at "max" on gi-04 (43239 needs_review; "high" agreed; the author expects 43239).
+  - Cost: "max" $12.05 ($2.41 a document), "high" $1.96 ($0.39 a document): 83.8% less. Time: "max" 2,826 s (9.4 min a
+    document), "high" 384 s (77 s a document): 86.4% less. Spent in all: $14.01.
+  - Decided under D433 ("as long as it keep the quality we cang change it and i give you permission for that"): the
+    coding effort becomes "high" (ops/install.py CODING_EFFORT and settings.CODING_EFFORT), as release 2's last item
+    (R2-33), after every lane merges, with R2-3's pins re-measured on purpose at "high" and the change in release 2's
+    declaration. The re-run at "max" where the checker disputes (D432's idea) is not built now: no dispute occurred at
+    "high" in this test; it is kept for release 3 with its own test. Batches (50% off) stay for the CommandHealth flow.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner answers, 2026-11-26 (738699b2) — release 3's four questions — DECISIONS D435
+
+D435 — 2026-11-26 ~07:55Z — OWNER ANSWERS: release 3's four questions (session 738699b2), as selected
+
+  - Asked in one batch (AskUserQuestion), with release 3's design summary; his choices, verbatim as selected:
+    1. Test budget: "Up to $100 (Recommended)" - release 3's paid tests on synthetic notes, one pair at a time, each
+       pair's cost reported to him; a ceiling of $100 (expected about $25-40 at effort "high").
+    2. Answer key: "No, AI-made answers" - no person codes the 20 synthetic GI notes; the answer key is made by AI agents
+       (blind to the builders, sealed), and the accuracy proof is stated as the weaker kind (the AI checks itself).
+    3. Who answers: "Keep today's rule (Recommended)" - owners and reviewers may answer the coder's questions; every
+       answer records who gave it.
+    4. ICD-10 check: "Yes, check and show (Recommended)" - each ICD-10-CM code the AI writes is checked against the official
+       list for the date of service, its validity shown to the doctor and given to the AI's second check; it never changes
+       a code by itself. Read as his own exception to D358's "vocabulary check" for this identity fact only.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (799ffbc5) — release 3's paid tests get $15-20, not $100; continue every job after the host restart — DECISIONS D436
+
+D436 — 2026-11-26 06:53:44Z — OWNER DIRECTION: release 3's paid tests get $15-20, not $100; continue every job after the host restart (session 799ffbc5), verbatim
+
+> continue all the jobs and also for test audit agent icd-10 we belive put up too $100 but i assume as long as we care the question ehich ai can handled is enough i mesnt like $100 way to much big for testing for this side like $15 or $20 is enough as long as it succefully audit it and handle it other jobs just continue all of them
+  - Read as: (1) D435's first answer ("Up to $100") is replaced. Release 3's paid tests (ICD-10 and the auto-answer
+    agent) get a hard ceiling of $20, aiming at about $15. The program covers every kind of question the auto-answer
+    agent can answer and every kind it must not answer, at least once each, instead of a large sample; one pair at a
+    time, each pair's cost and the running total reported to him; stop as soon as it works (2026-11-15 rule). A pair
+    that would take the total past $20 is not sent: he is told instead. (2) Every job that was running when the host
+    went down continues.
+  - The host went down at 06:17Z and booted at 06:47Z (`last -x reboot`, `who -b`). Every agent, workflow and
+    background job of session 738699b2 ended then; files and commits survived, /tmp did not. Live CPT Studio
+    (816045c72644) and the rebuild answered 200 after the boot (preflight 20261126T065627Z, GO). What was running and how
+    each job was resumed: /home/claude/cpt-r2-20261125/lead/STATE.md, section "Reboot recovery".
+  - Times, corrected from the artifact (session 738699b2's transcript; the entries above keep their text): D429's message
+    was queued at 03:17:56Z (recorded "~03:50Z"); D430 03:37:54Z ("~04:30Z"); D431 03:53:27Z ("~04:50Z"); D432
+    04:04:32Z ("~05:20Z"); D433 04:09:19Z ("~05:30Z"); D434's test started 04:49:52Z (its results file's name) and its
+    result was told at 05:46:26Z ("~06:40Z", "ran 04:49-06:3xZ"); D435's answers arrived at 06:13:10Z ("~07:55Z").
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner direction, 2026-11-26 (799ffbc5) — an Excel download of approved codes; a question on our own dictation — DECISIONS D437
+
+D437 — 2026-11-26 18:22:26Z — OWNER DIRECTION: an Excel download of approved codes; and a question on our own dictation (session 799ffbc5), verbatim
+
+> I've got a new task for ya we have to add a clear simple excel foramt downlado for site because they told me doctor msotly need excel after they codes are approved on our web site and also i jsut wnated to ask your opinion insteand of dealing with command health to get api for dictiation are we able to make ours? with fable agents? is it cost us a lot of time and do you think its worth it to have it? since we got a good accurate cpt do you think our dictaiton with ai would be possibly doing perfect?
+  - (1) Read as a new owner direction (class a, made by him): CPT Studio gains an Excel (.xlsx) download of approved
+    codes. It amends D388 ("the PDF is the only report") for Excel only; TXT and CSV stay refused. Under D422 the
+    session decides the design and records it:
+    (a) approved codes only, never a draft: a spreadsheet goes straight into billing, and a draft's lines are not
+        approved (his words: "after their codes are approved");
+    (b) one file per document, offered beside the approved PDF, carrying the same lines and values as that PDF
+        (customer.approved_lines), from the same snapshot;
+    (c) stored once as an immutable ExportArtifact (fmt 'xlsx') with its sha256 and an export.created audit row, served
+        as stored, reused under release 1's C5 rule, recorded like every other read;
+    (d) no patient identifier (as the PDF), a generic file name, no document words in a URL or header;
+    (e) every text cell a string, never a formula;
+    (f) a new dependency only if the design shows one is needed.
+    Built in its own lane beside release 2 (design now, a workflow; documents and code only); it ships with release 2
+    if built, refuted and full-suite green by the rehearsal, otherwise as a small release right after. Not built now:
+    one spreadsheet for several documents (offered to him in one line as the next step).
+  - (2) A question for the session's opinion, no task: answered in the reply. Facts used: Claude reads text, images
+    and PDFs, not audio (platform.claude.com features overview, fetched 2026-11-26); QuillMD's rebuild in this
+    repository already records a visit, transcribes it with Deepgram and writes the note with Anthropic, on synthetic
+    data (rebuild/README.md, rebuild/core/audio.py); the CommandHealth connection (D429) stays his product decision.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Owner question, 2026-11-26 (799ffbc5) — connect CommandHealth rather than build our own dictation? — DECISIONS D438
+
+D438 — 2026-11-26T18:58:55Z — OWNER QUESTION: connect CommandHealth rather than build our own dictation? (session 799ffbc5), verbatim
+
+> So you rather to have API install through our site into Command health but making a new dictation?
+  - Read as a question confirming the session's recommendation in its answer to D437 (2), not yet his decision: the
+    CommandHealth connection stays his product decision (class a, D429). Answered: yes, connect CommandHealth so each
+    finished dictation reaches the doctor's CPT Studio account and is coded with no upload; our own dictation stays an
+    option after release 3. What the build needs from CommandHealth: its developer documents (a webhook or a feed of
+    finished notes), a test account with made-up patients, and how a doctor's CommandHealth account is matched to ours.
+
+(Copied from the host decision log, DECISIONS.md, on 2026-11-26 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2's design decisions D-R2-1 to D-R2-53, recorded before the install's declaration
+
+The lead's decisions for CPT Studio release 2, made under the standing rules and D422, copied verbatim from the specification's section 10. Section 9.3 said lane F would record them here in its first commit; that had not happened (found by the install package's builder, G4), so they are recorded now, before the declaration that cites them is committed. D-R2-48 had been written only in lane M's notes and is recorded with them.
+
+These are decided under the standing rules and D422. Lane F records them in its first commit
+(`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` and `RULINGS.md` rows), and the session's `DECISIONS.md` gets
+the entry.
+
+- **D-R2-1.** The release is scoped as in section 1. Section 1.2's items stay out, each with its stated reason; L8
+  (SCALE-7) and the console's indexes go to release 3.
+- **D-R2-2.** Lanes, file ownership and merge order are as in section 5: F first, then M, D, W, P and S, then the
+  integration. Lane P owns `app.js`; lane S owns the API contract; lane F owns the client version.
+- **D-R2-3.** The client contract version is `customer-2026-11-26`, every copy in one commit (section 7).
+- **D-R2-4.** The entrance fade follows the audit's first option. The approved 350 ms fade plays on a page load's first
+  view only; nothing fades after it. The ≤ 120 ms fade on every view is not taken (R2-14).
+- **D-R2-5.** Kept PDF bytes:
+  - at most 6 documents and 24 MiB per tab;
+  - ArrayBuffers in page memory only;
+  - overwritten and dropped at every end, including `pagehide`;
+  - named in the declaration's ePHI evaluation (R2-15, R2-18).
+- **D-R2-6.** A re-open answered 304 writes `member.inline`, with filters `{"shown_from": "page_memory"}`, before it is
+  answered. A row that cannot be written answers 503 (R2-15).
+- **D-R2-7.** The view's ETag is an HMAC of the sign-in, the document and the stored sha256, shown as a UUID. It is
+  never a hash, and the tools check its shape (R2-15, R2-24).
+- **D-R2-8.** The page shell carries the session. Document opens refresh it at most once a minute. The lists area's
+  parallel boot is not built (R2-17).
+- **D-R2-9.** The standby worker starts 500 ms after the first route, not 1.5 s, and is skipped on Save-Data. One
+  worker waits, holding no document, and each document has its own (R2-10; section 4, rows 19 and 27).
+- **D-R2-10.** `opens_pdf` is on every list row: a first stored file that is a PDF of at most 1 MiB (R2-16).
+- **D-R2-11.** Paging:
+  - 50 rows a page, 5 on the Overview;
+  - up to 3 pages load by scrolling; the button "Show more documents" is added only once they are used up or one of
+    them failed (D-R2-32);
+  - the browser's own find sees the loaded rows only.
+
+  This comes with the paging the owner's approved plan names (REPORT section 4, Tier 1 item 10) (R2-19, R2-22).
+- **D-R2-12.** Search on the server, for a Documents list of more than 200 documents (D-R2-27):
+  - a POST;
+  - `strpos` over the row's own text in `pg_c_utf8`;
+  - no minimum length; a 300 ms pause; one search at a time;
+  - at most 240 characters, not counting the combining dot above (U+0307);
+  - PostgreSQL 17 or newer is required on any server (R2-20).
+- **D-R2-13.** A list record names the served ids. The repeat rule compares them. Later pages and searches are limited
+  to 120 a minute per member (R2-21).
+- **D-R2-14.** A search counts as a read at the front door. The vhost is republished through `cert` and `https-vhost`,
+  and its capacity comment is corrected (R2-27).
+- **D-R2-15.** Migrations 0019-0021 are plain `AddIndex`, one table each, with no CONCURRENTLY. Live is stopped before
+  `app` if it is more than 100 times its baseline (section 6).
+- **D-R2-16.** R2-25 is kept, with `state.py` changed by extraction only and proved. The optional membership argument
+  to `read_audit.record` is not taken.
+- **D-R2-17.** The web process:
+  - 4 sync workers in 1 GiB;
+  - preload, warm-up and `gc.freeze`;
+  - connections kept 3,600 s, with health checks, in the web only;
+  - recycling at 10,000 ± 1,000 requests;
+  - R2-6 and R2-7 together;
+  - the fallback of 3 workers at 768m only if the rehearsal's peak passes 768 MiB.
+- **D-R2-18.** Word:
+  - every `altChunk` that holds content is refused, of any format; so are an External `altChunk` and every
+    `w:subDoc`, on purpose; an `altChunk` that holds nothing is removed as in release 1 (D-R2-34);
+  - an object or control that would leave no picture is refused;
+  - the same check runs before a stored conversion is reused (D-R2-33);
+  - two sentences;
+  - R2-30 is built: the 7.4 corpus shows its loss (D-R2-36), and its fallback refuses the H01 shape under an outer type
+    other than `HYPERLINK`, `TOC`, `QUOTE` or `STYLEREF`, with the `inserted_document` sentence (D-R2-39);
+  - W5 is deferred;
+  - all of it is declared as an accepted-capability change under D421's principle and D422, and the owner was told
+    once, in the release-2 plan message (D-R2-35, D428).
+- **D-R2-19.** The bench is tracked at `cpt-studio/ops/bench`, never in the image, and measured on this host,
+  interleaved, under the judge's INVALID rule.
+- **D-R2-20.** No Playwright in CI. CI's floor is 59 passes, with every skip reason "no Playwright at". The local
+  browser gate (≥ 104 tests, 0 failed, 0 skipped) is a release gate.
+- **D-R2-21.** Section 8's gates replace the measure area's where the other lanes' measurements contradict them, each
+  with its reason (section 4, row 28).
+- **D-R2-22.** The pre-install reads of 9.2 and the post-install reads of 9.6 are counts and ages only. The live check
+  makes no view read.
+- **D-R2-23.** Import formats that never rendered (HTML, XHTML, MHT, RTF, TXT, flat-OPC) are refused too: a document
+  inserted whole is refused, whatever its format.
+- **D-R2-24.** Cross-browser coverage stays as in release 1: measured in Chromium; Firefox and Safari recorded as not
+  run.
+- **D-R2-25.** The audit's files copied from live before 2026-11-23 are never opened or reused, and join D425's kept
+  set.
+- **D-R2-26** (C1, D427). Statements per request: a first or a later list page ≤ 13, a search ≤ 14, each equal at 50
+  and 5,000 documents, the list builder's own ≤ 4 (R2-19, R2-20, section 8).
+- **D-R2-27** (C2, D427). Up to 200 documents, the first search input loads the rest of the list and the search runs
+  in the page with release 1's rule, inside the keystroke; the server search, and its 600 ms gate, serve only lists
+  above 200 (R2-20 to R2-22, section 8).
+- **D-R2-28** (C3, D427). After 30 opens, renderer private memory is ≤ A + 25 MB + the kept bytes on the list, and
+  ≤ A after sign-out (section 8).
+- **D-R2-29** (C4, D427). Sign-in requests are counted from the click on a fresh profile: A is 6, and the gate ≤ 7
+  includes the standby's two files when they fall inside the first 2 s (R2-17, section 8).
+- **D-R2-30** (C5, D427). No "no worse than A" limit is below A × (1 + 2 × its A/A spread) unless it is absolute; long
+  tasks ≤ 1.36 A, recomputed by lane M; the planted delay sits on the 1.67 MB scan; Documents P1 at 100 documents
+  ≤ 0.6 A (section 8).
+- **D-R2-31** (C6, D427, deferred by the lead). The Word case is deferred: no stored column gives a converted view's
+  size and release 2 adds no column; Word later opens keep two round trips and are reported in their own row, not
+  gated (R2-16, section 8, section 12).
+- **D-R2-32** (C7, D427). `#listMore` stays empty, and observed, until the three automatic loads are used up or one
+  failed; only then is "Show more documents" added. A browser without IntersectionObserver, which no supported
+  browser lacks, shows the button from 51 documents (R2-22, section 0).
+- **D-R2-33** (C8, D427). The package check runs on the stored original for every Word round, before a stored
+  conversion is reused; lane D owns `jobs._stored_conversion`'s lines, and 9.2's converter-log read is removed (R2-28,
+  R2-31, sections 5 and 9).
+- **D-R2-34** (C9, D427). An `altChunk` is refused when it names an Internal relationship to a present, non-empty part,
+  and, on purpose, when its relationship is External, as is every `w:subDoc`; any other `altChunk` holds nothing and is
+  removed and counted in `chunks`, as in release 1 (R2-28, 2.6). Present means by any name a reader could resolve,
+  the doctor's Word included (D-R2-39, D-R2-40). One naming a missing part is refused by the canonical package gate
+  (D-R2-46).
+- **D-R2-35** (C10, D428). The Word refusals beyond D421's `altChunk` are class b: the owner was told once, in plain
+  words, in the release-2 plan message, and was not asked. R2-30's refusal fallback, taken (D-R2-36), is class b too:
+  he is told it in one sentence before the install, the same way (section 4 row 37, 9.3, section 11).
+- **D-R2-53** (2026-11-27, the lead; the install package's review round 1, `release/PKG-ROUND1-DECISIONS.md`). The
+  preflight after `https-vhost` is always required (release 1's rule; `app` compares routing with the newest preflight),
+  superseding 9.4's "only if a co-tenant deployed". Before `app`: at most 2 web connections, each younger than 600 s; a
+  code job queued or running is PRE-APP STOP (wait, then pre-app again), never a declared pause. Tables that move with use
+  are a named set-aside list, and an empty or unset list fails the baseline diff. The record equation judges
+  `member.inline` and `member.download` as one count against the view route (no log field separates them). The log reads
+  cover the rotated files, and the hour after starts at S3. The runbook stops unless every file the merged revision
+  changes since B's revision `ccb350d0b` is a document.
+- **D-R2-52** (2026-11-27, the lead; the ARCHITECTURE.md pass, `ad5c36991`). The code is the truth where this
+  specification differs, corrected here rather than rewritten above: the bench has 15 parts (R2-2 says 11); the browser
+  gate `ops/test_viewer_speed.cjs` has 18 tests and release 1 fails the first 14 (R2-32 and `acceptance.json`'s descriptive
+  `suites` row say 5 of 5; the table stays frozen, B is judged with it); nothing in the code enforces the browser gate
+  before an install, so it is a runbook step on the release head; the web also sets `connect_timeout` 5 s (R2-7); the
+  load-failure line and the stream split (R2-5, R2-9); list and search answers carry `workspace` (I1-2); the
+  `X-CPT-View-Conversion` header and `document.view_conversion` replace `view_round` (I2-1, I2-2); a renamed flagless zip
+  name is refused by the canonical gate (R2-28 step 2), not converted afresh (C8's text); `scan_customer --all` fails only
+  below the smaller of `--limit` and the session's document count (R2-24); an unreachable database answers 503 with
+  `Retry-After` (I1-15, I2-4). Stale docstrings in `studio/` (docx_package's module text, `check_in_child`) wait for 2.1,
+  because `studio/` is frozen after B; `ops/INSTALL.md`'s "60 s" (the code: 70 s) is fixed with the package.
+- **D-R2-51** (2026-11-27 ~05:15Z, the lead; `lead/INT-ROUND3-DECISIONS.md`). The integrated refutation pass ends after
+  round 3. Round 3 found 14 real findings on round 2's repairs, none a leak or a wrong result in the shipped code: one
+  high and three medium are gaps in the TESTS that guard search words (each shown with a mutant the tests miss; "nothing
+  leaks today"), ten are low. Release 2 ships with them recorded; the guard is rebuilt in 2.1, before any real patient, as
+  a closed world over every request of every node test and every search path on the server.
+- **D-R2-50** (2026-11-26, the lead; `lead/INT-ROUND1B-FIXES.md`, avail-2). Cold-first-request times only GET /login/; in
+  B's measurement window the lead runs the row by hand with a signed-in GET /api/encounters/<id> as each lifetime's first
+  request (>= 12 lifetimes, max <= 100 ms), declared before it runs (`lead/d-r2-50/DECLARED.md`). Over 100 ms, the
+  residual is accepted in the open in section 8 with its value and reason, never hidden; bench-r3 fixes the row.
+- **D-R2-49** (2026-11-26 ~19:55Z, the lead; the integrated refutation pass, round 1 batch A,
+  `/home/claude/cpt-r2-20261125/lead/INT-ROUND1-FIXES.md`; decided before B is measured). The bench stays frozen for
+  release 2: aa6 measures A with bench-r2 (`68345fb9f`) and B is measured with the same bench-r2, every part. Four bench
+  gates were shown weaker than their names (records.fail_closed misses the frame fallback's bytes; records.marker and
+  marker_in_files see the search words only as typed; left.no_hash_header passes a sha256 written as a UUID; bluegreen.x3
+  cannot fail for two of its three clauses; plans.no_seq_scan counts a whole-list COUNT that D-R2-37 accepts). They are
+  not changed for release 2, because a bench change would void the A/A; their claims are carried by the CI tests the
+  round strengthens (I1-5, I1-6), by FailClosedTests, and by the lead's one-off checks (I1-8: release 1's suite on
+  release 2's schema, EXPLAIN of release 1's statements at 18,000 documents). The bench fixes land as bench-r3 after B is
+  measured (I1-D). Also amended by R2-33 (D-R2-38): section 2.1's "no effort changes" yields to the coder's effort
+  "high" (owner D433, result D434), the request otherwise byte-identical to release 1's; and a switch-back run by release
+  2's installer starts release 1's pair at effort "high" too (its CODING_EFFORT goes into every pair it starts; D434
+  measured release 1's image at "high"), to be named in 9.7 and in the declaration.
+- **D-R2-48** (2026-11-26, the lead; lane M refutation round 2, `laneM/ROUND2-FIXES.md`; recorded here 2026-11-27, it
+  had been written only in the lane's notes). Every real round-2 finding of lane M was applied as its verifier gave it
+  (22, each with a failing test and a mutation proof). No open round 3: the round closed MECHANICALLY by replaying every
+  case rounds 1 and 2 built through the repaired judge and bench (`laneM/REPLAY-R2.md`). The bench was re-frozen at the
+  final head as bench-r2 (`68345fb9f`), and the A/A was measured with it (aa6; aa5 discarded unread).
+- **D-R2-47** (2026-11-26, the lead; lane M's round-1 repairs as built, head `9cf96cc0a`,
+  `/home/claude/cpt-r2-20261125/laneM/PROOFS.md` "Round 1" and `ROUND1-FIXES.md`; D-R2-44 as built):
+  - **Units.** Section 8's MB is read as 10^6 bytes and converted into the metrics' MiB: the heap ≤ 38.3 MiB, the list
+    ≤ A + 23.88 MiB. 16 KB is 16,000 B.
+  - **The open@P0 planted-delay control** stays at 150 ms ± 40, although release 1's three recorded shifts were 182,
+    151 and 194 (one INVALID round in about four, run again by the driver): re-centring a control on its own data
+    would weaken what it proves.
+  - **As built, and accepted:** the statement rows at 51 documents (`n51`); the typical server search the word
+    `note`; the tab change judged per nav tab too (nine `tab-opaque-*` rows); the coder row byte for byte but for
+    `output_config.effort`, the efforts equal to the table's (A "max", B "high") and each tree's setting recorded;
+    the A-column tolerance with the instrument step (`a_step` / `a_recorded`; 8 ms on the nine Event Timing rows);
+    one gain rule (a limit below A, above it for a rate, asks for a gain beyond twice the row's spread); the two
+    standby clauses gated, the six reported rows the spec's own; `judge.py floors`' derived block (`--check`, exit 3
+    on an INVALID pair), the base table (`derived: null`) until the new A/A, then `DERIVED_SHA256`; the new A/A with
+    the bench frozen at `9cf96cc0a` into `laneM/aa5` (R2-2, R2-3, section 8, 9.1).
+- **D-R2-46** (2026-11-26, the lead; lane D's round 3, `/home/claude/cpt-r2-20261125/laneD/ROUND3-FIXES.md`, and the
+  gate's prototype, `/home/claude/cpt-r2-20261125/design/canon-gate/`: `canon-gate.diff`, applied by lane D verbatim,
+  and `out/`). **The canonical package gate.**
+  - Rounds 1 to 3 each found a crafted package lane D read differently from LibreOffice, and each repair grew the
+    next gap. The class (round 3's loss[0], [1], [2], [3] and [5]) is closed structurally, not by more readings.
+  - The principle: a Word package is accepted only in the one form a Word package takes, where every structural
+    reference has exactly one reading, the same for lane D, LibreOffice (24.2.7 and 7.4) and Word. Any other form is
+    refused before E2 reads a part, whatever the file holds. Release 1's own refusals still run first, with their
+    reasons, and D-R2-43's refusal stays. The forms, as built, are Group F's six (the archive, entry names,
+    relationships parts, Internal targets, content types, previews).
+  - The refusal is `PackageNotCanonical`, a `ContentNotShown` with code `inserted_document` and counts
+    `{documents: 1}` (the save-as-PDF sentence); the operator's log names the rule broken, never a part. 20 shapes
+    R2-29 refused move from `inserted_object` to `inserted_document`, and 25 `inserted_document` refusals carry the
+    gate's reason.
+  - Elsewhere: an `altChunk` naming a missing part is refused, not removed (C9); the flagless-UTF-8 name deviation is
+    gone (R2-28 step 2); the previews round 2 kept (`../../word/...`, `//word/...`, `media//...`, the repeated-id
+    first-row forms) are refused (R2-29); release 1's lower-case `external` and `internal` TargetMode is refused;
+    L-CODING keeps it on purpose. The readings round 2 added stay as a second line that no accepted package reaches.
+  - Measured: the fuzz unchanged; 21 real files coded unchanged; 309 shapes, 65 outcomes changed, the 20 newly
+    refused all crafted; every lossy input of round 3's five findings refused, the controls coded; 460 on-disk and
+    7,145 in-memory refuter cases; 25 mutation proofs, 24 killed, G11 equivalent.
+  - Known limit, class b: files from generators not measured here may be refused with the save-as-PDF message,
+    never silently coded; the owner is told once, with the other unusual Word files (D428's pattern). A real
+    generator's form can be admitted later as a measured exception.
+  - The closure is not another open refutation round: one differential lens on the gate's diff (is the gated head
+    worse than `4f8669c30` in the content-loss class, or does the gate refuse a real Word file), and the 7.4 corpus on
+    the gated head (Group F, 2.6, R2-28, R2-29, R2-31, section 4 row 37, section 8, 9.1, 9.3, section 11).
+
+  *Second part, 2026-11-26 (the gate's differential round, `/home/claude/cpt-r2-20261125/refute-d4/RESULT.json`, and
+  the 7.4 run on the gated head, `/home/claude/cpt-r2-20261125/lead/word74-d4/RESULT-7.4-laneD4.md`):*
+  - Across 9,565 packages the gated head `476d68ec9` accepts nothing `4f8669c30` refused, every package both accept is
+    byte-identical, and C8 decides the same. The 7.4 run on `476d68ec9`: 309 shapes, 771 packages, 0 accepted shapes
+    lose a token; only A15 and E07 (and the 18 crafted shapes renamed for the gate) move from coded to refused. The
+    closure is done; there is no further lane D round.
+  - One repair, which lane D builds now: the zip half runs after release 1's own package refusals (encrypted, named
+    twice, too large, OpenDocument, more than 10,000 parts, a CRC mismatch, not a Word package), so those files keep
+    release 1's reason and sentence ("The Word file could not be opened.") and are not told or recorded as inserted
+    documents. That makes "release 1's own refusals still run first, with their reasons" true as built.
+  - The class-b known limit gets its measured examples: documents the Open XML SDK creates from scratch (the main part
+    typed by a `Default`; admitting it needs a real SDK sample, because LibreOffice matches `Default` extensions by
+    suffix and order), the docx npm package's multi-word embedded font names, pandoc with `--reference-doc`, an
+    archive comment added by a re-zipping tool, a forced-zip64 local header, and Office 2007's `[trash]/` entries.
+    Each is refused with the save-as-PDF message, never silently coded, and the operator's log names the rule; any
+    can be admitted later as a measured exception from a real sample (Group F, 9.1, section 4 row 37, section 11).
+- **D-R2-45** (2026-11-26, the lead; the 7.4 run on lane D's round-2 head `464b60de5`,
+  `/home/claude/cpt-r2-20261125/lead/word74-d3/RESULT-7.4-laneD3.md`):
+  - 308 shapes, 787 packages: 0 accepted shapes lose a token the base shows, and the PDF preview is coded as release
+    1 codes it.
+  - EMZ and WMZ previews count as pictures only when their gzip stream, decompressed to a bounded prefix, begins with
+    the EMF or WMF signature lane D accepts; lane D builds it in its round-3 fixes (R2-29 step 1, 2.6).
+  - PICT and SVG previews stay refused: 7.4 draws these shapes through release 1's package, but neither format has a
+    signature as strong as the accepted ones (PICT's is a heuristic header; SVG is text that may draw nothing), so a
+    broken one could be coded with nothing in its place. A known limit, and class b: told to the owner once, with the
+    other unusual Word files (D428's pattern; section 4 row 37, 9.3, section 11).
+  - The H01 shapes whose plain result is a footnote reference or a non-breaking hyphen stay refused: R2-30's H01
+    class, refused by design (D-R2-36); nothing narrows (R2-30).
+- **D-R2-44** (2026-11-26, the lead; lane M's refutation round 1, `/home/claude/cpt-r2-20261125/laneM/ROUND1-FIXES.md`
+  and `/home/claude/cpt-r2-20261125/refute-m1/RESULT.json`: 38 real defects in the bench and judge, repaired by lane
+  M):
+  - The whole A/A is measured again with the repaired bench, frozen by its commit, in a quiet window after lane M's
+    round-1 repairs and before any B: every group, both rounds, back to back. The floors and the recorded A are
+    derived from it by lane M's tools, which reproduce `acceptance.json` exactly from a round folder, apply the
+    validity rule when deriving, and round floors up. This supersedes D-R2-41's re-measure of lists@P1 alone: the
+    repairs change what rows measure, and the host restart (kernel 6.8.0-149 to 6.8.0-151, 2026-11-26 06:47Z)
+    separates rounds more than load does. The old rounds (`laneM/aa4`) stay on disk as evidence, never as the A.
+  - A round's files are merged as AND for every check and control (a failing check in any part file fails the round),
+    and only an INVALID round may be superseded; a restarted driver never re-measures a valid one.
+  - The coder row compares B's requests with release 1's byte for byte except `output_config.effort` ("max" in A,
+    R2-33's "high" in B).
+  - Statement rows are measured at a practice size where the page and the whole list differ (not 50 documents, which
+    equals the page size), named in `acceptance.json`.
+  - A section 8 clause the bench cannot measure on this host becomes a "reported" row with its reason, never a gate
+    that cannot fail (named in lane M's round-1 report).
+
+  (R2-2, R2-3, R2-19, R2-20, section 5, section 8, 9.1, D-R2-41.)
+- **D-R2-43** (2026-11-26, the lead; lane D's round 2, head `33cde9694`,
+  `/home/claude/cpt-r2-20261125/laneD/ROUND2-FIXES.md` and `PROOFS.md` "Round 2"). Two decisions:
+  - D-R2-39's trade-off is accepted as extended: a round begun on release 1's worker and resumed after the S4 switch
+    finishes on its own PDF, which now also covers rounds[1]'s deviations, so a picture release 1 lost stays lost in
+    that one round; the next round converts afresh (9.3, 9.7).
+  - loss[6] (b), the document swap: a package any of whose entries carries a Unicode Path field (0x7075) naming it
+    differently from its stored name read as UTF-8 (the field's CRC ignored, as LibreOffice reads it) is refused
+    (`inserted_document`), so lane D never checks one part while LibreOffice opens another; Word never writes such a
+    pair. It is kept on purpose under L-CODING, and lane D builds it as round 2's last commit (R2-28 step 2, 2.6).
+- **D-R2-42** (2026-11-26, the lead; lane S refutation round 2, `/home/claude/cpt-r2-20261125/laneS/ROUND2-FIXES.md`
+  and `/home/claude/cpt-r2-20261125/refute-s2b/RESULT.json`):
+  - A whole list's COUNT keeps D-R2-37's 20 ms at the bench's live-like state mix. Where most of a large practice
+    waits, the queue COUNT probes the rounds once per waiting document (about 17-36 ms at 12,000-18,000 waiting, on a
+    clean heap after ANALYZE and after VACUUM ANALYZE), accepted rather than reading every practice's rounds
+    (plans[0], judged not a defect). The COUNT is promised an index only at the small practice (2,000 among 20,000),
+    and is held to its time, not to an index: a practice near half the table may be read whole until VACUUM
+    (plans[2]) (R2-19, D-R2-37).
+  - The server folds the 28 Unicode 17.0 pairs Chromium 153 lower-cases (U+A7CE, U+A7D2, U+A7D4 and Beria Erfe
+    U+16EA0-U+16EB8; search[0]), and the letter gate is a superset check over every engine present plus a committed
+    table of Chromium 153's pairs; lane S builds both in its round-2 fixes. Accepted residual: a browser on a newer
+    Unicode release can lower-case letters the server misses until the table is extended (R2-20).
+  - Words holding a character PostgreSQL cannot store, a lone surrogate included, keep their empty page although the
+    page's own rule can match half of a UTF-16 pair: a declared exception to "never fewer", reached only by a broken
+    string in the box (search[1], judged not a defect; R2-20).
+- **D-R2-41** (2026-11-26, the lead; lane M's report, head `c69fbd1d8`,
+  `/home/claude/cpt-r2-20261125/laneM/A-RESULTS.md`). Three decisions on the bench:
+  - The judge checks A against lane M's recorded A, pooled over the two valid A/A rounds, within the larger of 20%
+    and twice the row's own A/A spread; section 8's A column stays beside it as the design's estimates. Seven rows
+    differ from those figures by more than 20% (server list at 100 -34%, session at 18,000 -28%, the pause detail
+    -24%, a keystroke at 1,500 P1 -24%, a keystroke at 18,000 P0 +24%, Documents usable at 1,500 P1 -24%, detail at 20
+    in flight p95 -23%), so checked against them every round would be INVALID and no B could pass. The quick-leave
+    row takes the same rule: 384 ms recorded, against the viewer area's 877, a different measurement.
+  - The lists@P1 A/A pair is measured again at the integration, before any B round. Its two valid rounds straddle the
+    host restart (round 401 at a 1-minute load of 4.8-7.0, round 102 at 2.0-3.7), which widens the P1 list floors
+    (the search at 100 documents, P1, 1.941 A). In the integration's quiet window a fresh pair (both rounds, back to
+    back, the same frozen bench, the same validity rule) replaces both, the floors are derived again with lane M's
+    own tool, and `acceptance.json` is committed again before the first B round. No other group is measured again,
+    and this is the only exception to never moving the floors.
+
+    *Superseded, 2026-11-26 (D-R2-44): the whole A/A is measured again with lane M's repaired bench, before any B,
+    instead of lists@P1 alone. The text above is kept as decided.*
+  - A closed practice is not an end of access: release 1 keeps its documents readable on purpose (`disposal.close`;
+    ORG-18 (4), the data-return period). The bench judges three ends (membership off, document destroyed, session
+    ended) and records a closed practice's reading on its own (`correct.closed_keeps_reading`).
+
+  (R2-2, R2-32, section 5, section 8, 9.1.)
+- **D-R2-40** (2026-11-26, the lead; built in lane D's round 2). Two decisions after lane D's round 1:
+  - A preview whose bytes begin with `%PDF-` counts as a picture. The lead's 7.4 run on `3ad91321e`
+    (`/home/claude/cpt-r2-20261125/lead/word74-d2/RESULT-7.4-laneD2.md`: 226 shapes, 0 accepted shapes losing a
+    token) shows release 1's package drawing R1-L0e's PDF preview (as Mac Word writes one) with its words, which
+    round 1 refused. A PICT preview stays refused: no 7.4 measurement of one exists. Lane D adds a test on R1-L0e, and
+    the 7.4 corpus is run again on the fixed head (R2-29 step 1, 2.6, 9.1).
+  - An `altChunk` whose target the doctor's Word could resolve by a percent-decoded zip name or a `..` past the
+    package root (loss[4]'s three Word-only spellings, `/home/claude/cpt-r2-20261125/laneD/ROUND1-FIXES.md`) is
+    refused (`inserted_document`), never removed as holding nothing. C9 fails closed: a false refusal costs a
+    message, a silent removal costs content (R2-28 steps 2 and 4, 2.6, D-R2-34).
+- **D-R2-39** (2026-11-26, lane D refutation round 1, head `3ad91321e`;
+  `/home/claude/cpt-r2-20261125/laneD/ROUND1-FIXES.md` and the lead's decisions in it). A preview is a picture only by
+  its exact zip name and a picture signature LibreOffice decodes; PDF and PICT previews are refused until the lead's
+  7.4 run says otherwise (for PDF it has: D-R2-40). R2-30's fallback exempts outer `HYPERLINK`, `TOC`, `QUOTE` and
+  `STYLEREF` (QUOTE and STYLEREF from the lead's 7.4 run on lane D's code: H7f, H7g), refuses an unknown type name,
+  and is told with the `inserted_document` sentence. A zip name without the UTF-8 flag is read as UTF-8 where valid;
+  a non-ASCII one is the one case where a file needing no refusal and no edit differs from release 1's package (such
+  a name is refused since D-R2-46).
+  Accepted: an oversized file whose view was made before release 1 is refused at its next round; a round begun before
+  phase `converter` and resumed after S4 finishes on its own pre-R2-30 PDF (extended by D-R2-43); the converter is
+  never rolled back after S4 (R2-28 to R2-31, 9.3, 9.7).
+- **D-R2-38** (2026-11-26, D433 and D434). The coder runs at effort "high" (R2-33), set by the lead after every lane
+  merges, the pins re-measured on purpose; the re-run at "max" on a checker dispute is release 3's.
+- **D-R2-37** (2026-11-26, lane S refutation round 1). An exact COUNT of a whole list cannot avoid a full read when its
+  practice is most of the table; the plans rule binds the statements that read a page and the search, and the counts
+  are held to their time (<= 20 ms at 18,000 documents, at the bench's live-like state mix, R2-2; where most of a
+  large practice waits, the queue COUNT probes the rounds once per waiting document, about 17-36 ms at 12,000-18,000
+  waiting, measured on a clean heap after ANALYZE and after VACUUM ANALYZE, accepted rather than reading every
+  practice's rounds: plans[0], judged not a defect, D-R2-42). Lane M's plans check is narrowed to match.
+- **D-R2-36** (2026-11-26, the early 7.4 run, `word-scratch/image-corpus/RESULT-7.4.md`). R2-30 is BUILT: release 1
+  loses words on 7.4 for the nested-field shapes and the shell keeps them. The H01 shape (a removed field in an outer
+  field's instruction, plain stored result) loses its words on 7.4 with or without the shell, so it takes the fallback:
+  refused, class b, told to the owner before the install. The 7.4 corpus is run again on lane D's code before the
+  declaration.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10, file sha256 375c7a0a18863c93..., on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2's B measurement: two fixes and the rows accepted in the open, declared before B is measured again (D-R2-54)
+
+Recorded before the second B measurement starts, so that its commit time precedes every value it will be judged on.
+
+- **D-R2-54** (2026-11-27, the lead; B session `laneM/b2` and the investigation `investigate/RESULT.json`; DECLARED BEFORE
+  B IS MEASURED AGAIN, and committed before that measurement starts). B on `ccb350d0b` was INVALID (A drifted beyond
+  tolerance on five rows; A's bluegreen part was not given the other tree) with 9 FAIL rows. Dispositions:
+  (1) Two fixes, then B is measured again in full (A B A B A B, every group, `BENCH_OTHER_TREE` = release 1's tree for
+  the whole driver, no other work on the host):
+  - long-tasks-max-P1 (b2: A 136, B 186; gate 160): renderPage yields one task before a later page's text layer when
+    another page is already drawn (investigation F1-p2: 199 -> 151 ms at P1; long-tasks-total-P1 564.5 -> 475).
+  - standby-delay (b2: min 489; gate >= 500): the standby's 500 ms counts from the frame that draws the first route
+    (investigation F1); its test pins the delay itself, and every R2-18 end cancels the timer, an end before the first
+    frame included.
+  (2) Rows accepted in the open, each ONLY within the bound written here; a value past its bound is a FAIL that stands:
+  - quote-mark-P0: R2-14 recorded before B that the canvases' one-time re-raster "now falls on the first interaction
+    after a document is drawn" (measured once at about 23 ms), which this row's gate (1.1 A + 15, about 33-36 ms) cannot
+    hold by construction. Accepted: B median <= 75 ms, and the second click (nth 3) no worse than 1.1 A + 15.
+  - opaque-P1: the 200 ms target is missed narrowly (b2 230.15; investigation 202.8-218.2) against release 1's 656-691;
+    no small change passes it robustly. Accepted: B <= 240 ms and B <= 0.40 A.
+  - memory-signed-out: the standby PDF worker (R2-10), ended at sign-out, leaves allocator memory in the renderer; no
+    page data is held. Accepted: B <= A + 2.0 MiB.
+  - plans.no_seq_scan: both flagged statements are the documents list's whole-list COUNT (`customer.py:353` and `:223`,
+    byte-identical texts), which D-R2-37 accepts and which D-R2-49 recorded this gate counts. Accepted: that COUNT alone
+    may Seq Scan; a Seq Scan in any other statement is a FAIL.
+  - detail-10-p95, server-list-100, session-18000: their gain rule cannot show a gain at their A/A spread
+    (detail-10-p95 by construction, 2 x 0.641 > 1; the other two would need B <= 9.1 and <= 11.0 ms against section 8's
+    30 and 20 ms). Accepted as "gain not shown": B <= the section-8 limit (150, 30, 20 ms) and B <= A in the same session.
+  - the cold row: accepted as D-R2-50 declared (b2 hand-run: max 112.8 ms against release 1's 1,970 ms median).
+  Every other row: the frozen judge's verdict stands, and any other FAIL stops the release.
+  (3) The owner is told these residuals in one sentence in the install message, told and not asked (D422, D428's
+  pattern); if he objects, the act does not start.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-27 (799ffbc5) — release 2: the install's 5xx reading as a count, the standby's idle stage as built, and the package review's end (D-R2-55 to D-R2-57)
+
+- **D-R2-57** (2026-11-27, the lead; the install package's review round 4, `release/PKG-ROUND4-DECISIONS.md`). The
+  package review ends after round 4: round 3 found 1 high and 9 medium, round 4 found no high and 2 medium (the browser
+  speed gate missing from the runbook, R4P-1; a switch-back after the class-c question was sent, R4P-2), both narrow.
+  After their repair (and R4P-3: the live check reads only the walk's two recorded documents), one independent check of
+  those three and a mechanical re-run of every package test; then the rehearsal runs the package for real and its
+  findings are fixed before the declaration. The browser speed gate runs on the release head before the install
+  (D-R2-52), all tests passing.
+- **D-R2-56** (2026-11-27, the lead; the D-R2-54 follow-up `675a9b875`, its check `lead/b-fixes2`). R2-10's standby,
+  as built, corrected here rather than rewritten above: the 500 ms (600 ms for a later schedule) counts from the frame
+  that draws the route (D-R2-54 (1)); when the timer fires it asks for one idle callback only if none is waiting, so at
+  most one waits and a later timer leaves the waiting callback its earlier 2 s deadline (asking again at every timer
+  would keep putting the standby off on a busy thread); `endStandby` cancels the timer, the frame and the idle callback,
+  so every R2-18 end cancels at each stage. Both properties are pinned by tests with mutation proofs (`lead/b-fixes3`),
+  which land before B is measured again (D-R2-53).
+- **D-R2-55** (2026-11-27, the lead; the install package's review round 3, `release/PKG-ROUND3-DECISIONS.md` R3P-1).
+  Section 9.8's 5xx reading is a COUNT, not a rate: every 5xx the new web answers to a request other than `/health/` in
+  [S3, S3 + 1 h) is listed (time, method, route template with ids removed, status), and ANY such 5xx is stop-and-judge,
+  an incident in which the lead decides switch-back or not, recorded. The hour before is printed beside it as context
+  only. A count cannot be diluted by traffic, as each repair of the rate was (the recorder, the live check, strangers).
+  Stricter than 9.8's "a 5xx rate above the hour before", which it supersedes.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-28 (799ffbc5) — release 2: B's third session and its post-hoc acceptance, text-only work during B, and the switch-back checks (D-R2-58 to D-R2-60)
+
+- **D-R2-60** (2026-11-28 ~04:55Z, the lead; B's third session `laneM/b3`, revision a680d837b; WRITTEN AFTER THE VALUES,
+  labelled as such). B is valid (no INVALID round, A within tolerance) and the frozen judge says FAIL on 7 of 186 rows.
+  Five are inside D-R2-54's written bounds and accepted as declared: opaque-P1 200.15 ms (bound <= 240 and <= 0.40 A =
+  245.3), server-list-100 16.8 ms (<= 30, <= A 22.6), session-18000 12.4 ms (<= 20, <= A 22.0), detail-10-p95 105.9 ms
+  (<= 150, <= A 202.8), plans.no_seq_scan (both flagged statements are the whole-list COUNT, nothing else Seq Scans). The
+  cold row is accepted in the open as D-R2-50 declared (34 lifetimes, max 112.0 ms, medians 90 and 84 ms; release 1
+  median 1,949 ms). TWO FAILS ARE OUTSIDE D-R2-54's LIST, and under D-R2-54 they stop the release: documents-usable-100-P1
+  (B 209.1 ms against 0.6 A = 207.42; release 2 is 39.5% faster than release 1 there, the target was 40%; b2 had B 213
+  passing against a drifted A) and memory-list (B 139.5 MiB against A + 23.88 = 138.78, 0.72 MiB over the allowance for
+  the waiting worker and the kept copies; b2 had 137.1 passing). The lead does NOT re-judge them: they stay FAIL. The
+  lead's post-hoc decision, made with the values in hand and therefore put to the owner: release 2 proceeds with both
+  accepted in the open as measured, because each is a sub-1% miss of an improvement target or a design allowance, not a
+  regression a user meets, and a fix-and-remeasure cycle (about a day, with the same chance of a new marginal row) buys
+  nothing measurable. The owner is told with these numbers before anything else happens, and may say stop: then both are
+  fixed (the list's usable time at P1; the kept-copy budget) and B is measured again in full.
+- **D-R2-59** (2026-11-27 ~23:40Z, the lead; owner D455; recorded BEFORE B's third session starts, no B value exists).
+  D-R2-54 (1)'s "no other work on the host" is read as: no test, suite, build, browser, bench, docker or image process
+  other than B's driver and the lead's own one-off reads. Agents that only read and write files may run during B:
+  reading code and documents with read-only commands, writing markdown, and writing source code and tests in their own
+  worktrees (created with scripts/setup-worktree.sh), running no program but single-file syntax checks (python -m
+  py_compile, node --check, bash -n) and git. Reason: the owner puts release 3 first and asks for speed (D455, and at
+  ~23:45Z "accelerate ... run multiple jobs"); its preparation and first code are written while B runs, and tested after.
+  (Amended ~23:47Z, still before B's third session starts.) B's driver keeps its own gates (a round starts at 1-minute load <= 5; any sample above 8 makes
+  it INVALID), and `b3/mem.log` records the load every 15 s as the evidence.
+- **D-R2-58** (2026-11-27, the lead; I1-8's one-off switch-back checks, `lead/i1-8/RESULT.json`, run before B so that a
+  migration defect could not void B (D-R2-53)). (a) Release 1's Django suite on a database release 2's migrations built:
+  1,438 tests OK (1 skipped), the same as on its own schema in the same session; release 1's migrate there applies
+  nothing. (b) EXPLAIN (ANALYZE) of release 1's list, queue, search and counts statements at 18,000 documents: FAIL under
+  the criterion declared before the run, on its Seq Scan clause only. Release 1's whole-practice list statement (its
+  queue page too: release 1 ignores `?list=`) and its queue COUNT Seq Scan, and they do so identically on release 1's
+  own schema measured in the same session, so the clause measured release 1's design, not the switch-back: the criterion
+  was mis-specified, and its FAIL is recorded as it stands, not re-judged. Every statement ran at or below the control's
+  time (list 111 against 123 ms; queue COUNT 8.7 against 15.0 ms); release 1 has no server search (404 on both). The
+  switch-back claim rests on those comparisons. Section 6's "its queries keep the plans they have" is corrected:
+  release 1's statements keep their plans or take release 2's indexes for a faster one (the queue COUNT, and the worker
+  and console reads, e.g. `round_runs` 0.42 against 32.2 ms).
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-28 by session 799ffbc5.)

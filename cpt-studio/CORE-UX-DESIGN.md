@@ -200,7 +200,7 @@ apart from the page script.
   dropped and Unicode NFKC applies, on both sides, and a match is exact-case first, case-blind only where there is no
   exact-case occurrence, and always of whole characters (`Intl.Segmenter` grapheme clusters, joined again wherever NFKC
   combines two of them, so that NFKC of the page's text is exactly its characters' NFKC). No fuzzy or nearest match, no
-  word list.
+  word list: nothing in the rule reads what the words mean, only Unicode character classes, NFKC and the items' geometry.
 - **Word edges.** At each end of a match a word edge is asked for, in this order, read in the page's text above (copies
   left out, line breaks in) as the page writes it, not after NFKC:
   1. *Separate drawings* (R2b). Where the match's end lies between the last character of one item and the first
@@ -230,7 +230,7 @@ apart from the page script.
   it is still found.
 - **Pages.** It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping
   only a passage that starts on the quote's page and runs onto the next (the marked part on each page is shown; the edges
-  are read on each page). Nothing is ever marked on another page; a quote found only on another page is not marked. A
+  are read on each page; a character never spans two pages). Nothing is ever marked on another page; a quote found only on another page is not marked. A
   quote with no page is looked for on every page, and its pages are named. Each page's prepared text is made once per
   document and reused; a quote with no page reads and prepares the pages in slices, so the page never stops answering
   for long.
@@ -249,8 +249,15 @@ apart from the page script.
   scanned image), so nothing is marked."). Never a partial match.
 - The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
   passage chosen); it is painted again whenever its page is drawn again (a new width or zoom, scrolled back into view),
-  and a read of the document that only changes the codes never reloads the viewer. When another quote is chosen, what was
-  shown of the one before goes at once, before anything is waited on - its marks on every drawn page, the viewer's mark
+  and a read of the document that only changes the codes never reloads the viewer. A read that names another stored
+  conversion of a Word document does (`document.view_conversion`, integrated refutation round 1, viewer-0: a later round
+  that converts the file again serves another PDF at the same address); the viewer is drawn afresh, its kept copy asked
+  for with its tag (304 the same bytes, 200 new ones), so a round's codes are never shown beside another round's
+  conversion. A later round that reads back the same stored conversion (a clean Word file's answers or retry round)
+  names the same one, so the viewer, its zoom and the member's place in it stay (integrated refutation round 2,
+  viewer-1). When
+  another quote is chosen, what was shown of the one before goes at once, before anything is waited on - its marks on
+  every drawn page, the viewer's mark
   state and the note - and nothing of it is painted on a page drawn while the new quote's pages are read; a quote whose
   pages are already read is shown in the same moment. Scrolling to it respects `prefers-reduced-motion`; where the pages
   are wider than the viewer (a zoom above fit width), the first mark is brought into view across too (by the least
@@ -285,8 +292,12 @@ apart from the page script.
   the worker's address), waits for the worker to say it is ready, and only then hands it to the library as its port, so
   the library never starts a worker of its own or its stand-in on the page's thread; closing the document ends the
   worker (a worker made ready ahead, holding no document, becomes the next document's own: release 2 below). The viewer
-  downloads the view address itself (same origin, the browser's default credentials), chunk by chunk, and gives the
-  library the bytes. Once the document has opened, one watchdog per viewer watches every wait on the
+  downloads the view address itself (same origin, the browser's default credentials), chunk by chunk (each chunk
+  restarts the stalled download's timer), into one array it gives the library; an abort (the viewer closed, or framed
+  for another reason) rejects as a failure does. The download is the page's own request whatever drew the viewer, a
+  poll's redraw included, so it is marked a poll (`X-CPT-Poll: 1`): never the member's activity, since the member's own
+  act that opened the document has counted already (refutation r2, finding 18), and a frame's load (the browser's own
+  viewer) is never counted by the server either (`studio.sessions.automatic`). Once the document has opened, one watchdog per viewer watches every wait on the
   library (the pages fetched, a page drawn, a page's text read, a text layer rendered): a wait is given up only when the
   library has not answered for 20 seconds of visible time, counted from the later of its last answer and the start of the
   wait, where an answer is any message from the viewer's worker or any of these waits settling. So a scan whose pages
@@ -294,12 +305,15 @@ apart from the page script.
   worker that has stopped still gives the library's note about 20 seconds later. A page released from the view is no
   longer waited on.
 - **Browsers that mark** (measured in Chromium only, with each candidate built-in deleted in the page and in the
-  library's worker; Firefox and Safari were not run, and their versions are MDN's browser-compat-data for what the
-  measurement found needed): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
+  library's worker before the library loaded - its `typeof` read before and after, so a deletion that did not apply
+  could not pass - then the preview's PDFs and the walk's gi-02 opened and every quote chosen; Firefox and Safari were
+  not run, and their versions are MDN's browser-compat-data for what the measurement found needed): Chrome and Edge
+  119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
   and iPadOS, Samsung Internet 25+. The floor is set by what the legacy library calls with no stand-in
   (`Promise.withResolvers`, `ArrayBuffer.prototype.transferToFixedLength`, `Array.prototype.at`; `structuredClone` and
   `Object.hasOwn` on paths the test documents did not take) and by the matcher's `Intl.Segmenter` (Firefox 125). The
-  legacy build puts back itself, when missing, what else it calls (seen present again once it had run): Map and WeakMap
+  legacy build puts back itself, when missing, what else it calls (each seen present again once it had run, and with
+  each one deleted the documents drew and marked exactly as before): Map and WeakMap
   `getOrInsert` and `getOrInsertComputed`, `Math.sumPrecise`, `Promise.try`, Uint8Array `fromBase64`, `toBase64`,
   `toHex`, `setFromBase64` and `setFromHex`, `Iterator` with its `map`, `filter`, `toArray`, `flatMap`, `forEach`,
   `some`, `every` and `find`, the seven new Set methods, `URL.parse`, and Response and Blob `bytes()`; it does not put
@@ -439,7 +453,12 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   and watched, while up to three pages load by themselves as it comes within 600 px of the window; once those are used up,
   or one has failed, it holds "Show more documents" (`button[data-action=more-documents]`), and from then on only the
   button loads more, while more rows follow. A load that fails says why there, the button staying. A browser without
-  IntersectionObserver shows the button from 51 documents. New rows are appended through a `template`.
+  IntersectionObserver shows the button from 51 documents. New rows are appended through a `template`. Every page names
+  the practice it was read in: a later page or a search of another practice than the list's first page, and a first
+  page of another practice than the page shows (the member's access changed while the page was open), is never drawn -
+  nothing appended, no number set - the session is read again, and the route is drawn afresh once it names another
+  practice (integrated refutation rounds 1 and 2, exact-0 and exact-1); a page and a session of the same practice read
+  no session, and a session that cannot be read draws nothing more.
 - **The search** (`#documentSearch`; R2-22, the critics' C2). Up to 200 documents (the first page's `total`), the first
   input loads any pages not yet loaded, one at a time, each recorded as a later page, and the search runs in the page with
   release 1's rule - a row stays when its text, lower-cased, holds the words - inside the keystroke, with no request per
@@ -469,6 +488,19 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   never a Blob, the Cache API, IndexedDB or Web Storage. A re-open sends the tag (`If-None-Match`) and draws the kept
   bytes only when the server answers 304, which it records as it records any view; any other answer, or a failed
   request, drops the copy and overwrites it, and the page's own abort (a route away, a second click) leaves it kept.
+  A document whose detail names no PDF view (a Word file a later round refused, integrated refutation round 1: I1-1)
+  keeps no copy, whichever of its answers comes first: the view's 404, or the detail, which lets the click's view go
+  (I1-16, viewer-2), and the detail that comes after the member has left the document (the route's abort kept the
+  copy; integrated refutation round 2, viewer-2); and when the open page's poll brings the refusal, no view is asked and
+  the copy goes too.
+- **The conversion drawn is the one the detail names** (integrated refutation round 2, I2-1, viewer-0). A Word
+  document's view answers (the `200` and the `304` alike) name the stored conversion they serve, and the page draws
+  the bytes it holds only when that is the conversion its detail names (`document.view_conversion`): the click's view
+  is asked for before the detail is read, and a later round may store another conversion between the two reads. An
+  early answer of another conversion is asked again (with the kept tag: the server answers `200` with the conversion it
+  now serves); an answer newer than the detail (asked after it) makes the page read the document again, as a poll, and
+  that read's redraw asks afresh; a poll that names another conversion while the view comes redraws the viewer whole.
+  Each answer is recorded as served, so such an opening writes more `member.inline` rows than one - never fewer.
 - **Wiped at every end** (R2-18). The sign-out, the idle end and the cap, a 401 or a forced password change wherever
   the page meets it (the view's own download, a download the page saves, and the load of either viewer's frame, the
   text's or the browser's own PDF viewer's: the site's refusals forbid framing, so the browser does not let the page read
@@ -480,6 +512,14 @@ list, a view without a tag is never kept, and a shell with an empty `data-sessio
   ready ahead. A document that opens across an end keeps no copy of it, unless the end spared its view. A forced
   password change met at a download the page saves leaves the page where it is, and no worker is made ready ahead after
   it. A first read refused because the page is out of date drops the click's view too.
+- **The pages outside the app tell its tabs** (integrated refutation round 1, session-0). The sign-in page and the
+  account page load `session_news.js`, which posts on the tabs' own channel (the BroadcastChannel, else the
+  localStorage key the tabs already share) the page's session at load (none on the sign-in page), and the account
+  page's "Sign out everywhere" as its session signed out when that form is sent. A tab of that session leaves at once;
+  a tab of another session asks the server which session it is in (marked a poll), and a 401 there, or another
+  member's session (their sign-in, a forced password change included, lands on the account page), is an end, wiped as
+  above. An end made with no page of this browser's (another browser's sign-out everywhere) is heard at the tab's next
+  request, or when this browser next reaches the sign-in page.
 
 ## 9. Install and verify
 

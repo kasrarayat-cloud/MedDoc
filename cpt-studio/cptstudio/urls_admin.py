@@ -14,6 +14,9 @@ from studio.hosts import signed_out_to_sign_in
 OPEN_ROUTES = ('', 'health/', 'login/', 'logout/', 'ops', 'account/', 'logout/everywhere', 'session/activity',
                'login/second-factor', 'login/second-factor/options', 'login/enrol', 'login/enrol/options',
                'login/recovery')
+# the full urlconf's, for an error a view of this host raises (studio.db_unavailable; integrated refutation round 1,
+# avail-0)
+handler500 = customer_urls.handler500
 
 urlpatterns = [
     path('', views.admin_home),

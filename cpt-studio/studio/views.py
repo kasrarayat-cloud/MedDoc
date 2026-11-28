@@ -360,6 +360,9 @@ def account_security(request):
         'can_change': not (operator and not on_console), 'operator_on_console': OPERATOR_ON_CONSOLE,
         'min_length': settings.PASSWORD_MIN_LENGTH, 'home': '/ops/' if on_console else '/',
         'idle_minutes': sessions.limits(request_meta.ADMIN if on_console else request_meta.CPT)[0] // 60,
+        # the page's session tag, which session_news.js names to this browser's app tabs (integrated refutation round 1,
+        # session-0): a tab of another session asks the server which session it is in, and leaves
+        'session': sessions.session_tag(request),
     }
     return render(request, 'studio/account_security.html', context, status=200 if not error else 400)
 

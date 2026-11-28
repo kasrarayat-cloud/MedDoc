@@ -49,7 +49,7 @@ require_ran "$log" 'CPT Studio Django tests'
 # the id's line (refutation round 1, gates[4]).
 require_request_identity() {  # <log>
   local pinned
-  for pinned in TheCoderIsSentWhatRelease1SentTests.test_the_settings_are_release_1_s \
+  for pinned in TheCoderIsSentWhatRelease1SentTests.test_the_settings_are_those_the_pins_were_measured_at \
       TheCoderIsSentWhatRelease1SentTests.test_each_request_is_release_1_s \
       TheCoderIsSentWhatRelease1SentTests.test_each_request_goes_on_the_wire_as_release_1_s \
       TheCodingFilesKeepTheirBlobsTests.test_each_file_on_disk_is_release_1_s_blob \

@@ -26,12 +26,16 @@ from tests.support import rounds as r
 Round = models.CodingRound
 SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
 ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind', 'opens_pdf'}
-LIST_KEYS = {'encounters', 'next', 'total'}  # release 2 (R2-19, R2-24): one page, its next cursor, the list's total
+# release 2 (R2-19, R2-24): one page, its next cursor, the list's total, and the practice it was read in (I1-2)
+LIST_KEYS = {'encounters', 'next', 'total', 'workspace'}
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',
                   'activity'}
-# BUILD-SPEC 6's document keys, and the two this build adds (view_media_type, converted)
-DOCUMENT_KEYS = {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url', 'view_media_type', 'converted'}
+# BUILD-SPEC 6's document keys, the two the fix pass added (view_media_type, converted), and release 2's
+# view_conversion (integrated refutation rounds 1 and 2, viewer-0 and viewer-1: the stored conversion a Word document's
+# view serves)
+DOCUMENT_KEYS = {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url', 'view_media_type', 'converted',
+                 'view_conversion'}
 PROGRESS_KEYS = {'phase', 'busy', 'started_at', 'finished_at', 'server_time', 'message', 'can_stop', 'can_resume',
                  'can_retry', 'error'}
 CODE_KEYS = {'line', 'code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question',
@@ -163,7 +167,7 @@ class ContractTests(ApiCase):
             'name': 'synthetic-note.pdf', 'media_type': 'application/pdf', 'size': len(f.PDF_BYTES), 'kind': 'upload',
             'original_url': f'/api/encounters/{enc.pk}/original',
             'view_url': f'/api/encounters/{enc.pk}/original?view=1', 'view_media_type': 'application/pdf',
-            'converted': False})
+            'converted': False, 'view_conversion': None})
         self.assertEqual(payload['context'], {'service_date': '2026-11-02', 'insurance': 'medicare'})
         self.assertEqual([item['text'] for item in payload['activity']],
                          [f'Uploaded by {self.reviewer.label()}.', 'Coding review 1 finished with 2 questions.'])
@@ -502,7 +506,7 @@ class ViewTests(ApiCase):
         self.assertEqual(payload['document'], {
             'name': None, 'media_type': 'text/plain', 'size': len(f.NOTE.encode('utf-8')), 'kind': 'paste',
             'original_url': None, 'view_url': f'/api/encounters/{enc.pk}/original?view=1',
-            'view_media_type': 'text/plain', 'converted': False})
+            'view_media_type': 'text/plain', 'converted': False, 'view_conversion': None})
         view = self.client.get(payload['document']['view_url'])
         self.assertEqual((view.status_code, view.content.decode('utf-8')), (200, f.NOTE))
         self.assertEqual(view['Content-Type'], 'text/plain; charset=utf-8')
@@ -514,7 +518,8 @@ class ViewTests(ApiCase):
                  media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
         jobs.start_round(enc, enc.current_revision, Round.UPLOAD, self.reviewer)
         before = self.get_json(f'/api/encounters/{enc.pk}')['document']
-        self.assertEqual((before['view_url'], before['view_media_type'], before['converted']), (None, None, False))
+        self.assertEqual((before['view_url'], before['view_media_type'], before['converted'], before['view_conversion']),
+                         (None, None, False, None))
         self.assertEqual(self.client.get(f'/api/encounters/{enc.pk}/original?view=1').status_code, 404)
         with mock.patch.object(fable_document, 'convert_docx', return_value=CONVERTED) as convert:
             round1 = self.code_round(enc)
@@ -525,8 +530,11 @@ class ViewTests(ApiCase):
             self.assertEqual(payload['document']['media_type'],
                              'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
             self.assertEqual((payload['document']['view_url'], payload['document']['view_media_type'],
-                              payload['document']['converted']),
-                             (f'/api/encounters/{enc.pk}/original?view=1', 'application/pdf', True))
+                              payload['document']['converted'], payload['document']['view_conversion']),
+                             (f'/api/encounters/{enc.pk}/original?view=1', 'application/pdf', True,
+                              customer.view_conversion_of(enc, round1)))
+            self.assertRegex(payload['document']['view_conversion'],
+                             r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
             view = self.client.get(payload['document']['view_url'])
             self.assertEqual((view.status_code, view.content, view['Content-Type']), (200, CONVERTED, 'application/pdf'))
             self.assertEqual(view['Content-Disposition'], 'inline; filename="synthetic-note.pdf"')

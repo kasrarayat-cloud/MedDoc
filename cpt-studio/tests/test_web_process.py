@@ -201,8 +201,11 @@ class NothingHappensAtImportTests(SimpleTestCase):
 
 GUNICORN_CONF = Path(settings.BASE_DIR) / 'deploy' / 'gunicorn.conf.py'
 # The loopback ports a real gunicorn of this module may listen on (this host's lane W range; never the live site's 9150
-# or 9151): each is checked free first, and one taken meanwhile is skipped.
-GUNICORN_TEST_PORTS = range(9400, 9450)
+# or 9151): each is checked free first, and one taken meanwhile is skipped. CPT_STUDIO_GUNICORN_PORTS ('first-last')
+# keeps a run to another range of this host's.
+_LANE_W_PORTS_ASKED = re.fullmatch(r'(\d+)-(\d+)', os.environ.get('CPT_STUDIO_GUNICORN_PORTS', ''))
+GUNICORN_TEST_PORTS = (range(int(_LANE_W_PORTS_ASKED.group(1)), int(_LANE_W_PORTS_ASKED.group(2)) + 1)
+                       if _LANE_W_PORTS_ASKED else range(9400, 9450))
 # The line a step prints for lane W's probes, beside the tripwire probe's own PROBE line
 LANE_W_REPORT = 'LANE-W '
 # Release 1's access line (RELEASE-1-SPEC A2), which release 2 keeps byte for byte
@@ -682,6 +685,114 @@ class RealGunicornTests(SimpleTestCase):
         self.assertLess(time.monotonic() - started, 30)
         self.assertEqual(server.stop(), 0)
 
+    def test_a_database_lost_while_requests_run_or_restarted_answers_503_never_500(self):
+        # integrated refutation round 1, avail-0 (I1-15; studio.db_unavailable): a member signed in at a real web, four
+        # clients reading the API's session, list, document and view at once. The database ends the web's connections
+        # five times while requests run, then refuses every connection for 2.5 s, as a restart does - faults made on the
+        # database itself, on this run's own test database and this web's own sessions (its application name) alone.
+        # Every answer is 200 or 503 (Django's HTML 500 before), a 503 the API's fail-closed JSON with Retry-After, and
+        # the web answers 200 again once the database does
+        from studio import client_contract, read_audit
+        from studio.models import Membership
+        from tests.support import coding as f
+        ws = f.workspace('Synthetic restart practice')
+        member = f.member(ws, role=Membership.OWNER)
+        document = f.encounter(ws, member, title='Synthetic restart note')
+        f.upload(document, member)
+        server = ReleaseGunicorn(self).start()
+        self.assertEqual(len(server.until_sessions(4)), 4)
+
+        def call(method, path, body=None, headers=None):
+            client = http.client.HTTPConnection('127.0.0.1', server.port, timeout=60)
+            try:
+                client.request(method, path, body=body, headers={'Host': 'localhost', **(headers or {})})
+                answer = client.getresponse()
+                return answer.status, dict(answer.getheaders()), answer.read()
+            finally:
+                client.close()
+        _, headers, _ = call('GET', '/login/')
+        csrf = re.search(r'cptstudio_csrf=([^;]+)', headers['Set-Cookie']).group(1)
+        form = urllib.parse.urlencode({'username': member.get_username(), 'password': 'synthetic-pass-123!',
+                                       'csrfmiddlewaretoken': csrf})
+        status, headers, _ = call('POST', '/login/', form, {'Content-Type': 'application/x-www-form-urlencoded',
+                                                             'Cookie': f'cptstudio_csrf={csrf}'})
+        self.assertEqual(status, 302)
+        cookie = f"cptstudio_session={re.search(r'cptstudio_session=([^;]+)', headers['Set-Cookie']).group(1)}"
+        asked = {'Cookie': cookie, client_contract.HEADER: client_contract.VERSION}
+        paths = ('/api/session', '/api/encounters', f'/api/encounters/{document.pk}',
+                 f'/api/encounters/{document.pk}/original?view=1')
+        self.assertEqual([call('GET', path, headers=asked)[0] for path in paths], [200, 200, 200, 200])
+        answers, lock, running = [], threading.Lock(), threading.Event()
+        running.set()
+
+        def client_loop(index):
+            turn = index
+            while running.is_set():
+                path = paths[turn % len(paths)]
+                turn += 1
+                try:
+                    status, headers, body = call('GET', path, headers=asked)
+                except (OSError, http.client.HTTPException) as error:
+                    status, headers, body = type(error).__name__, {}, b''
+                with lock:
+                    answers.append((time.monotonic(), path, status, headers.get('Content-Type', ''),
+                                    headers.get('Retry-After', ''), body))
+        clients = [threading.Thread(target=client_loop, args=(index,), name=f'lane-w-db-client-{index}', daemon=True)
+                   for index in range(4)]
+        # the restart is made from a session of the server's own maintenance database: PostgreSQL refuses to close a
+        # database to new connections from a session of that database
+        import psycopg
+        conf = connection.settings_dict
+        name = connection.ops.quote_name(conf['NAME'])
+        maintenance = psycopg.connect(host=conf['HOST'], port=conf['PORT'], user=conf['USER'],
+                                      password=conf['PASSWORD'], dbname='postgres', autocommit=True)
+        self.addCleanup(maintenance.close)
+
+        def end_the_webs_connections():
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT count(*) FILTER (WHERE pg_terminate_backend(pid)) FROM pg_stat_activity '
+                               'WHERE application_name = %s', [server.name])
+        outage = back = None
+        for client in clients:
+            client.start()
+        try:
+            time.sleep(0.5)
+            for _ in range(5):  # ended while requests run
+                end_the_webs_connections()
+                time.sleep(0.3)
+            maintenance.execute(f'ALTER DATABASE {name} ALLOW_CONNECTIONS false')  # a restart: refused for 2.5 s
+            outage = time.monotonic()
+            end_the_webs_connections()
+            time.sleep(2.5)
+        finally:
+            maintenance.execute(f'ALTER DATABASE {name} ALLOW_CONNECTIONS true')
+            back = time.monotonic()
+            time.sleep(1.5)
+            running.clear()
+            for client in clients:
+                client.join(60)
+        statuses = sorted({str(answer[2]) for answer in answers})
+        self.assertEqual(statuses, ['200', '503'], f'{len(answers)} answers')
+        in_the_outage = [answer for answer in answers if outage + 0.2 < answer[0] < back]
+        self.assertTrue(in_the_outage and all(answer[2] == 503 for answer in in_the_outage),
+                        [answer[:3] for answer in in_the_outage][:12])
+        # a 503 is the lost database's (studio.db_unavailable: Retry-After), or the read record's own fail-closed answer
+        # when the loss lands on the record's write (studio.api._recorded, as before): the same JSON, no PDF byte
+        kinds = {'Retry-After': 0, 'the record\'s own': 0}
+        for _, path, status, kind, retry, body in answers:
+            if status == 503:
+                self.assertIn(retry, ('5', ''), path)
+                self.assertEqual((kind, json.loads(body)),
+                                 ('application/json', {'error': read_audit.NOT_RECORDED, 'details': {}}), path)
+                self.assertNotIn(b'%PDF', body)
+                kinds['Retry-After' if retry else 'the record\'s own'] += 1
+        self.assertTrue(all(answer[4] == '5' for answer in in_the_outage), 'the outage: the lost database\'s 503 alone')
+        self.assertEqual([call('GET', path, headers=asked)[0] for path in paths], [200, 200, 200, 200])
+        print(f'{LANE_W_REPORT}I1-15 answers {len(answers)}: '
+              f'{json.dumps({key: sum(1 for answer in answers if str(answer[2]) == key) for key in statuses})}; '
+              f'in the outage {len(in_the_outage)} (503); 503 kinds {json.dumps(kinds)}', flush=True)
+        self.assertEqual(server.stop(), 0)
+
 
 def docker_stamped(text: str, first: int = 0) -> bytes:
     """``text`` as `docker logs --timestamps` gives one stream of it: each line Docker read - it splits at a line feed
@@ -747,8 +858,8 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                         encoding='utf-8')
         return path
 
-    def killed_aborted_and_recycled(self) -> str:
-        server = ReleaseGunicorn(self, '--max-requests', '6', '--max-requests-jitter', '0').start()
+    def killed_aborted_and_recycled(self) -> tuple:
+        server = ReleaseGunicorn(self, '--max-requests', '6', '--max-requests-jitter', '0', separate=True).start()
         # every worker has opened its connection, so each has its signal handlers, and none is being recycled: no
         # request has been made yet
         self.assertEqual(len(server.until_sessions(4)), 4)
@@ -760,12 +871,12 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         answers = server.many(4, 8)  # then the workers are recycled
         self.assertEqual((len(answers), set(answers)), (32, {200}))
         self.assertEqual(server.stop(), 0)
-        return server.text()
+        return server.streams()
 
-    def timed_out(self) -> str:
+    def timed_out(self) -> tuple:
         # a timeout well above the idle heartbeat (half of it), so a loaded host never times out a worker this test has
         # not stopped
-        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '6').start(booted=1)
+        server = ReleaseGunicorn(self, '--workers', '1', '--timeout', '6', separate=True).start(booted=1)
         hung, = server.workers()
         # it has answered, so its heartbeat runs (gunicorn 23 times a worker out only after its first heartbeat)
         self.assertEqual(server.get(), 200)
@@ -773,39 +884,49 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
         server.until_text(f'Worker (pid:{hung}) was sent SIGKILL!')
         self.assertIn(f'WORKER TIMEOUT (pid:{hung})', server.text())
         self.assertEqual(server.stop(), 0)
-        return server.text()
+        return server.streams()
 
-    def failed_to_boot(self) -> str:
+    def failed_to_boot(self) -> tuple:
         server = ReleaseGunicorn(self, config=self.wrapped_settings(
-            'workers = 1\n\n\ndef post_worker_init(worker):\n    raise RuntimeError("a worker that cannot start")\n'))
+            'workers = 1\n\n\ndef post_worker_init(worker):\n    raise RuntimeError("a worker that cannot start")\n'),
+            separate=True)
         self.assertEqual(server.run_to_exit(), 3)
-        return server.text()
+        return server.streams()
 
-    def failed_to_load(self) -> str:
+    def failed_to_load(self) -> tuple:
         server = ReleaseGunicorn(self, config=self.wrapped_settings('workers = 1\npreload_app = False\n'),
-                                 app='cptstudio.wsgi:lane_w_no_such_application')
+                                 app='cptstudio.wsgi:lane_w_no_such_application', separate=True)
         self.assertEqual(server.run_to_exit(), 4)
-        return server.text()
+        return server.streams()
 
     def test_every_life_cycle_line_of_real_runs_is_kept_and_no_line_of_another_shape(self):
         install = lane_w_installer()
         if install is None:
             self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
-        texts = [self.killed_aborted_and_recycled(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
-        bodies, expected = [], []
-        for text in texts:
-            for line in text.splitlines():
-                # the container binds 0.0.0.0:8000 (the settings file's own bind), which the kept pattern names; these
-                # runs bind a loopback port
-                body = re.sub(r'Listening at: http://127\.0\.0\.1:\d+ \(', 'Listening at: http://0.0.0.0:8000 (', line)
-                bodies.append(body)
-                message = GUNICORN_LINE.fullmatch(body)
-                if (message and message['message'] != CRASH_REPORT) or ACCESS_LINE.match(body):
-                    expected.append(body)
-        stamped = [f'2026-11-26T10:00:00.{index:09d}Z {body}' for index, body in enumerate(bodies)]
-        kept, dropped = install.ids_only_lines('web', '\n'.join(stamped).encode())
-        self.assertEqual([line.split(' ', 1)[1] for line in kept], expected)
+        runs = [self.killed_aborted_and_recycled(), self.timed_out(), self.failed_to_boot(), self.failed_to_load()]
+        # each run's stdout and stderr as Docker keeps them, apart, each line with a time of its own (the run, then the
+        # stream, then the line): every line of a kept shape, whichever stream the run wrote it to, must be kept - so a
+        # life-cycle line written to stdout, where it is never kept (installer-0), fails this test
+        streams, bodies, expected = ([], []), [], []
+        for run, pair in enumerate(runs):
+            for stream, text in enumerate(pair):
+                lines = text.split('\n')
+                if lines and lines[-1] == '':
+                    lines.pop()
+                for number, line in enumerate(lines):
+                    # the container binds 0.0.0.0:8000 (the settings file's own bind), which the kept pattern names;
+                    # these runs bind a loopback port
+                    body = re.sub(r'Listening at: http://127\.0\.0\.1:\d+ \(', 'Listening at: http://0.0.0.0:8000 (', line)
+                    stamp = f'2026-11-26T10:{run:02d}:{stream:02d}.{number:09d}Z'
+                    streams[stream].append(f'{stamp} {body}')
+                    bodies.append(body)
+                    message = GUNICORN_LINE.fullmatch(body)
+                    if (message and message['message'] != CRASH_REPORT) or ACCESS_LINE.match(body):
+                        expected.append((stamp, body))
+        kept, dropped = install.ids_only_lines('web', *('\n'.join(lines).encode() for lines in streams))
+        self.assertEqual([line.split(' ', 1)[1] for line in kept], [body for _, body in sorted(expected)])
         self.assertEqual(dropped, len(bodies) - len(expected))
+        expected = [body for _, body in sorted(expected)]
         messages = [GUNICORN_LINE.fullmatch(body)['message'] for body in expected if GUNICORN_LINE.fullmatch(body)]
         for shape in LIFE_CYCLE_SHAPES:
             with self.subTest(shape=shape):
@@ -855,25 +976,53 @@ class TheInstallerKeepsARealRunsLifeCycleTests(SimpleTestCase):
                 self.assertEqual(dropped, sum(len(stream.decode().splitlines()) for stream in streams) - 1)
                 self.assertGreater(dropped, 0)
 
-    def test_a_request_cannot_write_the_fixed_line_into_a_serving_webs_kept_log(self):
+    def test_a_request_cannot_write_a_kept_line_into_a_serving_webs_kept_log(self):
         # gunicorn's access log, on stdout, writes a request's path decoded and unescaped: a line feed (%0A) starts a
-        # line of the request's own after Docker's own time, and a file separator (%1C) - a line break to the reader -
-        # one after a time the request chose. The fixed line is kept from stderr alone (refutation round 2)
+        # line of the request's own after Docker's own time, and a carriage return, a file separator or a line
+        # separator (%0D, %1C, %E2%80%A8) - a line break to str.splitlines, none to Docker - one after a time the request
+        # chose. The fixed line (refutation round 2) and, since integrated refutation round 1 (installer-0), every line
+        # of the web but its access lines are kept from stderr alone, and a kept line is one Docker entry: so neither
+        # the fixed line nor a life-cycle line (a memory kill, a worker boot, a boot failure, free text after a signal)
+        # nor a django.request line a request writes is kept, and every real line still is.
         install = lane_w_installer()
         if install is None:
             self.skipTest('this tree has no ops/install.py (the image ships without ops/)')
+        forged = [WEB_LOAD_FAILED,
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Worker (pid:21) was sent SIGKILL! Perhaps out of memory?',
+                  '[2026-11-26 10:00:01 +0000] [1] [INFO] Booting worker with pid: 4242',
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Reason: Worker failed to boot.',
+                  '[2026-11-26 10:00:01 +0000] [1] [ERROR] Worker (pid:21) exited with code 3',
+                  '[2026-11-26 10:00:01 +0000] [1] [INFO] Handling signal: janedoe19570412',
+                  'Not Found: /login']
+        chosen = '2026-11-26T09:00:00.000000000Z '  # before the web started
         server = ReleaseGunicorn(self, separate=True).start()
-        line = urllib.parse.quote(WEB_LOAD_FAILED, safe='')
-        stamp = urllib.parse.quote('2026-11-26T10:00:00.000000000Z ', safe='')
-        for path in (f'/x%0A{line}%0Ay', f'/x%1C{stamp}{line}%1Cy'):
-            with self.subTest(path=path):
-                self.assertTrue(400 <= server.get(path) < 500)
+        for line in forged:
+            quoted, stamped = urllib.parse.quote(line, safe=''), urllib.parse.quote(chosen + line, safe='')
+            for path in (f'/x%0A{quoted}%0Ay', *(f'/x{cut}{stamped}{cut}y' for cut in ('%0D', '%1C', '%E2%80%A8'))):
+                with self.subTest(path=path):
+                    self.assertTrue(400 <= server.get(path) < 500)
         self.assertEqual(server.stop(), 0)
         out, err = server.streams()
         stdout, stderr = docker_stamped(out), docker_stamped(err, 10 ** 6)
 
         def kept(*streams):
             return [line.split(' ', 1)[1] for line in install.ids_only_lines('web', *streams)[0]]
-        # the control: the requests did write the line, alone on a line, into stdout - read as stderr it is kept, twice
-        self.assertEqual(kept(b'', stdout).count(WEB_LOAD_FAILED), 2)
-        self.assertNotIn(WEB_LOAD_FAILED, kept(stdout, stderr))
+        # the control: the %0A requests did write each line, alone in a Docker entry of its own, into stdout - read as
+        # stderr, each is kept once
+        control = kept(b'', stdout)
+        self.assertEqual([control.count(line) for line in forged], [1] * len(forged))
+        shown = install.ids_only_lines('web', stdout, stderr)[0]
+        for line in forged:
+            with self.subTest(forged=line):
+                self.assertNotIn(line, [kept_line.split(' ', 1)[1] for kept_line in shown])
+        self.assertFalse([line for line in shown if line.startswith(chosen.strip())])  # no time the requests chose
+        # and every real line is: the four workers' boot, from stderr, and the server's own life cycle
+        bodies = [line.split(' ', 1)[1] for line in shown]
+        self.assertEqual(sum('Booting worker with pid: ' in body for body in bodies), 4)
+        self.assertEqual(sum(bool(re.search(r'\] Starting gunicorn [\d.]+$', body)) for body in bodies), 1)
+        self.assertEqual(sum(bool(re.search(r'\] Shutting down: Master$', body)) for body in bodies), 1)
+        # the real boot lines as gunicorn wrote them to stderr (Django's escaped 'Not Found:' lines of the forging
+        # requests carry the words too, as text inside one line, never as a line of their own)
+        booted = [line for line in err.split('\n') if (message := GUNICORN_LINE.fullmatch(line))
+                  and message['message'].startswith('Booting worker with pid: ')]
+        self.assertEqual(len(booted), 4)

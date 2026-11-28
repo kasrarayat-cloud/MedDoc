@@ -16,7 +16,8 @@
   "original_url": "/api/encounters/fb000000-0000-4000-8000-000000000001/original",
   "view_url": null,
   "view_media_type": null,
-  "converted": false
+  "converted": false,
+  "view_conversion": null
  },
  "context": {
   "service_date": "2026-11-09",

@@ -42,6 +42,23 @@ reload by the client header (below) before any of these is read, so it never rea
   its list and cursor (never search words); the same page read again within a minute by the same sign-in, showing the
   same documents in the same order, is counted on that record. A re-open of the in-page view answered `304` is recorded
   too, as shown from the page's memory (R2-15).
+- **A database that cannot be reached** (integrated refutation rounds 1 and 2, avail-0 and I2-4): a lost or unusable
+  connection - one the database ended while the request ran, one it refuses (a restart, a crash, a database not yet
+  accepting connections), one already closed: an `InterfaceError`, or an `OperationalError` the driver raised itself
+  (no SQLSTATE) or the server raised with class `08` or `57P01`-`57P03` - answers `503` with `Retry-After: 5` and
+  nothing of the request - under `/api/` `{"error": <sentence>, "details": {}}`, elsewhere a plain error page
+  (`studio/db_unavailable.py`). A read's sentence (a `GET`, and the search) is "This could not be recorded, so nothing
+  was shown."; a change's, which the database may have kept before the connection was lost (a decision's refresh after
+  its transaction, an upload whose `COMMIT`'s answer was lost), is "This action is not available right now. Reload the
+  page to see the latest state.", which says neither. A read whose own record is lost as it is written answers the same
+  `503`, `Retry-After` included. Any other error the database reports - a deadlock, a cancelled statement, a lock not
+  granted, a full disk - is Django's `500` with its traceback logged, as any other server error is. A recorded limit
+  (I1-20): a connection lost at the session's own save after the view, in Django's write of the session's row, is
+  Django's own `400` (`SessionInterrupted`: an HTML page, no `Retry-After`), not this `503`; the view's answer is not
+  sent then either, and a read's record, already written, says it was served. It is rare: a request writes its session
+  only when it changed it, and under `/api/` that is only its activity time, written at most once a minute
+  (`SESSION_ACTIVITY_WRITE_SECONDS`). A connection the database ended between requests is replaced at the next
+  request's first query and answers as usual (R2-7).
 - **Limits** (release 1, C5): 10 reports made per member in 10 minutes and 60 per practice in an hour, 30 uploads per
   member in 10 minutes. Only a report actually made counts. The stored copy answered again (200) counts toward no limit
   and is never refused by one, and neither is a refused request. Over a limit, any of these calls answers
@@ -95,7 +112,8 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
 {"encounters": [{"id": "...", "title": "...", "state": "ready", "state_label": "Ready for approval",
                  "service_date": "2026-11-02", "insurance": "medicare", "created_at": "2026-11-20T08:00:00Z",
                  "kind": "upload|paste", "opens_pdf": true}],
- "next": "20261120T075959.123456Z~f5000000-0000-4000-8000-000000000001", "total": 117}
+ "next": "20261120T075959.123456Z~f5000000-0000-4000-8000-000000000001", "total": 117,
+ "workspace": "fa000000-0000-4000-8000-000000000002"}
 ```
 
 - `list`: `documents` (the default, with no `list`), `queue` (the documents waiting on a member: a state of
@@ -107,6 +125,11 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
   counted. It is `null` for `recent` and for a later page.
 - `opens_pdf` (R2-16) is true when the document's first stored file is a PDF of at most 1 MiB, so the page may ask for
   its view at the click. A Word document's converted view is not hinted.
+- `workspace` is the id of the practice the page was read in: the caller's active practice at that request (for a
+  member active in two practices, the oldest active membership), as the page's read record names it. After the
+  member's access changes, a later page or a search may be another practice's: the page keeps its first page's
+  `workspace` and never draws a page or a search naming another, but reads the session and the list afresh
+  (integrated refutation round 1, exact-0).
 - An unknown `list`, a parameter given twice, or a cursor this API did not write (or any cursor on `recent`) answers
   `400 {"error": "That list is not available."}` or `400 {"error": "That part of the list could not be read. Open the
   list again."}`, with nothing read or recorded. Another practice's cursor shows only the caller's own documents.
@@ -115,8 +138,9 @@ One page of a list (release 2, R2-19), newest first (`created_at`, then `id`):
 ### `POST /api/encounters/search` (any member)
 
 `{"text": "<the words>", "before": "<cursor>"|null}` -> one page of the practice's documents whose row, as the page
-draws it, holds the words (release 2, R2-20): the list's answer above, with `total` `null`. The page uses it for a
-Documents list of more than 200 documents and searches a smaller list itself, with release 1's rule.
+draws it, holds the words (release 2, R2-20): the list's answer above (its `workspace` included), with `total`
+`null`. The page uses it for a Documents list of more than 200 documents and searches a smaller list itself, with
+release 1's rule.
 
 - It is a POST, so the words never sit in an address, a query string or an access log; CSRF is required.
 - The row's text is the page's: the title (or "Untitled document"), the kind, the insurance when it is shown, the
@@ -145,7 +169,7 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
 ```text
 {id, title, created_at, updated_at, state, state_label,
  permissions: {can_review},
- document: {name, media_type, size, kind, original_url, view_url, view_media_type, converted},
+ document: {name, media_type, size, kind, original_url, view_url, view_media_type, converted, view_conversion},
  context: {service_date, insurance},
  progress: {phase, busy, started_at, finished_at, server_time, message, can_stop, can_resume, can_retry,
             error: {text} | null},
@@ -172,6 +196,17 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
   for a Word document the view is the PDF the coding review read (`converted: true`, once a round has converted it).
   `size` is the upload's exact number of bytes, or for a paste the bytes of its text in UTF-8, so for a text it is the
   exact size of the view (the review page checks its frame of the view against it).
+- `document.view_conversion` (integrated refutation rounds 1 and 2, viewer-0 and viewer-1) names the stored conversion
+  a Word document's view serves: a UUID derived with the site's key from the document and the stored file's name -
+  never the file's bytes, a hash of them or any words. It is that of the newest round that stored one, none once a
+  later round refused the file - the file itself, or the round's own fresh conversion of it as too large to store or to
+  send (I1-1, I1-18), when the document reads as one refused at its first round (`view_url` null, `converted` false).
+  It is null for a PDF, a text, a paste and a Word document with no view. A later round that converts the Word file
+  again (R2-28 step 7, C8) stores another file and serves it at the same `view_url`, so the page redraws its viewer
+  whole when `view_conversion` changes: its kept copy is asked for with its `ETag` (`304` the same bytes, `200` the new
+  ones). A later round that reads back the same stored file (a clean Word file's answers or retry round) names the same
+  conversion, and the page keeps its viewer, its zoom and its place. So a round's codes are never drawn beside another
+  round's conversion (only a finished round has codes, and it recorded its own view).
 - `codes[]` is one row per line: its `decision`, `quotes` and `allowed_actions` are that line's; `decision.id` is what
   an undo names. `units` is the whole number the coding review wrote (0 included: it writes 0 on a code it does not
   support), or null when it gave none; `modifiers` are its modifiers as written (a blank item, which carries nothing,
@@ -292,7 +327,13 @@ the site's key from the sign-in, the document and the stored file's recorded has
 pasted view carries none. A request naming it in `If-None-Match` (the page sends it only for a copy it holds in its
 memory; the weak form `W/"..."` matches, `*` never does) is recorded first, as shown from the page's memory, and answered
 `304` with no body and no stored file read; another sign-in, another document, or a newer conversion of a Word document
-gets the `200` with the bytes. Both answers stay `no-store`. The review page fetches a PDF view itself (same origin, the session's cookie) and
+gets the `200` with the bytes. Both answers stay `no-store`. A Word document's converted view names, on its `200` and
+its `304` alike, the stored conversion it serves at that read: `X-CPT-View-Conversion: <uuid>`, the value of the
+detail's `document.view_conversion` (integrated refutation round 2, I2-1); no other view and no download carries it.
+The page draws the bytes it holds only when they are the conversion the detail it shows names: the click's view is
+asked for before the detail is read, and a later round may store another conversion between the two reads, so an
+answer naming another is asked again, and one newer than the detail makes the page read the document again (each such
+answer is recorded as served: more rows, never fewer). The review page fetches a PDF view itself (same origin, the session's cookie) and
 draws it with its pinned PDF library, marking a chosen quote's words on its page; where the browser cannot run that
 library, the library does not work or answer in time, it cannot draw the document, or the download fails or stalls, the
 page frames this address instead, a new frame at `#page=N` for a quote on another page, and says why. A text view is

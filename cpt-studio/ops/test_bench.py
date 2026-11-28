@@ -2485,7 +2485,7 @@ class BenchTreeReadingTests(unittest.TestCase):
         self.assertTrue(all(c.isdigit() for c in cores))
 
 
-DERIVED_SHA256 = None  # the committed table's derived rows: set by the commit that derives a new A/A (D-R2-44)
+DERIVED_SHA256 = '3e10c102a0c985ef649aedd1f820bbb0819f998b1c3a4333d760e1da25845aef'  # the committed table's derived rows: set by the commit that derives a new A/A (D-R2-44): laneM/aa6, 2026-11-26
 
 
 def _derived_problems(table: dict, pin) -> list:

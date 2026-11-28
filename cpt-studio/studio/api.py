@@ -46,8 +46,8 @@ from django.utils.crypto import salted_hmac
 from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, paging, rate, read_audit
-from . import request_meta, security_events, session_store, sessions
+from . import audit, client_contract, customer, db_unavailable, decisions, exports, intake, jobs, models, paging, rate
+from . import read_audit, request_meta, security_events, session_store, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -171,10 +171,12 @@ def api_view(view=None, *, contract=True):
 
 def _recorded(request, view, **fields):
     """The AccessRecord of this read, written before it is served; ApiError 503 (read_audit.NOT_RECORDED, no PHI) when
-    it cannot be written."""
+    it cannot be written - or, when the write met a lost connection, that error, which studio.db_unavailable answers as
+    a database that cannot be reached (the same 503, with Retry-After: integrated refutation round 2, I2-4)."""
     try:
         return read_audit.record(request, view=view, **fields)
-    except read_audit.NotRecorded:
+    except read_audit.NotRecorded as refused:
+        db_unavailable.raise_if_lost(refused)
         raise ApiError(503, read_audit.NOT_RECORDED)
 
 
@@ -313,6 +315,14 @@ def _later_page_counted(request, membership):
              workspace_id=membership.workspace_id)
 
 
+def _page_in_practice(page, membership) -> dict:
+    """A list or search page naming the practice it was read in (integrated refutation round 1, exact-0): the caller's
+    active practice is read on every request, so after the member's access changes a later page or a search may be
+    another practice's; the page keeps its first page's practice and draws none of another's (app.js). The membership is
+    already read: no statement."""
+    return {**page, 'workspace': str(membership.workspace_id)}
+
+
 @api_view
 @read_audit.phi_read(read_audit.MEMBER_LIST)
 def encounters(request):
@@ -331,7 +341,7 @@ def encounters(request):
         shown = [row['id'] for row in page['encounters']]
         _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
                   count=len(shown), as_of=as_of, filters={'list': which, 'before': before})
-        return JsonResponse(page)
+        return JsonResponse(_page_in_practice(page, membership))
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -408,7 +418,7 @@ def search_encounters(request):
     shown = [row['id'] for row in page['encounters']]
     _recorded(request, read_audit.MEMBER_LIST, workspace_id=membership.workspace_id, encounter_ids=shown,
               count=len(shown), as_of=as_of, filters={'list': 'search', 'before': before})
-    return JsonResponse(page)
+    return JsonResponse(_page_in_practice(page, membership))
 
 
 @require_GET
@@ -553,6 +563,11 @@ def download_report(request, report_id):
 # the bytes, recorded as today. Both stay no-store (access.SecurityHeadersMiddleware): nothing is kept by a proxy.
 
 SHOWN_FROM_PAGE_MEMORY = {'shown_from': 'page_memory'}  # a 304's record: the page drew its own copy
+# A Word document's converted view names, on its 200 and its 304 alike, the stored conversion it serves at that read
+# (customer.view_conversion_of, the detail's document.view_conversion): the page draws the bytes it holds only when they
+# are the conversion the detail it shows names - the click's early view is read before that detail, and a later round
+# may store another conversion between the two (integrated refutation round 2, I2-1, viewer-0).
+VIEW_CONVERSION_HEADER = 'X-CPT-View-Conversion'
 
 
 def view_tag(request, encounter, shown):
@@ -597,6 +612,8 @@ def original(request, encounter_id):
                 _recorded(request, view, filters=SHOWN_FROM_PAGE_MEMORY, **record)
                 held = HttpResponseNotModified()
                 held['ETag'] = f'"{tag}"'
+                if shown.conversion:
+                    held[VIEW_CONVERSION_HEADER] = shown.conversion
                 return held
             data = customer.view_bytes(encounter, shown)
             _recorded(request, view, **record)
@@ -606,6 +623,8 @@ def original(request, encounter_id):
             response['Content-Security-Policy'] = VIEW_CSP
             if tag is not None:
                 response['ETag'] = f'"{tag}"'
+            if shown.conversion:
+                response[VIEW_CONVERSION_HEADER] = shown.conversion
             return response
         try:
             found = customer.download_content(encounter, original=request.GET.get('format') == customer.ORIGINAL)

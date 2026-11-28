@@ -29,7 +29,19 @@
 // (tests/frontend/app.test.cjs).
 // POST /__preview__/reset restarts the uploads and the retried documents; POST /__preview__/outdated makes every API
 // call answer 409 {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a
-// document fail (503) until the next reset, which shows the page's reconnecting line.
+// document fail (503) until the next reset, which shows the page's reconnecting line; POST /__preview__/unrecorded makes
+// every view of a document (?view=1) answer 503 with the server's sentence until the next reset - the server's answer
+// when the view's read record cannot be written (studio/api.py original: read_audit.NOT_RECORDED), whatever asks: the
+// page's own download, a re-open with its tag, the frame it falls back to (integrated refutation round 1, failclosed-1).
+// POST /__preview__/reconvert begins a later coding review of the Word fixture, as another member's answers would, that
+// converts the file again (release 2, C8): its next reads play it forward (reading, checking, then the Word document's
+// codes, one quoting words only the new conversion has), and from its second read - once the round has stored its own
+// conversion, as the worker does before it sends anything - the view is that conversion (other bytes, another tag) and
+// document.view_conversion names it; until the next reset (integrated refutation round 1, viewer-0). POST
+// /__preview__/reread begins one that reads back the same stored conversion, as a clean Word file's answers round does:
+// the same reads, the Word document's own codes, the same view and the same view_conversion throughout (integrated
+// refutation round 2, viewer-1). A stored conversion's name is shaped as studio.customer.view_conversion_of's: a UUID
+// bound to this run, the document and the conversion, never its bytes (the fixture's own for the Word fixture's).
 // Release 2 (R2-1, R2-17): the shell carries the session as data-session-json - the payload GET /api/session answers
 // for the same request - and POST /session/activity answers as the server answers a signed-in session (ACTIVITY),
 // outside the client contract as there; the page pings it at load, so a 404 there was an error in every page.
@@ -42,7 +54,9 @@
 // time, total null; blank words answer 400, words past 240 characters or holding a NUL or a lone surrogate an empty page.
 // Release 2 (R2-15): a PDF view carries an ETag shaped as the server's (a quoted UUID, never a hash of the file: here an
 // HMAC of this run's key, the document and its bytes), and a request whose If-None-Match names it (its weak form too,
-// never '*') is answered 304 with no body, as studio.api answers the copy a page holds.
+// never '*') is answered 304 with no body, as studio.api answers the copy a page holds. A converted Word view's 200 and
+// 304 name the stored conversion served at that read (X-CPT-View-Conversion, document.view_conversion's value), as
+// studio.api names it (integrated refutation round 2, I2-1).
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -58,7 +72,8 @@ const PORTS = Array.from({ length: 10 }, (_, i) => 9170 + i);
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_ANSWER_CHARS = 2000;
 const CSRF = crypto.randomBytes(16).toString('hex');
-const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'favicon.svg': 'image/svg+xml' };
+const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'session_news.js': 'text/javascript; charset=utf-8',
+  'favicon.svg': 'image/svg+xml' };
 // The PDF library the review page loads for a PDF view (studio/static/studio/lib/): exactly the files its manifest lists,
 // served with exactly the headers the site sends for them (Django and WhiteNoise, through studio.access.
 // SecurityHeadersMiddleware, which wraps WhiteNoise: tests/test_frontend.py holds the two equal), so a local check sees
@@ -135,6 +150,10 @@ const SYNTHETIC_DOCUMENTS = {
     ],
   },
 };
+
+// The words a later round's conversion of the Word fixture shows on page 1 that its first conversion does not (as R2-30's
+// QUOTE keeps a field's words release 1 lost): POST /__preview__/reconvert.
+const RECONVERTED_LINE = 'A further biopsy was taken from the descending colon, a separate site.';
 
 function pdfText(value) {
   return value.replace(/[\\()]/g, ch => `\\${ch}`);
@@ -242,8 +261,13 @@ function documentBytes(name) {
 
 // What the viewer is served of one synthetic document: the PDF or text as uploaded, and for a Word file the PDF of its
 // pages (the server serves the PDF the coding review read: the converted file).
-function viewBytes(name) {
-  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) return { bytes: syntheticPdf(SYNTHETIC_DOCUMENTS[name].pages), type: 'application/pdf' };
+function viewBytes(name, play = null) {
+  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) {
+    const [first, ...rest] = SYNTHETIC_DOCUMENTS[name].pages;
+    // a later round's own conversion, once that round has stored it (POST /__preview__/reconvert)
+    const pages = play?.reconverted && play.again && reconvertedNow(play) ? [[...first, RECONVERTED_LINE], ...rest] : [first, ...rest];
+    return { bytes: syntheticPdf(pages), type: 'application/pdf' };
+  }
   return documentBytes(name);
 }
 
@@ -360,7 +384,8 @@ const uploads = new Map();  // '<session> <client_key>' -> encounter id
 // converted}: an uploaded or retried document, played forward
 const plays = new Map();
 const reports = new Map();
-const flags = { outdated: false, offline: false };
+const flags = { outdated: false, offline: false, unrecorded: false };
+const NOT_RECORDED = 'This could not be recorded, so nothing was shown.';  // studio/read_audit.py's, word for word
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[ch]));
@@ -459,14 +484,54 @@ const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const clone = value => JSON.parse(JSON.stringify(value));
 
 // What the viewer shows of a played document, as the server builds it: a PDF or a text as uploaded; a Word file nothing
-// until the coding review has converted it (here from its second read on), then that PDF.
+// until the coding review has converted it (here from its second read on), then that PDF, under the name of the stored
+// conversion it is (view_conversion: an answers round reads back the same one; a reconverted play's is the fixture's
+// until its second read).
 function playedView(id, play) {
   const view = `/api/encounters/${id}/original?view=1`;
   if (play.mediaType !== DOCX_TYPE) {
-    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false };
+    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false, view_conversion: null };
   }
+  if (play.reconverted) return { view_url: view, view_media_type: 'application/pdf', converted: true, view_conversion: playedConversion(id, play) };
   play.converted = play.converted || play.reads > 1;
-  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true } : { view_url: null, view_media_type: null, converted: false };
+  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true, view_conversion: playedConversion(id, play) }
+    : { view_url: null, view_media_type: null, converted: false, view_conversion: null };
+}
+
+// I2-2: the name of a stored conversion, as studio.customer.view_conversion_of names it - a UUID bound to this run, the
+// document and the conversion, never its bytes.
+function conversionName(id, which) {
+  const hex = crypto.createHmac('sha256', CSRF).update(`${id}:conversion:${which}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+// The stored conversion a played Word document's view serves: a reconverted play's own once it has stored it, else the
+// fixture's (a reread play, and a reconverted one before its second read); an uploaded or retried one's own.
+function playedConversion(id, play) {
+  if (!play.reconverted) return conversionName(id, 'first');
+  return play.again && reconvertedNow(play) ? conversionName(id, 'again') : play.reconverted.document.view_conversion;
+}
+
+// Whether a reconverted play's round has stored its own conversion yet: from its second read.
+const reconvertedNow = play => play.reads >= 2;
+
+// The Word fixture's codes once its reconverted round has finished: the cecal biopsies' line also quotes the words only
+// the new conversion has.
+function reconvertedResults(word) {
+  const done = clone(word);
+  done.codes.find(code => code.code === '45380').quotes.push({ text: RECONVERTED_LINE, page: 1 });
+  return done;
+}
+
+// POST /__preview__/reconvert (again) and /__preview__/reread: the Word fixture's next coding review, begun elsewhere,
+// converting the file again - or reading back the same stored conversion.
+function reconvert(again = true) {
+  const word = [...fixtures.byId.values()].find(doc => doc.document?.media_type === DOCX_TYPE && doc.document.converted === true);
+  startPlay(word.id, {
+    at: Date.parse(word.created_at), answers: word.answers || [], round: word.round.number, trigger: 'answers', answered: true,
+    reconverted: word, again, title: word.title, name: word.document.name, kind: word.document.kind, mediaType: word.document.media_type,
+    size: word.document.size, context: word.context,
+  });
 }
 
 // An uploaded or retried document, one stage further on each read of it (advance), with its times taken from the upload
@@ -476,7 +541,8 @@ function played(id, advance) {
   if (advance) play.reads += 1;
   const now = Date.now();
   const { reading, checking, asking, results } = fixtures;
-  const stages = play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
+  const stages = play.reconverted ? [[1, reading], [2, checking], [Infinity, play.again ? reconvertedResults(play.reconverted) : play.reconverted]]
+    : play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
   const base = clone(stages.find(([limit]) => play.reads <= limit)[1]);
   const done = !base.progress.busy;
   return {
@@ -517,12 +583,12 @@ async function handleApi(req, res, url) {
     if (!['documents', 'queue', 'recent'].includes(which)) return json(res, 400, { error: LIST_UNKNOWN });
     const rows = practiceRows(req);
     const [status, payload] = listAnswer(which === 'queue' ? rows.filter(row => QUEUE_STATES.has(row.state)) : rows, which, url.searchParams.get('before'));
-    return json(res, status, payload);
+    return json(res, status, status === 200 ? { ...payload, workspace: session.workspace.id } : payload);  // the practice read (I1-2)
   }
   if (route === '/api/encounters/search') {
     if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
     const [status, payload] = searchAnswer(practiceRows(req), parseJson(await readBody(req)));
-    return json(res, status, payload);
+    return json(res, status, status === 200 ? { ...payload, workspace: session.workspace.id } : payload);
   }
   if (method === 'POST' && route === '/api/encounters') {
     const body = (await readBody(req)).toString('latin1');
@@ -562,6 +628,8 @@ async function handleApi(req, res, url) {
     if (!doc) return apiError(res, 404, 'Not found.');
     const view = url.searchParams.get('view') === '1';
     if (view && !doc.document.view_url) return apiError(res, 404, 'Not found.');
+    // the read is recorded before anything is served: a record that cannot be written serves nothing, to any request
+    if (view && flags.unrecorded) return apiError(res, 503, NOT_RECORDED);
     if (!view && !doc.document.original_url) return apiError(res, 404, 'This document was pasted, so there is no original file.');
     const name = documentFor(doc);
     const filename = doc.document.name || 'pasted-text.txt';
@@ -570,16 +638,18 @@ async function handleApi(req, res, url) {
       return send(res, 200, bytes, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${filename}"` });
     }
     // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
-    const { bytes, type } = viewBytes(name);
+    const { bytes, type } = viewBytes(name, plays.get(match[1]));
     const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
-    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type
+    // R2-15: a PDF view carries its tag, and the copy the page holds is answered 304, with no body and no type; I2-1: a
+    // converted Word view names the stored conversion it serves at this read, on the 200 and the 304 alike
     const tag = type === 'application/pdf' ? viewTag(match[1], bytes) : '';
+    const named = doc.document.converted === true && doc.document.view_conversion ? { 'X-CPT-View-Conversion': doc.document.view_conversion } : {};
     if (tag && namesTag(req.headers['if-none-match'], tag)) {
-      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP });
+      return send(res, 304, '', { ETag: tag, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP, ...named });
     }
     return send(res, 200, bytes, {
       'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
-      ...(tag ? { ETag: tag } : {}),
+      ...(tag ? { ETag: tag } : {}), ...named,
     });
   }
   match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);
@@ -701,6 +771,7 @@ async function handle(req, res) {
     plays.clear();
     flags.outdated = false;
     flags.offline = false;
+    flags.unrecorded = false;
     return send(res, 204, '');
   }
   if (req.method === 'POST' && url.pathname === '/__preview__/outdated') {
@@ -709,6 +780,14 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && url.pathname === '/__preview__/offline') {
     flags.offline = true;
+    return send(res, 204, '');
+  }
+  if (req.method === 'POST' && url.pathname === '/__preview__/unrecorded') {
+    flags.unrecorded = true;
+    return send(res, 204, '');
+  }
+  if (req.method === 'POST' && (url.pathname === '/__preview__/reconvert' || url.pathname === '/__preview__/reread')) {
+    reconvert(url.pathname === '/__preview__/reconvert');
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {
@@ -777,4 +856,4 @@ if (require.main === module) {
 }
 
 module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP,
-  viewTag, namesTag, listAnswer, searchAnswer, rowText };
+  viewTag, namesTag, listAnswer, searchAnswer, rowText, RECONVERTED_LINE };

@@ -106,17 +106,21 @@ class ContractTests(unittest.TestCase):
         # RELEASE-2-SPEC R2-19, R2-16 and R2-24: a list answer is one page - its rows, the next page's cursor and, on a
         # first page, the list's total, each nullable - and each row says whether its first stored file is a small PDF
         self.assertEqual(CONTRACT['list'], {'keys': {'encounters': {'items': {'ref': 'list_row'}}, 'next': 'string?',
-                                                     'total': 'integer?'}})
+                                                     'total': 'integer?', 'workspace': 'string'}})
         row = CONTRACT['types']['list_row']['keys']
         self.assertEqual(sorted(row), sorted(['id', 'title', 'state', 'state_label', 'service_date', 'insurance',
                                               'created_at', 'kind', 'opens_pdf']))
         self.assertEqual(row['opens_pdf'], 'boolean')
-        page = {'encounters': [], 'next': '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', 'total': None}
+        page = {'encounters': [], 'next': '20261126T101500.123456Z~0b7f3a52-9c1e-4d2a-8f61-2a9e5d0c4b17', 'total': None,
+                'workspace': 'fa000000-0000-4000-8000-000000000002'}  # the practice it was read in (I1-2)
         self.assertEqual(sc.shape_problems(page, CONTRACT['list']), [])
-        self.assertEqual(sc.shape_problems({'encounters': [], 'next': None, 'total': 0}, CONTRACT['list']), [])
+        self.assertEqual(sc.shape_problems({**page, 'next': None, 'total': 0}, CONTRACT['list']), [])
+        self.assertEqual(sc.shape_problems({**page, 'workspace': None}, CONTRACT['list']),
+                         ['$.workspace: null where the contract has string'])
         # release 1's whole-list answer is now a difference: a reader of it would take a page for the whole practice
         self.assertEqual(sc.shape_problems({'encounters': []}, CONTRACT['list']),
-                         ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)'])
+                         ['$.next: missing (the contract lists it)', '$.total: missing (the contract lists it)',
+                          '$.workspace: missing (the contract lists it)'])
         self.assertTrue(sc.shape_problems({'encounters': [], 'next': 5, 'total': '1'}, CONTRACT['list']))
         denylist = json.loads((HERE / 'customer-denylist.json').read_text(encoding='utf-8'))
         self.assertFalse({'next', 'total', 'opens_pdf'} & set(denylist['forbidden_keys']))

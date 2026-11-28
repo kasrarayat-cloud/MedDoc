@@ -16,7 +16,8 @@
   "original_url": "/api/encounters/f9000000-0000-4000-8000-000000000001/original",
   "view_url": "/api/encounters/f9000000-0000-4000-8000-000000000001/original?view=1",
   "view_media_type": "application/pdf",
-  "converted": true
+  "converted": true,
+  "view_conversion": "c9000000-0000-4000-8000-0000000000c1"
  },
  "context": {
   "service_date": "2026-11-09",

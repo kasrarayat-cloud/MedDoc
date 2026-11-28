@@ -2052,7 +2052,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         for argv in (worker, web):  # the web is given the mode and the path, and no file
             env = flags(argv, '-e')
             self.assertIn('CPT_STUDIO_CODING_MODE=live', env)
-            self.assertIn('CPT_STUDIO_CODING_EFFORT=max', env)
+            self.assertIn('CPT_STUDIO_CODING_EFFORT=high', env)  # R2-33 (D434): 'max' in release 1
             self.assertIn(f'{install.CODER["file_env"]}={install.CODER["mounted"]}', env)
             for name, value in install.coding_figures().items():
                 self.assertIn(f'{name}={value}', env)
@@ -2072,11 +2072,11 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertEqual(world.oneshots[1][1], ['migrate'])
         self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
                         world.events.index(('run', 'web', NEXT, 9151, IMAGE)))
-        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'max', 'credentials_loaded': True,
+        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'high', 'credentials_loaded': True,
                                              'figures': install.coding_figures()})
         self.assertNotIn('interpreter', details)
         self.assertGreater(details['steps']['S4'], details['steps']['S1'])
-        self.assertIn('(coding live, effort max)', details['summary'])
+        self.assertIn('(coding live, effort high)', details['summary'])
 
     def test_without_its_installed_copy_the_install_refuses_before_anything_starts(self):
         world = BlueGreenWorld(self.tmp)

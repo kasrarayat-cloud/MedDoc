@@ -15,7 +15,7 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg`; release 1 (A3, A5): 512m of memory and no swap (memory and memory + swap equal, its own cgroup's `memory.swap.max` 0), core dumps off, and a log that never holds statement text (`log_min_error_statement` panic, `log_error_verbosity` terse); release 2's search needs PostgreSQL 17 or newer (**Known limits**) |
 | web | container `cpt-studio-web`, gunicorn: four sync processes forked from one master that has loaded and warmed the application, in 1 GiB of memory without swap (memory and memory + swap equal), each keeping its own database connection (release 2, R2-5 to R2-7; **Known limits**); read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 3,600 s (the Fable coding build: one coding stage prepares the document - a Word file converted in a bounded child of at most 60 s - then streams the reader's send and the checker's, each up to 96,000 output tokens at effort max, about 1,000 s each at the slowest rate measured, so a round can pass 2,000 s; the bound is `studio.jobs.CODE_STALE_SECONDS`, the age at which the stale sweep takes a running coding job for a dead worker's; a deploy may wait up to 60 minutes for it; round r3's question stage had 1,800 s before it), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 3,600 s (the Fable coding build: one coding stage prepares the document - a Word file converted in a bounded child of at most 60 s - then streams the reader's send and the checker's, each up to 96,000 output tokens (`max_tokens`), about 1,000 s each at the slowest rate measured whatever the effort, so a round can pass 2,000 s; the bound is `studio.jobs.CODE_STALE_SECONDS`, the age at which the stale sweep takes a running coding job for a dead worker's; a deploy may wait up to 60 minutes for it; round r3's question stage had 1,800 s before it), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `initial-credentials.json` (root 0600), `operator-enrolment.json` (root 0600, the platform operator's single-use setup code, valid 30 minutes: **operators** and **manage**; release 1, A6). No operator password is written to a file: an `operator-credentials.json` an earlier install wrote is left untouched, and deleting it is the owner's decision (D12). The Fable coding build (DECISIONS D351-D353) neither reads Corti's source nor writes Corti's copy: a `corti-credentials.env` an earlier install wrote is left as it is, and only a `switch-back` to an earlier pair given `--provider-mode live` mounts it |
@@ -322,8 +322,10 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   disabled. A refusal's error output is kept in the receipt directory only once
   a root helper has found no value from that file in it. Corti's and Astra's
   files are neither required nor mounted. The new web and worker are both given
-  `CPT_STUDIO_CODING_MODE` (the mode given), `CPT_STUDIO_CODING_EFFORT` (`max`,
-  the owner's setting) and the two owner figures `CPT_STUDIO_DOCUMENT_CEILING_USD`
+  `CPT_STUDIO_CODING_MODE` (the mode given), `CPT_STUDIO_CODING_EFFORT` (`high`,
+  the effort release 2 runs: R2-33, set under the owner's permission D433 after
+  the paid test D434; release 1 ran `max`) and the two owner figures
+  `CPT_STUDIO_DOCUMENT_CEILING_USD`
   and `CPT_STUDIO_CONCURRENT_DOCUMENTS` at the defaults the revision's
   `cptstudio/settings.py` gives them (read without running it; each must be
   given exactly once, as one `_env('<name>', '<value>')` call, and be valid - a
@@ -2297,8 +2299,8 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
 - The worker's stop timeout (3,600 s; the Fable coding build) covers its one
   stage: the document's preparation (a Word file's conversion, at most 60 s in
   its bounded child), the reader's send and the checker's, one after the other,
-  each a stream of up to 96,000 output tokens at effort max (about 1,000 s at
-  the slowest rate measured), on each of the worker's
+  each a stream of up to 96,000 output tokens (`max_tokens`: about 1,000 s at
+  the slowest rate measured, whatever the effort), on each of the worker's
   `CPT_STUDIO_CONCURRENT_DOCUMENTS` threads at once - a worker asked to stop
   lets each thread finish its job and claims nothing new. It is the coding
   job's stale-stage threshold too (`studio.jobs.CODE_STALE_SECONDS`): a stage
@@ -2322,13 +2324,15 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   document's revision may cost over every round: a send whose worst case would
   pass it fails its round, never sent. `CPT_STUDIO_CONCURRENT_DOCUMENTS` is the
   number of documents the one worker codes at once (its threads, each holding
-  one provider slot). The installer writes, into every container it starts, the
-  defaults the revision's `cptstudio/settings.py` gives them (the
+  one provider slot). The installer writes, into every web, worker and one-shot
+  container of the app image it starts (never the converter or the database),
+  the defaults the revision's `cptstudio/settings.py` gives them (the
   specification's: 25 US dollars and 4), so a figure moves by a change of that
-  file in a release; it writes `CPT_STUDIO_CODING_EFFORT` as `max`, the owner's
-  setting. The question stage's figures (`CPT_STUDIO_QUESTION_*`) are no longer
-  written: an earlier revision's pair that a `switch-back` starts reads its own
-  defaults for them, the values installers before the Fable coding build wrote.
+  file in a release; it writes `CPT_STUDIO_CODING_EFFORT` as `high` (R2-33;
+  release 1 wrote `max`), into a switch-back's earlier pair too. The question
+  stage's figures (`CPT_STUDIO_QUESTION_*`) are no longer written: an earlier
+  revision's pair that a `switch-back` starts reads its own defaults for them,
+  the values installers before the Fable coding build wrote.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
      after the drain has ended - in practice a large upload it is still reading

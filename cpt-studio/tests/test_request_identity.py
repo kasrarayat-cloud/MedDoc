@@ -1,7 +1,7 @@
 """Release 2, R2-3 (measure M10; specification 2.1, D358): what the coder is sent, pinned.
 
 Release 2 moves the coder's import (R2-4) and changes the Word package (R2-28 to R2-31). A byte diff cannot show that
-the requests are unchanged, so this module holds them to release 1's, three ways.
+the requests are unchanged, so this module holds them to release 1's - at the coder's effort R2-33 sets - three ways.
 
 1. The requests. The shipped job path - jobs.start_round, then jobs.run_job of the claimed job: the round's document
    prepared from its stored original, the READER built and sent, its answer read, the CHECKER built from it and sent -
@@ -13,24 +13,34 @@ the requests are unchanged, so this module holds them to release 1's, three ways
    - the sha256 of the exact parameters the SDK would be given (studio.fable.client.canonical of request.params, the
      document's own bytes included, so a PDF sent re-encoded changes it while the stored form would not);
    - the attempts one send may bill (the requested model's and the server-side fallback's).
-   The values are release 1's: measured on this tree's cpt-studio/ while it was still release 1's (tree bc0729bb9596,
-   main 9ee0c85be), before release 2 changed anything. The text file and the pasted text are the measure area's own
-   two text cases, and their four request hashes are the measure area's (55af66cb, 45b724da, 06d46117, 80f1d337 of the
-   eight its two runs on release 1 gave). Its other four come from PDFs reportlab generates, one of them drawn with the
-   C library's unseeded rand() (Pillow's effect_noise), so its bytes depend on what ran before it in the process: a
-   fixed PDF stands in for them here, built byte for byte below, and the bench's requests part (ops/bench, lane M)
-   compares those four between the trees it measures. Nothing here needs reportlab or the network.
+   The values are release 1's code at the coder's effort "high", release 2's setting (R2-33, owner D433 and D434;
+   release 1's setting was "max"). They were first measured at "max" on this tree's cpt-studio/ while it was still
+   release 1's (tree bc0729bb9596, main 9ee0c85be), before release 2 changed anything; R2-33 re-measured them on
+   purpose, twice and independently (the lead's measurements m1 and m2, cpt-r2-20261125/lead/r2-33/), on release 1's
+   commit 816045c7 (the same cpt-studio tree, bc0729bb9596) with CPT_STUDIO_CODING_EFFORT=high: this module's own
+   helpers - the shipped job path, then the shipped LiveCoder - run on release 1's checkout in fresh processes. The two
+   agree value for value, and each one's control run without the variable gives release 1's "max" values exactly. Only
+   the effort moved: every request.sha256, parameters sha256 and body sha256 changed, and with output_config.effort
+   taken out each digest equals release 1's at "max" (m1 checked it digest by digest); the attempts, the wire's method,
+   path and headers and the PDF's bytes are as they were. The text file and the pasted text are the measure area's own
+   two text cases; at "max" their four request hashes were the measure area's (55af66cb, 45b724da, 06d46117, 80f1d337
+   of the eight its two runs on release 1 gave), and at "high" they are 36229e88, 56fa9c97, e97949fb and 99642f7a.
+   Its other four come from PDFs reportlab generates, one of them drawn with the C library's unseeded rand() (Pillow's
+   effect_noise), so its bytes depend on what ran before it in the process: a fixed PDF stands in for them here, built
+   byte for byte below, and the bench's requests part (ops/bench, lane M) compares those four between the trees it
+   measures. Nothing here needs reportlab or the network.
 2. The wire (refutation round 1, gates[2]). The request is what the SDK is GIVEN; an anthropic, httpx2 or pydantic
    release could change what it SENDS from the same arguments (an effort clamped, a fallback dropped) and leave the
    request pin as it was. So each request also goes through the shipped LiveCoder - its own client construction, the
    SDK's token count, then its stream - over an in-memory httpx2.MockTransport that answers 400, and each HTTP request
    the SDK built is pinned: its method and path, its anthropic-beta and anthropic-version headers, the sha256 of its
-   body, and the credentials' workspace as anthropic-workspace-id, run without one and with one (release 1's, measured
-   with requirements.txt's anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4). A retryable answer (529) and a read
-   that times out leave the same one count and one send on the wire: release 1 sends nothing again automatically
-   (refutation round 2, pins[0] to pins[2]). The SDK's x-stainless-* telemetry is not pinned. Nothing leaves the
-   process: the base URL is a closed local port as a second guard, the key is synthetic, and the credentials loader
-   is replaced, so no credentials file is read.
+   body, and the credentials' workspace as anthropic-workspace-id, run without one and with one (release 1's at "high",
+   measured as above with requirements.txt's anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4: the count's body and
+   the send's carry the effort; the method, path and headers do not). A retryable answer (529) and a read that times
+   out leave the same one count and one send on the wire: release 1 sends nothing again automatically (refutation
+   round 2, pins[0] to pins[2]). The SDK's x-stainless-* telemetry is not pinned. Nothing leaves the process: the base
+   URL is a closed local port as a second guard, the key is synthetic, and the credentials loader is replaced, so no
+   credentials file is read.
 3. The blob gate (specification 2.1). The seven files that are what the coder is asked and how its answer is read and
    priced keep the git blob ids they had at 9ee0c85be: each file on disk hashed as git hashes a blob (so an edit that
    was never committed fails too), and - in a git checkout - git's own HEAD naming the same blobs. The image has no
@@ -38,8 +48,12 @@ the requests are unchanged, so this module holds them to release 1's, three ways
 
 A failure here is the alarm working (R2-3's risk: a new SDK version - seen on the wire - or a changed document rebuild
 breaks the equality), never a value to re-pin: what the coder is sent may change only through the coding-path gate
-(D358), and a bump of the SDK, its transport or pydantic is re-measured on release 1's tree before it is pinned.
-Synthetic data only; nothing reaches the network.
+(D358), and a bump of the SDK, its transport or pydantic is re-measured on release 1's tree before it is pinned. R2-33
+is such a change, made on purpose under the owner's permission (D433: a paid test of five synthetic documents at both
+efforts, and leave to change the effort if the quality held); the lead set the coder's effort from "max" to "high"
+after the paid test's result (D434: at "high" every code, unit and modifier matched "max", at 84% less cost), and these
+pins were re-measured on release 1's tree at "high" rather than taken from release 2's. Synthetic data only; nothing
+reaches the network.
 """
 from __future__ import annotations
 
@@ -221,151 +235,155 @@ CASES = {
     'paste-crlf': {'paste': PASTED.replace('\n', '\r\n')},
 }
 # label -> each request the coder was sent, in order: (role, request.sha256, sha256 of the exact parameters, attempts).
-# Release 1's, measured on tree bc0729bb9596 (lane F's PROOFS.md; item A's cases on 93c33dc1d's cpt-studio, exported
-# read-only, in refutation round 1); a text request carries no base64, so its two hashes are equal.
+# Release 1's at the coder's effort "high" (R2-33, D434): measured on release 1's commit 816045c7 (tree bc0729bb9596)
+# with CPT_STUDIO_CODING_EFFORT=high, twice and independently (the lead's m1 and m2). At release 1's own "max" they
+# were measured on the same tree by lane F (its PROOFS.md; item A's cases on 93c33dc1d's cpt-studio, exported
+# read-only, in refutation round 1). A text request carries no base64, so its two hashes are equal.
 RELEASE_1_REQUESTS = {
     'txt': (
-        ('reader', '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9',
-         '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9', 2),
-        ('checker', '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906',
-         '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906', 2),
+        ('reader', '36229e881b0b7f5e7384ce73ab51fa90486a457a280b8de3206d852d539efb96',
+         '36229e881b0b7f5e7384ce73ab51fa90486a457a280b8de3206d852d539efb96', 2),
+        ('checker', '56fa9c972574f54683a5b2bf8dabd76598fc11d1d9855dc9a563f9d9422fb2a6',
+         '56fa9c972574f54683a5b2bf8dabd76598fc11d1d9855dc9a563f9d9422fb2a6', 2),
     ),
     'paste': (
-        ('reader', '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b',
-         '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b', 2),
-        ('checker', '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695',
-         '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695', 2),
+        ('reader', 'e97949fb43b854a1395f8b0b36b4e39fa8fa01ffa7053f6516161fcb0113c9ad',
+         'e97949fb43b854a1395f8b0b36b4e39fa8fa01ffa7053f6516161fcb0113c9ad', 2),
+        ('checker', '99642f7a9aa7cfb6172e656a2ab00707d36169d2b706f24b33b6bf5088380a77',
+         '99642f7a9aa7cfb6172e656a2ab00707d36169d2b706f24b33b6bf5088380a77', 2),
     ),
     'pdf': (
-        ('reader', '2aacf5aa0610f077fea376d58dedf653e8000848724372c4448c030f1f041c76',
-         'dcc365c8433ca018705239a1e045c88d097b41aa41248ea49a859f68078bc005', 2),
-        ('checker', '10d38279f1abe56181fb27f60e5d60a25b2dac9092020f956ac5498c41854445',
-         '7b9733e964e32fa4f21f534515a93123abe1655212ae46081e6b6e201f2ed43d', 2),
+        ('reader', '687b0ce0bf802f814ff6a0410e73fe02539918d9889665ca4289d9c5cd553316',
+         '55f7a8b9fe9bad0e9420ce70f87903f1e51dae645d053c1be1ca283f5efee6ee', 2),
+        ('checker', 'cfa16b98776a04b97fdc1ff5aff60c75d641f9d53754b79e5572df2aa35ced86',
+         'e79755e33ef881cd402ab96c62d8d4726b422a9772517271cba402edd2938501', 2),
     ),
     'txt-lf': (
-        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
-         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
-        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
-         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+        ('reader', '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0',
+         '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0', 2),
+        ('checker', '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2',
+         '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2', 2),
     ),
     'txt-crlf': (
-        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
-         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
-        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
-         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+        ('reader', '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0',
+         '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0', 2),
+        ('checker', '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2',
+         '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2', 2),
     ),
     'txt-cr': (
-        ('reader', '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969',
-         '495c267ea2528ef031488bcca7876a2175256847b6112551e65501a46e659969', 2),
-        ('checker', '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185',
-         '485074c1631cd3543e5c1935f257d544d6de07bb6a4d89cc5aa4615317bc5185', 2),
+        ('reader', '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0',
+         '88dfe4f6994754fd035bd2c3f3b95eb989d85ce7ae2d3846d1cd395d41b6afc0', 2),
+        ('checker', '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2',
+         '1d2df021e52922b047a8a3ae7366c98015f227939be3c7b9574740c0974153f2', 2),
     ),
     'txt-kept': (
-        ('reader', '0e656ea23a09284f82227b7ebe7dc9647e355b72d8a4b271efaf4957c7615753',
-         '0e656ea23a09284f82227b7ebe7dc9647e355b72d8a4b271efaf4957c7615753', 2),
-        ('checker', '3adf0f92fa909849feb3379ef0f827a95ed54ef0f451d9cda139b58685a3adbb',
-         '3adf0f92fa909849feb3379ef0f827a95ed54ef0f451d9cda139b58685a3adbb', 2),
+        ('reader', '87c454dc9da59375dac11728007c68a7a2851872b64a5c92ad18f9a94d93dd9e',
+         '87c454dc9da59375dac11728007c68a7a2851872b64a5c92ad18f9a94d93dd9e', 2),
+        ('checker', '1d67ff9d3c2fd988c63cb67c6f92174d6cd27cc3a4514b80c6cfd0c64ce85406',
+         '1d67ff9d3c2fd988c63cb67c6f92174d6cd27cc3a4514b80c6cfd0c64ce85406', 2),
     ),
     'txt-bom': (
-        ('reader', '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9',
-         '55af66cb9481b369be7b3cd97f6bf245bd5f87ea9612206e2bd0f7f389cf5bd9', 2),
-        ('checker', '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906',
-         '45b724da91b3ba74bdd594e9bf8f0b0d45cbc433f73795a6394b510690e6c906', 2),
+        ('reader', '36229e881b0b7f5e7384ce73ab51fa90486a457a280b8de3206d852d539efb96',
+         '36229e881b0b7f5e7384ce73ab51fa90486a457a280b8de3206d852d539efb96', 2),
+        ('checker', '56fa9c972574f54683a5b2bf8dabd76598fc11d1d9855dc9a563f9d9422fb2a6',
+         '56fa9c972574f54683a5b2bf8dabd76598fc11d1d9855dc9a563f9d9422fb2a6', 2),
     ),
     'txt-nfc': (
-        ('reader', '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6',
-         '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6', 2),
-        ('checker', '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8',
-         '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8', 2),
+        ('reader', '4838c488b22fbdabf33baa37ad3fac243606ae70f1fd4eae5eee2e36235177fb',
+         '4838c488b22fbdabf33baa37ad3fac243606ae70f1fd4eae5eee2e36235177fb', 2),
+        ('checker', '1147b7d3b8f7f698aed3f2e9c84f67de2017a376ef7eb38651412a54e6c1ae84',
+         '1147b7d3b8f7f698aed3f2e9c84f67de2017a376ef7eb38651412a54e6c1ae84', 2),
     ),
     'txt-nfd': (
-        ('reader', '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6',
-         '64a00a177d18f4ffc1328dc7de8904028af19126af1ccf12e82e76035ed578b6', 2),
-        ('checker', '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8',
-         '9a1c2b76a42e03ef272cd885d712aa7922111cc5763b4471c97f486aaa190cd8', 2),
+        ('reader', '4838c488b22fbdabf33baa37ad3fac243606ae70f1fd4eae5eee2e36235177fb',
+         '4838c488b22fbdabf33baa37ad3fac243606ae70f1fd4eae5eee2e36235177fb', 2),
+        ('checker', '1147b7d3b8f7f698aed3f2e9c84f67de2017a376ef7eb38651412a54e6c1ae84',
+         '1147b7d3b8f7f698aed3f2e9c84f67de2017a376ef7eb38651412a54e6c1ae84', 2),
     ),
     'paste-crlf': (
-        ('reader', '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b',
-         '06d461171fcb70d0798068b6b8d8244251bd5132b07c4ebdded465b4331f3d7b', 2),
-        ('checker', '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695',
-         '80f1d3372678f154aee73962c148675ec9bb57f8cbf86b2415ffb1148e967695', 2),
+        ('reader', 'e97949fb43b854a1395f8b0b36b4e39fa8fa01ffa7053f6516161fcb0113c9ad',
+         'e97949fb43b854a1395f8b0b36b4e39fa8fa01ffa7053f6516161fcb0113c9ad', 2),
+        ('checker', '99642f7a9aa7cfb6172e656a2ab00707d36169d2b706f24b33b6bf5088380a77',
+         '99642f7a9aa7cfb6172e656a2ab00707d36169d2b706f24b33b6bf5088380a77', 2),
     ),
 }
 
 # Refutation round 1, gates[2]: the HTTP requests the SDK builds for each request above, as the shipped LiveCoder
 # makes them - the token count, then the send: each one's method and path, its anthropic-beta and anthropic-version
 # headers (round 2, pins[0]), the same for every request, and per request (role, sha256 of the count's body, sha256 of
-# the send's body). Release 1's, measured on 93c33dc1d's cpt-studio exported read-only, with requirements.txt's
-# anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4.
+# the send's body). Release 1's at "high" (R2-33, D434), measured with the requests above (m1 and m2, on 816045c7's
+# cpt-studio, the tree lane F measured them on at "max" as 93c33dc1d's, exported read-only), with requirements.txt's
+# anthropic 2.11.0, httpx2 2.16.2 and pydantic 2.14.4. Both bodies carry the effort (the count's through
+# client.COUNT_KEYS); the method, path and headers do not, and are release 1's at either effort.
 COUNT_ON_THE_WIRE = ('POST /v1/messages/count_tokens', 'server-side-fallback-2026-07-01,token-counting-2024-11-01',
                      '2026-10-21')
 SEND_ON_THE_WIRE = ('POST /v1/messages', 'server-side-fallback-2026-07-01', '2026-10-21')
 RELEASE_1_WIRE = {
     'txt': (
-        ('reader', 'e8753cd2e2c9580f11f91260b2d83d61ac7931ac350138168fa326e1bb3bcfa1',
-         'b742e1711313f805df00a9303afa4c3eb8e74fb015b34ab5573838ac61b51d50'),
-        ('checker', 'a52d7cb1d0a2113cc817b44dc2e11c259e5811991c0c9c5034d9c6c16be9a2ac',
-         'd42741df8e27fbf5b406332db98cebd552c69d396bec88241f961d42199f0627'),
+        ('reader', 'f5f420c1ef1074146edb3f1a0e093319ded762e0dbf9804b2899314434ebd9b0',
+         'a04d90cc3a0d51ed1ad6020f0b59640f2c09df0e1d0736c954acc2e9fac838c5'),
+        ('checker', '04c2e21d5bd399476e94b52e8121ae5fed5bf2afc6905cb66ad792bb306e4564',
+         '76c9a83e2eaf63bb90fb3f9f7a57de66c068c1653c4ba39539ad3cdf6c041170'),
     ),
     'paste': (
-        ('reader', '39f2828f7bd0126d2284c06d4ed31805e5a51cacc4cda5549a50f5f7ea182d98',
-         'e6d2f9ffea2e0b223a00ef87b121dccd6ae4b082a514f580a48c57e725c042e4'),
-        ('checker', '6d9da6553174d62e5a23cd18250e00a793bcac50e658c31671dd82937e11df7b',
-         '1293fabc3f3b74b4999e207e7388ac9feca1e9b49d96089f435310da64d63052'),
+        ('reader', '507f1fbfa201bbdbf8713cf150bb6238db4aa6b63eecaecb40cc701b907ab307',
+         'c33d7b2a862c7653e1fb6f26b86d3e06fae9cd51baf0c08fa3f5e6ed3ce0fdf6'),
+        ('checker', 'f709a59e4d39eb9e0d1e3ddfe76a98b5375fe4a56c8326d794ab4ee4eeb91762',
+         '3215c7339c71eb4c04a25ea809647db4eb95987411d062a821ba8db74d9225ab'),
     ),
     'pdf': (
-        ('reader', 'ea509cb59a815e393d4b1cad4320dfb8f09df9f4963cb33cebf036f6a65d31df',
-         '6e2550becf82bbc6133ce65fa5d34c5b7dad14186ffbe3c0a359a7955e3e9e81'),
-        ('checker', 'edfdc36d2f4a783f25864967646a9c9b5baa0f81450f7aa20fd392149520459e',
-         'c652214bd6cce59dcb24ec5cca015e11dea69f5984c108c54ba081ae6927050a'),
+        ('reader', '9aecfbedbc99f9aa5723bec51faba8a1446be7e98d842ab8e5686ea472e6113b',
+         '67a7ca19049f2a660ff778bd87da52c55c384d825df8247eae843ac89e7b4ff0'),
+        ('checker', 'd44a6e5732c84ffd10226beef04ad9e1f8f019da151efac7978f92e850fe04e8',
+         'bc8dc935b166c17643192d8f11fbbd5ca794a720eeba0d61b97c9f38496b8f34'),
     ),
     'txt-lf': (
-        ('reader', '274cda5503d065a1ec1dfaead9bd6f32018c48a2fadf6d60824c6089dadc9446',
-         '96a17e5cc58825860726ce1d95ad8368b083e7147ded8026730588bc78a2ebaf'),
-        ('checker', 'c79c9ff2d1c9b074d0bdf2592dd2269b7a9febfb38968d1c31af406931a2728e',
-         '97a38c84f28667390b862db868ebcac8dab1672c73998ff0f5f310719e8f1ceb'),
+        ('reader', 'e895ae3a487228c651b75634ec9e37973acd1fce51d91681d97a007b8b13faba',
+         'a85996dd7437209775831af937f52f7a643e29ca9551b698a4778f257a1a84fc'),
+        ('checker', 'acd7e3a3e6eba97bdcb9dadace27f10fd0f076b756c83160ab54c86f69a8f953',
+         '0f97c7f1cba4cbe17f9663f46007f394ba351a3702a2150466e342bd0fa9e1f2'),
     ),
     'txt-crlf': (
-        ('reader', '274cda5503d065a1ec1dfaead9bd6f32018c48a2fadf6d60824c6089dadc9446',
-         '96a17e5cc58825860726ce1d95ad8368b083e7147ded8026730588bc78a2ebaf'),
-        ('checker', 'c79c9ff2d1c9b074d0bdf2592dd2269b7a9febfb38968d1c31af406931a2728e',
-         '97a38c84f28667390b862db868ebcac8dab1672c73998ff0f5f310719e8f1ceb'),
+        ('reader', 'e895ae3a487228c651b75634ec9e37973acd1fce51d91681d97a007b8b13faba',
+         'a85996dd7437209775831af937f52f7a643e29ca9551b698a4778f257a1a84fc'),
+        ('checker', 'acd7e3a3e6eba97bdcb9dadace27f10fd0f076b756c83160ab54c86f69a8f953',
+         '0f97c7f1cba4cbe17f9663f46007f394ba351a3702a2150466e342bd0fa9e1f2'),
     ),
     'txt-cr': (
-        ('reader', '274cda5503d065a1ec1dfaead9bd6f32018c48a2fadf6d60824c6089dadc9446',
-         '96a17e5cc58825860726ce1d95ad8368b083e7147ded8026730588bc78a2ebaf'),
-        ('checker', 'c79c9ff2d1c9b074d0bdf2592dd2269b7a9febfb38968d1c31af406931a2728e',
-         '97a38c84f28667390b862db868ebcac8dab1672c73998ff0f5f310719e8f1ceb'),
+        ('reader', 'e895ae3a487228c651b75634ec9e37973acd1fce51d91681d97a007b8b13faba',
+         'a85996dd7437209775831af937f52f7a643e29ca9551b698a4778f257a1a84fc'),
+        ('checker', 'acd7e3a3e6eba97bdcb9dadace27f10fd0f076b756c83160ab54c86f69a8f953',
+         '0f97c7f1cba4cbe17f9663f46007f394ba351a3702a2150466e342bd0fa9e1f2'),
     ),
     'txt-kept': (
-        ('reader', '64310f004905caa1169580315aa3658a41e30fdf733f398bb73848ccd860231a',
-         '4026ec35ab22a2bdd60f14317df638724bbae6aa137df64d5175867aa5e3e73a'),
-        ('checker', 'c4c0a8ac6396b86dcd08d8fc35470f42f393c1548c7ba775912395ccc3849c8c',
-         '42acafe000437fd130149ebae8483eaf7968363926c0847567fd9bfc47700aad'),
+        ('reader', '2a789fda18a5945b36bfe09588dc0a1316826a4718f9662e1610bb091eb45020',
+         '02b0ca155a0155d330791541d6a16416b6d99c5468e93a95a4e3c9165e1a7ead'),
+        ('checker', '246129e9cf2cd98c52e052078a756c7963a154ac52b50494c50d61209b7dad3d',
+         'f25d853c8da7fd318211a72ba7bb584361c6fd155711b79611adb6f668ab87d8'),
     ),
     'txt-bom': (
-        ('reader', 'e8753cd2e2c9580f11f91260b2d83d61ac7931ac350138168fa326e1bb3bcfa1',
-         'b742e1711313f805df00a9303afa4c3eb8e74fb015b34ab5573838ac61b51d50'),
-        ('checker', 'a52d7cb1d0a2113cc817b44dc2e11c259e5811991c0c9c5034d9c6c16be9a2ac',
-         'd42741df8e27fbf5b406332db98cebd552c69d396bec88241f961d42199f0627'),
+        ('reader', 'f5f420c1ef1074146edb3f1a0e093319ded762e0dbf9804b2899314434ebd9b0',
+         'a04d90cc3a0d51ed1ad6020f0b59640f2c09df0e1d0736c954acc2e9fac838c5'),
+        ('checker', '04c2e21d5bd399476e94b52e8121ae5fed5bf2afc6905cb66ad792bb306e4564',
+         '76c9a83e2eaf63bb90fb3f9f7a57de66c068c1653c4ba39539ad3cdf6c041170'),
     ),
     'txt-nfc': (
-        ('reader', 'e17184ca7f3c538c942cf62696d2873f52b5e9a9f8bfc0f822ccab454ed38b0d',
-         '2478ebeda18839a6b8e685b0b095b3b8c7672d2f2f61bdd21c5f992e3678b94c'),
-        ('checker', '5218853defdfbb6a454f909e971a69b3ac81256f3f59f3e316eb5fa5882efe92',
-         '412782dd771b3a69170fe6441f8ce86602a29fb411d36e798bb50f7bb7a1f46e'),
+        ('reader', '925a9decedfef735b6110e7b064ac227438f04b585b1f5b76839b4ecd4a51135',
+         'caec197773abd36a839e8c313c577439cbad67ec8b5a53b78e3c6bf0659ef072'),
+        ('checker', 'a7ef1895095a91dae938b276bbcef1588814a76d3fb32d5b204284032b6c5eb6',
+         '1851068d818b4c20cc13f8ae777a9851736295b09a808b7dd10d0e1ef5f0a7fb'),
     ),
     'txt-nfd': (
-        ('reader', 'e17184ca7f3c538c942cf62696d2873f52b5e9a9f8bfc0f822ccab454ed38b0d',
-         '2478ebeda18839a6b8e685b0b095b3b8c7672d2f2f61bdd21c5f992e3678b94c'),
-        ('checker', '5218853defdfbb6a454f909e971a69b3ac81256f3f59f3e316eb5fa5882efe92',
-         '412782dd771b3a69170fe6441f8ce86602a29fb411d36e798bb50f7bb7a1f46e'),
+        ('reader', '925a9decedfef735b6110e7b064ac227438f04b585b1f5b76839b4ecd4a51135',
+         'caec197773abd36a839e8c313c577439cbad67ec8b5a53b78e3c6bf0659ef072'),
+        ('checker', 'a7ef1895095a91dae938b276bbcef1588814a76d3fb32d5b204284032b6c5eb6',
+         '1851068d818b4c20cc13f8ae777a9851736295b09a808b7dd10d0e1ef5f0a7fb'),
     ),
     'paste-crlf': (
-        ('reader', '39f2828f7bd0126d2284c06d4ed31805e5a51cacc4cda5549a50f5f7ea182d98',
-         'e6d2f9ffea2e0b223a00ef87b121dccd6ae4b082a514f580a48c57e725c042e4'),
-        ('checker', '6d9da6553174d62e5a23cd18250e00a793bcac50e658c31671dd82937e11df7b',
-         '1293fabc3f3b74b4999e207e7388ac9feca1e9b49d96089f435310da64d63052'),
+        ('reader', '507f1fbfa201bbdbf8713cf150bb6238db4aa6b63eecaecb40cc701b907ab307',
+         'c33d7b2a862c7653e1fb6f26b86d3e06fae9cd51baf0c08fa3f5e6ed3ce0fdf6'),
+        ('checker', 'f709a59e4d39eb9e0d1e3ddfe76a98b5375fe4a56c8326d794ab4ee4eeb91762',
+         '3215c7339c71eb4c04a25ea809647db4eb95987411d062a821ba8db74d9225ab'),
     ),
 }
 # A key no vendor would take, for the credentials loader this module replaces: no credentials file is read.
@@ -476,9 +494,10 @@ class TheCoderIsSentWhatRelease1SentTests(TestCase):
         cls._originals.cleanup()
         super().tearDownClass()
 
-    def test_the_settings_are_release_1_s(self):
-        # the owner's effort (class d, D358): a run under another one is sent another request, so say it first
-        self.assertEqual(settings.CODING_EFFORT, 'max')
+    def test_the_settings_are_those_the_pins_were_measured_at(self):
+        # the owner's effort (class d, D358): 'high' since R2-33 (D433, D434; release 1's setting was 'max'), the effort
+        # every pin here was measured at; a run under another one is sent another request, so say it first
+        self.assertEqual(settings.CODING_EFFORT, 'high')
         self.assertEqual(hashlib.sha256(PDF).hexdigest(), PDF_SHA256)
 
     def test_each_request_is_release_1_s(self):

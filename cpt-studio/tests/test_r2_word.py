@@ -6,7 +6,8 @@
   fallback refuses a field kept, not HYPERLINK, TOC, QUOTE or STYLEREF, whose stored result holds something a reader
   sees outside the fields in it while a removed field stood in its instruction (the 7.4 corpus's H01 shape), and
   nothing else; a seeded fuzz.
-- The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it.
+- The Word case of R2-3's pin (refutation round 1): a clean Word file is sent to the coder exactly as release 1 sent it,
+  but for the coder's effort, which R2-33 made "high" (release 1's was "max"): the pin is release 1's tree at "high".
 - The canonical package gate (refutation round 3, D-R2-46): a package not in the one form a Word package takes - its
   zip, its relationships parts and targets, its content types, a preview's id - is refused before E2 reads a part, told
   as an inserted document (CanonicalPackageTests); the files measured from Word and the real tools pass it unchanged.
@@ -27,6 +28,7 @@ Synthetic bytes only, every package built here; no LibreOffice, no network, no p
 import gzip
 import hashlib
 import io
+import json
 import random
 import re
 import struct
@@ -43,8 +45,8 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from studio import jobs, models, storage
-from studio.fable import BUSY, CONVERT, DOCUMENT, docx_package
+from studio import customer, jobs, models, storage
+from studio.fable import BUSY, CONVERT, DOCUMENT, FAILURE_KINDS, STORAGE, docx_package
 from studio.fable import client as fable_client
 from studio.fable import document as fable_document
 from tests.support import coding as f
@@ -1666,6 +1668,60 @@ class FieldShellTests(ReleaseOneCase):
                         begin[:-len('</w:r>')] + '<w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>'
                         + fc('separate') + t('TYPED') + fc('end'))
 
+    def test_a_removed_field_that_only_removed_fields_enclose_is_unwrapped_exactly_as_release_1(self):
+        """Integrated refutation round 1, coding-0 (I1-14): R2-30 keeps the words of a removed field in the result of a
+        field that STAYS. In a removed field's result with no kept field around it (7.4 shape 124's G10: INCLUDETEXT in
+        INCLUDETEXT's result) both are unwrapped exactly as release 1 unwraps them - no field is left to drop the words,
+        and release 1's package loses nothing there on 7.4 (lead/word74-d4, shape 124) - so the package is release 1's
+        byte for byte and C8 reuses a stored conversion of it (check_in_child False). Where a kept field stands in the
+        chain, every removed field inside it is shelled, and only those."""
+        inc = field(INC, 'INNER RESULT')
+        link = field(' LINK Excel.Sheet.12 "c:\\\\synthetic\\\\SECRET.xlsx" ', 'LINKED RESULT')
+        simple_inc = '<w:fldSimple w:instr=\' INCLUDETEXT "c:\\\\SECRET.docx" \'>' + t('INNER') + '</w:fldSimple>'
+        simple_link = '<w:fldSimple w:instr=" LINK Excel.Sheet.12 SECRET ">' + t('INNER') + '</w:fldSimple>'
+
+        def around(outer, inner):  # a complex field whose result holds ``inner``
+            return fc('begin') + instr(outer) + fc('separate') + t('OUT1 ') + inner + t(' OUT2') + fc('end')
+
+        def simple_around(outer, inner):  # a w:fldSimple whose result holds ``inner`` (``outer`` has no double quote)
+            return f'<w:fldSimple w:instr="{outer}">' + t('OUT1 ') + inner + t(' OUT2') + '</w:fldSimple>'
+
+        removed_only = {
+            'complex in complex (shape 124: INCLUDETEXT in INCLUDETEXT)': p(around(INC, inc)),
+            'a LINK in an INCLUDETEXT': p(around(INC, link)),
+            'simple in simple': p(simple_around(' INCLUDETEXT c:\\SECRET.docx ', simple_inc)),
+            'complex in simple (DDEAUTO)': p(simple_around(' DDEAUTO Excel SECRET ', inc)),
+            'simple in complex (LINK)': p(around(INC, simple_link)),
+            'three deep, all removed': p(around(INC, around(' LINK Excel.Sheet.12 SECRET ', inc))),
+            'an outer field over two paragraphs': p(fc('begin'), instr(INC), fc('separate'), t('OUT1 '))
+                                                  + p(inc, t(' OUT2'), fc('end')),
+        }
+        for name, body in removed_only.items():
+            with self.subTest(name):
+                data = package(BEFORE + body + AFTER)
+                self.assert_release_1_package(data)
+                out = docx_package._safe_package(data)[0]
+                self.assertEqual(shells_in(out), 0)
+                self.assertNotIn('SECRET', document_part(out))
+                ElementTree.fromstring(document_part(out).encode('utf-8'))
+                self.assertIs(docx_package.check_in_child(data), False, 'C8 reuses a stored conversion of it')
+        kept = {
+            # the same pair in a kept IF's result: both shelled
+            'in a kept IF': (p(around(' IF 1 = 1 "a" "b" ', around(INC, inc))), 2),
+            # in a kept REF w:fldSimple's result: both shelled
+            'in a kept REF w:fldSimple': (p(simple_around(' REF Bm \\h ', around(INC, simple_link))), 2),
+            # a kept IF between two removed fields: the one inside it shelled, the outer one unwrapped as release 1
+            'a kept IF between two removed fields': (p(around(INC, around(' IF 1 = 1 "a" "b" ', link))), 1),
+        }
+        for name, (body, shells) in kept.items():
+            with self.subTest(name):
+                data = package(BEFORE + body + AFTER)
+                out = docx_package._safe_package(data)[0]
+                self.assertEqual(shells_in(out), shells)
+                self.assertNotIn('SECRET', document_part(out))
+                self.assertNotEqual(out, self.release_1()._safe_package(data)[0])
+                self.assertIs(docx_package.check_in_child(data), True, 'C8 converts it afresh, so the QUOTE applies')
+
     def test_an_instruction_over_two_paragraphs_keeps_both_paragraphs_and_their_properties(self):
         def paragraphs(inner):
             return BEFORE + inner + AFTER
@@ -2454,6 +2510,346 @@ class StoredConversionTests(r.CustomerCase, TestCase):
                 self.assertEqual((round_.view_pdf_sha256, self.sent(coder)), (fresh, {fresh}))
                 self.assertNotEqual(round_.view_pdf_storage_name, name)
 
+    # --- integrated refutation round 1, I1-1 (bypass-0, failclosed-0): release 1's stored conversion of a file a later
+    # round refuses is never shown or downloaded to the doctor again - the page reads as for a file refused at its first
+    # round - while the record keeps it: the bundle's converted/ file and the operator's console
+
+    def doctors_page(self, member, enc, tag):
+        """What the doctor's page is given of ``enc``: the detail's document block, the view with and without the kept
+        ``tag``, the default download and the Word file by name - and the member.inline rows those reads added."""
+        base = f'/api/encounters/{enc.pk}'
+        inline = models.AccessRecord.objects.filter(view='member.inline').count()
+        document = member.get(base).json()['document']
+        kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=tag)
+        fresh = member.get(f'{base}/original?view=1')
+        download = member.get(f'{base}/original')
+        word = member.get(f'{base}/original?format=original')
+        added = models.AccessRecord.objects.filter(view='member.inline').count() - inline
+        return document, kept, fresh, download, word, added
+
+    def assert_refused_as_at_first_round(self, member, enc, data, tag, when):
+        document, kept, fresh, download, word, added = self.doctors_page(member, enc, tag)
+        self.assertEqual((document['view_url'], document['view_media_type'], document['converted'],
+                          document['view_conversion']), (None, None, False, None), when)
+        self.assertEqual((kept.status_code, fresh.status_code), (404, 404), f'{when}: no view, a kept tag included')
+        self.assertNotIn(b'%PDF', kept.content + fresh.content, when)
+        self.assertEqual(added, 0, f'{when}: nothing shown, from page memory or afresh')
+        self.assertEqual((download.status_code, download['Content-Type']), (409, 'application/json'),
+                         f'{when}: no PDF download')
+        self.assertEqual(download.json(), {'error': customer.ORIGINAL_ONLY, 'details': {
+            'original_url': f'/api/encounters/{enc.pk}/original?format=original'}}, when)
+        self.assertEqual((word.status_code, word.content), (200, data), f'{when}: the Word file stays downloadable')
+
+    def test_a_file_a_later_round_refuses_is_shown_and_downloaded_as_one_refused_at_its_first_round(self):
+        from tests.support import operator as ops
+        from tests.test_frontend import PLAIN_STATIC
+        from tests.test_operator_console import open_content
+        from tests.test_read_audit import member_client
+
+        for index, (data, code) in enumerate(((IMPORTING_WORD, docx_package.INSERTED_DOCUMENT),
+                                               (BARE_OBJECT_WORD, docx_package.INSERTED_OBJECT),
+                                               (DOCUMENT_SWAP_WORD, docx_package.INSERTED_DOCUMENT))):
+            with self.subTest(index=index, code=code):
+                enc, rev, _, digest = self.stored(data)
+                member = member_client(self.reviewer)
+                base = f'/api/encounters/{enc.pk}'
+                # before: round 1's conversion is the view, and the page keeps it under its tag
+                first = member.get(f'{base}/original?view=1')
+                self.assertEqual((first.status_code, first.content), (200, STORED_PDF))
+                tag = first['ETag']
+                self.assertEqual(member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=tag).status_code, 304)
+                self.assertEqual(member.get(base).json()['document']['converted'], True)
+                round_, _, _ = self.next_round(enc, rev, Round.ANSWERS, f.FakeCoder())
+                self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                 (Round.FAILED, CONVERT, fable_document.REFUSED_PACKAGE_TEXT[code]))
+                self.assert_refused_as_at_first_round(member, enc, data, tag, 'refused')
+                # a retry, queued and not yet run, shows no view either: the refusal stands until a round stores its own
+                jobs.retry(enc, self.reviewer)
+                self.assertEqual(jobs.latest_round(enc).state, Round.QUEUED)
+                self.assert_refused_as_at_first_round(member, enc, data, tag, 'retry queued')
+                self.use(f.FakeCoder())
+                with mock.patch.object(fable_document, 'convert_docx', side_effect=AssertionError('no conversion')):
+                    self.run_next()
+                self.assertEqual(jobs.latest_round(enc).failure_kind, CONVERT)
+                self.assert_refused_as_at_first_round(member, enc, data, tag, 'retry refused')
+                # the record keeps what round 1 read: the bundle's converted/ file (its record.json is the page as shown)
+                bundle = member.get(f'{base}/bundle')
+                self.assertEqual(bundle.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+                    self.assertEqual(archive.read('converted/synthetic-note.pdf'), STORED_PDF)
+                    self.assertEqual(archive.read('original/synthetic-note.docx'), data)
+                    shown = json.loads(archive.read('record.json'))['document']['document']
+                self.assertEqual((shown['view_url'], shown['converted']), (None, False))
+                # and the operator's console: its link to the converted PDF, and that PDF as the record's download
+                console = ops.admin_client(r.f.user(f'platform-operator-{index}'))
+                open_content(console, enc)
+                with override_settings(STORAGES=PLAIN_STATIC):  # R2-26: the console names its fonts by the static tag
+                    page = console.get(f'/ops/encounters/{enc.pk}').content.decode()
+                self.assertIn('The converted PDF the coding review read', page)
+                answer = console.get(f'/ops/encounters/{enc.pk}/original')
+                self.assertEqual((answer.status_code, answer.content), (200, STORED_PDF))
+                self.assertEqual(answer['X-Content-SHA256'], digest)
+                self.assertEqual(models.AccessRecord.objects.filter(view='ops.original').latest('created_at').filters,
+                                 {'format': 'converted_pdf'})
+
+    def test_a_round_refused_beside_the_view_it_recorded_shows_none_and_a_later_round_that_stores_one_shows_it(self):
+        from tests.test_read_audit import member_client
+
+        enc, _, _, _ = self.stored(IMPORTING_WORD)
+        member = member_client(self.reviewer)
+        # a resumed round refused at its check fails CONVERT beside the view it recorded on its first pass
+        Round.objects.filter(encounter=enc, number=1).update(state=Round.FAILED, failure_kind=CONVERT,
+                                                             error=fable_document.REFUSED_PACKAGE_TEXT[
+                                                                 docx_package.INSERTED_DOCUMENT])
+        document = member.get(f'/api/encounters/{enc.pk}').json()['document']
+        self.assertEqual((document['view_url'], document['converted']), (None, False))
+        self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original?view=1').status_code, 404)
+        # a failure of another kind is not the file's: it masks nothing (the view stands, as in release 1)
+        Round.objects.filter(encounter=enc, number=1).update(failure_kind=BUSY)
+        self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original?view=1').content, STORED_PDF)
+        Round.objects.filter(encounter=enc, number=1).update(failure_kind=CONVERT)
+        # a later round that stores a view of its own is shown again
+        later = r.write_round(enc)
+        name, digest, _ = storage.store_original(self.ws.pk, FRESH_PDF, 'converted.pdf')
+        Round.objects.filter(pk=later.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+        document = member.get(f'/api/encounters/{enc.pk}').json()['document']
+        self.assertEqual((document['view_url'], document['converted']),
+                         (f'/api/encounters/{enc.pk}/original?view=1', True))
+        self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original?view=1').content, FRESH_PDF)
+        self.assertEqual(member.get(f'/api/encounters/{enc.pk}/original').content, FRESH_PDF)
+
+    # --- integrated refutation round 1, I1-18 (the independent check's F2, the same class as I1-1): a later round that
+    # fails DOCUMENT on the Word file's own fresh conversion - past the store's limit beside an earlier view
+    # (jobs._keep_view, refutation round 2 rounds[4]) or past the send limit (fable.document._pdf_document) - stores no
+    # view of its own, so release 1's stored conversion, which C8 decided not to read again, is not the doctor's either:
+    # the page reads as for a file refused at its first round, view_conversion null (I1-12, I2-2), while the record keeps it
+
+    def test_a_later_round_that_fails_on_its_own_conversion_is_shown_as_one_refused_at_its_first_round(self):
+        from tests.test_read_audit import member_client
+
+        store_prefix = b'%PDF-1.7\n% a synthetic conversion past the store\'s limit\n'
+        send_prefix = b'%PDF-1.7\n% a synthetic conversion past the send limit\n'
+        store_large = store_prefix + b'0' * (settings.MAX_UPLOAD_BYTES + 1 - len(store_prefix))
+        send_large = send_prefix + b'0' * (docx_package.MAX_PDF_BYTES + 1 - len(send_prefix))
+        self.assertLess(len(store_large), docx_package.MAX_PDF_BYTES)  # sent if it could be stored: _keep_view refuses it
+        for path, conversion, logged in (('the store\'s limit', store_large, True), ('the send limit', send_large, False)):
+            with self.subTest(path=path):
+                enc, rev, _, _ = self.stored(SHELLED_WORD)
+                member = member_client(self.reviewer)
+                base = f'/api/encounters/{enc.pk}'
+                # before: round 1's conversion is the view, kept by the page under its tag
+                first = member.get(f'{base}/original?view=1')
+                self.assertEqual((first.status_code, first.content), (200, STORED_PDF))
+                tag = first['ETag']
+                round_one = customer.view_conversion_of(enc, Round.objects.get(encounter=enc, number=1))
+                self.assertEqual(member.get(base).json()['document']['view_conversion'], round_one)
+                for trigger, number in ((Round.ANSWERS, 2), (Round.RETRY, 3)):
+                    coder = f.FakeCoder()  # it fails the test if anything is sent
+                    if logged:  # the store's refusal is logged (jobs._keep_view)
+                        with self.assertLogs('studio.jobs', 'ERROR'):
+                            round_, convert, _ = self.next_round(enc, rev, trigger, coder, converted=conversion)
+                    else:
+                        round_, convert, _ = self.next_round(enc, rev, trigger, coder, converted=conversion)
+                    convert.assert_called_once_with(SHELLED_WORD)
+                    self.assertEqual((round_.number, round_.state, round_.failure_kind, round_.error,
+                                      round_.view_pdf_storage_name),
+                                     (number, Round.FAILED, DOCUMENT, fable_document.REFUSED_TEXT['docx'], None))
+                    self.assertEqual((coder.counts, coder.calls), ([], []))
+                    self.assert_refused_as_at_first_round(member, enc, SHELLED_WORD, tag, f'{path}: round {number}')
+                    with self.assertNumQueries(2):  # its first file and shown_view, read once: no statement added
+                        self.assertEqual(customer.document_json(enc)['view_conversion'], None)
+                # a retry queued, not yet run, shows none either: the refusal stands until a round stores its own view
+                jobs.retry(enc, self.reviewer)
+                self.assertEqual(jobs.latest_round(enc).state, Round.QUEUED)
+                self.assert_refused_as_at_first_round(member, enc, SHELLED_WORD, tag, f'{path}: a retry queued')
+                # the record keeps what round 1 read: the operator's download and the bundle's converted/ file (its
+                # record.json is the page as shown)
+                self.assertEqual(customer.converted_view(enc).number, 1)
+                self.assertEqual(customer.download_content(enc, recorded=True).data, STORED_PDF)
+                bundle = member.get(f'{base}/bundle')
+                self.assertEqual(bundle.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+                    self.assertEqual(archive.read('converted/synthetic-note.pdf'), STORED_PDF)
+                    shown = json.loads(archive.read('record.json'))['document']['document']
+                self.assertEqual((shown['view_url'], shown['converted'], shown['view_conversion']), (None, False, None))
+                # the retry's own conversion fits: stored, sent and shown - the copy kept under round 1's tag is
+                # answered with it, under the round's own tag
+                self.use(self.answering())
+                with mock.patch.object(fable_document, 'convert_docx', return_value=FRESH_PDF):
+                    self.run_next()
+                round_ = jobs.latest_round(enc)
+                self.assertEqual((round_.number, round_.state, round_.view_pdf_sha256),
+                                 (4, Round.DONE, hashlib.sha256(FRESH_PDF).hexdigest()))
+                document = member.get(base).json()['document']
+                self.assertEqual((document['view_url'], document['converted'], document['view_conversion']),
+                                 (f'{base}/original?view=1', True, customer.view_conversion_of(enc, round_)))
+                self.assertNotEqual(document['view_conversion'], round_one)
+                kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=tag)
+                self.assertEqual((kept.status_code, kept.content), (200, FRESH_PDF))
+                self.assertNotEqual(kept['ETag'], tag)
+                self.assertEqual(member.get(f'{base}/original').content, FRESH_PDF)
+
+    def test_only_a_document_failure_that_stored_no_view_of_its_own_masks_the_earlier_view(self):
+        from tests.test_read_audit import member_client
+
+        enc, _, _, _ = self.stored(SHELLED_WORD)
+        member = member_client(self.reviewer)
+        base = f'/api/encounters/{enc.pk}'
+
+        def page():
+            document = member.get(base).json()['document']
+            view = member.get(f'{base}/original?view=1')
+            download = member.get(f'{base}/original')
+            rounds = {customer.view_conversion_of(enc, row): row.number
+                      for row in Round.objects.filter(encounter=enc).exclude(view_pdf_storage_name=None)}
+            return (rounds.get(document['view_conversion']), document['converted'], view.status_code,
+                    view.content if view.status_code == 200 else None, download.status_code,
+                    download.content if download.status_code == 200 else None)
+        shown_first = (1, True, 200, STORED_PDF, 200, STORED_PDF)
+        masked = (None, False, 404, None, 409, None)
+        later = r.write_round(enc, state_=Round.FAILED, failure_kind=STORAGE, error='A synthetic failure.')
+        # a failure of another kind with no view of its own is not the Word file's: round 1's view stands, as before
+        # (STORAGE: the store path's other failure, which a retry codes again)
+        for kind in sorted(set(FAILURE_KINDS) - {CONVERT, DOCUMENT}):
+            with self.subTest(kind=kind):
+                Round.objects.filter(pk=later.pk).update(failure_kind=kind)
+                self.assertEqual(page(), shown_first)
+        # DOCUMENT with no view of its own (none, or an empty name): no view, and view_conversion null
+        for name in (None, ''):
+            with self.subTest(document_view=name):
+                Round.objects.filter(pk=later.pk).update(failure_kind=DOCUMENT, view_pdf_storage_name=name,
+                                                         error=fable_document.REFUSED_TEXT['docx'])
+                self.assertEqual(page(), masked)
+        # DOCUMENT beside a view the round stored - the API refused what was sent, after its view was kept - shows that
+        # view, which is the round's own (round 2's conversion named), never round 1's
+        name, digest, _ = storage.store_original(self.ws.pk, FRESH_PDF, 'converted.pdf')
+        Round.objects.filter(pk=later.pk).update(view_pdf_storage_name=name, view_pdf_sha256=digest)
+        self.assertEqual(page(), (2, True, 200, FRESH_PDF, 200, FRESH_PDF))
+        # and CONVERT beside it still shows none (I1-1)
+        Round.objects.filter(pk=later.pk).update(failure_kind=CONVERT)
+        self.assertEqual(page(), masked)
+
+    # --- integrated refutation rounds 1 and 2, I1-12 and I2-2 (viewer-0, viewer-1): the document block names the stored
+    # conversion its view serves (view_conversion: an opaque name of the stored file, never its bytes, a hash of them or
+    # any words), so a page kept open across a later round that converts the file again redraws its viewer whole and asks
+    # for the view with its kept copy's tag - answered 200 with the new bytes - while a later round that reads back the
+    # same stored file names the same conversion, and the page keeps its viewer, its zoom and its place
+
+    def assert_an_opaque_name(self, named, enc, storage_name, content):
+        """A conversion's name: a UUID derived with the site's key - never a rendering of the file's bytes or of their
+        sha256, sha1 or md5, nor of the document's id, the stored file's name or their digests."""
+        self.assertRegex(named, r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        bare = named.replace('-', '')
+        for source in (content, storage_name.encode(), str(enc.pk).encode(), f'{enc.pk}:{storage_name}'.encode()):
+            self.assertNotIn(bare, source.hex())
+            for digest in (hashlib.sha256, hashlib.sha1, hashlib.md5):
+                self.assertNotIn(bare, digest(source).hexdigest())
+        self.assertNotIn(bare, storage_name.replace('-', ''))
+        self.assertNotIn(storage_name.rsplit('/', 1)[-1][:12], bare)
+
+    def test_the_document_names_the_stored_conversion_its_view_serves(self):
+        from tests.test_read_audit import member_client
+
+        member = member_client(self.reviewer)
+        # a later round converts the file again (C8, R2-30's shape): another stored file, another name; the kept copy,
+        # asked with round 1's tag, is answered 200 with the new conversion under another tag
+        enc, rev, name, _ = self.stored(SHELLED_WORD)
+        base = f'/api/encounters/{enc.pk}'
+        first = member.get(f'{base}/original?view=1')
+        self.assertEqual((first.status_code, first.content), (200, STORED_PDF))
+        named = member.get(base).json()['document']['view_conversion']
+        self.assertEqual(named, customer.view_conversion_of(enc, Round.objects.get(encounter=enc, number=1)))
+        self.assert_an_opaque_name(named, enc, name, STORED_PDF)
+        with self.assertNumQueries(2):  # its first file and shown_view, read once: no statement added
+            self.assertEqual(customer.document_json(enc)['view_conversion'], named)
+        round_, convert, _ = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
+        self.assertEqual((round_.number, round_.state), (2, Round.DONE))
+        convert.assert_called_once_with(SHELLED_WORD)
+        self.assertNotEqual(round_.view_pdf_storage_name, name)
+        document = member.get(base).json()['document']
+        self.assertEqual((document['view_url'], document['converted'], document['view_conversion']),
+                         (f'{base}/original?view=1', True, customer.view_conversion_of(enc, round_)))
+        self.assertNotEqual(document['view_conversion'], named)
+        self.assert_an_opaque_name(document['view_conversion'], enc, round_.view_pdf_storage_name, FRESH_PDF)
+        kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((kept.status_code, kept.content), (200, FRESH_PDF))
+        self.assertNotEqual(kept['ETag'], first['ETag'])
+        # later rounds that read the same stored file back (a clean Word file's answers rounds: jobs._keep_view records
+        # the file round 1 stored on each) name the same conversion, so the page keeps its viewer - never a redraw that
+        # resets the member's zoom and place - and the kept copy is still answered 304
+        clean, clean_rev, clean_name, digest = self.stored(CLEAN_WORD)
+        clean_base = f'/api/encounters/{clean.pk}'
+        held = member.get(f'{clean_base}/original?view=1')
+        reused = member.get(clean_base).json()['document']['view_conversion']
+        self.assertNotEqual(reused, named)  # another document's conversion: another name
+        for number in (2, 3):
+            round_, convert, _ = self.next_round(clean, clean_rev, Round.ANSWERS, self.answering())
+            convert.assert_not_called()
+            self.assertEqual((round_.number, round_.view_pdf_storage_name, round_.view_pdf_sha256),
+                             (number, clean_name, digest))
+            self.assertEqual(member.get(clean_base).json()['document']['view_conversion'], reused, number)
+            again = member.get(f'{clean_base}/original?view=1', HTTP_IF_NONE_MATCH=held['ETag'])
+            self.assertEqual((again.status_code, again.content), (304, b''))
+        # a file a later round refused names none (I1-1); a first round still converting names none until it stores one
+        refused, refused_rev, _, _ = self.stored(IMPORTING_WORD)
+        round_, _, _ = self.next_round(refused, refused_rev, Round.ANSWERS, f.FakeCoder())
+        self.assertEqual((round_.number, round_.state, round_.failure_kind), (2, Round.FAILED, CONVERT))
+        self.assertEqual((customer.document_json(refused)['view_conversion'],
+                          customer.document_json(refused)['converted']), (None, False))
+        busy = f.encounter(self.ws, self.reviewer, title='Synthetic Word note')
+        f.upload(busy, self.reviewer, data=CLEAN_WORD, filename='synthetic-note.docx', media_type=DOCX)
+        jobs.start_round(busy, busy.current_revision, Round.UPLOAD, self.reviewer)
+        self.assertEqual(customer.document_json(busy)['view_conversion'], None)
+
+    # --- integrated refutation round 2, I2-1 (viewer-0): a converted view's 200 and 304 name the stored conversion they
+    # serve at that read (X-CPT-View-Conversion, the detail's view_conversion), so the page draws the bytes it holds only
+    # when they are the conversion the detail it shows names: the click's early view is read before that detail, and a
+    # later round may store another conversion between the two reads; any other view names none
+
+    def test_the_views_answers_name_the_stored_conversion_they_serve(self):
+        from studio import api
+        from tests.test_read_audit import member_client
+
+        member = member_client(self.reviewer)
+        enc, rev, _, _ = self.stored(SHELLED_WORD)
+        base = f'/api/encounters/{enc.pk}'
+        named = member.get(base).json()['document']['view_conversion']
+        first = member.get(f'{base}/original?view=1')
+        self.assertEqual((first.status_code, first.content, first[api.VIEW_CONVERSION_HEADER]), (200, STORED_PDF, named))
+        held = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((held.status_code, held.content, held[api.VIEW_CONVERSION_HEADER]), (304, b'', named))
+        # the race: the click's view read while round 1's conversion is served, then a later round stores its own, then
+        # the detail is read - the two name different conversions, which is what the page compares
+        early = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        round_, _, _ = self.next_round(enc, rev, Round.ANSWERS, self.answering(), converted=FRESH_PDF)
+        self.assertEqual((round_.number, round_.state), (2, Round.DONE))
+        fresh = member.get(base).json()['document']['view_conversion']
+        self.assertEqual((early.status_code, early[api.VIEW_CONVERSION_HEADER]), (304, named))
+        self.assertNotEqual(fresh, named)
+        # asked again with the kept tag: 200, the new bytes, under the name the detail now gives; a re-open of those, 304
+        kept = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=first['ETag'])
+        self.assertEqual((kept.status_code, kept.content, kept[api.VIEW_CONVERSION_HEADER]), (200, FRESH_PDF, fresh))
+        again = member.get(f'{base}/original?view=1', HTTP_IF_NONE_MATCH=kept['ETag'])
+        self.assertEqual((again.status_code, again[api.VIEW_CONVERSION_HEADER]), (304, fresh))
+        # the download and a refused file's 404 name none; nor does any view that is not a converted Word document's
+        self.assertNotIn(api.VIEW_CONVERSION_HEADER, member.get(f'{base}/original'))
+        refused, refused_rev, _, _ = self.stored(IMPORTING_WORD)
+        self.next_round(refused, refused_rev, Round.ANSWERS, f.FakeCoder())
+        gone = member.get(f'/api/encounters/{refused.pk}/original?view=1')
+        self.assertEqual(gone.status_code, 404)
+        self.assertNotIn(api.VIEW_CONVERSION_HEADER, gone)
+        for label, make in (('a PDF', lambda e: f.upload(e, self.reviewer)),
+                            ('a text', lambda e: f.upload(e, self.reviewer, data=b'Synthetic text note.\n',
+                                                          filename='synthetic-note.txt', media_type='text/plain')),
+                            ('a paste', lambda e: f.paste(e, self.reviewer))):
+            with self.subTest(label):
+                other = f.encounter(self.ws, self.reviewer, title='Synthetic note')
+                make(other)
+                shown = member.get(f'/api/encounters/{other.pk}/original?view=1')
+                self.assertEqual(shown.status_code, 200)
+                self.assertNotIn(api.VIEW_CONVERSION_HEADER, shown)
+                self.assertIsNone(member.get(f'/api/encounters/{other.pk}').json()['document']['view_conversion'])
+
 
 # --- refutation round 1, view[0] and loss[3]: a resumed Word round that recorded its own view reads, records and shows
 # one PDF (refutation round 2, rounds[2]: a round that stored no view has none to read back, and converts afresh) ----
@@ -2897,110 +3293,114 @@ def pin_requests(ws, user, data):
         (role, request.sha256, hashlib.sha256(fable_client.canonical(request.params)).hexdigest(), request.attempts)
         for role, request in fake.calls)
 
-# Measured on release 1's tree - an export of 9ee0c85be (docx_package.py blob c4aa942e) - with exactly these builders,
-# CONVERTER_SOCKET='' and laned_pin_pdf: per shape, the upload's sha256, the package's sha256 as the converter saw it,
-# and each request (role, request.sha256, sha256 of the exact parameters, attempts). A failure here is the alarm, never
-# a value to re-pin: what the coder is sent for a clean Word file may change only through the coding-path gate (D358).
+# Measured on release 1's tree at the coder's effort "high" (R2-33, D433 and D434; release 1's setting was "max", at
+# which lane D first measured them on an export of 9ee0c85be, docx_package.py blob c4aa942e): twice and independently
+# (the lead's m1 and m2) on release 1's commit 816045c7 (cpt-studio tree bc0729bb9596) with
+# CPT_STUDIO_CODING_EFFORT=high, with exactly these builders, CONVERTER_SOCKET='' and laned_pin_pdf: per shape, the
+# upload's sha256, the package's sha256 as the converter saw it, and each request (role, request.sha256, sha256 of the
+# exact parameters, attempts). The effort moved every request.sha256 and parameters sha256 and nothing else: the
+# uploads, the packages and the attempts are as at "max". A failure here is the alarm, never a value to re-pin: what
+# the coder is sent for a clean Word file may change only through the coding-path gate (D358).
 RELEASE_1_WORD_REQUESTS = {
     'plain, a PAGE field': (
         'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
         'd84af93d617847be4ce5cadb6bf4928f2b8b978baa18e0d48190135d5d108502',
         (
-            ('reader', 'f709a11872af1092c3d2bdd05d1812f668704a13a6ee1122fbbf908686974073',
-             '68c703d43e7a01ac70ad99d4e7c3891ec9dfada9886572f6c440cb360c5a44a4', 2),
-            ('checker', '7984eb2c9f1346ae50469c590f219d941814a2cef0d0fc12cf8658ffde00226b',
-             '28166ac5c600bf9a554dba95b0baf4247e7e0916cdb47c6f8059384219a7fe82', 2),
+            ('reader', '7b5a7edaf8cd646d09cdbb28b6cf8f9111daf830b389c9c4ba6a4c31c8d2d9f2',
+             '0b4559423486b087a7c540aff307cdd66f8944ba906f25dc015ee9283f559909', 2),
+            ('checker', '6ae3baa72e07529746da968a4f3f62d716948fc38d2d82a8c6e8c6bf83b10586',
+             '0619e6d3b483d7c2788433e3fffb1dd6770f0aae48cf3811628eb87e2ea522fd', 2),
         )),
     'an object with its preview': (
         'd0c7171d5eae0ef9364030f85829773e45067a5e069e317283e4d8f86f03c4a7',
         '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
         (
-            ('reader', 'd9cabd6201c9bb8f620658a00d45d856ae3c8b8da35a1030cf9feedcaa600479',
-             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
-            ('checker', '0b2f18d2a4242fdb45897101a6f2439e504bd7fb76128dd0710c6ea57003c4ec',
-             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+            ('reader', '488fafce876c304ca85cac7212f8fd54eb61cc6a38b369c0c44fb973395ccd25',
+             '7ca37765cb8e5767f47e85d920a1053636876008cae82b4d9edbbd3c6b42054c', 2),
+            ('checker', '3e1df38df52353eb68c09acd84eb5cca07eef8616386935095af903ff334d797',
+             '5c4ab9bb89b0575af8d1993ad3af1e889cd9f7058accef35dff167680e1be830', 2),
         )),
     'a removed field with its result': (
         '25137a7f789df0ea6af37ad33cf9ad683c7ddb2d0ba877a7877af70db96bbf43',
         '613e01ffb636b81b7f1edebdcac6c60e453a097cc04dce75e064bf8c6a70c02f',
         (
-            ('reader', '01a7ca13a7979444e54998b1d877f37f3053d3b65b21c3b0f3630ca42114e8fc',
-             'e109717c963e7109ea5b6e3391b73086cd1ca65b005c2c8bf56e6c05e6ed5aee', 2),
-            ('checker', '4253486b77447dbdc28aee03c989ff4593c312690c8b5d952cb341b3e8e8fc49',
-             'c3d8c454ab6e2dca8ed087c8e84c106af89094d36f3e53bacf7d54acdb069a71', 2),
+            ('reader', 'b1f085b0eb04b05b413bb15fff25b9c3a21960fd45b5c75f44702cefdfa13106',
+             '5ef14ebe01cd8048c651b5b7bf285de5409e8887e7403ee72645b410fd409c49', 2),
+            ('checker', '56e297d4a2faefb95411e379b613246bed922024e6fd870f34afd291cf48090c',
+             '684b03e181de815129161cd49fd3f16ec4bf67cecadfca7a63c68b5a23daafeb', 2),
         )),
     'an empty w:object': (
         '27c59b326f1103b050508b562fb006702079a2e84034999aed9066dec7dbfccf',
         '32f07c4f214665ec879f1599d33b017f0f5d04d5e5b36b4b818e58194ac0ccf4',
         (
-            ('reader', '01dc7df561b2ff2b7b000d61b2ca6597a2bd51ae27a486020106815abd381929',
-             'd3e960badb04ed07e3bf21fe5d32778433db789a47360b9f53c35242147a8543', 2),
-            ('checker', '9881a03fa672d5edd661739b254454caff698866072a3ef6161da9880b54e493',
-             '9cca02dd8a243dc8e366e4eb62b6e25c5f3a97a9df4e1602593b06e36f381229', 2),
+            ('reader', '7e29aa355464b975f9eb31abfcf4311fcc70b7d190baabae09b0dc9c9f4bde70',
+             'eaeabfd1c897df440837752cb5973b37230517ca2f6e0667a6670a2fbf82d992', 2),
+            ('checker', '416f26132dfd16e20cef34f6540c307351c16e149696499e4582cb9ff6ff83b6',
+             'a3ac93f2c0be679a59f1eb5fa70ac623e66a1360bc631447e7c7cf98b64441bb', 2),
         )),
     'an empty removed w:fldSimple in an IF result': (
         '368e6cc9070892c286fed7ada17add47b9fab127dd6f70274a9e3763946e63d6',
         '68220ffe7297ccf93d6c9ba824378283a724739585361e0c87eeb049dfadc708',
         (
-            ('reader', 'e9b37c3c1d90b981899903698a2da031389689bbe7c0f970ee415f6dee044c47',
-             '32d3060fa79f0d2150e6bf852085a51f91dc2305f074ad61ec89dfcfd2c0e84d', 2),
-            ('checker', '674ab65d12ab01a11799ee5f481e050652d65b1b01979ba1f20e07cc20a43dbb',
-             '7efcc22bc6ac127d3d17b0a977935cca6011731c6f34f973bfa42c78f5d82265', 2),
+            ('reader', '975e8a457a006a5511f1dcc2ddbb6462a8f4423eac18206cd4213974cce13ff4',
+             '3d55db8375f872e14e9ee0193f93688a048f9ff0af9e9ea3494e6470d07ee30a', 2),
+            ('checker', '7ff43b9f49218c3fefaac0db91f9beaa35b841a0befbc8be02811032a52fda84',
+             'af75156555ea3340a38634fe27051ce812f170da9cfa84c6c671aabf22b3ad0a', 2),
         )),
     'an object with its preview and a w:movie': (
         'c5d359bd2527e317f13c58ea5708178fa1663108d99539c882fa56281f09b652',
         '165642bd7b0c837f97ab65a3054c5b9070219f05d70f444d844978c5c4b3f3ff',
         (
-            ('reader', '08937266afd8a758c016bda66236375b308cf1533e8d1b3b67a460c7498b1cb0',
-             '137755718dd66ca5219de868e4674e7851a8fdb886c6b0de6407ccb3884dfc6b', 2),
-            ('checker', 'ab540ec6cd2b3ab7caefe0a9d4585b152278e8056835ecfa103c68ce19a8d387',
-             'cd8fc196d4e5964cec53fc421e60a4fbffd222384c8303a97a0c496b98eea1df', 2),
+            ('reader', '2512b6faa611e720eaf459184c560b88d65afec4b1059198fcfed5fde812840d',
+             '7ca37765cb8e5767f47e85d920a1053636876008cae82b4d9edbbd3c6b42054c', 2),
+            ('checker', '28ae07ff747f1836f261dbda52f4ee6cf259a3aebaa1e2d199528a54e1d5a82a',
+             '5c4ab9bb89b0575af8d1993ad3af1e889cd9f7058accef35dff167680e1be830', 2),
         )),
     'an altChunk that holds nothing': (
         'c7d8cb0ca87e9c1da7eabb414aecfa3c6eb7d6cae5ddd308add238223fdf8fcf',
         '1a7ca20d8f460e0ee40bf098c84ff0cd3d2ff05c240795a829ebc57b11ec4793',
         (
-            ('reader', '0761e4bd54a7dbe0fb97ed821a89fead977537a28a3d69f9657e1d91892ff207',
-             'c165680749a6f130302dab82d0e6e6e3fed7f8bd8e2c9d9ee7c7bdfcf374929d', 2),
-            ('checker', '3679ae9d6361cf6f1b5139a75da91a09e28fd2ade3553fc0b4dd46109792ebec',
-             '7c8c38865ffd06dc1f2fc4ce41cd2330c3f84c73fd938bb0279fd9692bcf5c1a', 2),
+            ('reader', '0d14990deab6669168b63b4ae055408e80e916cd24215c3737ab368b5ea499a2',
+             'd117db80365d8f84c41e4e76fe5e710a138ce13e9c596573d4282a7e34e058fa', 2),
+            ('checker', 'e55c09f4fd58c7fc31bff528243e3ccbe4f918ce1b0b58d0b5fd71206c9efab1',
+             '38cb11876980fbd4fc7e4fb90600c0f13123dfd874c7ec7adabf5548b3cfb548', 2),
         )),
     'a picture INCLUDEPICTURE in an IF result': (
         '59beff8ba0f3272b659e9688770c88d8c337172f06190eaf44336066b66c4828',
         'aa4c439652576e60b6c37dd38af74dbbc0948309a297d9e7b01b9ef0a4d53ab9',
         (
-            ('reader', '0886fe679f3f8cc5902af5ced4514dda6063e46b5e8f147c29b887a7c25f78ed',
-             'b9882167d1e57c2ee227660f35c779b9e46659b2d5671d2e50d564c9d8df73e0', 2),
-            ('checker', '1a6d4a08379419c85e679f3fa4faeaaf1d2c718f8ccbd978b6936fae64319773',
-             'a8dc9902c92aa69a205bbe6a4647a2188d8daff206d06d0fd546f4d1f48d57cf', 2),
+            ('reader', '21f99259e39d9ed8196c7f115aef33e4b4be5f1cbe393964eab1e3e80fdb64ee',
+             '14848fa616d0d514ca27ccca8920d45e7dc2c0227a2dfe31ce92c69f9ff6c80e', 2),
+            ('checker', '8896f5738d62b60ffaba3eebea1446bfdf6f8952de27874f4ee46e92eff5eb0c',
+             '0c15743e63ec22edaed89794e8605c519e01f9883189c069b5cd8eab683564e7', 2),
         )),
     'a removed field in a HYPERLINK instruction, plain result': (
         'd80e298b0d73c8fae0a16ef126d550dcdf14f6a3357d9d03e31ed1e20694a2a4',
         '45e0d8196c736dd3578f47a6af006a48187422b233df4581753337ba9f7f9b15',
         (
-            ('reader', 'e3e69de51ff0379f2e93d8d0c2e8364a0488292cd4e4af2c6ec0ee8f3fcce005',
-             '8754b7f48f07ab0f31eedfa404bbf469f79aeb89aa194529bcb4e962cae342d9', 2),
-            ('checker', '93c2679d01ae5ef8301516c095e950fd85fc28603bc385ee32342de19304fa64',
-             'e19e673bc57c94c89af657c7983985a4f3a2d867c3865804995ace17f695aae7', 2),
+            ('reader', '3767c6e33b2b4ebb7123f6436ca8042fa314de29f77bf2490bdee2d22ed1c303',
+             '311053fb24fc264bf26e7245d319b60ede510421f39e3ce43222ae3d4f79b9c5', 2),
+            ('checker', '88435c5567d1b1a7507a2808d818a8b42b33a6f22c478a9ed59d3e549cde3dfb',
+             'a1059bdcb71cb7132495bf7847f05c513fcc598410685db8c384a46159d92a46', 2),
         )),
     'a removed field in a QUOTE instruction, plain result': (
         'a5189f553064ec1ce8cc24d07f4f3d4a0748fc690d6bc87a1b3f25d41510d97c',
         '2f271ef6ad028d35fbdbea5360f75823a26269610f2e9ed7b35cd474429663a9',
         (
-            ('reader', '0399dda60d6e4edc624f239e0c078feea9ee71acbce4200d52d8d3a345b6662f',
-             '94111e17890d7e49c57772a43e2cd3aa31122e5f83ed0e59a4bacfa3630721b8', 2),
-            ('checker', 'dead2940e10127cee732bc249eaa398036b74bb8e5177b8f1e186c57a6924524',
-             '4039eae8168d430c0e4fb8fae517fc1621aa601dc1e65d72d0840e1bbaf75c0d', 2),
+            ('reader', 'e6a66dfc46bd280b6e6a31bc6d3c13500182e44efb413d9868956bc762426db9',
+             'cf8370a8a32c381e7df990f3b3d161074d00dab1cf112e3b3f8a9281e9d0a758', 2),
+            ('checker', '55cfbec7d66db4565c6d7d218fbdccd8f4fef69c9b977a31dc023d7873b6eb48',
+             'af79df7134274501b72ff13338e430a71dd745ecf9a3b5fa113e362e3583dd43', 2),
         )),
 }
 
 
 class CleanWordRequestTests(TestCase):
     """Refutation round 1, refuse[0] (the Word case of R2-3, D358): a Word file that needs no refusal and no QUOTE is
-    sent to the coder exactly as release 1 sent it - the package, every request and its parameters - over clean shapes
-    that include what release 2 reads and leaves alone: an object with its preview, an empty w:object, an import that
-    holds nothing, a picture INCLUDEPICTURE in a field's result, and a removed field in an exempt outer field's
-    instruction (HYPERLINK, QUOTE)."""
+    sent to the coder exactly as release 1 sent it, at the coder's effort R2-33 set ('high'; release 1's was 'max') -
+    the package, every request and its parameters - over clean shapes that include what release 2 reads and leaves
+    alone: an object with its preview, an empty w:object, an import that holds nothing, a picture INCLUDEPICTURE in a
+    field's result, and a removed field in an exempt outer field's instruction (HYPERLINK, QUOTE)."""
 
     @classmethod
     def setUpClass(cls):

@@ -15,7 +15,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import client_contract, customer, models, paging, read_audit
+from studio import client_contract, customer, models, paging, rate, read_audit, request_meta
 from tests.support import coding as f
 from tests.test_cux_client_contract import RELEASE_1_BUILD
 from tests.test_frontend import PLAIN_STATIC
@@ -204,7 +204,7 @@ class PagedListTests(ListCase):
 
     def test_no_documents(self):
         self.check(0)
-        self.assertEqual(self.page(), {'encounters': [], 'next': None, 'total': 0})
+        self.assertEqual(self.page(), {'encounters': [], 'next': None, 'total': 0, 'workspace': str(self.ws.pk)})
 
     def test_one_document(self):
         self.check(1)
@@ -526,16 +526,102 @@ class ListPlanTests(TestCase):
 
 # --- the search (R2-20) --------------------------------------------------------------------------------------------
 
-import logging  # noqa: E402 - this section's own imports
+import base64  # noqa: E402 - this section's own imports
+import contextlib  # noqa: E402
+import io  # noqa: E402
+import logging  # noqa: E402
 import random  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import urllib.parse  # noqa: E402
+from importlib import import_module  # noqa: E402
 from pathlib import Path  # noqa: E402
 from unittest import mock  # noqa: E402
 
 from django.conf import settings  # noqa: E402
+from django.contrib.sessions.models import Session  # noqa: E402
 
 SEARCH = '/api/encounters/search'
+# Every table a read, an event, a limit or a session writes, which a search's words must never reach (integrated
+# refutation round 1, phileak-0 and phileak-2: the whole row of each, never only its free-text fields).
+SEARCH_MARKER_TABLES = (models.AccessRecord, models.AccessRecordRepeat, models.SecurityEvent, models.AuditEvent,
+                        models.RateWindow, models.SessionAccountLink)
+
+
+def search_marker_forms(word: str) -> set:
+    """Every form of ``word`` a no-leak guard looks for (integrated refutation round 1, phileak-0), as the bench's
+    markerForms reads a marker (ops/bench/bench.cjs, records[4]): the word as typed and case-folded, and its base64 and
+    base64url cores at the three byte alignments (the characters the word's bytes alone decide, wherever it starts)."""
+    forms = {word, word.casefold()}
+    data = word.encode('utf-8')
+    for pad in range(3):
+        encoded = base64.b64encode(b'\0' * pad + data).decode('ascii')
+        core = encoded[-(-pad * 4 // 3):(pad + len(data)) * 4 // 3]
+        forms |= {core, core.replace('+', '-').replace('/', '_')}
+    return forms
+
+
+UUID_SHAPE = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+
+def answer_retry(answer) -> int:
+    """A 429's whole seconds to wait, as its body and its Retry-After give them (the same number)."""
+    seconds = answer.json()['retry_after']
+    assert isinstance(seconds, int) and 0 < seconds <= 60 and answer['Retry-After'] == str(seconds), answer.items()
+    return seconds
+
+
+def search_answer_headers(answer, sign_in) -> dict:
+    """The headers a search's answer carries, every one with its fixed value or an id (the sign-in reference)."""
+    from studio import access
+    return {'Content-Type': 'application/json', 'Content-Length': str(len(answer.content)), 'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'Content-Security-Policy': access.SecurityHeadersMiddleware.CSP,
+            'X-Frame-Options': 'DENY', 'Cross-Origin-Opener-Policy': 'same-origin', 'Vary': 'Cookie',
+            'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', 'X-Robots-Tag': 'noindex, nofollow',
+            'X-CPT-Actor': str(sign_in)}
+
+
+def every_row() -> dict:
+    """Every row of every table the project and Django keep, read through each model's base manager: {table: {pk: {column:
+    value}}} - what a search's closed-world check compares as a whole (integrated refutation round 2, I2-3)."""
+    from django.apps import apps
+    rows = {}
+    for model in apps.get_models(include_auto_created=True):
+        pk = model._meta.pk.attname
+        rows[model._meta.db_table] = {str(row[pk]): row for row in model._base_manager.values()}
+    return rows
+
+
+def rows_changed(before, after) -> dict:
+    """{table: {'added': [row], 'removed': [row], 'changed': [(pk, {column: (before, after)})]}} for each table whose rows
+    are not what they were: rows added, rows gone, and every column that moved."""
+    out = {}
+    for table in sorted(set(before) | set(after)):
+        old, new = before.get(table, {}), after.get(table, {})
+        added = [new[key] for key in sorted(set(new) - set(old))]
+        removed = [old[key] for key in sorted(set(old) - set(new))]
+        changed = [(key, {column: (old[key].get(column), new[key][column]) for column in new[key]
+                          if old[key].get(column) != new[key][column]})
+                   for key in sorted(set(old) & set(new)) if old[key] != new[key]]
+        if added or removed or changed:
+            out[table] = {'added': added, 'removed': removed, 'changed': changed}
+    return out
+
+
+def search_marker_hits(texts, words) -> list:
+    """[(form, the text's index)] of every form of each of ``words`` in ``texts``: each text read as it is and percent-
+    and plus-decoded; the word's own forms matched case-folded, a base64 core as written (its case is its content)."""
+    hits = []
+    for index, text in enumerate(texts):
+        readings = {text, urllib.parse.unquote_plus(text)}
+        folded = {reading.casefold() for reading in readings}
+        for word in words:
+            plain = {word, word.casefold()}
+            for form in sorted(search_marker_forms(word)):
+                if (form in plain and any(form.casefold() in reading for reading in folded)) or \
+                        (form not in plain and any(form in reading for reading in readings)):
+                    hits.append((form, index))
+    return hits
 ROW_TEXT = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'row_text.cjs'
 LOWER_TABLE = Path(settings.BASE_DIR) / 'tests' / 'frontend' / 'lower_table.cjs'
 # Awkward rows (R2-20's property test): titles a browser and PostgreSQL may lower-case or trim differently, SQL's own
@@ -659,6 +745,51 @@ class SearchCase(ListCase):
         self.assertEqual(answer.status_code, status, answer.content[:300])
         self.assertEqual(answer['Cache-Control'], 'no-store')
         return answer.json()
+
+    def assert_a_search_leaves_only_ids_counts_and_fixed_words(self, before, after, session_before, found, refused,
+                                                                logged, printed, marked, now):
+        """The closed-world half of the no-leak test (integrated refutation round 2, I2-3): every row of every table, the
+        member's session, the two answers' headers and cookies, every log record and everything printed, compared as a
+        whole with what a served search (found) and a refused one (refused, over the member's limit) may leave."""
+        from tests.test_read_audit import REQUEST_ID
+        self.maxDiff = None
+        member, practice = self.reviewer.pk, self.ws.pk
+        sign_in = uuid.UUID(str(session_before[request_meta.SESSION_SIGN_IN_REF]))
+        changed = rows_changed(before, after)
+        # the served search's one read record, the refused one's one event, and the member's list.member window: nothing
+        # else in any table, no row changed or removed anywhere (the session's own row included)
+        record, = changed.pop('studio_accessrecord', {}).get('added') or [None]
+        self.assertIsNotNone(record, changed)
+        self.assertRegex(str(record.pop('id')), UUID_SHAPE)
+        self.assertEqual(record, {
+            'created_at': now, 'host': request_meta.CPT, 'view': read_audit.MEMBER_LIST, 'actor_id': member,
+            'actor_kind': 'human', 'actor_role': models.Membership.REVIEWER, 'workspace_id': practice,
+            'encounter_ids': [str(marked.pk)], 'export_id': None, 'count': 1, 'as_of': now,
+            'filters': {'list': 'search', 'before': None}, 'reason': '', 'outcome': Record.SERVED, 'client': '127.0.0.1',
+            'sign_in_ref': sign_in, 'request_id': REQUEST_ID})
+        event, = changed.pop('studio_securityevent', {}).get('added') or [None]
+        self.assertIsNotNone(event, changed)
+        self.assertRegex(str(event.pop('id')), UUID_SHAPE)
+        self.assertEqual(event, {
+            'created_at': now, 'event': 'list.rate_limited', 'actor_id': member, 'actor_label': '', 'subject_id': member,
+            'workspace_id': practice, 'data': {'scope': 'list.member', 'limit': 1, 'window_seconds': 60},
+            'client': '127.0.0.1', 'sign_in_ref': sign_in, 'request_id': REQUEST_ID})
+        windows = changed.pop('studio_ratewindow', {})
+        self.assertEqual([{column: value for column, value in row.items() if column != 'id'} for row in windows.get('added', [])],
+                         [{'scope': 'list.member', 'key': str(member), 'window_start': rate.window_start(60), 'count': 2,
+                           'last_at': now}], windows)
+        self.assertEqual((windows.get('removed'), windows.get('changed')), ([], []))
+        self.assertEqual(changed, {}, 'nothing else, anywhere')
+        # the session: what it was, nothing added or changed
+        self.assertEqual(dict(self.member.session.items()), session_before)
+        # the answers: exactly these headers, each with its fixed value or an id; no cookie
+        for answer, extra in ((found, {}), (refused, {'Retry-After': str(answer_retry(refused))})):
+            self.assertEqual(dict(answer.items()), {**search_answer_headers(answer, sign_in), **extra}, answer.status_code)
+            self.assertEqual(list(answer.cookies), [], answer.status_code)
+        # the log: the refused answer's one line, the method and the path only; nothing printed
+        self.assertEqual([(name, level, msg, args, exc) for name, level, msg, args, exc in logged],
+                         [('django.request', 'WARNING', '%s: %s', ('Too Many Requests', SEARCH), None)])
+        self.assertEqual(printed, '')
 
 
 class SearchPropertyTests(SearchCase):
@@ -787,7 +918,8 @@ class SearchTests(SearchCase):
     def test_the_answer_is_the_lists_shape_newest_first_with_no_total(self):
         made = mixed_practice(self.ws, self.reviewer, 30)
         answer = self.search('list note')
-        self.assertEqual(set(answer), {'encounters', 'next', 'total'})
+        self.assertEqual(set(answer), {'encounters', 'next', 'total', 'workspace'})
+        self.assertEqual(answer['workspace'], str(self.ws.pk))
         self.assertEqual((answer['next'], answer['total']), (None, None))
         joined, _pages = self.walk()
         self.assertEqual(answer['encounters'], joined)  # every row holds the words: the whole list, rows identical
@@ -882,7 +1014,8 @@ class SearchTests(SearchCase):
         f.encounter(self.ws, self.reviewer, title='Synthetic note')
         for words in ('n' * 241, 'note\x00', 'note\ud800', '\ud800'):
             with self.subTest(words=repr(words)), mock.patch.object(customer, 'search_page') as asked:
-                self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None,
+                                                       'workspace': str(self.ws.pk)})
                 asked.assert_not_called()
         with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
             self.assertEqual(self.search('n' * 240)['encounters'], [])  # at the bound: searched
@@ -914,7 +1047,8 @@ class SearchTests(SearchCase):
             with self.subTest(words=f'{len(words)} characters'):
                 self.assertEqual(customer.search_length(words), length)
                 with mock.patch.object(customer, 'search_page', wraps=customer.search_page) as asked:
-                    self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None})
+                    self.assertEqual(self.search(words), {'encounters': [], 'next': None, 'total': None,
+                                                           'workspace': str(self.ws.pk)})
                 self.assertEqual(asked.called, read)
         membership = membership_of(self.reviewer)  # search_page's own guard counts the same way
         self.assertEqual(searched(membership, 'i\u0307' * 121), [str(dotted.pk)])
@@ -930,37 +1064,62 @@ class SearchTests(SearchCase):
         self.assertFalse(Record.objects.filter(view=read_audit.MEMBER_LIST).exists())
 
     def test_a_marker_searched_for_is_in_no_record_event_log_or_header(self):
-        self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))  # one window of the limit
-        f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
-        seen = []
+        # every form of the words (search_marker_hits: as typed, case-folded, percent- and plus-decoded, base64 and
+        # base64url) in every row of SEARCH_MARKER_TABLES, the session store decoded, the answers' headers and cookies,
+        # every log record as the console handler formats it - its exception text included - and what was printed
+        # (integrated refutation round 1, phileak-0 and phileak-2)
+        now = self.enterContext(mock.patch.object(timezone, 'now', return_value=timezone.now()))()  # one window
+        marked = f.encounter(self.ws, self.reviewer, title='Synthetic ZZ-SEARCH-MARKER note')
+        seen, logged, printed = [], [], io.StringIO()
+        formatter = logging.Formatter()
 
         class Keep(logging.Handler):
             def emit(self, record):
-                seen.append(f'{record.getMessage()} {record.args!r}')
+                seen.append(f'{formatter.format(record)} {record.args!r}')
+                logged.append((record.name, record.levelname, record.msg, record.args, record.exc_info))
         keep = Keep(level=logging.DEBUG)
         root = logging.getLogger()
         root.addHandler(keep)
         previous = root.level
         root.setLevel(logging.DEBUG)
+        self.assertEqual(self.member.get(LIST).status_code, 200)  # the client's handler built before anything is watched
+        before = every_row()
+        session_before = dict(self.member.session.items())
         try:
-            found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
-                                     content_type='application/json')
-            with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(1, 60)):  # and a refused one
-                refused = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker'}),
-                                           content_type='application/json')
+            with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(printed):
+                found = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker', 'before': None}),
+                                         content_type='application/json')
+                with self.settings(LIST_PAGES_LIMIT_PER_MEMBER=(1, 60)):  # and a refused one
+                    refused = self.member.post(SEARCH, data=json.dumps({'text': 'zz-search-marker'}),
+                                               content_type='application/json')
         finally:
             root.removeHandler(keep)
             root.setLevel(previous)
         self.assertEqual((found.status_code, refused.status_code), (200, 429))
         self.assertEqual(len(found.json()['encounters']), 1)
-        stored = json.dumps([[str(value) for value in row.__dict__.values()] for row in
-                             [*Record.objects.all(), *models.SecurityEvent.objects.all(), *models.RateWindow.objects.all()]])
+        # integrated refutation round 2, I2-3 (failclosed-1): CLOSED WORLD - what the two searches left anywhere is
+        # compared as a whole with what they may leave (ids, counts, times and fixed words), so no form of the words,
+        # derived however (hex, a digest, base32, ...), can hide in a row, a session, a header or a log record; the
+        # form checks below are the second line
+        self.assert_a_search_leaves_only_ids_counts_and_fixed_words(before, every_row(), session_before, found, refused,
+                                                                   logged, printed.getvalue(), marked, now)
+        stored = [json.dumps(list(table.objects.values()), default=str) for table in SEARCH_MARKER_TABLES]
+        store = import_module(settings.SESSION_ENGINE).SessionStore()
+        sessions = list(Session.objects.all())
+        self.assertTrue(sessions)  # the member's own session is read, decoded
+        for row in sessions:
+            stored += [row.session_data, json.dumps(store.decode(row.session_data), default=str)]
         for answer in (found, refused):
-            stored += json.dumps(dict(answer.items()))
-        stored += json.dumps(seen)
+            stored.append(json.dumps(dict(answer.items())))
+            stored.append(json.dumps([morsel.OutputString() for morsel in answer.cookies.values()]))  # Set-Cookie
+        stored += [json.dumps(seen), printed.getvalue()]
         self.assertTrue(models.SecurityEvent.objects.filter(event='list.rate_limited').exists())
-        for marker in ('zz-search-marker', 'ZZ-SEARCH-MARKER', 'search-marker'):
-            self.assertNotIn(marker, stored)
+        self.assertEqual(search_marker_hits(stored, ('zz-search-marker', 'search-marker')), [])
+        # the control: each form, written where a guard reads, is found
+        for form in sorted(search_marker_forms('zz-search-marker')):
+            with self.subTest(form=form):
+                self.assertTrue(search_marker_hits([json.dumps({'reason': form})], ('zz-search-marker',)))
+                self.assertTrue(search_marker_hits([urllib.parse.quote_plus(form)], ('zz-search-marker',)))
 
     def test_searches_count_toward_the_members_limit_and_a_first_page_does_not(self):
         f.encounter(self.ws, self.reviewer, title='Synthetic note')
@@ -974,6 +1133,48 @@ class SearchTests(SearchCase):
         built.assert_not_called()  # refused unread: the refused search never ran
         self.assertEqual((answer.status_code, answer.json()['error'], listed.status_code), (429, 'rate_limited', 200))
         self.assertEqual(models.SecurityEvent.objects.filter(event='list.rate_limited').count(), 1)
+
+
+class PracticeNamedTests(SearchCase):
+    """Integrated refutation round 1, exact-0 (I1-2): a member active in two practices - the oldest active membership
+    is the one read, on every request - whose access to it is turned off between a list's pages, or a search's. Every
+    page and search answer names the practice it was read in, as its member.list record does, so the page can tell
+    another practice's page from its own list's (the page then draws none of it: app.js, I1-2)."""
+
+    def setUp(self):
+        super().setUp()
+        models.Membership.objects.create(user=self.reviewer, workspace=self.other_ws, role=models.Membership.REVIEWER)
+        self.ids = {'A': set(), 'B': set()}
+        for _ in range(60):  # interleaved by created_at, so A's cursor has B's older rows to page to
+            for name, ws, title in (('A', self.ws, 'Synthetic list note'), ('B', self.other_ws, 'Synthetic B list note')):
+                self.ids[name] |= {str(enc.pk) for enc in mixed_practice(ws, self.reviewer, 1, title=title)}
+        self.names = {'A': str(self.ws.pk), 'B': str(self.other_ws.pk)}
+
+    def access_to_a(self, active):
+        models.Membership.objects.filter(user=self.reviewer, workspace=self.ws).update(active=active)
+
+    def read_in(self, answer, practice, *, rows_given=True):
+        """The answer names ``practice``, its rows are that practice's, and its record names both."""
+        record = models.AccessRecord.objects.filter(view=read_audit.MEMBER_LIST).latest('created_at')
+        rows = {row['id'] for row in answer['encounters']}
+        self.assertEqual(answer['workspace'], self.names[practice])
+        self.assertTrue((rows or not rows_given) and rows <= self.ids[practice], practice)
+        self.assertEqual((str(record.workspace_id), set(record.encounter_ids)), (self.names[practice], rows))
+
+    def test_each_page_and_search_names_the_practice_it_was_read_in_across_an_access_change(self):
+        first = self.page('documents')
+        self.read_in(first, 'A')
+        self.access_to_a(False)  # A's owner turns the member's access to A off: B is read now, with A's cursor
+        self.read_in(self.page('documents', before=first['next']), 'B')
+        self.read_in(self.search('list note'), 'B')  # a first search, too
+        self.access_to_a(True)  # and back: the oldest active membership, A, is read again
+        found = self.search('list note')
+        self.read_in(found, 'A')
+        self.access_to_a(False)
+        self.read_in(self.search('list note', before=found['next']), 'B')
+        self.read_in(self.page('queue'), 'B', rows_given=False)
+        recent = self.page('recent')
+        self.assertEqual(recent['workspace'], self.names['B'])
 
 
 @override_settings(STORAGES=PLAIN_STATIC)

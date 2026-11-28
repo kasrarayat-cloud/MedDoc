@@ -771,12 +771,12 @@ class AppPhaseCodingTests(TemporaryDirectoryTest):
         details = self.app(app_args(self.tmp))
         self.assertIn(('replace', 'disabled', RULING, None), self.world.timeline)
         self.assertEqual((self.world.coding, self.world.interpreter), ('live', None))
-        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'max', 'credentials_loaded': True,
+        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'high', 'credentials_loaded': True,
                                              'figures': install.coding_figures()})
         self.assertEqual(details['authorization_ref'], RULING)
         for gone in ('provider_mode', 'participants', 'participant_credentials_loaded', 'access_checks', 'interpreter'):
             self.assertNotIn(gone, details)
-        self.assertIn('(coding live, effort max)', details['summary'])
+        self.assertIn('(coding live, effort high)', details['summary'])
         # nothing was sent, so nothing was scanned: the only container the coder's file reached was the loader check
         self.assertFalse([event for event in self.world.timeline if event[0] == 'helper'])
 
@@ -787,7 +787,7 @@ class AppPhaseCodingTests(TemporaryDirectoryTest):
         self.assertIn(('replace', 'disabled', '', None), self.world.timeline)
         self.assertIsNone(self.world.coding)  # not named: replace_services' default, as a stand-in always took it
         self.assertEqual((details['coding']['mode'], details['coding']['credentials_loaded']), ('disabled', False))
-        self.assertIn('(coding disabled, effort max)', details['summary'])
+        self.assertIn('(coding disabled, effort high)', details['summary'])
 
     def test_an_earlier_revisions_modes_on_the_args_are_never_read(self):
         # (d): the app phase neither requires nor mounts Corti's or Astra's file, whatever an args object carries

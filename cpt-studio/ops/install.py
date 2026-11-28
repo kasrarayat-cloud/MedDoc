@@ -77,8 +77,9 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # A stopped worker finishes the stage it is in (run_worker: each of its threads finishes its current job), which may be
 # inside a send. The Fable coding build's one stage (studio.jobs.stage_code, DECISIONS D351-D353) prepares the document
 # - a Word file is converted in a bounded child of at most 70 s (studio.fable.document.CONVERT_SECONDS) - then makes two
-# streamed sends one after the other, the reader's and the checker's, each of up to 96,000 output tokens at effort max:
-# about 1,000 s each at the slowest rate measured (studio.jobs.CODE_STALE_SECONDS' own reckoning), so one round can run
+# streamed sends one after the other, the reader's and the checker's, each of up to 96,000 output tokens (max_tokens):
+# about 1,000 s each at the slowest rate measured, whatever the effort - the bound is max_tokens at that rate
+# (studio.jobs.CODE_STALE_SECONDS' own reckoning) - so one round can run
 # past 2,000 s and the 1,800 s of the pipeline before it would cut the checker's send into an UNKNOWN outcome. The stage
 # must be recorded before Docker kills the worker, or a request that reached the vendor is left 'sending' (HARNESS.md 8,
 # 11.2). So 3,600 s outlasts the stage, and it is studio.jobs.CODE_STALE_SECONDS, the age at which the stale-stage sweep
@@ -221,7 +222,14 @@ CODER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
          'loader': 'load_anthropic_credentials', 'setting': 'ANTHROPIC_CREDENTIALS_FILE',
          'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)}
 CODING_MODES = ('disabled', 'live')  # --coding-mode: the installer never starts a pair replaying
-CODING_EFFORT = 'max'  # the owner's setting (the build specification, section 4.1)
+# The coder's effort, the owner's setting (the build specification, section 4.1): 'high' since release 2 (R2-33), 'max'
+# in release 1. The owner approved a paid test of five synthetic documents at both efforts (D433); at 'high' every
+# code, unit and modifier matched 'max', at 84% less cost (D434). runtime_env gives it as CPT_STUDIO_CODING_EFFORT to
+# the web and the worker (service_args: the incoming web and a switch-back's earlier pair included, so a switch-back runs
+# release 1's pair at 'high' too, the effort D434 measured release 1's image at) and to every one-shot of the app image
+# (the migrate, dispose and manage runs); never to the converter (converter_args), the database (db_args) or a root
+# helper, which run no coder.
+CODING_EFFORT = 'high'
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
 PASSAGE_DATA = f'{APP}/studio/reference/data'
@@ -1120,35 +1128,41 @@ _PATH = rf'/(?:{_SEGMENT}(?:/{_SEGMENT})*/?)?'
 _METHOD = r'(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)'
 # A fixed word of a worker message: a failure kind or a stage kind, never text an exception carries.
 _WORD = r'[a-z][a-z_]{0,39}'
+# The web's lines, by the stream each is kept from (KEPT_STREAM_FORMATS): its access lines, which gunicorn writes to
+# stdout, and its error lines - gunicorn's own life cycle and django.request's - which gunicorn's error log and Django's
+# console handler write to stderr (deploy/gunicorn.conf.py, cptstudio/settings.py LOGGING).
+WEB_ACCESS_FORMATS = tuple(re.compile(pattern) for pattern in (
+    # gunicorn's access line in release 1's format (deploy/gunicorn.conf.py: A2)
+    rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
+    rf'\d{{3}} (?:\d+|-) \d+ms (?:[0-9a-f]{{32}}|-) (?:{_UUID}|-)',
+    # and in the format before it (36e550ab's deploy/gunicorn.conf.py: no request id, no actor), which the retired
+    # web of the release-1 install and of any switch-back to such a revision wrote (refutation round 1,
+    # installer-6): its address, path, status, size and time, nothing more
+    rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
+    rf'\d{{3}} (?:\d+|-) \d+ms',
+))
+WEB_ERROR_FORMATS = tuple(re.compile(pattern) for pattern in (
+    # gunicorn's own life cycle; since release 2 (R2-9) also how a worker ended - the kernel's kill with gunicorn
+    # 23's own hint ('Perhaps out of memory?'), an exit code, or a web that could not boot a worker - each in
+    # numbers and fixed words only, so a deploy that removes the container keeps the evidence. 'Reason: App failed
+    # to load.' comes only from a web that loads the application in each worker (an earlier revision's, after a
+    # switch-back), and with two or more workers failing at once gunicorn 23 may write no 'Reason:' line at all.
+    # Release 2's web loads the application in gunicorn's master before gunicorn writes a line
+    # (deploy/gunicorn.conf.py, preload_app): one that cannot load writes the fixed line KEPT_STDERR_FORMATS keeps
+    # instead, then the error's text, which is never kept. The worker class is a fixed word:
+    # deploy/gunicorn.conf.py's own (ops/test_install_r2web.py ties the two).
+    r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
+    r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
+    r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
+    r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?(?: Perhaps out of memory\?)?|WORKER TIMEOUT \(pid:\d+\)|'
+    r'Autorestarting worker after current request\.|Reason: (?:Worker failed to boot|App failed to load)\.|'
+    r'Worker \(pid:\d+\) exited with code \d+\.?)',
+    # django.request's warning and error lines name the path alone (its traceback lines are dropped)
+    rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
+    rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
+))
 KEPT_LOG_FORMATS = {
-    'web': tuple(re.compile(pattern) for pattern in (
-        # gunicorn's access line in release 1's format (deploy/gunicorn.conf.py: A2)
-        rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
-        rf'\d{{3}} (?:\d+|-) \d+ms (?:[0-9a-f]{{32}}|-) (?:{_UUID}|-)',
-        # and in the format before it (36e550ab's deploy/gunicorn.conf.py: no request id, no actor), which the retired
-        # web of the release-1 install and of any switch-back to such a revision wrote (refutation round 1,
-        # installer-6): its address, path, status, size and time, nothing more
-        rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
-        rf'\d{{3}} (?:\d+|-) \d+ms',
-        # gunicorn's own life cycle; since release 2 (R2-9) also how a worker ended - the kernel's kill with gunicorn
-        # 23's own hint ('Perhaps out of memory?'), an exit code, or a web that could not boot a worker - each in
-        # numbers and fixed words only, so a deploy that removes the container keeps the evidence. 'Reason: App failed
-        # to load.' comes only from a web that loads the application in each worker (an earlier revision's, after a
-        # switch-back), and with two or more workers failing at once gunicorn 23 may write no 'Reason:' line at all.
-        # Release 2's web loads the application in gunicorn's master before gunicorn writes a line
-        # (deploy/gunicorn.conf.py, preload_app): one that cannot load writes the fixed line KEPT_STDERR_FORMATS keeps
-        # instead, then the error's text, which is never kept. The worker class is a fixed word:
-        # deploy/gunicorn.conf.py's own (ops/test_install_r2web.py ties the two).
-        r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
-        r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'
-        r'Booting worker with pid: \d+|Handling signal: [a-z0-9]+|Worker exiting \(pid: \d+\)|Shutting down: Master|'
-        r'Worker \(pid:\d+\) was sent SIG[A-Z]+!?(?: Perhaps out of memory\?)?|WORKER TIMEOUT \(pid:\d+\)|'
-        r'Autorestarting worker after current request\.|Reason: (?:Worker failed to boot|App failed to load)\.|'
-        r'Worker \(pid:\d+\) exited with code \d+\.?)',
-        # django.request's warning and error lines name the path alone (its traceback lines are dropped)
-        rf'(?:Not Found|Forbidden|Bad Request|Unauthorized|Method Not Allowed|Gone|Conflict|Payload Too Large|'
-        rf'Too Many Requests|Internal Server Error|Service Unavailable): {_PATH}',
-    )),
+    'web': WEB_ACCESS_FORMATS + WEB_ERROR_FORMATS,
     # the worker's own messages (studio/jobs.py and run_worker's log calls), each with its ids, numbers and fixed words
     'worker': tuple(re.compile(pattern) for pattern in (
         r'CPT Studio worker (?:started|stopped)\.',
@@ -1180,6 +1194,13 @@ KEPT_LOG_FORMATS = {
 # Release 2's web writes this one to stderr when its application cannot load in gunicorn's master (cptstudio/wsgi.py).
 KEPT_STDERR_FORMATS = {
     'web': (re.compile(r'CPT Studio web: the application could not be loaded\.'),),
+}
+# Integrated refutation round 1, installer-0: the same holds for every line of the web. gunicorn's access log writes a
+# client's decoded path unescaped, so one unauthenticated request could write a life-cycle line (a memory kill, a worker
+# boot, a boot failure) or a django.request line into stdout, at a time of its choosing. So the web's access lines are
+# kept from stdout alone and every other kept line of it from stderr alone: (stdout's formats, stderr's).
+KEPT_STREAM_FORMATS = {
+    'web': (WEB_ACCESS_FORMATS, WEB_ERROR_FORMATS + KEPT_STDERR_FORMATS['web']),
 }
 
 
@@ -1296,13 +1317,23 @@ STATIC_TOKEN = 'static-file'
 
 def ids_only_lines(role, *streams) -> tuple:
     """(kept, dropped) of a container's output (``streams``: `docker logs --timestamps` stdout, then stderr): the lines
-    in one of the role's KEPT_LOG_FORMATS - or, in the second stream (stderr) alone, its KEPT_STDERR_FORMATS - each with
-    its timestamp, in time order; every other line - a traceback, a DETAIL line, a line with no timestamp - counted in
-    ``dropped`` and never copied (A13)."""
+    in one of the role's KEPT_LOG_FORMATS - or, in the second stream (stderr) alone, its KEPT_STDERR_FORMATS; for a role
+    of KEPT_STREAM_FORMATS (the web), in that stream's own formats alone - each with its timestamp, in time order; every
+    other line - a traceback, a DETAIL line, a line with no timestamp - counted in ``dropped`` and never copied (A13). A
+    line is one Docker entry, with Docker's own time: a stream is cut at a line feed alone, as Docker cuts it, never at
+    the other breaks str.splitlines knows (a carriage return, a file separator, NEL, a line separator...), after which a
+    request's path could start a line of its own with a time it chose (integrated refutation round 1, installer-0)."""
     kept, dropped = [], 0
     for index, stream in enumerate(streams):
-        patterns = KEPT_LOG_FORMATS.get(role, ()) + (KEPT_STDERR_FORMATS.get(role, ()) if index == 1 else ())
-        for line in (stream or b'').decode('utf-8', 'replace').splitlines():
+        if role in KEPT_STREAM_FORMATS:
+            own = KEPT_STREAM_FORMATS[role]
+            patterns = own[index] if index < len(own) else ()
+        else:
+            patterns = KEPT_LOG_FORMATS.get(role, ()) + (KEPT_STDERR_FORMATS.get(role, ()) if index == 1 else ())
+        lines = (stream or b'').decode('utf-8', 'replace').split('\n')
+        if lines[-1] == '':
+            lines.pop()  # the line feed that ends the stream's last entry
+        for line in lines:
             stamp_match = DOCKER_TIMESTAMP_RE.match(line)
             body = line[stamp_match.end():] if stamp_match else None
             if body is not None and any(pattern.fullmatch(body) for pattern in patterns):
@@ -7162,7 +7193,7 @@ def pair_modes(mode, participants=None, interpreter=None, coding=None) -> str:
 
 
 def coding_summary(mode) -> str:
-    """'coding live, effort max': how an app phase starts its pair (the Fable coding build runs no other provider)."""
+    """'coding live, effort high': how an app phase starts its pair (the Fable coding build runs no other provider)."""
     return f'coding {mode}, effort {CODING_EFFORT}'
 
 

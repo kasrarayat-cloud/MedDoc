@@ -58,8 +58,8 @@ QUEUE_DEADLINE = timedelta(minutes=120)
 REQUEUE_SECONDS = 2  # a job queued again (no free slot) waits this long in its thread
 STALE_SWEEP_SECONDS = 60  # how often the running worker settles stages a dead thread or process left 'running'
 # A running code job no thread of this process runs is taken for dead after this long: two sends of up to 96,000
-# output tokens at max effort (about 1,000 s each at the slowest rate measured, 100 tokens a second) and the document's
-# preparation, with margin. The worker's own threads are never swept (_live).
+# output tokens (about 1,000 s each at the slowest rate measured, 100 tokens a second, whatever the effort: the bound is
+# max_tokens at that rate) and the document's preparation, with margin. The worker's own threads are never swept (_live).
 CODE_STALE_SECONDS = 3600
 RECONCILE_NOTE_CHARS = 12
 STOPPED_MESSAGE = 'Stopped by a workspace member; nothing more was sent.'

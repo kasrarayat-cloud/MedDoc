@@ -62,7 +62,7 @@ def encounter():
         'document': {'name': 'synthetic-note.pdf', 'media_type': 'application/pdf', 'size': 1024, 'kind': 'upload',
                      'original_url': f'/api/encounters/{eid}/original',
                      'view_url': f'/api/encounters/{eid}/original?view=1', 'view_media_type': 'application/pdf',
-                     'converted': False},
+                     'converted': False, 'view_conversion': None},
         'context': {'service_date': '2026-11-02', 'insurance': 'medicare'},
         'progress': {'phase': 'done', 'busy': False, 'started_at': '2026-11-20T10:00:01.123Z',
                      'finished_at': '2026-11-20T10:04:59Z', 'server_time': '2026-11-20T10:05:30Z', 'message': '',
@@ -99,7 +99,7 @@ def listing():
     # release 2 (R2-19, R2-24): one page of a list, its next cursor and the list's total; each row's opens_pdf
     return {'encounters': [{'id': 'e1', 'title': 'Synthetic', 'state': 'processing', 'state_label': 'Processing',
                             'service_date': None, 'insurance': 'unknown', 'created_at': '2026-11-20T10:00:00Z',
-                            'kind': 'paste', 'opens_pdf': False}], 'next': None, 'total': 1}
+                            'kind': 'paste', 'opens_pdf': False}], 'next': None, 'total': 1, 'workspace': 'w1'}
 
 
 def mutated(make, change):

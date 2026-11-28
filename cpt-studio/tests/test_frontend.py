@@ -239,7 +239,8 @@ class ShellTemplateTests(SimpleTestCase):
         self.assertIn('name="password" type="password"', html)
         audit = _audit(html)
         self.assertFalse(audit.inline_script)
-        self.assertEqual(audit.script_sources, [])
+        # one same-origin script: session_news.js (integrated refutation round 1, session-0; tests/test_session_news.py)
+        self.assertEqual(audit.script_sources, ['/static/studio/session_news.js'])
         self.assertEqual(audit.handlers, [])
         self.assertEqual(audit.external, [])
 
@@ -319,13 +320,18 @@ class CustomerFixtureTests(SimpleTestCase):
         docs = self.encounters()
         self.assertEqual(len(docs), 12)
         self.assertEqual(DOCUMENT_KEYS, {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url',
-                                         'view_media_type', 'converted'})
+                                         'view_media_type', 'converted', 'view_conversion'})
         for name, doc in docs.items():
             with self.subTest(name):
                 self.assertEqual(set(doc), ENCOUNTER_KEYS)
                 self.assertEqual(set(doc['document']), DOCUMENT_KEYS)
                 self.assertIn(doc['document']['view_media_type'], ('application/pdf', 'text/plain', None))
                 self.assertIs(type(doc['document']['converted']), bool)
+                # I1-12, I2-2: the stored conversion a Word document's view serves (a UUID), else none
+                if doc['document']['converted']:
+                    self.assertRegex(doc['document']['view_conversion'], UUID)
+                else:
+                    self.assertIsNone(doc['document']['view_conversion'])
                 self.assertEqual(doc['document']['view_url'] is None, doc['document']['view_media_type'] is None)
                 self.assertRegex(doc['id'], UUID)
                 self.assertIn(doc['state'], STATES)
@@ -351,7 +357,7 @@ class CustomerFixtureTests(SimpleTestCase):
         # release 2 (R2-19, R2-16, R2-24): a list answer is one page - its rows, the next page's cursor (none: the whole
         # list is on it) and the list's total - and a row says opens_pdf when its document's first stored file is a PDF
         # of at most 1 MiB, which is what each encounter fixture's document block shows
-        self.assertEqual(set(CONTRACT['list']['keys']), {'encounters', 'next', 'total'})
+        self.assertEqual(set(CONTRACT['list']['keys']), {'encounters', 'next', 'total', 'workspace'})
         listing = _customer('encounters.json')
         self.assertEqual(set(listing), set(CONTRACT['list']['keys']))
         self.assertEqual((listing['next'], listing['total']), (None, len(listing['encounters'])))
@@ -362,7 +368,9 @@ class CustomerFixtureTests(SimpleTestCase):
                 self.assertIs(row['opens_pdf'], document['kind'] == 'upload' and document['media_type'] == LIST_ROW_PDF_MEDIA_TYPE
                               and document['size'] <= 1024 * 1024)
         self.assertEqual({row['opens_pdf'] for row in listing['encounters']}, {True, False})
-        self.assertEqual(_customer('encounters-empty.json'), {'encounters': [], 'next': None, 'total': 0})
+        session = _customer('session.json')['workspace']['id']  # the practice the page was read in (I1-2)
+        self.assertEqual(listing['workspace'], session)
+        self.assertEqual(_customer('encounters-empty.json'), {'encounters': [], 'next': None, 'total': 0, 'workspace': session})
 
     def test_every_code_row_names_its_line(self):
         # the fix pass, section 1: the coding review's codes are lines L1..Ln in its order, the codes the second check
@@ -694,7 +702,7 @@ class BrowserLogicTests(SimpleTestCase):
                                         r'wherever it is drawn$')
 
     def test_scripts_parse(self):
-        for path in (STATIC / 'app.js', STATIC / 'ops_session.js', STATIC / 'ops_second_factor.js',
+        for path in (STATIC / 'app.js', STATIC / 'ops_session.js', STATIC / 'ops_second_factor.js', STATIC / 'session_news.js',
                      ROOT / 'ops' / 'dev_preview_server.cjs'):
             result = subprocess.run([self.node, '--check', str(path)], capture_output=True, text=True, timeout=60, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)

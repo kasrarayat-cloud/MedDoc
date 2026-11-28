@@ -447,26 +447,9 @@ function findPassages(source, passage) {
 }
 
 // --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) --------------
-// A page's text is its text items joined in order, as the PDF library reads them (pageText), with three steps of its own:
-// an item drawn a second time over an earlier one of the same words and font height to look bold (an overprint copy:
-// overprintCopies) is left out and never marked; a line break follows every item the library ends a line with; and
-// Unicode format characters (\p{Cf}) are dropped, as the library drops them. Quoted words are located by their own
-// characters only: white space is ignored entirely, format characters are dropped and Unicode NFKC applies, on both
-// sides; a match is exact-case first, case-blind only where there is no exact-case one, and always of whole characters of
-// that text; and at each end of a match a word edge is asked for (keepsEdge): two drawings that do not visibly continue
-// each other meet at an edge (R2b); else, where the quote's end is a letter or a digit, the page's character beside the
-// match may not be a letter, a digit or a mark - a Han ideograph or a hiragana character is a word of its own (R2, R2c);
-// and a number's own decimal point or thousands separator keeps its digits in one word (R2a). So a quote is never
-// counted inside a longer word or number as the library's text reads (CORE-UX-DESIGN.md section 8 records where that
-// text differs from what is drawn: letter-spaced text, a browser's drawing order). Whole characters of the text as the
-// library reads it are not always the text as drawn:
-// two letters the PDF declares for one drawn ligature are two characters (only the word-edge rule keeps a mark from
-// beginning or ending between them), and a spacing accent drawn over a letter is a character of its own (the letter can
-// be marked without it). The words are looked for on the quote's page; only where they are not there, on that page and
-// the next joined, keeping a passage that starts on the quote's page and runs onto the next (a character never spans two
-// pages). Nothing is ever marked on another page, and nothing partial or nearest is marked. A quote with no page is
-// looked for on every page. Every occurrence found is marked and counted. Nothing here reads what the words mean: it
-// reads Unicode character classes, NFKC and the items' geometry only.
+// The rule's one statement is CORE-UX-DESIGN.md, "Marking a quoted passage": a page's text (pageText, overprintCopies),
+// a quote located by its own characters, its word edges (keepsEdge) and its pages (locateQuote). Nothing here reads
+// what the words mean: Unicode character classes, NFKC and the items' geometry only.
 
 // One character with the marks that follow it (or marks with nothing before them): how a text is cut into characters
 // where the browser cannot cut it into the characters a person sees (Intl.Segmenter). The PDF viewer never runs there
@@ -1258,7 +1241,7 @@ const state = {
   // it lets go of when it signs out (clearScreen)
   confirming: null, objectUrls: new Set(),
   // release 2: the session's last read (R2-17); the worker made ready ahead (R2-10); whether a worker started (R2-12)
-  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, pdfStarted: false,
+  sessionReadAt: 0, standbyOn: false, standbyFails: 0, pdfStandby: null, standbyTimer: 0, standbyFrame: 0, standbyIdle: 0, pdfStarted: false,
   // the PDFs kept for a re-open, oldest view first (R2-15); the click's early view and the list's hints (R2-16); the
   // ends that spare no view (forgetMemory, R2-18): a document opening across one keeps no copy
   keptViews: new Map(), early: null, viewHints: new Map(), wipes: 0,
@@ -1307,10 +1290,12 @@ function listPage(data) {
   const rows = whole ? data : data?.encounters;
   const next = whole ? null : data?.next ?? null;
   const total = whole ? null : data?.total ?? null;
-  if (!Array.isArray(rows) || (next !== null && typeof next !== 'string') || (total !== null && !(Number.isInteger(total) && total >= 0))) {
+  const workspace = whole ? null : data?.workspace ?? null;
+  if (!Array.isArray(rows) || (next !== null && typeof next !== 'string') || (total !== null && !(Number.isInteger(total) && total >= 0))
+    || (workspace !== null && typeof workspace !== 'string')) {
     throw new ApiError('The server answered with a document list this page cannot read.');
   }
-  return { rows: objects(rows), next: next || null, total };
+  return { rows: objects(rows), next: next || null, total, workspace };
 }
 
 // The list's description for `count` documents.
@@ -1823,7 +1808,8 @@ async function api(path, { method = 'GET', json, form, poll = false } = {}) {
     goToAccount();
     throw new ApiError('Choose a new password to continue.', 403, data);
   }
-  if (isClientOutdated(response.status, data)) {
+  // a 404 to the search that is no JSON is release 1's web after a switch-back, which has no search (I1-3)
+  if (isClientOutdated(response.status, data) || (response.status === 404 && !isJson && path === SEARCH_URL)) {
     showUpdateNotice();
     throw new ApiError(OUTDATED_TEXT, 409, data);
   }
@@ -1974,13 +1960,15 @@ function endEntrance() {
 }
 
 // Boot's first route: at once from the shell's session (R2-17), else after reading it, as release 1; the worker made
-// ready ahead is asked for after it (R2-10).
+// ready ahead is asked for `first` ms after the next frame, the one that draws the route (R2-10, D-R2-54), and an end
+// before that frame cancels it (endStandby).
 function firstRoute() {
   const carried = shellSession();
   const begin = () => {
     route();
     state.standbyOn = true;
-    scheduleStandby(PDF_STANDBY.first);
+    if (typeof requestAnimationFrame !== 'function') scheduleStandby(PDF_STANDBY.first);
+    else state.standbyFrame = requestAnimationFrame(() => { state.standbyFrame = 0; scheduleStandby(PDF_STANDBY.first); });
   };
   if (!carried) return loadSession().then(begin);
   state.session = carried;
@@ -2126,8 +2114,10 @@ async function showList(name, serial) {
     return;
   }
   if (serial !== state.routeSerial || list !== state.list) return;
+  // exact-1: a first page of another practice than the page shows is never drawn either
+  if (page.workspace && state.session?.workspace?.id && otherPractice({ workspace: state.session.workspace.id }, page)) return;
   const next = name === 'workspace' ? null : page.next;
-  Object.assign(list, { loaded: true, total: page.total,
+  Object.assign(list, { loaded: true, total: page.total, workspace: page.workspace,
     browse: { rows: page.rows, next, auto: 0, failed: false, problem: '',
       button: next !== null && typeof IntersectionObserver !== 'function' } });
   // C2: the search runs in the page up to LOCAL_SEARCH_MAX documents, else on the server
@@ -2141,6 +2131,16 @@ async function showList(name, serial) {
   watchListEnd(list);
   drawListMore();
   applySearch();
+}
+
+// I1-2, exact-1: a page of another practice than the one shown (the member's access changed meanwhile) - a later page
+// or a search against the list's first page, a first page against the session - is never drawn: the session is read
+// again, then the route drawn afresh once it names another practice.
+function otherPractice(list, page) {
+  if (page.workspace === list.workspace) return false;
+  const serial = state.routeSerial;
+  loadSession().then(session => { if (serial === state.routeSerial && session?.workspace?.id !== list.workspace) route(); });
+  return true;
 }
 
 function closeList() {
@@ -2210,7 +2210,7 @@ async function loadMore(list, why) {
     failure = error.message;
   }
   list.loading = false;
-  if (list !== state.list) return;
+  if (list !== state.list || (page && otherPractice(list, page))) return;
   const shown = source === (list.found || list.browse);
   if (page) {
     // a page with no rows, or naming the same place again, is the end
@@ -2346,7 +2346,7 @@ async function searchDocuments(list) {
     failure = error.message;
   }
   list.searching = false;
-  if (list !== state.list) return;
+  if (list !== state.list || (page && otherPractice(list, page))) return;
   const due = list.again;
   list.again = false;
   if (list.query !== query) {
@@ -2439,7 +2439,10 @@ async function loadDocument(id, serial, silent, poll = false) {
       : messageView('The review could not be loaded.', error.message, true);
     return;
   }
-  if (serial !== state.routeSerial || older()) return;
+  if (serial !== state.routeSerial || older()) {
+    if (state.route?.id !== doc?.id) dropRefused(doc);  // I1-16: left before its answers; the route's abort kept it
+    return;
+  }
   state.reads.applied = read;
   state.poll.errors = 0;
   state.reconnecting = false;
@@ -2515,10 +2518,14 @@ function renderKey(doc) {
   return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
 }
 
-// What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original.
+// The stored conversion a Word document's view serves, as the server names it (a UUID), or none (I2-2).
+const conversionOf = value => (typeof value === 'string' && UUID.test(value) ? value : '');
+
+// What the viewer shows (the Word conversion served included: I1-12, I2-2): the page redraws it only when this
+// changes, so neither a poll nor a later round reading back the same conversion reloads the original.
 function viewerKey(doc) {
   const part = record(doc?.document);
-  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
+  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${conversionOf(part.view_conversion)} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
 }
 
 function renderDocument(doc, fresh, force = false) {
@@ -2720,6 +2727,7 @@ const PDF_STANDBY = { first: 500, next: 600, idle: 2000, fails: 2 };
 // R2-15: the bounds of the PDFs kept for a re-open; a view's tag, a quoted UUID (anything else is no tag).
 const KEPT_VIEWS = { documents: 6, bytes: 24 * 1024 * 1024 };
 const VIEW_TAG = new RegExp(`^(?:W/)?"(${UUID_PART})"$`, 'i');
+const CONVERSION_HEADER = 'X-CPT-View-Conversion';  // I2-1: the stored conversion a view's 200 or 304 served
 
 // A wait on the library that went past its time limit (withinLimit).
 class TimeLimit extends Error {}
@@ -2911,15 +2919,9 @@ function startWorker(viewer, address, loading) {
   });
 }
 
-// Downloads the document the viewer shows (A5): its view address, same origin with the browser's default credentials,
-// read chunk by chunk - each chunk calls `moved`, which restarts the stall timer - into one array of bytes. An answer that
-// is not 2xx, a fetch that fails and a body that breaks off all reject (the 'download' reason); so does an abort (the
-// viewer closed, or framed for another reason). The download is the page's own request, whatever drew the viewer - a
-// poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
-// member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
-// counted by the server either (studio.sessions.automatic).
-// R2-15: a kept view is asked for with its tag; a 304 hands back a copy of the kept bytes; any other answer, or a
-// failed request, drops them first, and the page's own abort leaves them kept. It answers {data, tag, held}.
+// The viewer's download of its view (A5, R2-15: CORE-UX-DESIGN.md, "The viewer's own worker, download and watchdog" and
+// "A re-open from page memory"), marked a poll; each chunk calls `moved`; a failure or an abort rejects. It answers
+// {data, tag, held, conversion}: the conversion the answer names (I2-1).
 async function downloadDocument(view, signal, moved) {
   const held = state.keptViews.get(view) || null;
   const headers = { [POLL_HEADER]: '1' };
@@ -2931,6 +2933,7 @@ async function downloadDocument(view, signal, moved) {
     if (!signal?.aborted) dropView(view, held);
     throw error;
   }
+  const conversion = conversionOf(response.headers?.get?.(CONVERSION_HEADER));
   if (held && response.status === 304) {
     try {
       await response.arrayBuffer?.();  // its empty body read, so the browser counts the request done, not cancelled
@@ -2941,7 +2944,7 @@ async function downloadDocument(view, signal, moved) {
     if (state.keptViews.get(view) !== held) throw new Error('The copy was let go of.');
     moved();
     keepView(view, held.tag, held.data);
-    return { data: held.data.slice(0), tag: held.tag, held: true };
+    return { data: held.data.slice(0), tag: held.tag, held: true, conversion };
   }
   dropView(view, held);
   // a 401 (the session ended) or a 403 (its password must change) is an end (R2-18)
@@ -2969,7 +2972,7 @@ async function downloadDocument(view, signal, moved) {
     data.set(chunk, at);
     at += chunk.byteLength;
   }
-  return { data, tag, held: false };
+  return { data, tag, held: false, conversion };
 }
 
 // R2-15: an opened PDF's bytes, kept in page memory under their tag - never a Blob, the Cache API, IndexedDB or Web
@@ -3030,22 +3033,15 @@ function pdfAssets() {
 
 // What this browser must have natively for the viewer to draw a PDF and mark its words. A browser without any of it is
 // not offered the viewer (the library is not even downloaded): the browser's own viewer is framed and the note says
-// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium only - Firefox and Safari were not
-// run; their versions are MDN's browser-compat-data for what is asked for here: each candidate deleted in the page and in
-// the library's worker before the library loaded (typeof read before and after, so a deletion that did not apply could
-// not pass), then the preview's PDFs and the walk's gi-02 opened and every quote chosen. Asked for here: what our own code
-// calls, what broke the drawing or the marking when deleted, and what the library calls with no stand-in on a path the
-// viewer can take that those documents did not (read in the library). Not asked for: what the legacy build puts back
-// itself when it is missing (each was seen present again once the library had run, and with each deleted the documents
-// drew and marked exactly as before) - Map and WeakMap getOrInsert and getOrInsertComputed, Math.sumPrecise, Promise.try,
-// Uint8Array fromBase64, toBase64, toHex, setFromBase64 and setFromHex, Iterator with its map, filter, toArray, flatMap,
-// forEach, some, every and find (take and drop in the page only), the seven new Set methods, URL.parse, and Response and
-// Blob bytes(); nor what it does not put back and the documents never needed: Uint8Array.fromHex, Iterator.from,
-// Iterator.prototype.reduce and Array.prototype.findLast and findLastIndex (the library calls none of them on a path the
-// viewer takes) and Float16Array (used only where it exists). The same goes for OffscreenCanvas, ImageDecoder,
-// CompressionStream and DecompressionStream, used only where they exist. Dynamic import() is this script's own syntax, so a
-// browser running the script has it; the library's own syntax (class static blocks: Chrome 94, Firefox 93, Safari 16.4)
-// is older than the newest built-in asked for here. A worker has its page's built-ins, so the page answers for the worker.
+// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium only, each candidate deleted in the
+// page and in the library's worker (typeof read before and after), then the preview's PDFs and the walk's gi-02 opened and
+// every quote chosen: asked for here is what our own code calls, what broke the drawing or the marking when deleted, and
+// what the library calls with no stand-in on a path the viewer can take. What the legacy build puts back
+// itself, and what it does not that the documents never needed, are listed in CORE-UX-DESIGN.md ("Browsers that mark");
+// Iterator take and drop are put back in the page only. OffscreenCanvas, ImageDecoder, CompressionStream and
+// DecompressionStream are used only where they exist. Dynamic import() is this script's own syntax, so a browser running
+// the script has it; the library's own syntax (class static blocks: Chrome 94, Firefox 93, Safari 16.4) is older than the
+// newest built-in asked for here. A worker has its page's built-ins, so the page answers for the worker.
 function pdfCapable() {
   return typeof IntersectionObserver === 'function'  // our code: pages are drawn only near the visible area
     && typeof ResizeObserver === 'function'  // our code: pages are refitted when the panel's width changes
@@ -3087,14 +3083,14 @@ function forgetPdfLibrary(loading) {
   state.pdfStarted = false;  // tried again at fresh addresses, so fetched again (R2-12)
 }
 
-// R2-10: the worker made ready ahead, asked for in `ms`, when the browser is idle.
+// R2-10: the worker made ready ahead, asked for in `ms`, when the browser is idle (one idle callback waits at a time).
 function scheduleStandby(ms) {
   clearTimeout(state.standbyTimer);
   state.standbyTimer = 0;
   if (!state.standbyOn) return;
   state.standbyTimer = setTimeout(() => {
     state.standbyTimer = 0;
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(startStandby, { timeout: PDF_STANDBY.idle });
+    if (typeof requestIdleCallback === 'function') state.standbyIdle ||= requestIdleCallback(() => { state.standbyIdle = 0; startStandby(); }, { timeout: PDF_STANDBY.idle });
     else startStandby();
   }, ms);
 }
@@ -3132,6 +3128,10 @@ function startStandby() {
 function endStandby() {
   clearTimeout(state.standbyTimer);
   state.standbyTimer = 0;
+  if (state.standbyFrame) cancelAnimationFrame(state.standbyFrame);
+  state.standbyFrame = 0;
+  if (state.standbyIdle && typeof cancelIdleCallback === 'function') cancelIdleCallback(state.standbyIdle);
+  state.standbyIdle = 0;
   const standby = state.pdfStandby;
   state.pdfStandby = null;
   standby?.end?.();
@@ -3171,6 +3171,12 @@ function forgetMemory(opening = '') {
   endStandby();
 }
 
+// I1-16: a document whose detail names no PDF view keeps no copy, whichever of its answers came first.
+function dropRefused(doc) {
+  const own = `/api/encounters/${doc?.id}/original?view=1`;
+  if (viewerKind(doc?.document) !== 'pdf') dropView(own, state.keptViews.get(own));
+}
+
 // Draws the PDF of a document viewed as one into #documentViewer (after a full redraw of the review page).
 function mountViewer(doc) {
   closeViewer();
@@ -3178,13 +3184,14 @@ function mountViewer(doc) {
   const view = safeViewUrl(element?.dataset?.viewUrl);
   if (!element || !view || viewerKind(doc?.document) !== 'pdf') {
     dropEarly();
+    dropRefused(doc);
     return;
   }
   // thread: the viewer's own worker; worker: the library's handle on it; download: the download's abort; watchdog: the
   // waits on the library (libraryWatchdog); quoteScroll: the quote's page while the scroll to it is under way; inputs: the
   // listeners that see the member scroll the viewer; queue and busy: the pages asked to be drawn, and the one drawing
   const viewer = {
-    element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, thread: null, worker: null, task: null,
+    element, view, conversion: conversionOf(record(doc?.document).view_conversion), name: documentName(record(doc?.document)), mode: 'loading', library: null, thread: null, worker: null, task: null,
     download: null, watchdog: null, pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null, chosen: null,
     markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: ZOOM_FIT, watch: null,
     resize: null, onScroll: null, inputs: [], unwatchRatio: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0,
@@ -3246,8 +3253,16 @@ async function openPdf(viewer) {
     fallbackViewer(viewer, 'library');
   });
   downloading = downloading || downloadFor(viewer, null);
-  const got = await downloading;
+  let got = await downloading;
+  // I2-1: drawn only as the conversion the detail names. The click's early answer, read before the detail, is asked
+  // again; any other is newer than the detail, which is read again (its redraw asks afresh)
+  if (got && early && got.conversion !== viewer.conversion && opening()) got = await downloadFor(viewer, null);
   if (!got || !opening()) return;
+  if (got.conversion !== viewer.conversion) {
+    startStall(viewer);
+    refreshDocument({ poll: true });
+    return;
+  }
   const { data, tag, held } = got;
   // R2-15: the copy kept (a tagged 200's, once opened) is made first: the library takes the array it is given
   const copy = tag && !held && data.byteLength <= KEPT_VIEWS.bytes ? data.slice(0) : null;
@@ -3561,6 +3576,11 @@ async function renderPage(viewer, page) {
     reading.catch(() => {});
     await watched(viewer, page.render.promise, page);
     const content = await reading;
+    // D-R2-54: the frame that ends a page's drawing is not one long task with all the rest: a later page (another is
+    // drawn) is shown in the next task; the first page shown, at once (R2-13), and its text, unless already prepared to
+    // be searched (a redraw, whose marks are then painted with it), prepared in the next task
+    const later = viewer.pages.some(other => other !== page && other.drawn);
+    if (later) await nextTask();
     if (!live()) return;
     const text = document.createElement('div');
     text.className = 'pdf-text';
@@ -3569,6 +3589,7 @@ async function renderPage(viewer, page) {
     page.layer = new library.TextLayer({ textContentSource: content, container: text, viewport });
     page.painted = [];
     await watched(viewer, page.layer.render(), page);
+    if (!later && !viewer.prepared.has(page.number)) await nextTask();
     if (!live()) return;
     for (const item of preparedPage(viewer, page.number, content).copies) page.layer.textDivs[item]?.setAttribute('data-overprint', '1');
     page.drawn = key;

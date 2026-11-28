@@ -42,15 +42,18 @@ Studio's: the activity names members of the workspace only.
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
 from django.db import connection
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 from . import decisions, jobs, models, paging, state
+from .fable import CONVERT, DOCUMENT
 from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_own_original
 
@@ -521,9 +524,33 @@ def _root_revision(encounter):
 
 
 def converted_view(encounter):
-    """The newest round of the encounter that stored the PDF its Word document was converted to, or None."""
+    """The newest round of the encounter that stored the PDF its Word document was converted to, or None: the record of
+    what a round read, which the record bundle and the operator's console keep. The doctor's page reads shown_view."""
     return (Round.objects.filter(encounter_id=encounter.pk, view_pdf_storage_name__isnull=False)
             .exclude(view_pdf_storage_name='').order_by('-number').first())
+
+
+def shown_view(encounter):
+    """The converted PDF the doctor's page shows and downloads (document_json, view_source, download_content): the newest
+    round that stored one, unless that round, or a round after it, ended failed on the Word file itself, when there is
+    none: CONVERT (the file refused - R2-28 step 7, C8, at a later round - or not converted), or DOCUMENT with no view of
+    its own (its own fresh conversion refused before it was stored: past the store's limit, jobs._keep_view, or past the
+    send limit, fable.document._pdf_document - integrated refutation round 1, I1-18). A refused file then reads as one
+    refused at its first round: no view (?view=1 404, a kept tag included; view_conversion null), the PDF download 409
+    OriginalOnly, the Word file by name only (integrated refutation round 1, bypass-0 and failclosed-0). A failure of
+    any other kind is not the Word file's and masks nothing (STORAGE included: a retry codes the file again), nor does a
+    DOCUMENT beside a view the round stored (that view is the conversion the round itself read), and a later round that
+    stores a view of its own shows it again. One statement, as converted_view."""
+    newest = (Round.objects.filter(encounter_id=encounter.pk)
+              .filter((Q(view_pdf_storage_name__isnull=False) & ~Q(view_pdf_storage_name=''))
+                      | Q(state=Round.FAILED, failure_kind__in=(CONVERT, DOCUMENT)))
+              .order_by('-number').first())
+    if newest is None or (newest.state == Round.FAILED and (
+            newest.failure_kind == CONVERT or (newest.failure_kind == DOCUMENT and not newest.view_pdf_storage_name))):
+        # CONVERT hides even a view the round recorded (a resumed round refused at its check fails CONVERT beside it);
+        # DOCUMENT only where the round stored none
+        return None
+    return newest
 
 
 def safe_name(name, fallback='original') -> str:
@@ -544,17 +571,20 @@ def _converted_file(view):
 class Shown(NamedTuple):
     """What the in-page viewer shows (release 2, R2-15), read from the rows alone: the stored file it serves (a
     SourceFile, or a Word document's converted view: anything with storage_name and sha256) - or None for a paste, whose
-    ``text`` it is - the content type it is served as and its file name."""
+    ``text`` it is - the content type it is served as and its file name; and for a Word document's converted view the
+    name of the stored conversion (view_conversion_of), which the view's answers carry so the page draws only the
+    conversion its detail names (integrated refutation round 2, I2-1)."""
     stored: object
     text: Optional[str]
     content_type: str
     filename: str
+    conversion: Optional[str] = None
 
 
 def view_source(encounter) -> Optional[Shown]:
     """What GET /api/encounters/<id>/original?view=1 shows, by view_content's own branches, or None when there is
     nothing to show - reading no stored file: the original PDF or text file, the pasted text, or for a Word document the
-    PDF the coding review read (converted_view)."""
+    PDF the coding review read (shown_view: none once a later round refused the file)."""
     source = original_file(encounter)
     if source is None:
         revision = _root_revision(encounter)
@@ -566,10 +596,10 @@ def view_source(encounter) -> Optional[Shown]:
     if source.media_type == TEXT:
         return Shown(source, None, TEXT_SERVED, safe_name(source.original_name))
     if source.media_type == DOCX:
-        view = converted_view(encounter)
+        view = shown_view(encounter)
         if view is None:
             return None
-        return Shown(_converted_file(view), None, PDF, converted_name(source))
+        return Shown(_converted_file(view), None, PDF, converted_name(source), view_conversion_of(encounter, view))
     return None
 
 
@@ -619,15 +649,16 @@ class Download(NamedTuple):
     extension: str
 
 
-def download_content(encounter, *, original=False) -> Optional[Download]:
+def download_content(encounter, *, original=False, recorded=False) -> Optional[Download]:
     """The document's download (see above), or None for a paste, which has none. A stored file that no longer matches
     its sha256 raises storage.OriginalCorrupted; a Word document with no converted PDF yet raises OriginalOnly unless
-    ``original`` asks for the Word file."""
+    ``original`` asks for the Word file - the doctor's, by shown_view (none once a later round refused the file); with
+    ``recorded`` (the operator's console), the record's, by converted_view."""
     source = original_file(encounter)
     if source is None:
         return None
     if source.media_type == DOCX and not original:
-        view = converted_view(encounter)
+        view = converted_view(encounter) if recorded else shown_view(encounter)
         if view is None:
             raise OriginalOnly(ORIGINAL_ONLY)
         return Download(read_own_original(encounter.workspace_id, _converted_file(view)), PDF, converted_name(source),
@@ -638,8 +669,25 @@ def download_content(encounter, *, original=False) -> Optional[Download]:
                     EXTENSIONS.get(source.media_type, 'bin'))
 
 
+def view_conversion_of(encounter, view) -> str:
+    """The name the doctor's page knows the converted PDF ``view`` serves by (``view``: a round with view_pdf_*, as
+    shown_view answers): a UUID derived with the site's key from the document and the stored file's name - never the
+    file's bytes, a hash of them or any words - so it names the stored file served, and nothing about its content. A
+    later round that reads back the same stored file (a reuse: jobs._keep_view records the file an earlier round stored)
+    keeps it; one that converts the file again stores another file, and another name (integrated refutation round 2,
+    viewer-1)."""
+    return str(uuid.UUID(salted_hmac('studio.customer.view_conversion', f'{encounter.pk}:{view.view_pdf_storage_name}',
+                                     algorithm='sha256').hexdigest()[:32]))
+
+
 def document_json(encounter) -> dict:
-    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view."""
+    """The document block: what was uploaded or pasted, its download (an upload's) and its in-page view.
+    ``view_conversion`` names the stored conversion a Word document's view serves (view_conversion_of shown_view), null
+    for any other document and for a Word document with no view: a later round that converts the file again (R2-28 step
+    7, C8) serves another PDF at the same view_url, so the page redraws its viewer whole when this changes (integrated
+    refutation round 1, viewer-0) - and only then: a later round that reads back the same file names the same
+    conversion, so the page keeps its viewer, its zoom and its place (integrated refutation round 2, viewer-1).
+    shown_view is read once, as before: no statement is added."""
     base = f'/api/encounters/{encounter.pk}/original'
     source = original_file(encounter)
     if source is None:
@@ -647,15 +695,17 @@ def document_json(encounter) -> dict:
         text = revision.pasted_text if revision is not None and revision.kind == Revision.PASTE else None
         return {'name': None, 'media_type': TEXT, 'size': len(text.encode('utf-8')) if text is not None else None,
                 'kind': Revision.PASTE, 'original_url': None, 'view_url': f'{base}?view=1' if text is not None else None,
-                'view_media_type': TEXT if text is not None else None, 'converted': False}
-    view_type, converted = None, False
+                'view_media_type': TEXT if text is not None else None, 'converted': False, 'view_conversion': None}
+    view_type, converted, conversion = None, False, None
     if source.media_type in (PDF, TEXT):
         view_type = source.media_type
-    elif source.media_type == DOCX and converted_view(encounter) is not None:
-        view_type, converted = PDF, True
+    elif source.media_type == DOCX:
+        shown = shown_view(encounter)
+        if shown is not None:
+            view_type, converted, conversion = PDF, True, view_conversion_of(encounter, shown)
     return {'name': source.original_name, 'media_type': source.media_type, 'size': source.size,
             'kind': Revision.UPLOAD, 'original_url': base, 'view_url': f'{base}?view=1' if view_type else None,
-            'view_media_type': view_type, 'converted': converted}
+            'view_media_type': view_type, 'converted': converted, 'view_conversion': conversion}
 
 
 # --- the round: progress, codes, questions -------------------------------------------------------------------------------------

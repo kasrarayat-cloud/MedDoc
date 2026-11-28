@@ -63,6 +63,9 @@ MIDDLEWARE = [
     # release 1 (RELEASE-1-SPEC 3.2; B3, B4, B5, A2): the session policy, which reads the signed-in user
     'studio.sessions.SessionPolicyMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # integrated refutation round 1, avail-0: a database that cannot be reached answers 503 (studio.db_unavailable, with
+    # the urlconfs' handler500 for what another middleware raises)
+    'studio.db_unavailable.DatabaseUnavailableMiddleware',
 ]
 ROOT_URLCONF = 'cptstudio.urls'
 TEMPLATES = [{
@@ -88,10 +91,14 @@ DATABASES = {'default': {
     'HOST': _env('DB_HOST', '127.0.0.1'),
     'PORT': _env('DB_PORT', '55451'),
     # The web keeps each process's one connection for an hour and checks it at the first query of each request, so a
-    # click after a pause opens no connection inside the request, and a connection the database ended is replaced, never
-    # answered with an error (R2-7). An hour, not for ever, so a changed database setting that needs a new session
-    # reaches the web within it. The worker and the commands keep 60 s and no check: a worker thread's connection holds
-    # its provider slot's session lock across a send (studio.jobs._take_slot).
+    # click after a pause opens no connection inside the request, and a connection the database ended between requests
+    # is replaced, never answered with an error (R2-7); one lost while a request runs, or a database that refuses
+    # connections, answers 503 (studio.db_unavailable) - except a loss in Django's own write of the session's row after
+    # the view, which is Django's 400 (SessionInterrupted), a recorded limit (I1-20): rare, since a request writes its
+    # session only when it changed it, its activity time at most once a minute (SESSION_ACTIVITY_WRITE_SECONDS). An
+    # hour, not for ever, so a changed database setting that needs a new session reaches the web within it. The worker
+    # and the commands keep 60 s and no check: a worker thread's connection holds its provider slot's session lock
+    # across a send (studio.jobs._take_slot).
     'CONN_MAX_AGE': 3600 if _web_process else 60,
     'CONN_HEALTH_CHECKS': _web_process,
     # The web waits at most 5 s for a new connection (refutation round 1 of R2-7), so a database that accepts and never
@@ -276,13 +283,15 @@ ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
 # The coding step (studio/fable/; BUILD-SPEC 3 and 4): Claude Fable 5.2 reads the original document twice, as the reader
 # and as the checker. CODING_MODE 'disabled' (the default) sends nothing; 'replay' reads recorded final messages from
 # CODING_REPLAY_DIR by request sha256 and calls nothing; 'live' calls the Anthropic API with the key read at send time
-# from ANTHROPIC_CREDENTIALS_FILE (above; mounted in the worker only). CODING_EFFORT is output_config.effort ('max', the
-# owner's setting); CODING_READ_TIMEOUT_SECONDS bounds each wait for a byte of the stream (anthropic.Timeout's read).
+# from ANTHROPIC_CREDENTIALS_FILE (above; mounted in the worker only). CODING_EFFORT is output_config.effort ('high',
+# the owner's setting since release 2, R2-33; it was 'max' in release 1: the owner approved a paid test of five
+# synthetic documents at both efforts, D433, and at 'high' every code, unit and modifier matched 'max', at 84% less
+# cost, D434); CODING_READ_TIMEOUT_SECONDS bounds each wait for a byte of the stream (anthropic.Timeout's read).
 CODING_MODE = _env('CODING_MODE', 'disabled')
 if CODING_MODE not in {'disabled', 'replay', 'live'}:
     raise RuntimeError('CPT_STUDIO_CODING_MODE must be disabled, replay or live.')
 CODING_REPLAY_DIR = _env('CODING_REPLAY_DIR', '')
-CODING_EFFORT = _env('CODING_EFFORT', 'max')
+CODING_EFFORT = _env('CODING_EFFORT', 'high')
 if CODING_EFFORT not in {'low', 'medium', 'high', 'xhigh', 'max'}:
     raise RuntimeError('CPT_STUDIO_CODING_EFFORT must be low, medium, high, xhigh or max.')
 _read_timeout = _env('CODING_READ_TIMEOUT_SECONDS', '900')

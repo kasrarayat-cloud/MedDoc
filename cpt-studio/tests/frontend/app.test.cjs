@@ -265,8 +265,8 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'pdfStarted',
-    'list'];
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter', 'sessionReadAt', 'standbyOn', 'standbyFails', 'pdfStandby', 'standbyFrame', 'standbyIdle',
+    'pdfStarted', 'list'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   const idleBefore = { ...app.idle };  // the idle timer's state is the page's too (B5)
   try {
@@ -297,6 +297,12 @@ function click(selector, dataset) {
 // Lets the page's own asynchronous work run until `done()` holds (at most 50 turns of the event loop).
 async function settle(done) {
   for (let turn = 0; turn < 50 && !done(); turn += 1) await new Promise(resolve => setImmediate(resolve));
+}
+
+// As settle, in a test that keeps real timers, letting the page's own next task (nextTask: a timer of 0 ms) run as well:
+// each turn is a timer of 1 ms, so a timer the page set before it has fired by the time it ends (D-R2-54).
+async function settleTasks(done) {
+  for (let turn = 0; turn < 50 && !done(); turn += 1) await new Promise(resolve => setTimeout(resolve, 1));
 }
 
 // --- helpers kept from the earlier page ---------------------------------------------------------------------------
@@ -437,7 +443,7 @@ test('every customer fixture matches ops/verification/customer-contract.json exa
   const found = contractProblems(planted, CONTRACT.encounter, 'planted');
   assert.deepEqual(found.sort(), [
     'planted.codes[0].second_check.agrees: not boolean: "yes"',
-    'planted.document: keys kind,media_type,name,original_url,preview_type,size,view_media_type,view_url are not converted,kind,media_type,name,original_url,size,view_media_type,view_url',
+    'planted.document: keys kind,media_type,name,original_url,preview_type,size,view_conversion,view_media_type,view_url are not converted,kind,media_type,name,original_url,size,view_conversion,view_media_type,view_url',
     'planted.progress.phase: "finished" is not one of queued, reading, checking, done, failed, stopped, earlier',
   ]);
 });
@@ -495,6 +501,8 @@ test('the fixtures cover every state the page draws, and the list matches them, 
     const part = fixture(name).document;
     assert.deepEqual([part.view_media_type, part.converted], expectedView(part), name);
     assert.equal(part.view_url, part.view_media_type ? `/api/encounters/${fixture(name).id}/original?view=1` : null, name);
+    // I1-12, I2-2: a Word document's view names the stored conversion it serves (a UUID), any other document none
+    assert.ok(part.converted ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(part.view_conversion) : part.view_conversion === null, name);
     return [name, part.view_media_type];
   }));
   assert.deepEqual([views['encounter-word.json'], views['encounter-earlier.json'], views['encounter-awaiting-answer.json'], views['encounter-no-codes.json']],
@@ -512,8 +520,8 @@ test('the fixtures cover every state the page draws, and the list matches them, 
   for (const name of ['session.json', 'session-agent.json']) {
     assert.deepEqual(fixture(name).counts, { documents: rows.length, queue: rows.filter(app.inQueue).length }, name);
   }
-  // R2-19: a list answer carries next and total
-  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [], next: null, total: 0 });
+  // R2-19: a list answer carries next and total, and (I1-2) the practice it was read in, the session's
+  assert.deepEqual(fixture('encounters-empty.json'), { encounters: [], next: null, total: 0, workspace: fixture('session.json').workspace.id });
 });
 
 test('every quote in the fixtures is the synthetic document\'s own text, on the page it names', () => {
@@ -1242,14 +1250,16 @@ test('a page with no text to search says so, whatever the next page holds, and i
   assert.equal(app.markNote(run([['x']], { text: 'words', page: 1 })), 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.');
 });
 
-test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it', async () => {
+test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it - and a later round that serves another conversion of the Word file (I1-12) redraws it whole, while one that reads back the same conversion keeps it, its zoom and its place (I2-2)', async () => {
   const word = fixture('encounter-word.json');
+  assert.match(word.document.view_conversion, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'the fixture: a Word document whose view names its stored conversion');
   const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
   const saved = { viewer: app.state.viewer };
   try {
     await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
       const viewer = { element, view: word.document.view_url, name: 'x', mode: 'pdf', pages: [], texts: new Map(), markSerial: 0, reveal: 0, frame: null,
-        mark: { key: 'L2#0', quote: word.codes[1].quotes[0], result: { status: 'marked', pages: [1], count: 1, marks: {} } }, pending: null };
+        mark: { key: 'L2#0', quote: word.codes[1].quotes[0], result: { status: 'marked', pages: [1], count: 1, marks: {} } }, pending: null, zoom: 3 };
+      element.scrollTop = 2867;
       Object.assign(app.state, { doc: word, route: { name: 'doc', id: word.id }, docKey: 'drawn', viewerKey: app.viewerKey(word), selectedQuote: 'L2#0', viewer });
       find('#viewerMark').textContent = 'Marked on page 1.';
       // the same coding review, read again with a change (a decision recorded): the review column is redrawn, the viewer kept
@@ -1261,20 +1271,55 @@ test('a read that changes the page never reloads the viewer: its mark stays, a n
       assert.equal(viewer.mark.key, 'L2#0', 'its mark stays');
       assert.equal(app.state.selectedQuote, 'L2#0');
       assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
-      // a newer coding review of the same document: the passage chosen and its mark go, the viewer stays
+      // a newer coding review of the same document whose view is still the same conversion (view_conversion unchanged:
+      // a PDF's; a Word round that has not stored its own yet; or one that reads back the same stored file - I2-2, a
+      // clean Word file's answers round, which records round 1's file on its own row): the passage chosen and its mark
+      // go, the viewer stays, at the member's zoom and place
       const newer = clone(decided);
       newer.round = { ...newer.round, number: newer.round.number + 1 };
+      assert.equal(app.viewerKey(newer), app.viewerKey(word), 'the round is not in the viewer key: the conversion is');
       app.renderDocument(newer, false);
       assert.equal(app.state.viewer, viewer);
+      assert.deepEqual([viewer.mode, app.ZOOM_STEPS[viewer.zoom], element.scrollTop], ['pdf', 1.5, 2867], 'its zoom (150%) and place kept');
       assert.equal(viewer.mark, null);
       assert.equal(app.state.selectedQuote, '');
       assert.equal(find('#viewerMark').textContent, '');
+      // I1-12 (viewer-0): that round converted the Word file again (C8) and serves its own conversion at the same
+      // view_url - the detail names it (view_conversion) - so the page is redrawn whole: the viewer that drew the earlier
+      // conversion is closed, and a new one asks for the view (with the kept copy's tag: 304 the same bytes, 200 new ones)
+      const reconverted = clone(newer);
+      reconverted.document.view_conversion = 'c9000000-0000-4000-8000-0000000000c2';
+      assert.notEqual(app.viewerKey(reconverted), app.viewerKey(newer), 'the served conversion is in the viewer key');
+      app.renderDocument(reconverted, false);
+      assert.equal(viewer.mode, 'closed', 'the viewer of the earlier conversion is closed');
+      assert.notEqual(app.state.viewer, viewer, 'a new viewer');
+      assert.equal(app.state.viewerKey, app.viewerKey(reconverted));
+      // a later read of that round (a decision recorded), and a later round reading its conversion back: the new viewer stays
+      const drawn = app.state.viewer;
+      const again = clone(reconverted);
+      again.codes[1].reason = `${again.codes[1].reason} Once more.`;
+      app.renderDocument(again, false);
+      assert.equal(app.state.viewer, drawn, 'the same conversion: the same viewer');
+      const reread = clone(again);
+      reread.round = { ...reread.round, number: reread.round.number + 1 };
+      app.renderDocument(reread, false);
+      assert.equal(app.state.viewer, drawn, 'a later round that reads back the same conversion: the same viewer');
       // another view of the document (another viewer key): the page is redrawn whole and the viewer closed
-      const other = clone(newer);
+      const other = clone(reread);
       other.document.converted = false;
       app.renderDocument(other, false);
-      assert.equal(viewer.mode, 'closed', 'the old viewer is closed');
-      assert.notEqual(app.state.viewer, viewer);
+      assert.equal(drawn?.mode ?? 'closed', 'closed', 'the old viewer is closed');
+      assert.notEqual(app.state.viewer, drawn);
+      // the key reads view_conversion as the server sends it: a UUID, or nothing
+      for (const value of [null, undefined, '', '2', 2, 'c9000000-0000-4000-8000-0000000000c', `${word.document.view_conversion} `, [word.document.view_conversion],
+        { id: word.document.view_conversion }]) {
+        const odd = clone(word);
+        odd.document.view_conversion = value;
+        const none = clone(word);
+        delete none.document.view_conversion;
+        assert.equal(app.viewerKey(odd), app.viewerKey(none), String(value));
+      }
+      assert.notEqual(app.viewerKey(word), app.viewerKey({ ...word, document: { ...word.document, view_conversion: null } }), 'a UUID is a conversion');
     });
   } finally {
     Object.assign(app.state, saved);
@@ -1359,6 +1404,18 @@ function viewResponse({ status = 200, chunks = [Uint8Array.from([37, 80, 68, 70,
 const PDF_MODULE = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.0123456789ab.mjs';
 const PDF_WORKER = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.0123456789ab.mjs';
 
+// I2-1: a view's answers name the stored conversion they serve (X-CPT-View-Conversion), as the server's do: a test's
+// answer names its address's fixture's own (document.view_conversion), unless it names one itself (`conversion`, null
+// for none). The page draws only the conversion its detail names.
+const CONVERSION_HEADER = 'X-CPT-View-Conversion';
+const FIXTURE_CONVERSIONS = new Map(ENCOUNTERS.map(name => fixture(name).document).map(part => [part.view_url, part.view_conversion]));
+function namingConversion(answer, url) {
+  if (!answer || typeof answer !== 'object') return answer;
+  const conversion = Object.hasOwn(answer, 'conversion') ? answer.conversion : FIXTURE_CONVERSIONS.get(url) ?? null;
+  const get = typeof answer.headers?.get === 'function' ? answer.headers.get.bind(answer.headers) : () => null;
+  return { ...answer, headers: { get: name => (name === CONVERSION_HEADER ? conversion ?? null : get(name)) } };
+}
+
 // Runs fn on a page that can draw a PDF (the observers a browser has, and Worker), with the library's module loaded by
 // `load`, the view's download answered by `download(url, init)` (a whole document by default) and the page's state kept
 // apart. fn gets {element, loads, fetches} besides the page's own.
@@ -1380,7 +1437,7 @@ async function withPdfPage(load, fn, download = () => Promise.resolve(viewRespon
       const fetches = [];
       global.fetch = (url, init = {}) => {
         fetches.push({ url, init });
-        return download(url, init);
+        return Promise.resolve(download(url, init)).then(answer => namingConversion(answer, url));
       };
       Object.assign(app.state, { pdfLibrary: null, pdfAttempt: 0, viewer: null, pdfStarted: false });
       await fn({ ...page, loads, fetches });
@@ -1864,11 +1921,11 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
       viewer.reveal = 4;
       app.releasePage(viewer.pages[1]);
       finish.get(1).resolve();
-      await settle(() => started.length === 2);
+      await settleTasks(() => started.length === 2);  // the first page shown prepares its text in the next task (D-R2-54)
       assert.deepEqual(started, [1, 4], 'the quote\'s page next');
       assert.equal(viewer.pages[0].drawn, '1 1', 'page 1 drawn');
       finish.get(4).resolve();
-      await settle(() => started.length === 3);
+      await settleTasks(() => started.length === 3);  // a later page is shown in the task after its drawing (D-R2-54)
       assert.deepEqual(started, [1, 4, 3], 'then the others still asked for, in order; page 2 never');
       // a page released while it is drawn lets the next one start at once
       app.releasePage(viewer.pages[2]);
@@ -1891,11 +1948,11 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
       assert.equal(cancelled, false, 'the drawing under way is not cancelled');
       assert.deepEqual(viewer.queue, [first], 'the page is asked for again');
       settle1.resolve();
-      await settle(() => started.length === 5);
+      await settleTasks(() => started.length === 5);
       assert.equal(first.drawn, '1 1', 'the first drawing was shown');
       assert.deepEqual(started.slice(3), [1, 1], 'and the page is drawn again at the new size');
       finish.get(1).resolve();
-      await settle(() => first.drawn === '1.25 1');
+      await settleTasks(() => first.drawn === '1.25 1');
       assert.deepEqual([first.drawn, first.drawing], ['1.25 1', '']);
       app.closeViewer();
     });
@@ -4337,6 +4394,24 @@ test('the viewer is offered only where every built-in it and the legacy library 
   }
 });
 
+// I1-19 (the independent check's F3): I1-3 trimmed the comment above pdfCapable to keep app.js's weight, pointing at
+// CORE-UX-DESIGN.md for what it moved, and two measured facts reached no file. The section it points at records how the
+// measurement deleted each built-in and what the documents did without each one the legacy build puts back.
+test('the measurement the pdfCapable comment points at is recorded in CORE-UX-DESIGN.md: how each built-in was deleted, and that the documents drew and marked as before (I1-19)', () => {
+  assert.ok(fs.readFileSync(BUNDLE, 'utf8').includes('CORE-UX-DESIGN.md ("Browsers that mark")'), 'the comment points at it');
+  const design = fs.readFileSync(path.join(ROOT, 'CORE-UX-DESIGN.md'), 'utf8');
+  const start = design.indexOf('\n- **Browsers that mark**');
+  assert.ok(start >= 0, 'the section is there');
+  const end = design.indexOf('\n- **', start + 1);
+  const section = design.slice(start, end < 0 ? undefined : end).replace(/\s+/g, ' ');
+  for (const fact of [
+    'deleted in the page and in the library\'s worker before the library loaded',
+    'its `typeof` read before and after, so a deletion that did not apply could not pass',
+    'then the preview\'s PDFs and the walk\'s gi-02 opened and every quote chosen',
+    'seen present again once it had run, and with each one deleted the documents drew and marked exactly as before',
+  ]) assert.ok(section.includes(fact), fact);
+});
+
 // A synthetic PDF, one content stream per page, with Helvetica as /F1 and Helvetica-Bold as /F2 (standard fonts, no
 // embedded data): enough to read what the library makes of a drawing.
 function rawPdf(pages) {
@@ -5225,7 +5300,7 @@ test('B2: the console\'s key script converts the options to bytes and the answer
   const registered = opsSecondFactor.answer({ id: 'AAEC', rawId: Uint8Array.from([0, 1, 2]).buffer, type: 'public-key',
     response: { clientDataJSON: Uint8Array.from([123, 125]).buffer, attestationObject: Uint8Array.from([3]).buffer, getTransports: () => ['usb'] } });
   assert.deepEqual(registered.response, { clientDataJSON: 'e30', attestationObject: 'Aw', transports: ['usb'] });
-  for (const file of ['ops_session.js', 'ops_second_factor.js']) {
+  for (const file of ['ops_session.js', 'ops_second_factor.js', 'session_news.js']) {
     const source = fs.readFileSync(path.join(ROOT, 'studio', 'static', 'studio', file), 'utf8');
     assert.ok(!/eval\(|new Function|innerHTML|document\.write/.test(source), file);
   }
@@ -6009,12 +6084,18 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
       t.mock.timers.tick(10000);
       assert.equal(asked.length, 0, 'not on a page that has not booted');
       await withStandby(async () => {
+        // asked for twice, the second 300 ms after the first: the second clears the first one's timer, so the delay counts
+        // from the second - nothing at 500 ms, asked for once at 800. A count alone cannot show the clear: one idle
+        // callback waits at a time (D-R2-54), so a first timer left to fire would ask at 500 and the second ask for nothing.
         app.scheduleStandby(500);
+        t.mock.timers.tick(300);
         app.scheduleStandby(500);
-        t.mock.timers.tick(499);
-        assert.equal(asked.length, 0);
+        t.mock.timers.tick(200);
+        assert.equal(asked.length, 0, 'nothing at 500 ms: the second ask cleared the first one\'s timer');
+        t.mock.timers.tick(299);
+        assert.equal(asked.length, 0, 'nor before 500 ms after the second ask');
         t.mock.timers.tick(1);
-        assert.equal(asked.length, 1, 'once, asked twice');
+        assert.equal(asked.length, 1, 'once, asked twice: 500 ms after the second ask');
         assert.deepEqual(asked[0].options, { timeout: 2000 }, 'when the browser is idle, or 2 s at the latest');
         assert.equal(FakeWorker.made.length, 0, 'nothing before the browser says it is idle');
         asked[0].fn();
@@ -6037,20 +6118,41 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
   } finally {
     global.requestIdleCallback = savedIdle;
   }
-  // boot: after its first route
-  await withPage({}, async () => {
-    global.document.body.dataset = { sessionJson: JSON.stringify(fixture('session.json')) };
-    global.location.hash = '#how-it-works';
-    Object.assign(app.state, { route: null, standbyOn: false });
-    try {
-      await app.firstRoute();
-      assert.equal(app.state.standbyOn, true, 'on, from the page\'s first route');
-      assert.ok(app.state.standbyTimer, 'and asked for');
-    } finally {
-      app.endStandby();
-      app.state.standbyOn = false;
-    }
-  });
+  // boot (D-R2-54): 500 ms after the frame that draws its first route - the script that routes runs before that frame -
+  // the delay itself pinned: nothing at 499 ms, asked for at 500; a page without frames counts it from the route
+  for (const framed of [false, true]) {
+    await withPage({}, async () => {
+      global.document.body.dataset = { sessionJson: JSON.stringify(fixture('session.json')) };
+      global.location.hash = '#how-it-works';
+      Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0 });
+      const frames = [];
+      const idleAsked = [];
+      const savedIdleCallback = global.requestIdleCallback;
+      global.requestIdleCallback = (fn, options) => idleAsked.push(options);
+      if (framed) Object.assign(global, { requestAnimationFrame: fn => frames.push(fn), cancelAnimationFrame: () => {} });
+      try {
+        await app.firstRoute();
+        assert.equal(app.state.standbyOn, true, 'on, from the page\'s first route');
+        if (framed) {
+          assert.deepEqual([app.state.standbyTimer, frames.length], [0, 1], 'not asked for before the frame that draws the route; that frame asked for');
+          t.mock.timers.tick(300);  // the frame comes after the route: the 500 ms are not counted from the route
+          assert.equal(idleAsked.length, 0);
+          frames.shift()();
+        }
+        assert.ok(app.state.standbyTimer, framed ? 'asked for at that frame' : 'asked for at the route');
+        t.mock.timers.tick(499);
+        assert.deepEqual([idleAsked.length, Boolean(app.state.standbyTimer)], [0, true], `not before 500 ms after ${framed ? 'that frame' : 'the route'}`);
+        t.mock.timers.tick(1);
+        assert.deepEqual([idleAsked, app.state.standbyTimer], [[{ timeout: 2000 }], 0], `asked for 500 ms after ${framed ? 'that frame' : 'the route'}, when the browser is idle`);
+      } finally {
+        app.endStandby();  // before the frame's stubs go: a failed assertion is never hidden by its cleanup
+        app.state.standbyOn = false;
+        delete global.requestAnimationFrame;
+        delete global.cancelAnimationFrame;
+        global.requestIdleCallback = savedIdleCallback;
+      }
+    });
+  }
   const source = fs.readFileSync(BUNDLE, 'utf8');
   assert.match(source, /function closeViewer\(\) \{[^}]*stopPdf\(viewer\);\n  viewer\.mode = 'closed';\n  scheduleStandby\(PDF_STANDBY\.next\);\n\}/);
   assert.match(source, /    page\.drawn = key;\n    scheduleStandby\(PDF_STANDBY\.next\);\n/);
@@ -6062,6 +6164,294 @@ test('R2 V1: the worker is made ready ahead when the browser is idle, after the 
   assert.equal(aroundPagehide.length, 2, 'the pagehide line stands once in boot\'s own body, at its top level');
   assert.doesNotMatch(aroundPagehide[0], /\breturn\b/, 'no return in boot before it');
   assert.match(aroundPagehide[0], /[;}]$/, 'the line before it is a whole statement');
+});
+
+// D-R2-54, R2-18: boot asks for the worker made ready ahead at the frame that draws its first route, so an end can come
+// between the route and that frame - a deep link to a document the server refuses, its 404 answered within one frame (a
+// near server), the skeptic's case. Every end there leaves nothing asked for, as every end after the frame does.
+test('D-R2-54, R2-18: every end met between boot\'s first route and the frame that draws it - a refused document\'s 404, a late 404 that spares the view shown, pagehide, a 401, a forced password change, another tab\'s sign-out, the idle end, the cap, the sign-out form - leaves no timer, no frame and no worker', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const refused = 'f5000000-0000-4000-8000-0000000000ff';  // another practice's: its details answer 404
+  const own = 'f5000000-0000-4000-8000-000000000001';
+  const otherView = '/api/encounters/fe000000-0000-4000-8000-0000000000aa/original?view=1';  // another document's, kept
+  const notFound = () => response({ status: 404, body: { error: 'Not found.' } });
+  const api = (status, body) => url => (url === '/api/encounters' ? response({ status, body }) : new Promise(() => {}));
+  let refuse = null;
+  const ends = [
+    ['a refused document, its 404 before the frame', `#doc/${refused}`, url => (url === `/api/encounters/${refused}` ? notFound() : new Promise(() => {})),
+      async ({ element }) => { await settle(() => element('#main').innerHTML?.includes('This document is not available.')); return element('#main').innerHTML.includes('This document is not available.'); }],
+    ['a late 404 that spares the view the route shown opens', `#doc/${refused}`, url => (url === `/api/encounters/${refused}` ? new Promise(resolve => { refuse = resolve; }) : new Promise(() => {})),
+      async () => {
+        await settle(() => refuse !== null);
+        global.location.hash = `#doc/${own}`;
+        app.route();
+        const wipes = app.state.wipes;
+        refuse(notFound());
+        await settle(() => false);
+        return app.state.wipes === wipes;  // an end that spares a view counts no wipe: endStandby is what it shares
+      }],
+    ['pagehide', '#how-it-works', () => new Promise(() => {}), async () => { app.forgetMemory({ type: 'pagehide', persisted: false }); return true; }],
+    ['a 401', '#how-it-works', api(401, { error: 'signed_out', reason: 'idle' }), async () => { await app.api('/api/encounters').catch(() => {}); return app.idle.gone; }],
+    ['a forced password change', '#how-it-works', api(403, { error: 'password_change_required' }), async ({ calls }) => {
+      await app.api('/api/encounters').catch(() => {});
+      return calls.some(call => typeof call.assign === 'string' && call.assign.includes('/account'));
+    }],
+    ['another tab\'s sign-out', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { gone: false, session: 'tag-a' });
+      app.receiveSession({ type: 'signed-out', reason: 'idle', session: 'tag-a' });
+      return app.idle.gone;
+    }],
+    ['the idle end', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { deadline: Date.now() - 1, gone: false });
+      app.scheduleIdle();
+      return app.idle.gone;
+    }],
+    ['the cap', '#how-it-works', () => new Promise(() => {}), async () => {
+      Object.assign(app.idle, { deadline: Date.now() - 1, capEnd: Date.now() - 1, idleEnd: Date.now() + 60000, gone: false });
+      app.scheduleIdle();
+      return app.idle.gone;
+    }],
+    ['the sign-out form', '#how-it-works', () => new Promise(() => {}), async ({ element }) => {
+      const listeners = {};
+      element('#signoutForm').addEventListener = (type, fn) => { listeners[type] = fn; };
+      global.document.addEventListener = () => {};
+      global.window.addEventListener = () => {};
+      const channel = globalThis.BroadcastChannel;
+      globalThis.BroadcastChannel = undefined;
+      try {
+        Object.assign(app.idle, { started: false, gone: false, channel: null });
+        app.startIdleWatch();
+      } finally {
+        globalThis.BroadcastChannel = channel;
+      }
+      listeners.submit();
+      return app.idle.gone;
+    }],
+  ];
+  const savedIdle = global.requestIdleCallback;
+  const asked = [];
+  global.requestIdleCallback = fn => asked.push(fn);
+  try {
+    for (const [what, hash, answer, end] of ends) {
+      refuse = null;
+      await withPdfPage(() => Promise.resolve(fakeLibrary().library), async page => {
+        const frames = new Map();
+        let handle = 0;
+        global.requestAnimationFrame = fn => { handle += 1; frames.set(handle, fn); return handle; };
+        global.cancelAnimationFrame = id => frames.delete(id);
+        try {
+          global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+          global.location.hash = hash;
+          Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+          asked.length = 0;
+          const kept = Uint8Array.from([37, 80]);
+          app.state.keptViews.clear();
+          app.keepView(otherView, 'abcdef00-0000-4000-8000-000000000000', kept);
+          await app.firstRoute();
+          assert.deepEqual([app.state.standbyOn, app.state.standbyTimer, frames.size], [true, 0, 1], `${what}: the frame that draws the route asked for, nothing else yet`);
+          assert.equal(await end(page), true, `${what}: the end happened as this case says`);
+          assert.deepEqual([app.state.keptViews.has(otherView), [...kept]], [false, [0, 0]], `${what}: an end - another document's kept copy overwritten and dropped`);
+          for (const fn of [...frames.values()]) fn();  // the frame comes after the end
+          assert.equal(app.state.standbyTimer, 0, `${what}: no timer after the frame`);
+          t.mock.timers.tick(10000);
+          assert.deepEqual([asked.length, FakeWorker.made.length, app.state.pdfStandby], [0, 0, null], `${what}: nothing asked for, no worker made`);
+        } finally {
+          app.endStandby();
+          app.state.standbyOn = false;
+          delete global.requestAnimationFrame;
+          delete global.cancelAnimationFrame;
+        }
+      }, answer);
+    }
+  } finally {
+    global.requestIdleCallback = savedIdle;
+  }
+  // and the control: with no end, the same page asks for the worker 500 ms after that frame and makes it
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+    const frames = [];
+    global.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+    global.cancelAnimationFrame = () => {};
+    global.requestIdleCallback = undefined;
+    try {
+      global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+      global.location.hash = '#how-it-works';
+      Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+      await app.firstRoute();
+      frames.shift()();
+      t.mock.timers.tick(500);
+      await settle(() => FakeWorker.made.length === 1);
+      assert.equal(FakeWorker.made.length, 1, 'the control: a worker made ready ahead, 500 ms after the frame');
+    } finally {
+      app.endStandby();
+      app.state.standbyOn = false;
+      delete global.requestAnimationFrame;
+      delete global.cancelAnimationFrame;
+      global.requestIdleCallback = savedIdle;
+    }
+  });
+});
+
+// D-R2-54, R2-18 (the idle stage): the worker made ready ahead is asked for in two stages - a timer, then, once it fires,
+// an idle callback - so an end can come in the second as in the first: a refused document's 404 answered while the
+// browser is busy. One idle callback waits at a time (a second schedule's timer, fired meanwhile, asks for none), its
+// handle kept, and every end cancels it (endStandby) as it cancels the timer. The one waiting keeps its earlier deadline:
+// a later timer neither cancels it nor asks again (which, on a busy thread, would put the worker off at every timer). The
+// browser's idle callbacks are stood in for with their cancel, as a browser has both.
+test('D-R2-54, R2-18: an end met after the standby\'s timer fired and before its idle callback ran - a refused document\'s 404, one schedule\'s timer fired or two - cancels the one idle callback waiting and makes no worker; the next schedule asks again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const refused = 'f5000000-0000-4000-8000-0000000000ee';  // another practice's: its details answer 404
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const idles = new Map();
+  const cancelled = [];
+  let handle = 0;
+  global.requestIdleCallback = (fn, options) => { handle += 1; idles.set(handle, { fn, options }); return handle; };
+  global.cancelIdleCallback = id => { cancelled.push(id); idles.delete(id); };
+  // the browser is idle: every idle callback still waiting runs
+  const idleNow = () => {
+    const due = [...idles.values()];
+    idles.clear();
+    for (const { fn } of due) fn({ didTimeout: false, timeRemaining: () => 50 });
+  };
+  try {
+    for (const timers of [1, 2]) {
+      let refuse = null;
+      idles.clear();
+      cancelled.length = 0;
+      await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element }) => {
+        const frames = [];
+        global.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+        global.cancelAnimationFrame = () => {};
+        try {
+          global.document.body.dataset.sessionJson = JSON.stringify(fixture('session.json'));
+          global.location.hash = `#doc/${refused}`;
+          Object.assign(app.state, { route: null, standbyOn: false, standbyTimer: 0, standbyFrame: 0, standbyIdle: 0, standbyFails: 0, pdfStandby: null, leaving: false });
+          await app.firstRoute();
+          frames.shift()();
+          t.mock.timers.tick(app.PDF_STANDBY.first);
+          const first = [...idles.keys()];  // the idle callback the first timer asked for
+          if (timers === 2) {
+            app.scheduleStandby(app.PDF_STANDBY.next);  // a closed viewer or a drawn page: its timer fires while the first callback waits
+            t.mock.timers.tick(app.PDF_STANDBY.next);
+          }
+          assert.deepEqual([idles.size, [...idles.values()][0]?.options, FakeWorker.made.length], [1, { timeout: 2000 }, 0], `${timers} fired: one idle callback waits, nothing made yet`);
+          // and it is the first one asked for, its handle still queued and never cancelled: its deadline is the earlier one
+          assert.deepEqual([[...idles.keys()], first.length, cancelled], [first, 1, []], `${timers} fired: the idle callback waiting is the first one asked for, never cancelled`);
+          await settle(() => refuse !== null);
+          refuse(response({ status: 404, body: { error: 'Not found.' } }));
+          await settle(() => element('#main').innerHTML?.includes('This document is not available.'));
+          assert.ok(element('#main').innerHTML.includes('This document is not available.'), `${timers} fired: the end happened`);
+          assert.equal(idles.size, 0, `${timers} fired: the end cancelled the idle callback waiting`);
+          idleNow();
+          await settle(() => false);
+          assert.deepEqual([FakeWorker.made.length, app.state.pdfStandby], [0, null], `${timers} fired: no worker made after the end`);
+          // still signed in after a 404: the next schedule asks again and makes the worker (the control), and a callback that
+          // ran leaves none kept, so the schedule after it asks again too
+          app.scheduleStandby(app.PDF_STANDBY.next);
+          t.mock.timers.tick(app.PDF_STANDBY.next);
+          assert.equal(idles.size, 1, `${timers} fired: asked for again after the end`);
+          idleNow();
+          await settle(() => FakeWorker.made.length === 1);
+          assert.equal(FakeWorker.made.length, 1, `${timers} fired: the control - made when no end came`);
+          app.scheduleStandby(app.PDF_STANDBY.next);
+          t.mock.timers.tick(app.PDF_STANDBY.next);
+          assert.equal(idles.size, 1, `${timers} fired: asked for again after a callback ran`);
+        } finally {
+          app.endStandby();
+          app.state.standbyOn = false;
+          delete global.requestAnimationFrame;
+          delete global.cancelAnimationFrame;
+        }
+      }, url => (url === `/api/encounters/${refused}` ? new Promise(resolve => { refuse = resolve; }) : new Promise(() => {})));
+    }
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
+});
+
+// D-R2-54, R2-18: a schedule clears the timer of the one before it (scheduleStandby) and an end clears the timer kept
+// (endStandby), so two schedules and then an end leave no timer behind: a page drawn asks for the worker made ready ahead,
+// the viewer closed by the next route asks again 300 ms later, before the first one's timer fired, and that route's
+// document is refused - its 404 is an end, still signed in. Nothing is asked for after the end and no worker is made; the
+// next schedule asks again and makes it (the control). The browser's idle callbacks are stood in for with their cancel.
+test('D-R2-54, R2-18: an end after two schedules - the second asked for before the first one\'s timer fired - leaves no timer: nothing is asked for and no worker made; the next schedule makes it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const idles = new Map();
+  let handle = 0;
+  let asks = 0;
+  global.requestIdleCallback = fn => { asks += 1; handle += 1; idles.set(handle, fn); return handle; };
+  global.cancelIdleCallback = id => { idles.delete(id); };
+  // the browser is idle: every idle callback still waiting runs
+  const idleNow = () => {
+    const due = [...idles.values()];
+    idles.clear();
+    for (const fn of due) fn({ didTimeout: false, timeRemaining: () => 50 });
+  };
+  try {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      await withStandby(async () => {
+        Object.assign(app.state, { standbyTimer: 0, standbyIdle: 0 });
+        app.scheduleStandby(app.PDF_STANDBY.next);  // a page drawn (renderPage)
+        t.mock.timers.tick(300);
+        app.scheduleStandby(app.PDF_STANDBY.next);  // the viewer closed by the next route (closeViewer)
+        app.forgetMemory();  // that route's document refused: its 404 is an end (R2-18), still signed in
+        t.mock.timers.tick(10000);
+        idleNow();
+        await settle(() => FakeWorker.made.length > 0);
+        assert.deepEqual([asks, FakeWorker.made.length, Boolean(app.state.pdfStandby)], [0, 0, false], 'two schedules, then an end: nothing asked for after it, no worker made');
+        // the control: the next schedule asks again and makes the worker
+        app.scheduleStandby(app.PDF_STANDBY.next);
+        t.mock.timers.tick(app.PDF_STANDBY.next);
+        assert.equal(asks, 1, 'the control: the next schedule asks again');
+        idleNow();
+        await settle(() => FakeWorker.made.length === 1);
+        assert.equal(FakeWorker.made.length, 1, 'the control: made when no end came');
+      });
+    });
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
+});
+
+// D-R2-54 (the idle stage): the one idle callback waiting keeps its earlier deadline. On a busy thread, where an idle
+// callback runs only at its deadline (2 s), pages drawn one after another ask for the worker made ready ahead every
+// 600 ms; each of those timers finds the first idle callback still waiting and leaves it be, so the worker is made at
+// that callback's deadline, 2600 ms - never put off by cancelling it and asking again at every timer, which would make
+// none for as long as pages keep being drawn. The browser's idle callbacks are stood in for by timers at their deadline,
+// with their cancel.
+test('D-R2-54 (the idle stage): on a busy thread - an idle callback runs only at its 2 s deadline - pages drawn every 600 ms never put the worker made ready ahead off: it is made at the first idle callback\'s deadline, 2600 ms', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const saved = { request: global.requestIdleCallback, cancel: global.cancelIdleCallback };
+  const due = new Map();
+  let handle = 0;
+  global.requestIdleCallback = (fn, options) => {
+    handle += 1;
+    const id = handle;
+    due.set(id, setTimeout(() => { due.delete(id); fn({ didTimeout: true, timeRemaining: () => 0 }); }, options.timeout));
+    return id;
+  };
+  global.cancelIdleCallback = id => { clearTimeout(due.get(id)); due.delete(id); };
+  try {
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async () => {
+      await withStandby(async () => {
+        Object.assign(app.state, { standbyTimer: 0, standbyIdle: 0 });
+        app.scheduleStandby(app.PDF_STANDBY.next);  // at 0 ms: its timer fires at 600, the idle callback it asks for runs at 2600
+        let madeAt = null;
+        for (let at = 100; at <= 6000; at += 100) {
+          t.mock.timers.tick(100);
+          if (at % 600 === 0 && at <= 4800) app.scheduleStandby(app.PDF_STANDBY.next);  // a page drawn every 600 ms, to 4800
+          await settle(() => FakeWorker.made.length > 0);
+          if (madeAt === null && FakeWorker.made.length > 0) madeAt = at;
+        }
+        assert.deepEqual([madeAt, FakeWorker.made.length], [2600, 1], 'made once, at the first idle callback\'s deadline (2600 ms): the later timers did not put it off');
+      });
+    });
+  } finally {
+    global.requestIdleCallback = saved.request;
+    global.cancelIdleCallback = saved.cancel;
+  }
 });
 
 test('R2 V1: leaving a document while its worker starts never makes the page forget a working library', async t => {
@@ -6237,6 +6627,203 @@ test('R2 V2, R2-13: page 1 is asked for as the pages are built, and its text rea
   } finally {
     global.getComputedStyle = style;
     Object.assign(global, globals);
+    Object.assign(app.state, saved);
+  }
+});
+
+// D-R2-54 (long-tasks-max-P1): the library ends a page's drawing in an animation frame, and the page's own work after it
+// ran in that frame's task, so a page's last drawing slice, its canvas and text layer, its text prepared to be searched
+// and the canvas's commit were one long task. Here a "task" is a timer the test holds (setTimeout is mocked): what the page
+// does before the test ticks it ran in the task its drawing ended in.
+test('D-R2-54: a later page is shown in the task after its drawing ends; the first page shown, at once (R2-13), its text prepared in the next task; a redraw whose text is prepared is shown and marked in one task', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const layers = [];
+      const viewer = pdfViewer(word, element, [['a'], ['b']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+        TextLayer: class { constructor(options) { layers.push(options); this.textDivs = []; this.textContentItemsStr = []; } render() { return Promise.resolve(); } cancel() {} } } });
+      const draws = [];
+      const reads = new Map();
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.element = viewerElement({ offsetTop: 400 * (page.number - 1) });
+        page.proxy = { cleanup() {}, getTextContent: () => new Promise(resolve => { reads.set(page.number, resolve); }), render: () => {
+          let resolve;
+          const promise = new Promise(done => { resolve = done; });
+          draws.push({ number: page.number, resolve });
+          return { promise, cancel() {} };
+        } };
+      }
+      app.state.viewer = viewer;
+      const [first, second] = viewer.pages;
+      const shown = page => page.element.children.length === 2;
+      app.drawPage(viewer, first);
+      app.drawPage(viewer, second);
+      assert.deepEqual(draws.map(item => item.number), [1], 'one page at a time');
+      // the first page shown: its canvas and text layer together, in the task its drawing ends in (R2-13)
+      reads.get(1)({ items: [{ str: 'a' }] });
+      draws[0].resolve();
+      await settle(() => shown(first));
+      assert.ok(shown(first), 'the first page shown is shown in the task its drawing ends in');
+      assert.equal(layers.length, 1, 'with its text layer');
+      assert.deepEqual([first.drawn, viewer.prepared.has(1)], ['', false], 'its text is not prepared to be searched in that task');
+      t.mock.timers.tick(0);
+      await settle(() => first.drawn !== '');
+      assert.deepEqual([first.drawn, viewer.prepared.has(1)], ['1 1', true], 'it is in the next task, and the page drawn');
+      // a later page (another is drawn): shown in the task after its drawing ends, never in that task
+      await settle(() => draws.length === 2);
+      reads.get(2)({ items: [{ str: 'b' }] });
+      draws[1].resolve();
+      await settle(() => shown(second));
+      assert.equal(shown(second), false, 'a later page is not shown in the task its drawing ends in');
+      assert.equal(layers.length, 1, 'nor is its text layer made there');
+      t.mock.timers.tick(0);
+      await settle(() => second.drawn !== '');
+      assert.ok(shown(second), 'it is shown in the next task');
+      assert.deepEqual([second.drawn, viewer.prepared.has(2), layers.length], ['1 1', true, 2], 'its text layer made, its text prepared and the page drawn in that same task');
+      // a redraw (a zoom) of the only page drawn, whose text is prepared: shown and drawn - its marks painted - in the task
+      // its drawing ends in, so no frame shows it without its marks
+      app.releasePage(second);
+      first.viewport = { width: 765, height: 990, scale: 1.25 };
+      app.drawPage(viewer, first);
+      await settle(() => draws.length === 3);
+      assert.equal(draws[2].number, 1);
+      draws[2].resolve();
+      await settle(() => first.drawn === '1.25 1');
+      assert.equal(first.drawn, '1.25 1', 'a redraw whose text is prepared is drawn in the task it is shown');
+      assert.equal(layers.length, 3);
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+// D-R2-54 (the waits' re-checks): each of renderPage's two waits - a later page's, before it is shown; the first page
+// shown's, before its text is prepared - opens a task in which nothing of the page's drawing is pending, so a page let go
+// there (released as it leaves the view, its viewer closed, or framed) is stopped by the live() re-check after the wait
+// alone: no wait on the library is left to reject. Each wait, each way a page is let go: nothing more is drawn, prepared
+// or marked for it, and a released page is drawn again when asked for. Pages drawn undisturbed in the same harness are
+// drawn, prepared, flagged and marked (the controls), so no check here passes for want of anything to see.
+test('D-R2-54: a page let go during either wait - released, its viewer closed, or framed - is drawn, prepared and marked no further; a released one is drawn again when asked for', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  // plain: one item; overprinted: item 1 is item 0 drawn again at the same place, so a page drawn flags one span
+  const plain = [{ str: 'Synthetic page text.', transform: [10, 0, 0, 10, 72, 700] }];
+  const overprinted = [{ str: 'Bold', transform: [10, 0, 0, 10, 72, 700] }, { str: 'Bold', transform: [10, 0, 0, 10, 72, 700] }];
+  const flagged = layer => layer.textDivs.filter(div => div.attributes['data-overprint'] === '1').length;
+  const marked = layer => layer.textDivs.flatMap(div => div.children).filter(node => node?.className === 'pdf-mark').length;
+  const open = (element, items) => {
+    const layers = [];
+    const viewer = pdfViewer(word, element, [['a'], ['b']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+      TextLayer: class {
+        constructor(options) {
+          layers.push(this);
+          this.textDivs = options.textContentSource.items.map(() => fakeElement({ children: [], append(...nodes) { this.children.push(...nodes); } }));
+          this.textContentItemsStr = options.textContentSource.items.map(item => item.str);
+        }
+        render() { return Promise.resolve(); }
+        cancel() {}
+      } } });
+    // the quote chosen marks the first word of each page: a page drawn has it painted
+    viewer.mark = { key: 'L1#0', quote: null, result: { status: 'marked', marks: { 1: [{ item: 0, start: 0, end: 4, occurrence: 0 }], 2: [{ item: 0, start: 0, end: 4, occurrence: 1 }] } } };
+    const draws = [];
+    for (const page of viewer.pages) {
+      page.viewport = { width: 612, height: 792, scale: 1 };
+      page.element = viewerElement({ offsetTop: 400 * (page.number - 1) });
+      page.proxy = { cleanup() {}, getTextContent: () => Promise.resolve({ items }), render: () => {
+        let resolve;
+        const promise = new Promise(done => { resolve = done; });
+        draws.push({ number: page.number, resolve });
+        return { promise, cancel() {} };
+      } };
+    }
+    app.state.viewer = viewer;
+    return { viewer, layers, draws, first: viewer.pages[0], second: viewer.pages[1] };
+  };
+  const letGo = (how, viewer, page) => {
+    if (how === 'released') app.releasePage(page);  // it left the view (nearPages)
+    else if (how === 'closed') app.closeViewer();
+    else app.fallbackViewer(viewer, 'library');
+  };
+  // the first page shown: its drawing ends, and it is shown in that task, its text prepared in the next (R2-13)
+  const firstShown = async (viewer, first, draws) => {
+    draws[0].resolve();
+    await settle(() => first.element.children.length === 2);
+  };
+  try {
+    await t.test('the control: the first page shown, not let go, is drawn, prepared, flagged and marked in the next task', async () => {
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async () => {
+        Object.assign(app.state, { doc: word, route: null });
+        const { viewer, layers, draws, first } = open(element, overprinted);
+        app.drawPage(viewer, first);
+        await firstShown(viewer, first, draws);
+        assert.deepEqual([first.element.children.length, layers.length, first.drawn, viewer.prepared.has(1)], [2, 1, '', false], 'shown at once, its text not yet prepared');
+        t.mock.timers.tick(0);
+        await settle(() => first.drawn !== '');
+        assert.deepEqual([first.drawn, viewer.prepared.has(1), flagged(layers[0]), marked(layers[0])], ['1 1', true, 1, 1], 'drawn, prepared, flagged and marked in the next task');
+        app.closeViewer();
+      });
+    });
+    for (const how of ['released', 'closed', 'framed']) {
+      // a released page lets its layer go, so it is plain text, whose drawn mark is what a later ask reads; a closed or
+      // framed one keeps its layer, so it is overprinted, for a flag to show
+      const items = how === 'released' ? plain : overprinted;
+      await t.test(`the first page shown, ${how} during the wait before its text is prepared`, async () => {
+        const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+        await withPage({ elements: { documentViewer: element } }, async () => {
+          Object.assign(app.state, { doc: word, route: null });
+          const { viewer, layers, draws, first } = open(element, items);
+          app.drawPage(viewer, first);
+          await firstShown(viewer, first, draws);
+          assert.deepEqual([first.element.children.length, layers.length, first.drawn, viewer.prepared.has(1)], [2, 1, '', false], `${how}: shown at once, its text not yet prepared`);
+          letGo(how, viewer, first);
+          t.mock.timers.tick(0);
+          await settle(() => false);
+          assert.deepEqual([first.drawn, viewer.prepared.has(1), flagged(layers[0]), marked(layers[0])], ['', false, 0, 0], `${how} during that wait: the first page is not taken as drawn, nor prepared, flagged or marked`);
+          if (how === 'released') {
+            assert.equal(first.element.children.length, 0, 'released: back to its placeholder');
+            app.drawPage(viewer, first);
+            await settle(() => draws.length === 2);
+            assert.equal(draws.length, 2, 'released during that wait: drawn again when asked for');
+          }
+          app.closeViewer();
+        });
+      });
+      await t.test(`a later page, ${how} during the wait before it is shown`, async () => {
+        const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+        await withPage({ elements: { documentViewer: element } }, async () => {
+          Object.assign(app.state, { doc: word, route: null });
+          const { viewer, layers, draws, first, second } = open(element, items);
+          app.drawPage(viewer, first);
+          app.drawPage(viewer, second);
+          await firstShown(viewer, first, draws);
+          t.mock.timers.tick(0);
+          await settle(() => draws.length === 2);
+          assert.deepEqual([first.drawn, viewer.prepared.has(1), marked(layers[0]), draws.map(item => item.number)], ['1 1', true, 1, [1, 2]], `${how}: the control - page 1 drawn, prepared and marked; then page 2 started`);
+          draws[1].resolve();
+          await settle(() => false);
+          assert.deepEqual([second.element.children.length, layers.length], [0, 1], `${how}: page 2 is not shown in the task its drawing ends in`);
+          letGo(how, viewer, second);
+          t.mock.timers.tick(0);
+          await settle(() => false);
+          assert.deepEqual([second.element.children.length, layers.length, second.layer === null, second.drawn, viewer.prepared.has(2)], [0, 1, true, '', false], `${how} during that wait: the later page is not drawn - no canvas, no text layer made, so nothing to flag or mark - nor prepared`);
+          if (how === 'released') {
+            app.drawPage(viewer, second);
+            await settle(() => draws.length === 3);
+            assert.equal(draws.length, 3, 'released during that wait: drawn again when asked for');
+          }
+          app.closeViewer();
+        });
+      });
+    }
+  } finally {
     Object.assign(app.state, saved);
   }
 });
@@ -6571,6 +7158,268 @@ test('R2 V4: the view is asked for with the click only once the library has star
     app.state.outdated = false;
   }, url => (url.endsWith('?view=1') ? new Promise(() => {}) : url.endsWith('f5000000-0000-4000-8000-000000000001')
     ? new Promise(resolve => { release = resolve; }) : new Promise(() => {})));
+});
+
+test('I1-1, I1-16: a Word document a later round refused draws no copy the page keeps - its detail names no view: no viewer, no converted note, no "Download PDF"; the copy is dropped, overwritten, whichever answer comes first - the click\'s view answered 404, or the detail drawn first and the view aborted - and when the open page\'s poll brings the refusal; nothing is drawn', async () => {
+  const word = fixture('encounter-word.json');
+  const view = `/api/encounters/${word.id}/original?view=1`;
+  const refused = clone(word);  // the server's detail once a later round refused the file (customer.shown_view)
+  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false, view_conversion: null });
+  const panel = dom(app.viewerPanel(refused)).one('section.viewer-panel');
+  assert.deepEqual([panel.one('#documentViewer'), panel.one('.viewer-note'), panel.one('#downloadOriginal')], [null, null, null],
+    'no viewer, no converted note, no "Download PDF"');
+  assert.equal(panel.one('#downloadWord').attr('data-word-original'), `${refused.document.original_url}?format=original`, 'the Word file by name');
+  const tag = 'abcdef00-0000-4000-8000-000000000000';
+  // the page's fetch as a browser's: a request whose signal aborts is rejected with an AbortError (refutation viewer-2:
+  // a stand-in that ignores the signal hid the detail-first order)
+  const browserFetch = answer => (url, init = {}) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    answer(url).then(resolve, reject);
+  });
+  // I1-16 (viewer-2): both orders of the click's two answers
+  for (const order of ['the view\'s 404 first', 'the detail first']) {
+    const library = fakeLibrary();
+    const answered = [];
+    let viewDone = null;
+    const viewSettled = new Promise(resolve => { viewDone = resolve; });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ fetches }) => {
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
+      const data = Uint8Array.from([37, 80, 68, 70]);
+      app.keepView(view, tag, data);  // kept from an open before the refusal
+      global.location.hash = `#doc/${word.id}`;
+      app.route();
+      assert.deepEqual(fetches.filter(item => item.url === view).map(item => item.init.headers['If-None-Match']),
+        [`"${tag}"`], `${order}: the click asks once, with the tag it holds`);
+      await settle(() => app.state.doc?.id === word.id && !app.state.keptViews.has(view));
+      assert.equal(app.state.doc?.document?.view_url, null, order);
+      assert.deepEqual(answered, order === 'the detail first' ? ['detail'] : ['view', 'detail'], `${order}: the answers' order`);
+      assert.equal(fetches.find(item => item.url === view).init.signal.aborted, true, `${order}: the click's view let go of`);
+      assert.deepEqual([app.state.viewer, app.state.early], [null, null], `${order}: no viewer mounted, no view left asked for`);
+      assert.deepEqual([app.state.keptViews.has(view), [...data]], [false, [0, 0, 0, 0]], `${order}: the copy dropped and overwritten`);
+      assert.equal(library.made.tasks.length, 0, `${order}: nothing drawn`);
+      app.forgetMemory();
+    }, browserFetch(url => {
+      if (url === view) {
+        if (order === 'the detail first') return new Promise(() => {});  // answered only after the detail: aborted first
+        return taggedView(404, [], '').then(answer => { answered.push('view'); viewDone(); return answer; });
+      }
+      if (url === `/api/encounters/${word.id}`) {
+        const detail = () => { answered.push('detail'); return response({ status: 200, body: refused }); };
+        return order === 'the detail first' ? Promise.resolve().then(detail) : viewSettled.then(detail);
+      }
+      return new Promise(() => {});
+    }));
+  }
+  // ... and the open document's poll that brings the refusal (another viewer key: the page is redrawn whole), which asks
+  // for no view at all
+  const library = fakeLibrary();
+  await withPdfPage(() => Promise.resolve(library.library), async ({ fetches }) => {
+    const data = Uint8Array.from([37, 80, 68, 70]);
+    app.keepView(view, tag, data);  // drawn and kept while round 1's view stood
+    Object.assign(app.state, { doc: word, route: { name: 'doc', id: word.id }, docKey: 'drawn', viewerKey: app.viewerKey(word) });
+    app.renderDocument(refused, false);
+    assert.deepEqual(fetches.filter(item => item.url === view), [], 'the poll: no view asked');
+    assert.deepEqual([app.state.viewer, app.state.keptViews.has(view), [...data]], [null, false, [0, 0, 0, 0]],
+      'the poll: no viewer, the copy dropped and overwritten');
+    assert.equal(library.made.tasks.length, 0, 'the poll: nothing drawn');
+    app.forgetMemory();
+  });
+});
+
+// --- I2-1 (integrated refutation round 2, viewer-0): the page draws a view only as the stored conversion its detail
+// names, whatever the order of the click's early view, the detail and a poll -----------------------------------------
+
+const C_ONE = 'c9000000-0000-4000-8000-0000000000c1';  // the Word fixture's own conversion (round 1's)
+const C_TWO = 'c9000000-0000-4000-8000-0000000000c2';  // a later round's fresh conversion
+const ALPHA = [37, 80, 68, 70, 45, 65];  // '%PDF-A': round 1's conversion, kept under VIEW_TAG_A
+const BRAVO = [37, 80, 68, 70, 45, 66];  // '%PDF-B': the later round's
+const viewAnswer = (status, bytes, tag, conversion) => taggedView(status, bytes ? [Uint8Array.from(bytes)] : [], tag)
+  .then(answer => ({ ...answer, conversion }));
+
+test('I2-1 (viewer-0): a re-open draws only the conversion its detail names - the click\'s early answer of another (a 304 read before a later round stored its own) is asked again and the new one drawn; one newer than the detail reads the document again, whose redraw draws it; a poll naming another while the view comes redraws it whole; an agreeing answer draws at once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  assert.equal(word.document.view_conversion, C_ONE);
+  const later = clone(word);  // the detail read once the later round stored its own conversion
+  later.document.view_conversion = C_TWO;
+  later.round = { ...later.round, number: 2 };
+  const cases = [
+    { what: 'the early 304 read before the later round stored its conversion, the detail after (the finding\'s order)', detail: later,
+      answers: [[304, null, VIEW_TAG_A, C_ONE], [200, BRAVO, VIEW_TAG_B, C_TWO]], drawn: BRAVO, asked: [VIEW_TAG_A, VIEW_TAG_A], reads: 0 },
+    { what: 'the early 304 and the detail agree', detail: word, answers: [[304, null, VIEW_TAG_A, C_ONE]], drawn: ALPHA, asked: [VIEW_TAG_A], reads: 0 },
+    { what: 'a 304 naming the conversion the detail names, its bytes the copy\'s (the server\'s tag matched them)', detail: later,
+      answers: [[304, null, VIEW_TAG_A, C_TWO]], drawn: ALPHA, asked: [VIEW_TAG_A], reads: 0 },
+    { what: 'the early answer read after the later round stored its conversion, the detail before it', detail: word,
+      answers: [[200, BRAVO, VIEW_TAG_B, C_TWO], [200, BRAVO, VIEW_TAG_B, C_TWO], [200, BRAVO, VIEW_TAG_B, C_TWO]], drawn: BRAVO,
+      asked: [VIEW_TAG_A, undefined, undefined], reads: 1, again: later },
+  ];
+  for (const item of cases) {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    const answers = [...item.answers];
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 7, pdfStarted: true, reads: { asked: 0, applied: 0 } });
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), Uint8Array.from(ALPHA));
+      app.startEarly(word.id);  // the click: the view asked for with the kept copy's tag
+      await mount(item.detail, find, () => opened.length === 1);
+      assert.deepEqual(opened, [item.drawn], `${item.what}: drawn`);
+      const views = fetches.filter(call => call.url === view);
+      assert.deepEqual(views.map(call => call.init.headers['If-None-Match']), item.asked, `${item.what}: the view's requests`);
+      assert.equal(fetches.filter(call => call.url === `/api/encounters/${word.id}`).length, item.reads, `${item.what}: the document read again`);
+      assert.equal(app.state.viewer.conversion, (item.again || item.detail).document.view_conversion, `${item.what}: the viewer names what it drew`);
+      await settle(() => app.state.keptViews.get(view)?.data?.[5] === item.drawn[5]);
+      assert.deepEqual([...app.state.keptViews.get(view).data], item.drawn, `${item.what}: the copy kept is the one drawn`);
+      app.closeViewer();
+      app.forgetMemory();
+    }, url => {
+      if (url === view) {
+        const [status, bytes, tag, conversion] = answers.length > 1 ? answers.shift() : answers[0];
+        return viewAnswer(status, bytes, tag, conversion);
+      }
+      if (url === `/api/encounters/${word.id}`) return Promise.resolve(response({ status: 200, body: item.again }));
+      return new Promise(() => {});
+    });
+  }
+  // a first open (no early view) answered with another conversion than its detail names: never drawn, the document is
+  // read again, and the redraw that brings the conversion draws it
+  {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 8, pdfStarted: true, reads: { asked: 0, applied: 0 } });
+      await mount(word, find, () => opened.length === 1);
+      assert.deepEqual(opened, [BRAVO]);
+      assert.deepEqual(fetches.map(call => call.url), [view, `/api/encounters/${word.id}`, view], 'the view, the document again (a poll), the view');
+      assert.equal(fetches[1].init.headers['X-CPT-Poll'], '1', 'the page\'s own read: never the member\'s activity');
+      assert.equal(app.state.doc.document.view_conversion, C_TWO);
+      app.closeViewer();
+      app.forgetMemory();
+    }, url => (url === view ? viewAnswer(200, BRAVO, VIEW_TAG_B, C_TWO)
+      : url === `/api/encounters/${word.id}` ? Promise.resolve(response({ status: 200, body: later })) : new Promise(() => {})));
+  }
+  // a poll that names another conversion while the click's view is on the way: the viewer is redrawn whole, its early
+  // view let go of, and the new viewer draws the poll's conversion; the early answer, come late, draws nothing
+  {
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    let late = null;
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: word.id }, routeSerial: 9, pdfStarted: true, docKey: '', viewerKey: '' });
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), Uint8Array.from(ALPHA));
+      app.startEarly(word.id);
+      const first = await mount(word, find, made => made.mode === 'loading');
+      Object.assign(app.state, { docKey: app.renderKey(word), viewerKey: app.viewerKey(word) });
+      app.renderDocument(later, false);  // the poll
+      assert.equal(first.mode, 'closed', 'the viewer of the conversion no longer served is closed');
+      assert.equal(fetches[0].init.signal.aborted, true, 'its early view let go of');
+      await settle(() => opened.length === 1);
+      late?.(viewAnswer(304, null, VIEW_TAG_A, C_ONE));
+      await settle(() => false);
+      assert.deepEqual(opened, [BRAVO], 'the poll\'s conversion drawn, and nothing else');
+      assert.equal(app.state.viewer.conversion, C_TWO);
+      app.closeViewer();
+      app.forgetMemory();
+    }, (url, init) => {
+      if (url === view && init.headers['If-None-Match'] === VIEW_TAG_A && !late) return new Promise(resolve => { late = resolve; });
+      if (url === view) return viewAnswer(200, BRAVO, VIEW_TAG_B, C_TWO);
+      return new Promise(() => {});
+    });
+  }
+  // a PDF document names no conversion, nor do its view's answers: drawn at once, as before
+  {
+    const ready = fixture('encounter-ready.json');
+    const opened = [];
+    const library = fakeLibrary({ open: task => { opened.push([...task.options.data]); return Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }); } });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      Object.assign(app.state, { route: { name: 'doc', id: ready.id }, routeSerial: 10, pdfStarted: true });
+      await mount(ready, find, () => opened.length === 1);
+      assert.deepEqual([ready.document.view_conversion, fetches.length], [null, 1]);
+      app.closeViewer();
+      app.forgetMemory();
+    }, () => viewAnswer(200, ALPHA, VIEW_TAG_A, undefined));
+  }
+});
+
+test('I1-16, I2-1 (viewer-2): a refused Word document clicked and left before either answer keeps no copy - the route away, or a second click on another document; a PDF left so keeps its copy (R2-15)', async () => {
+  const word = fixture('encounter-word.json');
+  const view = word.document.view_url;
+  const refused = clone(word);
+  Object.assign(refused.document, { view_url: null, view_media_type: null, converted: false, view_conversion: null });
+  const browserFetch = answer => (url, init = {}) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    answer(url).then(resolve, reject);
+  });
+  for (const [what, leave, doc] of [['back to Documents', '#documents', refused], ['a second click on another document', '#doc/f5000000-0000-4000-8000-000000000001', refused],
+    ['a PDF document, back to Documents', '#documents', word]]) {
+    let release = null;
+    const detail = new Promise(resolve => { release = resolve; });
+    await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ fetches }) => {
+      Object.assign(app.state, { route: { name: 'documents' }, session: fixture('session.json'), sessionReadAt: Date.now(), pdfStarted: true });
+      const data = Uint8Array.from(ALPHA);
+      app.keepView(view, VIEW_TAG_A.slice(1, -1), data);
+      global.location.hash = `#doc/${word.id}`;
+      app.route();
+      global.location.hash = leave;  // left before either answer
+      app.route();
+      assert.equal(fetches.find(call => call.url === view).init.signal.aborted, true, `${what}: the click's view let go of`);
+      assert.equal(app.state.keptViews.has(view), true, `${what}: the page's own abort keeps the copy (R2-15)`);
+      release(response({ status: 200, body: doc }));  // the detail, come after the route left
+      await settle(() => !app.state.keptViews.has(view));
+      const kept = doc === word;
+      assert.deepEqual([app.state.keptViews.has(view), [...data]], kept ? [true, ALPHA] : [false, [0, 0, 0, 0, 0, 0]],
+        `${what}: ${kept ? 'a PDF view: the copy kept for a re-open' : 'no view named: the copy dropped and overwritten'}`);
+      app.forgetMemory();
+    }, browserFetch(url => (url === view ? new Promise(() => {}) : url === `/api/encounters/${word.id}` ? detail : new Promise(() => {}))));
+  }
+});
+
+test('I1-2, exact-1: a first page of another practice than the page shows - the member\'s access changed - is never drawn: the session is read once, and the route drawn afresh under its name; the same practice reads no session; a session that cannot be read draws nothing more', { timeout: 60000 }, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const name of ['documents', 'queue', 'workspace']) {
+    const practices = twoPractices(60);
+    practices.active = 'B';  // the page shows A (its shell's session); A's owner turned the member's access to A off
+    await withListPage(practices.answer, async ({ calls, table, element }) => {
+      const session = fixture('session.json');
+      app.state.session = { ...session, workspace: { ...session.workspace, id: practices.ids.A, name: 'Practice A' } };
+      global.location.hash = `#${name}`;
+      app.state.routeSerial = 50;
+      await app.showList(name, 50);
+      assert.equal(table.rows.length, 0, `${name}: none of B's rows drawn under A's name`);
+      assert.equal(app.state.list.loaded, false, name);
+      await settle(() => app.state.list?.loaded);
+      assert.equal(calls.filter(call => call.url === '/api/session').length, 1, `${name}: the session read once`);
+      assert.equal(app.state.session.workspace.id, practices.ids.B, `${name}: the page now shows B`);
+      assert.equal(app.state.list.workspace, practices.ids.B, `${name}: the route drawn afresh, B's own list`);
+      assert.ok(table.rows.length > 0 && table.rows.every(row => row.href.startsWith('#doc/b0')), `${name}: B's rows`);
+      app.state.list.observer?.disconnect();
+    });
+  }
+  // the page and the server name the same practice: no session read (R2-17: a page load asks none)
+  const same = twoPractices(60);
+  await withListPage(same.answer, async ({ calls, table }) => {
+    const session = fixture('session.json');
+    app.state.session = { ...session, workspace: { ...session.workspace, id: same.ids.A } };
+    app.state.routeSerial = 51;
+    await app.showList('documents', 51);
+    assert.deepEqual([table.rows.length, calls.filter(call => call.url === '/api/session').length], [50, 0]);
+    app.state.list.observer?.disconnect();
+  });
+  // a session read that fails leaves the page's practice as it was: nothing drawn, and the route not drawn again (each
+  // answer comes a turn later, as a network's does, so a page that asked again and again would be counted, not hang)
+  const failing = twoPractices(60);
+  failing.active = 'B';
+  const answer = (method, url, body) => new Promise(resolve => setImmediate(() => resolve(url === '/api/session'
+    ? { status: 503, body: { error: 'Unavailable.' } } : failing.answer(method, url, body))));
+  await withListPage(answer, async ({ calls, table }) => {
+    const session = fixture('session.json');
+    app.state.session = { ...session, workspace: { ...session.workspace, id: failing.ids.A } };
+    app.state.routeSerial = 52;
+    await app.showList('documents', 52);
+    await settle(() => false);
+    assert.deepEqual([table.rows.length, calls.filter(call => call.url === '/api/session').length,
+      calls.filter(call => call.url.startsWith('/api/encounters')).length], [0, 1, 1], 'one session read, the list asked once');
+  });
 });
 
 test('R2-18: a document the server refuses (404: another practice\'s, or access ended) wipes page memory - the copies, the hints and the worker made ready ahead', async () => {
@@ -6977,7 +7826,7 @@ async function withListPage(answer, fn, { observer = true } = {}) {
       global.document.createElement = tag => (tag === 'template' ? { set innerHTML(value) { this.content = { rows: rowsOf(value) }; } } : tag === 'p' ? empty : fakeElement());
       global.fetch = async (url, init = {}) => {
         const method = init.method || 'GET';
-        calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, headers: init.headers });
+        calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, headers: init.headers, init });
         return response(await answer(method, url, typeof init.body === 'string' ? JSON.parse(init.body) : undefined));
       };
       const type = words => { search.value = words; app.onInput({ target: search }); };
@@ -7000,13 +7849,14 @@ test('R2-22: the list addresses; listPage reads either server\'s answer and refu
   assert.deepEqual(app.LIST_ADDRESS, { workspace: '/api/encounters?list=recent', documents: '/api/encounters?list=documents', queue: '/api/encounters?list=queue' });
   assert.deepEqual([app.SEARCH_URL, app.SEARCH_PAUSE_MS, app.AUTO_PAGES, app.LOCAL_SEARCH_MAX, app.MORE_TEXT], ['/api/encounters/search', 300, 3, 200, 'Show more documents']);
   const rows = fixture('encounters.json').encounters;
-  assert.deepEqual(app.listPage({ encounters: rows }), { rows, next: null, total: null }, 'release 1\'s answer: one whole page');
-  assert.deepEqual(app.listPage(rows), { rows, next: null, total: null }, 'a bare list too');
-  assert.deepEqual(app.listPage({ encounters: rows.slice(0, 2), next: 'c2', total: 12 }), { rows: rows.slice(0, 2), next: 'c2', total: 12 });
-  assert.deepEqual(app.listPage({ encounters: [], next: null, total: 0 }), { rows: [], next: null, total: 0 });
+  assert.deepEqual(app.listPage({ encounters: rows }), { rows, next: null, total: null, workspace: null }, 'release 1\'s answer: one whole page');
+  assert.deepEqual(app.listPage(rows), { rows, next: null, total: null, workspace: null }, 'a bare list too');
+  assert.deepEqual(app.listPage({ encounters: rows.slice(0, 2), next: 'c2', total: 12, workspace: 'w-a' }), { rows: rows.slice(0, 2), next: 'c2', total: 12, workspace: 'w-a' },
+    'the practice it was read in (I1-2)');
+  assert.deepEqual(app.listPage({ encounters: [], next: null, total: 0 }), { rows: [], next: null, total: 0, workspace: null });
   assert.deepEqual(app.listPage({ encounters: [null, 7, 'x', rows[0]] }).rows, [rows[0]], 'a row that is no object is never drawn');
   for (const bad of [null, 7, {}, { encounters: {} }, { encounters: [], next: 7 }, { encounters: [], next: {} }, { encounters: [], total: -1 },
-    { encounters: [], total: 1.5 }, { encounters: [], total: '12' }]) {
+    { encounters: [], total: 1.5 }, { encounters: [], total: '12' }, { encounters: [], workspace: 7 }, { encounters: [], workspace: {} }]) {
     assert.throws(() => app.listPage(bad), { message: 'The server answered with a document list this page cannot read.' }, JSON.stringify(bad));
   }
   assert.equal(app.listDescription('queue', 6), '6 documents wait on you: questions to answer, or codes to review or approve.');
@@ -7200,10 +8050,25 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
   const rows = listRowsOf(260);
   const expect = words => rows.filter(row => listText(row).includes(words)).map(hrefOf);
   const server = holding(pagedServer(rows));
-  await withListPage(server.answer, async ({ calls, table, empty, type, shown, storage }) => {
+  await withListPage(server.answer, async ({ calls, table, more, empty, type, shown, storage }) => {
     app.state.routeSerial = 14;
     await app.showList('documents', 14);
     const searches = () => calls.filter(call => call.url === app.SEARCH_URL);
+    // from here every request of any kind is recorded, and everything drawn kept (the closed-world check below)
+    const at = calls.length;
+    const other = recordOtherRequests();
+    const drawn = [];
+    for (const element of [table, more]) {
+      const own = Object.getOwnPropertyDescriptor(element, 'innerHTML');
+      let html = '';
+      Object.defineProperty(element, 'innerHTML', { get: own?.get || (() => html), set(value) { drawn.push(String(value)); if (own?.set) own.set.call(this, value); else html = value; }, configurable: true });
+    }
+    const made = global.document.createElement;
+    global.document.createElement = tag => {
+      const element = made(tag);
+      if (tag !== 'template') return element;
+      return { set innerHTML(value) { drawn.push(String(value)); element.innerHTML = value; }, get content() { return element.content; } };
+    };
     server.holdWhen(method => method === 'POST');
     type('polyp');
     assert.deepEqual(shown().map(row => row.href), rows.slice(0, 50).filter(row => listText(row).includes('polyp')).map(hrefOf), 'the rows on the page, filtered at once');
@@ -7241,9 +8106,268 @@ test('R2-22, C2: above 200 documents the server is asked after a 300 ms pause, o
     t.mock.timers.tick(1000);
     assert.equal(shown().length, 50, 'cleared: the list\'s rows again, from page memory');
     assert.equal(searches().length, 3);
-    assert.ok(calls.every(call => !/polyp|nothing/.test(call.url)), 'the words are never in an address');
+    // CLOSED WORLD (integrated refutation round 2, I2-3, failclosed-0): while the box searched, the page made exactly the
+    // searches it must - each one POST to the search address as a string, no query string, exactly its four headers and
+    // their values however they are given (an object, an array of pairs, a Headers), its other options exactly, the
+    // words in its body only - and no other request of any kind, nor drew anything that loads; the form checks below are
+    // the second line
+    assert.deepEqual(calls.slice(at).map(requestShape), ['polyp', 'polyp report 2', 'nothing like this'].map(searchShape),
+      'exactly the searches, each as it must be');
+    assert.deepEqual(other.requests, [], 'no other request of any kind');
+    assert.deepEqual(drawn.flatMap(loadingMarkup), [], 'nothing drawn that loads');
+    // every form of the words typed - as typed, case-blind, percent- or plus-encoded, base64 or base64url at any byte
+    // alignment - in no request's address and no request header (integrated refutation round 1, phileak-0)
+    const typed = ['polyp', 'polyp report 2', 'polyp report 21', 'nothing like this'];
+    assert.deepEqual(calls.flatMap(call => searchMarkerHits(requestText(call), typed)), [],
+      'the words are never in an address or a header');
+    for (const form of searchMarkerForms('polyp report 2')) {  // the control: each form, in an address, is found
+      assert.ok(searchMarkerHits(`/api/encounters?q=${encodeURIComponent(form)}`, ['polyp report 2']).length, form);
+    }
     assert.deepEqual(storage, [], 'nothing in the browser\'s storage');
+    other.restore();
+    // the control of the form checks' reading: a header given as a Headers object or an array of pairs, and a Request's
+    // own address, are read (I2-3, failclosed-0)
+    for (const headers of [new Headers({ 'X-Q': 'polyp report 2' }), [['X-Q', 'polyp report 2']]]) {
+      assert.ok(searchMarkerHits(requestText({ url: '/x', init: { headers } }), ['polyp report 2']).length, String(headers));
+    }
+    assert.ok(searchMarkerHits(requestText({ url: new Request('http://studio.test/x?q=polyp%20report%202'), init: {} }), ['polyp report 2']).length);
   });
+});
+
+// One request the page made, as a search's closed-world check compares it whole (I2-3): its address as given (a
+// string, or what else it was), the names of its options, and each option - its headers read however they were given.
+function requestShape(call) {
+  const init = call.init && typeof call.init === 'object' ? call.init : {};
+  let headers;
+  try {
+    headers = Object.fromEntries(new Headers(init.headers ?? {}));
+  } catch (error) {
+    headers = `unreadable: ${error.message}`;  // a value no browser would send is never a search's
+  }
+  return { url: typeof call.url === 'string' ? call.url : Object.prototype.toString.call(call.url), options: Object.keys(init).sort(),
+    method: init.method, headers, body: init.body, credentials: init.credentials, cache: init.cache };
+}
+
+// A request as the form checks read it (the second line): its address - a Request's own included - and its headers,
+// however they were given (I2-3, failclosed-0: JSON.stringify read a Headers object as '{}').
+function requestText(call) {
+  const address = typeof call.url === 'string' ? call.url : call.url instanceof Request ? call.url.url : String(call.url);
+  return `${address}\n${JSON.stringify(requestShape(call).headers)}`;
+}
+
+// The one request a search of `text` is (R2-20, R2-22): its words in the POST body only.
+function searchShape(text) {
+  return { url: app.SEARCH_URL, options: ['body', 'cache', 'credentials', 'headers', 'method'], method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json', [app.CLIENT_HEADER.toLowerCase()]: app.CLIENT_VERSION, 'x-csrftoken': 'token123' },
+    body: JSON.stringify({ text, before: null }), credentials: 'same-origin', cache: 'no-store' };
+}
+
+// Every other way a page can make a request, recorded until restore() (I2-3: a closed world): XMLHttpRequest,
+// sendBeacon, EventSource, WebSocket, a worker, an image, a dynamic import, window.open, a navigation, and any element
+// made other than the list's own (its rows' template, the empty search's paragraph).
+function recordOtherRequests() {
+  const requests = [];
+  const undo = [];
+  const swap = (owner, name, value) => {
+    const before = Object.getOwnPropertyDescriptor(owner, name);
+    undo.push(() => (before ? Object.defineProperty(owner, name, before) : delete owner[name]));
+    Object.defineProperty(owner, name, { value, configurable: true, writable: true });
+  };
+  const named = kind => class { constructor(...args) { requests.push([kind, ...args.map(String)]); } };
+  swap(global, 'XMLHttpRequest', class {
+    open(...args) { requests.push(['XMLHttpRequest', ...args.map(String)]); }
+    send(body) { requests.push(['XMLHttpRequest send', String(body)]); }
+    setRequestHeader(...args) { requests.push(['XMLHttpRequest header', ...args.map(String)]); }
+  });
+  for (const kind of ['EventSource', 'WebSocket', 'Worker', 'SharedWorker', 'Request']) swap(global, kind, named(kind));
+  swap(global, 'Image', class { set src(value) { requests.push(['Image', String(value)]); } });
+  swap(global, 'navigator', { sendBeacon: (...args) => { requests.push(['sendBeacon', ...args.map(String)]); return true; } });
+  swap(global.window, 'open', (...args) => { requests.push(['window.open', ...args.map(String)]); return null; });
+  const place = global.location;
+  swap(global, 'location', { get hash() { return place.hash; }, set hash(value) { place.hash = value; },
+    get href() { return `http://studio.test/${place.hash}`; }, set href(value) { requests.push(['location', String(value)]); },
+    assign: value => requests.push(['location.assign', String(value)]), replace: value => requests.push(['location.replace', String(value)]) });
+  const make = global.document.createElement;
+  swap(global.document, 'createElement', tag => {
+    if (tag !== 'template' && tag !== 'p') requests.push(['element', String(tag)]);
+    return make(tag);
+  });
+  const load = app.PDF_IMPORT.load;
+  app.PDF_IMPORT.load = specifier => { requests.push(['import', String(specifier)]); return new Promise(() => {}); };
+  undo.push(() => { app.PDF_IMPORT.load = load; });
+  return { requests, restore: () => { while (undo.length) undo.pop()(); } };
+}
+
+// What in drawn markup could load anything (I2-3): an element or attribute the list's own markup does not have, or an
+// address that is not a place on the page itself (a fragment).
+const LIST_MARKUP = { div: ['class'], span: ['class'], a: ['class', 'href'], strong: [], small: [], p: ['class', 'role'], svg: ['class', 'aria-hidden'],
+  use: ['href'], button: ['type', 'class', 'data-action', 'disabled', 'aria-busy'] };
+function loadingMarkup(html) {
+  return [...dom(html).walk()].flatMap(node => {
+    if (!Object.hasOwn(LIST_MARKUP, node.tag)) return [`<${node.tag}>`];
+    return Object.entries(node.attrs).filter(([name, value]) => !LIST_MARKUP[node.tag].includes(name) || (name === 'href' && !/^#[\w/%.-]*$/.test(value)))
+      .map(([name, value]) => `<${node.tag} ${name}="${value}">`);
+  });
+}
+
+// Every form of a typed word a no-leak guard looks for (integrated refutation round 1, phileak-0), as the bench's
+// markerForms reads a marker (ops/bench/bench.cjs, records[4]): the word as typed and case-folded, and its base64 and
+// base64url cores at the three byte alignments.
+function searchMarkerForms(word) {
+  const forms = new Set([word, word.toLowerCase()]);
+  const bytes = Buffer.from(word, 'utf8');
+  for (let pad = 0; pad < 3; pad += 1) {
+    const b64 = Buffer.concat([Buffer.alloc(pad), bytes]).toString('base64');
+    const core = b64.slice(Math.ceil(pad * 4 / 3), Math.floor((pad + bytes.length) * 4 / 3));
+    forms.add(core);
+    forms.add(core.replace(/\+/g, '-').replace(/\//g, '_'));
+  }
+  return [...forms];
+}
+
+// The forms of `words` in `text`, read as it is and percent- and plus-decoded: a word's own forms case-blind, a base64
+// core as written (its case is its content).
+function searchMarkerHits(text, words) {
+  const raw = String(text);
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw.replace(/\+/g, ' '));
+  } catch {
+    // not percent-encoded text: read as it is
+  }
+  const readings = [raw, decoded];
+  return words.flatMap(word => searchMarkerForms(word).filter(form => ([word, word.toLowerCase()].includes(form)
+    ? readings.some(reading => reading.toLowerCase().includes(form.toLowerCase()))
+    : readings.some(reading => reading.includes(form)))));
+}
+
+// Release 1's web after a switch-back has no search route: Django's own HTML 404, as measured on 816045c7 (rollback-0).
+const RELEASE_1_NOT_FOUND = { status: 404, type: 'text/html; charset=utf-8', body: '\n<!doctype html>\n<html lang="en">\n<head>\n  <title>Not Found</title>\n</head>\n<body>\n  <h1>Not Found</h1><p>The requested resource was not found on this server.</p>\n</body>\n</html>\n' };
+
+test('I1-3 (rollback-0): after a switch-back, release 1\'s HTML 404 to a search reads as an update - the notice, the list\'s rows kept, never "Not found" - while release 2\'s own JSON 404 and an HTML 404 elsewhere stay not found', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = listRowsOf(260);
+  let flipped = false;  // release 1's web takes over once the first page is drawn: 409 to every API call, its 404 to the search
+  const server = pagedServer(rows, { refuse: (method, url) => (!flipped ? null : url === app.SEARCH_URL ? RELEASE_1_NOT_FOUND
+    : { status: 409, body: { error_code: 'client_outdated', error: 'Reload.' } }) });
+  await withListPage(server, async ({ calls, element, more, type, shown }) => {
+    app.state.routeSerial = 31;
+    await app.showList('documents', 31);
+    assert.equal(app.state.list.local, false, 'above 200 documents: the server is asked');
+    element('#updateNotice').hidden = true;
+    flipped = true;
+    type('polyp report 99');
+    t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+    await settle(() => app.state.list.refused !== '');
+    assert.deepEqual(calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body), [{ text: 'polyp report 99', before: null }]);
+    assert.deepEqual([app.state.outdated, element('#updateNotice').hidden], [true, false], 'the update notice');
+    assert.equal(app.state.list.refused, app.OUTDATED_TEXT);
+    assert.ok(!more.innerHTML.includes('Not found'), 'never "Not found" about a document that is in the practice');
+    assert.equal(shown().length, rows.slice(0, 50).filter(row => listText(row).includes('polyp report 99')).length, 'the page\'s own matches stay');
+  });
+  app.state.outdated = false;
+  // the search's later page meets it the same way; release 2's own JSON 404, and an HTML 404 anywhere else, are not found
+  for (const [what, path, answer, said] of [['a later page of the search', app.SEARCH_URL, RELEASE_1_NOT_FOUND, app.OUTDATED_TEXT],
+    ['release 2\'s own 404 to the search', app.SEARCH_URL, { status: 404, body: { error: 'Not found.' } }, 'Not found.'],
+    ['an HTML 404 to another address', '/api/encounters/x', RELEASE_1_NOT_FOUND, 'Not found, or not in your workspace.']]) {
+    const outdated = said === app.OUTDATED_TEXT;
+    await withPage({ elements: { updateNotice: fakeElement({ hidden: true }) }, answers: [{ match: () => true, ...answer }] }, async ({ element }) => {
+      const method = path === app.SEARCH_URL ? 'POST' : 'GET';
+      await assert.rejects(app.api(path, { method, json: method === 'POST' ? { text: 'x', before: 'c50' } : undefined }),
+        { message: said }, what);
+      assert.deepEqual([app.state.outdated, element('#updateNotice').hidden], [outdated, !outdated], what);
+    });
+    app.state.outdated = false;
+  }
+});
+
+// Two practices a member is active in (exact-0): each answers as release 2's server does, naming the practice read, and
+// `active` is the member's active practice at each request (the oldest active membership: A until A's owner turns the
+// member's access to A off). A cursor is a position only, so A's cursor read in B pages B's rows.
+function twoPractices(count) {
+  const rows = { A: listRowsOf(count) };
+  rows.B = rows.A.map(row => ({ ...row, id: row.id.replace(/^f0/, 'b0'), title: row.title.replace('Synthetic', 'Synthetic B') }));
+  const ids = { A: 'fa000000-0000-4000-8000-0000000000a1', B: 'fa000000-0000-4000-8000-0000000000b1' };
+  const servers = { A: pagedServer(rows.A), B: pagedServer(rows.B) };
+  const practice = { active: 'A', rows, ids };
+  practice.answer = (method, url, body) => {
+    const session = fixture('session.json');
+    if (url === '/api/session') return { status: 200, body: { ...session, workspace: { ...session.workspace, id: ids[practice.active] } } };
+    const reply = servers[practice.active](method, url, body);
+    return reply.status === 200 ? { ...reply, body: { ...reply.body, workspace: ids[practice.active] } } : reply;
+  };
+  return practice;
+}
+
+test('I1-2 (exact-0): a later page or a search that names another practice than the list\'s first page is never drawn - nothing appended or shown under it - and the route is read afresh, with the session', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ofB = row => row.href.startsWith('#doc/b0');
+  // later pages of the list (110 documents: two more pages, each loaded as its end comes near)
+  const later = twoPractices(110);
+  await withListPage(later.answer, async ({ calls, table, near }) => {
+    global.location.hash = '#documents';
+    app.state.routeSerial = 41;
+    await app.showList('documents', 41);
+    const first = app.state.list;
+    assert.deepEqual([first.workspace, table.rows.length, table.rows.some(ofB)], [later.ids.A, 50, false]);
+    const appended = [];
+    const append = table.append.bind(table);
+    table.append = content => { appended.push(...content.rows); append(content); };
+    near();  // a later page of A, named A: appended, as before
+    await settle(() => appended.length === 50);
+    assert.deepEqual(appended.map(row => row.href), later.rows.A.slice(50, 100).map(hrefOf), 'the list\'s own practice: appended');
+    assert.equal(app.state.list, first);
+    later.active = 'B';  // A's owner turns the member's access to A off: B is the member's active practice now
+    const at = calls.length;
+    near();
+    await settle(() => app.state.list !== first && app.state.list?.loaded);
+    assert.ok(calls.some(call => call.url === '/api/encounters?list=documents&before=c100'), 'the later page was asked, and answered by B');
+    assert.equal(appended.length, 50, 'none of B\'s rows appended to A\'s list');
+    assert.ok(calls.slice(at).some(call => call.url === '/api/session'), 'the session read again');
+    assert.equal(app.state.list.workspace, later.ids.B, 'the route drawn afresh: B\'s own list');
+    assert.deepEqual(table.rows.map(row => row.href), later.rows.B.slice(0, 50).map(hrefOf), 'B\'s first page, from its start');
+    assert.equal(first.observer.disconnected, true, 'A\'s list closed');
+  });
+  // a search (above 200 documents, on the server): its first page, then a later page of an answer A gave
+  for (const what of ['first', 'later']) {
+    const search = twoPractices(260);
+    await withListPage(search.answer, async ({ calls, table, type, near }) => {
+      global.location.hash = '#documents';
+      app.state.routeSerial = 42;
+      await app.showList('documents', 42);
+      const first = app.state.list;
+      assert.equal(first.local, false);
+      if (what === 'later') {  // A answers the search's first page; B its next
+        type('Synthetic');
+        t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+        await settle(() => first.found?.query === 'synthetic');
+        assert.equal(first.found.next, 'c50');
+      }
+      const drawn = [];
+      const own = Object.getOwnPropertyDescriptor(table, 'innerHTML');
+      Object.defineProperty(table, 'innerHTML', { get: own.get, set(value) { drawn.push(value); own.set.call(this, value); }, configurable: true });
+      const appended = [];
+      const append = table.append.bind(table);
+      table.append = content => { appended.push(...content.rows); append(content); };
+      search.active = 'B';
+      const at = calls.length;
+      if (what === 'first') {
+        type('polyp report 9');
+        t.mock.timers.tick(app.SEARCH_PAUSE_MS);
+      } else {
+        near();
+      }
+      await settle(() => app.state.list !== first && app.state.list?.loaded);
+      const asked = calls.filter(call => call.url === app.SEARCH_URL).map(call => call.body);
+      assert.deepEqual(asked.at(-1), what === 'first' ? { text: 'polyp report 9', before: null } : { text: 'Synthetic', before: 'c50' }, what);
+      assert.deepEqual(appended, [], `${what}: none of B's rows appended`);
+      assert.equal(drawn.length, 1, `${what}: the table drawn once, by B's own list`);
+      assert.deepEqual(dom(drawn[0]).all('a.document-row').map(row => row.attr('href')), search.rows.B.slice(0, 50).map(hrefOf), `${what}: B's first page`);
+      assert.deepEqual([app.state.list.workspace, first.found?.rows?.some(row => row.id.startsWith('b0')) ?? false], [search.ids.B, false], what);
+      assert.ok(calls.slice(at).some(call => call.url === '/api/session'), `${what}: the session read again`);
+      app.state.list.observer?.disconnect();
+    });
+  }
 });
 
 test('R2-22, C2: above 200 documents, words in the box load no more of the list\'s pages, however near its end comes; a search\'s own pages and the list\'s, once cleared, do', async t => {
@@ -7869,4 +8993,113 @@ test('R2: the page script and the stylesheet stay 1% under section 8\'s static w
   const gzipped = file => zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
   assert.ok(gzipped(BUNDLE) <= 79200, `app.js: ${gzipped(BUNDLE)} B gzipped by node, the early gate 79,200 (section 8: 80,000)`);
   assert.ok(gzipped(STYLES) <= 15840, `styles.css: ${gzipped(STYLES)} B gzipped by node, the early gate 15,840 (section 8: 16,000)`);
+});
+
+// --- I1-13 (session-0): the sign-in page and the account page tell this browser's app tabs they were reached
+// (studio/static/studio/session_news.js), on the app's own channel and in the shapes the app already acts on ---------
+
+const SESSION_NEWS = path.join(ROOT, 'studio', 'static', 'studio', 'session_news.js');
+
+// session_news.js run on a page of its own (a vm context): the body's data-session (none on the sign-in page), the
+// "Sign out everywhere" form where the page has one, and a BroadcastChannel that works, cannot be made, refuses to post
+// or is not there (then the localStorage key, which may refuse too). It answers what was posted, what was stored and the
+// form's submit.
+function newsPage({ session, form = false, channel = 'works', storage = 'works', now = 1764000000000 } = {}) {
+  const posted = [];
+  const stored = [];
+  const listeners = {};
+  const everywhere = form ? { addEventListener(type, listener) { listeners[type] = listener; } } : null;
+  class Channel {
+    constructor(name) {
+      if (channel === 'throws') throw new Error('no channel here');
+      this.name = name;
+    }
+    postMessage(data) {
+      if (channel === 'refuses') throw new Error('the channel refused it');
+      posted.push({ name: this.name, data: JSON.parse(JSON.stringify(data)) });
+    }
+  }
+  const sandbox = {
+    document: { body: { dataset: session === undefined ? {} : { session } }, getElementById: id => (id === 'everywhereForm' ? everywhere : null) },
+    Date: { now: () => now },
+  };
+  if (channel !== 'none') sandbox.BroadcastChannel = Channel;
+  if (storage !== 'none') {
+    sandbox.localStorage = { setItem(key, value) { if (storage === 'throws') throw new Error('no storage here'); stored.push({ key, data: JSON.parse(value) }); } };
+  }
+  vm.runInNewContext(fs.readFileSync(SESSION_NEWS, 'utf8'), sandbox);
+  return { posted, stored, submit: () => listeners.submit?.({ type: 'submit' }) };
+}
+
+test('I1-13 (session-0): the sign-in page and the account page tell the app\'s tabs they were reached - on its own channel, in its own shapes: at load the page and its session (none on the sign-in page), and the account page\'s "Sign out everywhere" as its session signed out; with no channel, the storage key shareSession writes; a channel or storage that refuses throws nothing', () => {
+  const now = 1764000000000;
+  const page = { type: 'page', session: 'tag-a', at: now };
+  const out = { type: 'signed-out', reason: 'expired', session: 'tag-a', at: now };
+  // the sign-in page: one message, at load, naming no session; it has no everywhere form
+  const login = newsPage({ now });
+  assert.deepEqual([login.posted, login.stored], [[{ name: app.SESSION_CHANNEL, data: { type: 'page', session: '', at: now } }], []]);
+  // the account page: its session at load; its everywhere form, sent, says that session signed out
+  const account = newsPage({ session: 'tag-a', form: true, now });
+  assert.deepEqual(account.posted, [{ name: app.SESSION_CHANNEL, data: page }]);
+  account.submit();
+  assert.deepEqual(account.posted.map(item => [item.name, item.data]), [[app.SESSION_CHANNEL, page], [app.SESSION_CHANNEL, out]]);
+  assert.deepEqual(account.stored, [], 'the channel worked: nothing in storage');
+  // no channel, one that cannot be made, or one that refuses: the storage key the app's storage events read
+  for (const channel of ['none', 'throws', 'refuses']) {
+    const fallback = newsPage({ session: 'tag-a', form: true, channel, now });
+    fallback.submit();
+    assert.deepEqual([fallback.posted, fallback.stored], [[], [{ key: app.SESSION_CHANNEL, data: page }, { key: app.SESSION_CHANNEL, data: out }]], channel);
+  }
+  // nowhere to say it: no error escapes the page
+  for (const storage of ['none', 'throws']) assert.doesNotThrow(() => newsPage({ session: 'tag-a', form: true, channel: 'none', storage }).submit(), storage);
+  // the shape is the app's own (shareSession): the message, the session and the time, nothing else
+  const shared = [];
+  const saved = { channel: app.idle.channel, session: app.idle.session };
+  try {
+    Object.assign(app.idle, { channel: { postMessage: data => shared.push(JSON.parse(JSON.stringify(data))) }, session: 'tag-a' });
+    app.shareSession({ type: 'signed-out', reason: 'expired' });
+  } finally {
+    Object.assign(app.idle, saved);
+  }
+  assert.deepEqual(Object.keys(shared[0]).sort(), Object.keys(out).sort());
+  assert.deepEqual({ ...shared[0], at: now }, out);
+});
+
+test('I1-13 (session-0): an app tab acts on what those pages say as on another tab\'s news - its own session\'s account page changes nothing; that page\'s "Sign out everywhere" takes it to the sign-in page at once; the sign-in page, or another member\'s account page, makes it ask the server (a poll), whose 401 or other session ends it - and every end wipes the kept copies, the hints and the waiting worker', async () => {
+  const keep = () => {
+    const data = Uint8Array.from([37, 80, 68, 70]);
+    app.state.keptViews.clear();
+    app.keepView('/api/encounters/x/original?view=1', 'abcdef00-0000-4000-8000-000000000000', data);
+    app.state.viewHints = new Map([['x', true]]);
+    const thread = { terminated: false, terminate() { this.terminated = true; } };
+    app.state.pdfStandby = { thread, address: 'x', ready: Promise.resolve(thread), taken: false };
+    return { data, thread };
+  };
+  const ping = (status, body) => ({ match: (method, url) => method === 'POST' && url === app.ACTIVITY_URL, status, body });
+  const alive = session => ping(200, { idle_seconds: 900, cap_seconds: 28800, warning_seconds: 120, session });
+  const cases = [
+    // [what, the page's messages, the server's answer to a check, ends?, asks?]
+    ['the account page of its own session', newsPage({ session: 'tag-a', form: true }).posted, null, false, false],
+    ['that page\'s "Sign out everywhere"', (() => { const one = newsPage({ session: 'tag-a', form: true }); one.submit(); return one.posted; })(), null, true, false],
+    ['the sign-in page after the sessions ended (401)', newsPage({}).posted, ping(401, { error: 'signed_out', reason: 'expired' }), true, true],
+    ['the sign-in page while still signed in', newsPage({}).posted, alive('tag-a'), false, true],
+    ['another member\'s account page (a forced change: their session)', newsPage({ session: 'tag-b', form: true }).posted, alive('tag-b'), true, true],
+  ];
+  for (const [what, messages, answer, ends, asks] of cases) {
+    await withSignedInPage({ elements: { signoutForm: fakeElement({ submitted: 0, submit() { this.submitted += 1; } }) }, answers: answer ? [answer] : [] }, async ({ calls }) => {
+      Object.assign(app.idle, { gone: false, session: 'tag-a', checking: null, deadline: Date.now() + 600000, idleEnd: Date.now() + 600000 });
+      app.state.leaving = false;
+      const { data, thread } = keep();
+      for (const message of messages) app.receiveSession(message.data);
+      await settle(() => !app.idle.checking);
+      const checks = calls.filter(call => call.url === app.ACTIVITY_URL);
+      assert.deepEqual(checks.map(call => [call.method, call.headers[app.POLL_HEADER]]), asks ? [['POST', '1']] : [], `${what}: asked the server (a poll, no one's activity)`);
+      const left = calls.filter(call => call.assign).map(call => call.assign.split('?')[0]);
+      assert.deepEqual(left, ends ? ['/login/'] : [], `${what}: where the tab went`);
+      assert.deepEqual([app.state.keptViews.size, [...data], app.state.viewHints.size, app.state.pdfStandby, thread.terminated],
+        ends ? [0, [0, 0, 0, 0], 0, null, true] : [1, [37, 80, 68, 70], 1, app.state.pdfStandby, false], `${what}: page memory`);
+      if (!ends) assert.ok(app.state.pdfStandby, `${what}: the waiting worker stays`);
+      app.forgetMemory();
+    });
+  }
 });
