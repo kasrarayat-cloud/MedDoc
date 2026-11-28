@@ -5047,3 +5047,44 @@ Recorded before the second B measurement starts, so that its commit time precede
   Stricter than 9.8's "a 5xx rate above the hour before", which it supersedes.
 
 (Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-27 by session 799ffbc5.)
+
+### Session record, 2026-11-28 (799ffbc5) — release 2: B's third session and its post-hoc acceptance, text-only work during B, and the switch-back checks (D-R2-58 to D-R2-60)
+
+- **D-R2-60** (2026-11-28 ~04:55Z, the lead; B's third session `laneM/b3`, revision a680d837b; WRITTEN AFTER THE VALUES,
+  labelled as such). B is valid (no INVALID round, A within tolerance) and the frozen judge says FAIL on 7 of 186 rows.
+  Five are inside D-R2-54's written bounds and accepted as declared: opaque-P1 200.15 ms (bound <= 240 and <= 0.40 A =
+  245.3), server-list-100 16.8 ms (<= 30, <= A 22.6), session-18000 12.4 ms (<= 20, <= A 22.0), detail-10-p95 105.9 ms
+  (<= 150, <= A 202.8), plans.no_seq_scan (both flagged statements are the whole-list COUNT, nothing else Seq Scans). The
+  cold row is accepted in the open as D-R2-50 declared (34 lifetimes, max 112.0 ms, medians 90 and 84 ms; release 1
+  median 1,949 ms). TWO FAILS ARE OUTSIDE D-R2-54's LIST, and under D-R2-54 they stop the release: documents-usable-100-P1
+  (B 209.1 ms against 0.6 A = 207.42; release 2 is 39.5% faster than release 1 there, the target was 40%; b2 had B 213
+  passing against a drifted A) and memory-list (B 139.5 MiB against A + 23.88 = 138.78, 0.72 MiB over the allowance for
+  the waiting worker and the kept copies; b2 had 137.1 passing). The lead does NOT re-judge them: they stay FAIL. The
+  lead's post-hoc decision, made with the values in hand and therefore put to the owner: release 2 proceeds with both
+  accepted in the open as measured, because each is a sub-1% miss of an improvement target or a design allowance, not a
+  regression a user meets, and a fix-and-remeasure cycle (about a day, with the same chance of a new marginal row) buys
+  nothing measurable. The owner is told with these numbers before anything else happens, and may say stop: then both are
+  fixed (the list's usable time at P1; the kept-copy budget) and B is measured again in full.
+- **D-R2-59** (2026-11-27 ~23:40Z, the lead; owner D455; recorded BEFORE B's third session starts, no B value exists).
+  D-R2-54 (1)'s "no other work on the host" is read as: no test, suite, build, browser, bench, docker or image process
+  other than B's driver and the lead's own one-off reads. Agents that only read and write files may run during B:
+  reading code and documents with read-only commands, writing markdown, and writing source code and tests in their own
+  worktrees (created with scripts/setup-worktree.sh), running no program but single-file syntax checks (python -m
+  py_compile, node --check, bash -n) and git. Reason: the owner puts release 3 first and asks for speed (D455, and at
+  ~23:45Z "accelerate ... run multiple jobs"); its preparation and first code are written while B runs, and tested after.
+  (Amended ~23:47Z, still before B's third session starts.) B's driver keeps its own gates (a round starts at 1-minute load <= 5; any sample above 8 makes
+  it INVALID), and `b3/mem.log` records the load every 15 s as the evidence.
+- **D-R2-58** (2026-11-27, the lead; I1-8's one-off switch-back checks, `lead/i1-8/RESULT.json`, run before B so that a
+  migration defect could not void B (D-R2-53)). (a) Release 1's Django suite on a database release 2's migrations built:
+  1,438 tests OK (1 skipped), the same as on its own schema in the same session; release 1's migrate there applies
+  nothing. (b) EXPLAIN (ANALYZE) of release 1's list, queue, search and counts statements at 18,000 documents: FAIL under
+  the criterion declared before the run, on its Seq Scan clause only. Release 1's whole-practice list statement (its
+  queue page too: release 1 ignores `?list=`) and its queue COUNT Seq Scan, and they do so identically on release 1's
+  own schema measured in the same session, so the clause measured release 1's design, not the switch-back: the criterion
+  was mis-specified, and its FAIL is recorded as it stands, not re-judged. Every statement ran at or below the control's
+  time (list 111 against 123 ms; queue COUNT 8.7 against 15.0 ms); release 1 has no server search (404 on both). The
+  switch-back claim rests on those comparisons. Section 6's "its queries keep the plans they have" is corrected:
+  release 1's statements keep their plans or take release 2's indexes for a faster one (the queue COUNT, and the worker
+  and console reads, e.g. `round_runs` 0.42 against 32.2 ms).
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-28 by session 799ffbc5.)
