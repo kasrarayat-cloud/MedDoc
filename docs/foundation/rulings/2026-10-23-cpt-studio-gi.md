@@ -5088,3 +5088,54 @@ Recorded before the second B measurement starts, so that its commit time precede
   and console reads, e.g. `round_runs` 0.42 against 32.2 ms).
 
 (Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-28 by session 799ffbc5.)
+
+### Session record, 2026-11-28 (799ffbc5) — release 2: D-R2-55 completed with the package rulings the declaration cites, and the rehearsal's decisions (D-R2-61)
+
+Recorded as the first commit of the install declaration's documents branch, before the declaration's commit (D-R2-61 (4)).
+
+- **D-R2-55, completed** (2026-11-28, by D-R2-61; the text ANSWERS-R3.md proposed for D-R2-55, recorded as written; D-R2-55's first entry above stays as written). The install package's three review rounds:
+/home/claude/cpt-r2-20261125/release/PKG-ROUND1-DECISIONS.md - Q2, Q3, Q9, Q11, Q12 and the class-c ruling owner-9; D-R2-53
+holds that file's Q5-Q8, Q10, G1 and its two log rulings -, PKG-ROUND2-DECISIONS.md (R2P-1 to R2P-7) and
+PKG-ROUND3-DECISIONS.md (R3P-1 to R3P-6), the last governing where they differ; D-R2-54 is the B measurement's
+dispositions). Q2 with R3P-2: the owner is told, not asked (D428, C10), in ONE message carrying exactly three items - the
+install hour, the class-b Word notice (its words say that some files release 1 coded completely, and some files Word 2007
+itself writes, are now refused with the save-as-PDF sentence) and D-R2-54 (3)'s one sentence on B's rows accepted in the
+open; nothing that asks goes in it (the Dictation owner batch goes separately when ready); if he objects to any of the
+three when told, the act does not start. Q3: the HIPAA line stays verbatim (9.3); the ePHI evaluation names D429's
+documents as known and unchanged by this act. Q9 with R3P-5: the walk document is checked at the baseline, read-only, and
+must be the walk's own - one of its recorded synthetic documents (D361) made by its agent member - never only a document
+that exists. Q11: the window is placed away from the maintenance due times, read before the hour is told. Q12: the
+rehearsal's three hand steps are the lead's; until run, the declaration says 'not rehearsed'. owner-9: the class-c question
+asks him to open the first document again; its 304 evidence comes from the access log of his window, by route and status
+only. R2P-1 with R3P-1: 9.8's 5xx reading is a COUNT, stricter than 9.8's rate - every 5xx release 2's web answers to any
+request other than /health/ in its first hour from S3 is listed (time, method, route template, status) and any one is STOP
+AND JUDGE, an incident in which the lead decides switch-back or not, recorded; the hour before is context only; every
+request to /health/ is set aside by the path nginx logged and counted beside it. R2P-2: the web's switch-back reads count
+only what no client text can produce: the container and memory.events from Docker and the kernel; its processes from the
+kernel are a stop until judged; gunicorn's lines on its stderr are printed. R2P-3: every text names the decision files,
+never the refused variables. R2P-4: app's install counts are judged against the reading pre_app_r2.sh kept. R2P-5 with
+R3P-3: a continuation after a PRE-APP STOP under a new declaration runs image again under it, then converter; app is
+refused until both ran under it; the post-check binds every receipt to the declaration by path and sha256. R2P-6: a job
+queued or running, or a send in flight, at the moment of the read is a wait whatever the declared baseline held. R3P-4:
+after a WAIT at pre_app, a preflight runs again before pre_app and app; app refuses a preflight older than a pre-app reading
+made before the one it runs on. R2P-7 with R3P-6: the class-c question is asked only after the post-check and the
+hour-after reading, and only while release 2 serves (after a switch-back he is told the switch-back in one line instead);
+it ends the lead's turn; only a genuine message from the owner that answers it is his answer (a task notification never
+is); no answer within 24 hours is recorded as 'no answer', which judges nothing; an objection after app does not stop the
+post-install readings but opens an incident in which the lead decides switch-back, recorded; a continuation that moves the
+hour tells him the new hour in one line, and the declaration records both hours.
+- **D-R2-61** (2026-11-28 ~08:45Z, the lead; the rehearsal's decisions `release/PKG-REHEARSAL-DECISIONS.md` RH-1 to RH-7, and
+  the finalization's check `release/FINALIZE-RESULT.json`). (1) The rehearsal's tooling repairs RH-1, RH-2, RH-6 and the
+  runbook order RH-7 are recorded as made. (2) Section 9.1 item 3 is narrowed, each with its replacement: the suites
+  against the image are not run (RH-3: the image ships no dev dependency and no ops/ by design; the suite gate is the
+  quiet host's full suite on the merge commit); the bench's open, lists and office browser flows are "not rehearsed" (RH-4:
+  no browser container; the office model's request mix is replayed through the rehearsal nginx instead, and its gates -
+  0 answers 429, the 304s counted, memory.peak <= 768 MiB - are met: 300.4 MiB); the pause with a held document is "not
+  rehearsed" (RH-5: no tooling; the pause without one is recorded, 4.4 s harness time). (3) B's revision for D-R2-53's
+  documents-only check (the lead's ruling Q10) is a680d837b, B's third session, no longer ccb350d0b. (4) Item 4's order is
+  amended: the rulings recorded after #1537 merges (this one, and D-R2-55's entry completed with the package rulings the
+  declaration cites: round 1's Q2, Q3, Q9, Q11, Q12 and owner-9, round 2's R2P-1 to R2P-7, round 3's R3P-1 to R3P-6, from
+  ANSWERS-R3.md) land as the first commit of the declaration's own documents branch, before the declaration's commit,
+  instead of on the merged integration branch.
+
+(Copied from /home/claude/cpt-r2-20261125/design/RELEASE-2-SPEC.md section 10 on 2026-11-28 by session 799ffbc5.)
